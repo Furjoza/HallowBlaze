@@ -1,13 +1,25 @@
 ﻿using UnityEngine;
+using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;       //Allows us to use Lists. 
+using UnityEngine.SceneManagement;
 
 public class GameManager : MonoBehaviour
 {
-
+    public float levelStartDelay = 2f;
+    public float turnDelay = .1f;
     public static GameManager instance = null;              //Static instance of GameManager which allows it to be accessed by any other script.
-    private BoardManager boardScript;                       //Store a reference to our BoardManager which will set up the level.
-    private int level = 3;                                  //Current level number, expressed in game as "Day 1".
+    public BoardManager boardScript;                       //Store a reference to our BoardManager which will set up the level.
+    public int playerFoodPoints = 100;
+    [HideInInspector] public bool playerTurn = true;
+
+    private Text levelText;
+    private GameObject levelImage;
+    private GameObject restartButton;
+    private int level = 0;                                  //Current level number, expressed in game as "Day 1".
+    private List<Enemy> enemies;
+    private bool enemiesMoving;
+    private bool doingSetup;
 
     //Awake is always called before any Start functions
     void Awake()
@@ -25,24 +37,84 @@ public class GameManager : MonoBehaviour
         //Sets this to not be destroyed when reloading scene
         DontDestroyOnLoad(gameObject);
 
+        //
+        enemies = new List<Enemy>();
+
         //Get a component reference to the attached BoardManager script
         boardScript = GetComponent<BoardManager>();
+    }
 
-        //Call the InitGame function to initialize the first level 
-        InitGame();
+    private void OnLevelWasLoaded(int index)
+    {
+        if (index == 2)
+        {
+            level++;
+            InitGame();
+        } 
     }
 
     //Initializes the game for each level.
     void InitGame()
     {
+        doingSetup = true;
+
+        levelImage = GameObject.Find("LevelImage");
+        levelText = GameObject.Find("LevelText").GetComponent<Text>();
+        levelText.text = "Day: " + level;
+        levelImage.SetActive(true);
+        restartButton = GameObject.Find("RestartBttn");
+        restartButton.SetActive(false);
+        Invoke("HideLevelImage", levelStartDelay);
+        enemies.Clear();
+        
         //Call the SetupScene function of the BoardManager script, pass it current level number.
         boardScript.SetupScene(level);
 
     }
 
+    private void HideLevelImage()
+    {
+        levelImage.SetActive(false);
+        doingSetup = false;
+    }
+
+    public void GameOver()
+    {
+        levelText.text = "After " + level + " days, your starved.";
+        levelImage.SetActive(true);
+        enabled = false;
+        restartButton.SetActive(true);
+    }
+
     //Update is called every frame.
     void Update()
     {
+        if (playerTurn || enemiesMoving || doingSetup)
+            return;
 
+        StartCoroutine(MoveEnemies());
+
+    }
+
+    public void AddEnemytoList(Enemy script)
+    {
+        enemies.Add(script);
+    }
+
+    IEnumerator MoveEnemies()
+    {
+        enemiesMoving = true;
+        yield return new WaitForSeconds(turnDelay);
+        if (enemies.Count == 0)
+            yield return new WaitForSeconds(turnDelay);
+
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            enemies[i].MoveEnemy();
+            yield return new WaitForSeconds(enemies[i].moveTime);
+        }
+
+        playerTurn = true;
+        enemiesMoving = false;
     }
 }
