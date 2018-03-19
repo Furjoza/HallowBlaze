@@ -46,7 +46,7 @@ public class GameManager : MonoBehaviour
 
     private void OnLevelWasLoaded(int index)
     {
-        if (index == 2)
+        if (index == 1)
         {
             level++;
             InitGame();
@@ -80,7 +80,7 @@ public class GameManager : MonoBehaviour
 
     public void GameOver()
     {
-        levelText.text = "After " + level + " days, your starved.";
+        levelText.text = "After " + level + " days, you've starved.";
         levelImage.SetActive(true);
         enabled = false;
         restartButton.SetActive(true);
