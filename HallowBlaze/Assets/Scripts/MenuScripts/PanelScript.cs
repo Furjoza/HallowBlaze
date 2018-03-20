@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
 
-public class MenuScript : MonoBehaviour {
+public class PanelScript : MonoBehaviour {
 
     public EventSystem eventSystem;
     public GameObject selectedObject;
