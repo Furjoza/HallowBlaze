@@ -11,7 +11,7 @@ public class SoundOffBttnScript : MonoBehaviour {
 
     public void SetSoundOff()
     {
-        SoundSource.mute = false;
+        SoundSource.mute = true;
         SoundOnText.color = new Color32(50, 50, 50, 255);
         SoundOffText.color = new Color32(255, 255, 255, 255);
     }
