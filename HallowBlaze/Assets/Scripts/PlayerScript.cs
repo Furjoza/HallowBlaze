@@ -10,6 +10,7 @@ public class PlayerScript : MovingObject {
     public int pointsPerSoda = 20;
     public float restartLevelDelay = 1f;
     public Text foodText;
+    public Text healthText;
     public AudioClip moveSound1;
     public AudioClip moveSound2;
     public AudioClip eatSound1;
@@ -21,6 +22,7 @@ public class PlayerScript : MovingObject {
 
     private Animator animator;
     private int food;
+    private int health;
     private Vector2 touchOrigin = -Vector2.one;
 
 	// Use this for initialization
@@ -29,9 +31,10 @@ public class PlayerScript : MovingObject {
         animator = GetComponent<Animator>();
 
         food = GameManager.instance.playerFoodPoints;
+        health = GameManager.instance.playerHealthPoints;
 
         foodText.text = "Food: " + food;
-
+        healthText.text = "Health: " + health;
         base.Start();
 	}
 
@@ -92,6 +95,7 @@ public class PlayerScript : MovingObject {
     {
         food--;
         foodText.text = "Food: " + food;
+        healthText.text = "Health: " + health;
 
         base.AttemptMove<T>(xDir, yDir);
 
@@ -139,21 +143,21 @@ public class PlayerScript : MovingObject {
         Application.LoadLevel(Application.loadedLevel);
     }
 
-    public void LoseFood (int loss)
+    public void LoseHealth (int loss)
     {
         animator.SetTrigger("playerHit");
-        food -= loss;
-        foodText.text = "-" + loss + " Food: " + food;
+        health -= loss;
+        healthText.text = "-" + loss + " Health: " + health;
         CheckIfGameOver();
     }
 
     private void CheckIfGameOver()
     {
-        if (food <= 0)
+        if (food <= 0 || health <= 0)
         {
             SoundManager.instance.RandomizeSfx(gameOverSound);
-            SoundManager.instance.musicSource.Stop();
-            GameManager.instance.GameOver();
+            //SoundManager.instance.musicSource.Stop();
+            GameManager.instance.GameOver(food <= 0 ? true : false);
         }    
     }
 }

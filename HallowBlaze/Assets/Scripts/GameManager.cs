@@ -11,13 +11,14 @@ public class GameManager : MonoBehaviour
     public static GameManager instance = null;              //Static instance of GameManager which allows it to be accessed by any other script.
     public BoardManager boardScript;                       //Store a reference to our BoardManager which will set up the level.
     public int playerFoodPoints = 100;
+    public int playerHealthPoints = 100;
     [HideInInspector] public bool playerTurn = true;
 
     private Text levelText;
     private GameObject levelImage;
     private GameObject restartButton;
-    private int level = 0;                                  //Current level number, expressed in game as "Day 1".
     private List<Enemy> enemies;
+    private int level = 0;                                  //Current level number, expressed in game as "Day 1".
     private bool enemiesMoving;
     private bool doingSetup;
 
@@ -78,9 +79,12 @@ public class GameManager : MonoBehaviour
         doingSetup = false;
     }
 
-    public void GameOver()
+    public void GameOver(bool isStarved)
     {
-        levelText.text = "After " + level + " days, you've starved.";
+        if(isStarved)
+            levelText.text = "After " + level + " days, you've starved.";
+        else
+            levelText.text = "After " + level + " days, your brain has been eaten.";
         levelImage.SetActive(true);
         enabled = false;
         restartButton.SetActive(true);

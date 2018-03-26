@@ -9,7 +9,7 @@ public class RestartBttnScript : MonoBehaviour {
     public void Restart()
     {
         Destroy(GameManager.instance.gameObject);
-        SoundManager.instance.musicSource.Play();
+        //SoundManager.instance.musicSource.Play();
         Instantiate(gameManager);
         Application.LoadLevel(Application.loadedLevel);
     }

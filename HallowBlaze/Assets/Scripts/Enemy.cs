@@ -55,6 +55,6 @@ public class Enemy : MovingObject {
 
         SoundManager.instance.RandomizeSfx(enemyAttack1, enemyAttack2);
 
-        hitPlayer.LoseFood(playerDamage);
+        hitPlayer.LoseHealth(playerDamage);
     }
 }
