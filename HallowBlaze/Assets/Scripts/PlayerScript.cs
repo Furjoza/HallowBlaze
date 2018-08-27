@@ -8,6 +8,7 @@ public class PlayerScript : MovingObject {
     public int wallDamage = 1;
     public int pointsPerFood = 10;
     public int pointsPerSoda = 20;
+    public int pointsPerAid = 10;
     public float restartLevelDelay = 1f;
     public Text foodText;
     public Text healthText;
@@ -41,6 +42,7 @@ public class PlayerScript : MovingObject {
     private void OnDisable()
     {
         GameManager.instance.playerFoodPoints = food;
+        GameManager.instance.playerHealthPoints = health;
     }
 
     // Update is called once per frame
@@ -50,7 +52,7 @@ public class PlayerScript : MovingObject {
         int horizontal = 0;
         int vertical = 0;
 
-#if UNITY_EDITOR || UNITY_STAHDALONE || UNITY_WEBPLAYER
+#if UNITY_EDITOR || UNITY_STANDALONE || UNITY_WEBPLAYER
 
         horizontal = (int)Input.GetAxisRaw("Horizontal");
         vertical = (int)Input.GetAxisRaw("Vertical");
@@ -119,15 +121,22 @@ public class PlayerScript : MovingObject {
         else if (other.tag == "Food")
         {
             food += pointsPerFood;
-            foodText.text = "+" + pointsPerFood + " Food: " + food;
+            foodText.text = "Food: " + food + "+" + pointsPerFood;
             SoundManager.instance.RandomizeSfx(eatSound1, eatSound2);
             other.gameObject.SetActive(false);
         }
         else if (other.tag == "Soda")
         {
             food += pointsPerSoda;
-            foodText.text = "+" + pointsPerSoda + " Food: " + food;
+            foodText.text = "Food: " + food + "+" + pointsPerSoda;
             SoundManager.instance.RandomizeSfx(drinkSound1, drinkSound2);
+            other.gameObject.SetActive(false);
+        }
+        else if (other.tag == "Aid")
+        {
+            health += pointsPerAid;
+            healthText.text = "Health: " + health + "+" + pointsPerAid;
+            SoundManager.instance.RandomizeSfx(drinkSound1, drinkSound2); //Zmienić dźwięk!!!
             other.gameObject.SetActive(false);
         }
     }

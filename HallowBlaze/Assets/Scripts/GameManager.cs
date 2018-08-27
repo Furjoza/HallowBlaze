@@ -81,10 +81,11 @@ public class GameManager : MonoBehaviour
 
     public void GameOver(bool isStarved)
     {
-        if(isStarved)
+        if (isStarved)
             levelText.text = "After " + level + " days, you've starved.";
         else
             levelText.text = "After " + level + " days, your brain has been eaten.";
+
         levelImage.SetActive(true);
         enabled = false;
         restartButton.SetActive(true);
