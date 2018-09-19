@@ -29,7 +29,8 @@ public class BoardManager : MonoBehaviour {
     public GameObject exit;                                         //Prefab to spawn for exit.
     public GameObject[] floorTiles;                                 //Array of floor prefabs.
     public GameObject[] wallTiles;                                  //Array of wall prefabs.
-    public GameObject[] foodTiles;                                  //Array of food prefabs.
+    public GameObject[] groundFoodTiles;                            //Array of ground food prefabs.
+    public GameObject bushFoodTiles;                              //Array of bush food prefabs.
     public GameObject[] aidTiles;                                   //Array of aid prefabs.
     public GameObject[] enemyTiles;                                 //Array of enemy prefabs.
     public GameObject[] outerWallTiles;                             //Array of outer tile prefabs.
@@ -121,6 +122,14 @@ public class BoardManager : MonoBehaviour {
 
             //Instantiate tileChoice at the position returned by RandomPosition with no change in rotation
             Instantiate(tileChoice, randomPosition, Quaternion.identity);
+
+            if (tileChoice.tag == "InnerWall")
+            {
+                if (Random.Range(0, 100) > 90)
+                {
+                    Instantiate(bushFoodTiles, randomPosition, Quaternion.identity);
+                }
+            }
         }
     }
 
@@ -138,7 +147,7 @@ public class BoardManager : MonoBehaviour {
         LayoutObjectAtRandom(wallTiles, wallCount.minimum, wallCount.maximum);
 
         //Instantiate a random number of food tiles based on minimum and maximum, at randomized positions.
-        LayoutObjectAtRandom(foodTiles, foodCount.minimum, foodCount.maximum);
+        LayoutObjectAtRandom(groundFoodTiles, foodCount.minimum, foodCount.maximum);
 
         //Instantiate a random number of food tiles based on minimum and maximum, at randomized positions.
         LayoutObjectAtRandom(aidTiles, aidCount.minimum, aidCount.maximum);
