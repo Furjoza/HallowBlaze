@@ -24,7 +24,9 @@ public class PlayerScript : MovingObject {
     private Animator animator;
     private int food;
     private int health;
+    private bool onCarrot = false;
     private Vector2 touchOrigin = -Vector2.one;
+    private GameObject tmpCarrot;
 
 	// Use this for initialization
 	protected override void Start ()
@@ -53,6 +55,9 @@ public class PlayerScript : MovingObject {
         int vertical = 0;
 
 #if UNITY_EDITOR || UNITY_STANDALONE || UNITY_WEBPLAYER
+
+        if (Input.GetKeyDown("space"))
+            AttemptGathering();
 
         horizontal = (int)Input.GetAxisRaw("Horizontal");
         vertical = (int)Input.GetAxisRaw("Vertical");
@@ -111,6 +116,25 @@ public class PlayerScript : MovingObject {
         GameManager.instance.playerTurn = false;
     }
 
+    protected void AttemptGathering()
+    {
+        food--;
+        foodText.text = "Food: " + food;
+        healthText.text = "Health: " + health;
+
+        CheckIfGameOver();
+
+        if (onCarrot)
+        {
+            food += pointsPerFood;
+            foodText.text = "Food: " + food + "+" + pointsPerFood;
+            SoundManager.instance.RandomizeSfx(eatSound1, eatSound2);
+            tmpCarrot.SetActive(false);
+        }
+
+        GameManager.instance.playerTurn = false;
+    }
+
     private void OnTriggerEnter2D(Collider2D other)
     {
         if(other.tag == "Exit")
@@ -139,6 +163,17 @@ public class PlayerScript : MovingObject {
             SoundManager.instance.RandomizeSfx(drinkSound1, drinkSound2); //Zmienić dźwięk!!!
             other.gameObject.SetActive(false);
         }
+        if (other.tag == "Carrot")
+        {
+            onCarrot = true;
+            tmpCarrot = other.gameObject;
+        }
+    }
+
+    private void OnTriggerExit2D(Collider2D other)
+    {
+        if (other.tag == "Carrot")
+            onCarrot = false;
     }
     protected override void OnCantMove<T>(T component)
     {
@@ -156,7 +191,7 @@ public class PlayerScript : MovingObject {
     {
         animator.SetTrigger("playerHit");
         health -= loss;
-        healthText.text = "-" + loss + " Health: " + health;
+        healthText.text =  "Health: " + health + "-" + loss;
         CheckIfGameOver();
     }
 
