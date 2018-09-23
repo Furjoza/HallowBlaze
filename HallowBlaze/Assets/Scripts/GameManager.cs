@@ -15,6 +15,7 @@ public class GameManager : MonoBehaviour
     [HideInInspector] public bool playerTurn = true;
 
     private Text levelText;
+    private Text scoreText;
     private GameObject levelImage;
     private GameObject restartButton;
     private List<Enemy> enemies;
@@ -60,11 +61,17 @@ public class GameManager : MonoBehaviour
         doingSetup = true;
 
         levelImage = GameObject.Find("LevelImage");
+        levelImage.SetActive(true);
+
         levelText = GameObject.Find("LevelText").GetComponent<Text>();
         levelText.text = "Day: " + level;
-        levelImage.SetActive(true);
+
         restartButton = GameObject.Find("RestartBttn");
         restartButton.SetActive(false);
+
+        scoreText = GameObject.Find("ScoreText").GetComponent<Text>();
+        scoreText.text = string.Empty;
+
         Invoke("HideLevelImage", levelStartDelay);
         enemies.Clear();
         
@@ -86,9 +93,23 @@ public class GameManager : MonoBehaviour
         else
             levelText.text = "After " + level + " days, your brain has been eaten.";
 
+        int score = ManageScore(level);
+
         levelImage.SetActive(true);
+        scoreText = GameObject.Find("ScoreText").GetComponent<Text>();
+        scoreText.text = "Your current local record is " + score + " days.";
         enabled = false;
         restartButton.SetActive(true);
+    }
+
+    private int ManageScore(int score)
+    {
+        if (score > PlayerPrefs.GetInt("HighScore", 0))
+            PlayerPrefs.SetInt("HighScore", score);
+
+        score = PlayerPrefs.GetInt("HighScore", 0);
+
+        return score;
     }
 
     //Update is called every frame.
