@@ -5,17 +5,17 @@ using UnityEngine.UI;
 
 public class ManageRecords : MonoBehaviour {
 
-    string highScores = "";
-    string playerName = "";
+    string highScores = string.Empty;
+    string playerName = string.Empty;
 
     public Button uploadRecordButton;
     public InputField mainInputField;
     public Text uploadedRecordText;
     public Text resultsText;
     public Scrollbar scrollbar;
+    
     //Dreamlo specific variables
     string webserviceURL = "http://dreamlo.com/lb/";
-
     public string privateCode = "EWoIz_OEmEKKefw2XQ49kge9Rh8wnyZE-WvSX9kxb0kA";
     public string publicCode = "5ba67a28613a880614fe3ace";
 
@@ -30,11 +30,11 @@ public class ManageRecords : MonoBehaviour {
 
     void Awake()
     {
-        resultsText.text = "";
+        resultsText.text = string.Empty;
         LoadScores();
 
         //Adds a listener that invokes the "LockInput" method when the player finishes editing the main input field.
-        //Passes the main input field into the method when "LockInput" is invoked
+        //Passes the main input field into the method when "LockInput" is invoked.
         mainInputField.onEndEdit.AddListener(delegate { LockInput(mainInputField); });
     }
 
@@ -111,6 +111,7 @@ public class ManageRecords : MonoBehaviour {
     public void ListScores()
     {
         resultsText.text = string.Empty;
+
         List<Score> resultList = ToListHighToLow();
         for (int x = 0; x < resultList.Count; x++)
         {
@@ -159,7 +160,7 @@ public class ManageRecords : MonoBehaviour {
     public string[] ToStringArray()
     {
         if (this.highScores == null) return null;
-        if (this.highScores == "") return null;
+        if (this.highScores == string.Empty) return null;
 
         string[] rows = this.highScores.Split(new char[] { '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
         return rows;
@@ -210,8 +211,8 @@ public class ManageRecords : MonoBehaviour {
             current.playerName = values[0];
             current.score = 0;
             current.seconds = 0;
-            current.shortText = "";
-            current.dateString = "";
+            current.shortText = string.Empty;
+            current.dateString = string.Empty;
             if (values.Length > 1) current.score = CheckInt(values[1]);
             if (values.Length > 2) current.seconds = CheckInt(values[2]);
             if (values.Length > 3) current.shortText = values[3];
@@ -225,8 +226,8 @@ public class ManageRecords : MonoBehaviour {
     // Keep pipe and slash out of names
     string Clean(string s)
     {
-        s = s.Replace("/", "");
-        s = s.Replace("|", "");
+        s = s.Replace("/", string.Empty);
+        s = s.Replace("|", string.Empty);
 
         return s;
     }

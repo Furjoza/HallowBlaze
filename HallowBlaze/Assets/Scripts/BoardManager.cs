@@ -12,7 +12,6 @@ public class BoardManager : MonoBehaviour {
         public int minimum;             //Minimum value for our Count class.
         public int maximum;             //Maximum value for our Count class.
 
-
         //Assignment constructor.
         public Count(int min, int max)
         {
@@ -23,8 +22,8 @@ public class BoardManager : MonoBehaviour {
 
     public int columns = 8;                                         //Number of columns in our game board.
     public int rows = 8;                                            //Number of rows in our game board.
-    public Count wallCount = new Count(5, 9);                      //Lower and upper limit for our random number of walls per level.
-    public Count foodCount = new Count(1, 5);                      //Lower and upper limit for our random number of food items per level.
+    public Count wallCount = new Count(5, 9);                       //Lower and upper limit for our random number of walls per level.
+    public Count foodCount = new Count(1, 5);                       //Lower and upper limit for our random number of food items per level.
     public Count aidCount = new Count(0, 1);
     public Count buriedCount = new Count(0, 1);
     public GameObject exit;                                         //Prefab to spawn for exit.
@@ -38,7 +37,7 @@ public class BoardManager : MonoBehaviour {
     public GameObject[] outerWallTiles;                             //Array of outer tile prefabs.
 
     private Transform boardHolder;                                  //A variable to store a reference to the transform of our Board object.
-    private List<Vector3> gridPositions = new List<Vector3>();   //A list of possible locations to place tiles.
+    private List<Vector3> gridPositions = new List<Vector3>();      //A list of possible locations to place tiles.
 
 
     //Clears our list gridPositions and prepares it to generate a new board.

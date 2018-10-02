@@ -1,17 +1,13 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 
 public class PlayerScript : MovingObject {
 
+    public float restartLevelDelay = 1f;
     public int wallDamage = 1;
     public int pointsPerFood = 10;
     public int pointsPerSoda = 20;
     public int pointsPerAid = 10;
-    public float restartLevelDelay = 1f;
-    public Text foodText;
-    public Text healthText;
     public AudioClip moveSound1;
     public AudioClip moveSound2;
     public AudioClip eatSound1;
@@ -19,14 +15,15 @@ public class PlayerScript : MovingObject {
     public AudioClip drinkSound1;
     public AudioClip drinkSound2;
     public AudioClip gameOverSound;
+    public Text foodText;
+    public Text healthText;
 
-
-    private Animator animator;
+    private bool onCarrot = false;
     private int food;
     private int health;
-    private bool onCarrot = false;
-    private Vector2 touchOrigin = -Vector2.one;
+    private Animator animator;
     private GameObject tmpCarrot;
+    private Vector2 touchOrigin = -Vector2.one;
 
 	// Use this for initialization
 	protected override void Start ()
@@ -200,7 +197,6 @@ public class PlayerScript : MovingObject {
         if (food <= 0 || health <= 0)
         {
             SoundManager.instance.RandomizeSfx(gameOverSound);
-            //SoundManager.instance.musicSource.Stop();
             GameManager.instance.GameOver(food <= 0 ? true : false);
         }    
     }

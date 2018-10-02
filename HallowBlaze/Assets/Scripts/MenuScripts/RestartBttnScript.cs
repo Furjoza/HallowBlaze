@@ -1,15 +1,13 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
 public class RestartBttnScript : MonoBehaviour {
 
     public GameObject gameManager;
-
+    
+    //Destroy GameManager and re-instantiate it as it is the easiest way of restarting the game.
     public void Restart()
     {
         Destroy(GameManager.instance.gameObject);
-        //SoundManager.instance.musicSource.Play();
         Instantiate(gameManager);
         Application.LoadLevel(Application.loadedLevel);
     }

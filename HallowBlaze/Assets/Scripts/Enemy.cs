@@ -1,6 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
 public class Enemy : MovingObject {
 
@@ -16,6 +14,7 @@ public class Enemy : MovingObject {
         GameManager.instance.AddEnemytoList(this);
         animator = GetComponent<Animator>();
         target = GameObject.FindGameObjectWithTag("Player").transform;
+
         base.Start();
 	}
 

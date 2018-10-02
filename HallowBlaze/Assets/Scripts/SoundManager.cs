@@ -1,6 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
 public class SoundManager : MonoBehaviour {
 
@@ -11,20 +9,26 @@ public class SoundManager : MonoBehaviour {
 
     public float lowPitchRange = .95f;
     public float highPitchRange = 1.05f;
-	// Use this for initialization
-	void Awake () {
-        //Check if instance already exists
+	
+	void Awake ()
+    {
+        //Enforce singleton pattern
         if (instance == null)
-            //if not, set instance to this
             instance = this;
 
-        //If instance already exists and it's not this:
         else if (instance != this)
-            //Then destroy this. This enforces our singleton pattern, meaning there can only ever be one instance of a GameManager.
             Destroy(gameObject);
 
-        //Sets this to not be destroyed when reloading scene
         DontDestroyOnLoad(gameObject);
+    }
+
+    private void Start()
+    {
+        if (PlayerPrefs.GetString("Music") == "Off")
+            musicSource.Stop();
+
+        if (PlayerPrefs.GetString("Sound") == "Off")
+            efxSource.mute = true;
     }
 
     public void PlaySingle (AudioClip clip)
@@ -41,6 +45,5 @@ public class SoundManager : MonoBehaviour {
         efxSource.pitch = randomPitch;
         efxSource.clip = clips[randomIndex];
         efxSource.Play();
-
     }
 }
