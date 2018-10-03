@@ -115,7 +115,7 @@ public class ManageRecords : MonoBehaviour {
         List<Score> resultList = ToListHighToLow();
         for (int x = 0; x < resultList.Count; x++)
         {
-            resultsText.text += (x + 1).ToString() + "\t" + resultList[x].playerName + "\t" + resultList[x].score + "\n";
+            resultsText.text += string.Format("{0} {1} {2} \n", (x + 1).ToString().PadRight(5), resultList[x].playerName.PadRight(9), resultList[x].score);
         }
     }
 

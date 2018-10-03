@@ -22,7 +22,8 @@ public class SoundManager : MonoBehaviour {
         DontDestroyOnLoad(gameObject);
     }
 
-    private void Start()
+    //When the script instance is being started check saved sound settings and set audio sources accordingly.
+    private void Start ()
     {
         if (PlayerPrefs.GetString("Music") == "Off")
             musicSource.Stop();
