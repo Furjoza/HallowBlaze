@@ -10,7 +10,8 @@ public class PanelScript : MonoBehaviour {
 
     void Update()
     {
-        if (Input.GetAxisRaw("Vertical") != 0 && buttonSelected == false)
+        //if (Input.GetAxisRaw("Vertical") != 0 && buttonSelected == false)
+        if (buttonSelected == false)
         {
             eventSystem.SetSelectedGameObject(selectedObject);
             buttonSelected = true;
