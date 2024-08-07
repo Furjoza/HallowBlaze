@@ -11,7 +11,7 @@ public class SoundOffBttnScript : MonoBehaviour {
     public void Awake()
     {
         if (PlayerPrefs.GetString("Sound") == "Off")
-           SoundOffText.color = new Color32(255, 255, 255, 255);
+            SoundOffText.color = new Color32(255, 255, 255, 255);
         else
             SoundOffText.color = new Color32(50, 50, 50, 255);
     }

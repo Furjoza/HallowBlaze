@@ -8,7 +8,7 @@ public class MusicOnBttnScript : MonoBehaviour {
     public Text MusicOffText;
 
     //When the script instance is being loaded check saved music settings and set buttons accordingly.
-    public void Awake()
+    public void Start()
     {
         if (PlayerPrefs.GetString("Music") == "On")
             MusicOnText.color = new Color32(255, 255, 255, 255);

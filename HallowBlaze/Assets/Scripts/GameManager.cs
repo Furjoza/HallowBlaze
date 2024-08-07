@@ -2,7 +2,6 @@
 using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;       //Allows us to use Lists. 
-using UnityEngine.SceneManagement;
 
 public class GameManager : MonoBehaviour
 {
@@ -72,7 +71,7 @@ public class GameManager : MonoBehaviour
         scoreText = GameObject.Find("ScoreText").GetComponent<Text>();
         scoreText.text = string.Empty;
 
-        Invoke("HideLevelImage", levelStartDelay);
+        Invoke(nameof(HideLevelImage), levelStartDelay);
         enemies.Clear();
         
         //Call the SetupScene function of the BoardManager script, pass it current level number.

@@ -12,7 +12,7 @@ public class SoundManager : MonoBehaviour {
 	
 	void Awake ()
     {
-        //Enforce singleton pattern
+        // Enforce singleton pattern
         if (instance == null)
             instance = this;
 
@@ -22,7 +22,7 @@ public class SoundManager : MonoBehaviour {
         DontDestroyOnLoad(gameObject);
     }
 
-    //When the script instance is being started check saved sound settings and set audio sources accordingly.
+    // When the script instance is being started check saved sound settings and set audio sources accordingly.
     private void Start ()
     {
         if (PlayerPrefs.GetString("Music") == "Off")
@@ -38,6 +38,7 @@ public class SoundManager : MonoBehaviour {
         efxSource.Play();
     }
 
+    // Takes a list of sounds, randomly chooses one and play it with randomized pitch.
     public void RandomizeSfx (params AudioClip[] clips)
     {
         int randomIndex = Random.Range(0, clips.Length);

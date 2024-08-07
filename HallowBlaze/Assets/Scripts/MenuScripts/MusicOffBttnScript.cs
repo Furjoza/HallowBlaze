@@ -1,6 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 
 public class MusicOffBttnScript : MonoBehaviour {
@@ -10,7 +8,7 @@ public class MusicOffBttnScript : MonoBehaviour {
     public Text MusicOffText;
 
     //When the script instance is being loaded check saved music settings and set buttons accordingly.
-    public void Awake()
+    public void Start()
     {
         if (PlayerPrefs.GetString("Music") == "Off")
             MusicOffText.color = new Color32(255, 255, 255, 255);

@@ -13,9 +13,9 @@ public class ManageRecords : MonoBehaviour {
     public Text uploadedRecordText;
     public Text resultsText;
     public Scrollbar scrollbar;
-    
+
     //Dreamlo specific variables
-    string webserviceURL = "http://dreamlo.com/lb/";
+    readonly string webserviceURL = "http://dreamlo.com/lb/";
     public string privateCode = "EWoIz_OEmEKKefw2XQ49kge9Rh8wnyZE-WvSX9kxb0kA";
     public string publicCode = "5ba67a28613a880614fe3ace";
 
@@ -101,6 +101,7 @@ public class ManageRecords : MonoBehaviour {
 
     IEnumerator GetScores()
     {
+        
         WWW www = new WWW(webserviceURL + publicCode + "/pipe");
         yield return www;
 
@@ -234,9 +235,7 @@ public class ManageRecords : MonoBehaviour {
 
     int CheckInt(string s)
     {
-        int x = 0;
-
-        int.TryParse(s, out x);
+        int.TryParse(s, out int x);
 
         return x;
     }
