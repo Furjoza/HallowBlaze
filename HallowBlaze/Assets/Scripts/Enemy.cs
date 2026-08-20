@@ -3,8 +3,11 @@
 public class Enemy : MovingObject {
 
     public int playerDamage;
+
+    // Sounds of getting hit by enemy
     public AudioClip enemyAttack1;
     public AudioClip enemyAttack2;
+    public AudioClip enemyAttack3;
 
     private Animator animator;
     private Transform target;
@@ -52,7 +55,7 @@ public class Enemy : MovingObject {
 
         animator.SetTrigger("enemyAttack");
 
-        SoundManager.instance.RandomizeSfx(enemyAttack1, enemyAttack2);
+        SoundManager.instance.RandomizeSfx(enemyAttack1, enemyAttack2, enemyAttack3);
 
         hitPlayer.LoseHealth(playerDamage);
     }

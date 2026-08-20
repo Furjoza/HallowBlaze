@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;       //Allows us to use Lists. 
@@ -45,13 +46,23 @@ public class GameManager : MonoBehaviour
         boardScript = GetComponent<BoardManager>();
     }
 
-    private void OnLevelWasLoaded(int index)
+    private void OnEnable()
     {
-        if (index == 1)
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    private void OnDisable()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (scene.buildIndex == 1)
         {
             level++;
             InitGame();
-        } 
+        }
     }
 
     //Initializes the game for each level.
@@ -60,22 +71,31 @@ public class GameManager : MonoBehaviour
         doingSetup = true;
 
         levelImage = GameObject.Find("LevelImage");
-        levelImage.SetActive(true);
+        if (levelImage != null)
+            levelImage.SetActive(true);
 
-        levelText = GameObject.Find("LevelText").GetComponent<Text>();
-        levelText.text = "Day: " + level;
+        GameObject levelTextObject = GameObject.Find("LevelText");
+        if (levelTextObject != null)
+            levelText = levelTextObject.GetComponent<Text>();
+        if (levelText != null)
+            levelText.text = "Day: " + level;
 
         restartButton = GameObject.Find("RestartBttn");
-        restartButton.SetActive(false);
+        if (restartButton != null)
+            restartButton.SetActive(false);
 
-        scoreText = GameObject.Find("ScoreText").GetComponent<Text>();
-        scoreText.text = string.Empty;
+        GameObject scoreTextObject = GameObject.Find("ScoreText");
+        if (scoreTextObject != null)
+            scoreText = scoreTextObject.GetComponent<Text>();
+        if (scoreText != null)
+            scoreText.text = string.Empty;
 
         Invoke(nameof(HideLevelImage), levelStartDelay);
         enemies.Clear();
         
         //Call the SetupScene function of the BoardManager script, pass it current level number.
-        boardScript.SetupScene(level);
+        if (boardScript != null)
+            boardScript.SetupScene(level);
 
     }
 
@@ -87,18 +107,28 @@ public class GameManager : MonoBehaviour
 
     public void GameOver(bool isStarved)
     {
-        if (isStarved)
-            levelText.text = "After " + level + " days, you've starved.";
-        else
-            levelText.text = "After " + level + " days, your brain has been eaten.";
+        if (levelText != null)
+        {
+            if (isStarved)
+                levelText.text = "After " + level + " days, you've starved.";
+            else
+                levelText.text = "After " + level + " days, your brain has been eaten.";
+        }
 
         int score = ManageScore(level);
 
-        levelImage.SetActive(true);
-        scoreText = GameObject.Find("ScoreText").GetComponent<Text>();
-        scoreText.text = "Your current local record is " + score + " days.";
+        if (levelImage != null)
+            levelImage.SetActive(true);
+
+        GameObject scoreTextObject = GameObject.Find("ScoreText");
+        if (scoreTextObject != null)
+            scoreText = scoreTextObject.GetComponent<Text>();
+        if (scoreText != null)
+            scoreText.text = "Your current local record is " + score + " days.";
+
         enabled = false;
-        restartButton.SetActive(true);
+        if (restartButton != null)
+            restartButton.SetActive(true);
     }
 
     private int ManageScore(int score)

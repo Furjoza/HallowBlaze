@@ -6,6 +6,11 @@ public class Loader : MonoBehaviour {
 
 	void Awake () {
         if (GameManager.instance == null)
-            Instantiate(gameManager);
+        {
+            if (gameManager != null)
+                Instantiate(gameManager);
+            else
+                Debug.LogError("Loader is missing the GameManager prefab reference.");
+        }
 	}
 }

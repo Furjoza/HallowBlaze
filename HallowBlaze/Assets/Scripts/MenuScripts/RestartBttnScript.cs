@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class RestartBttnScript : MonoBehaviour {
 
@@ -9,6 +10,6 @@ public class RestartBttnScript : MonoBehaviour {
     {
         Destroy(GameManager.instance.gameObject);
         Instantiate(gameManager);
-        Application.LoadLevel(Application.loadedLevel);
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 }

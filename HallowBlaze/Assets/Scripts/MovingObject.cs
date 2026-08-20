@@ -13,8 +13,12 @@ public abstract class MovingObject : MonoBehaviour
     protected virtual void Start()
     {
         boxCollider = GetComponent<BoxCollider2D>();
-
         rb2D = GetComponent<Rigidbody2D>();
+
+        if (boxCollider == null)
+            Debug.LogError("Missing BoxCollider2D on " + name, this);
+        if (rb2D == null)
+            Debug.LogError("Missing Rigidbody2D on " + name, this);
 
         //By storing the reciprocal of the move time we can use it by multiplying instead of dividing, this is more efficient.
         inverseMoveTime = 1f / moveTime;
@@ -42,7 +46,8 @@ public abstract class MovingObject : MonoBehaviour
         if (hit.transform == null)
         {
             //If nothing was hit, start SmoothMovement co-routine passing in the Vector2 end as destination
-            StartCoroutine(SmoothMovement(end));
+            if (rb2D != null)
+                StartCoroutine(SmoothMovement(end));
 
             return true;
         }

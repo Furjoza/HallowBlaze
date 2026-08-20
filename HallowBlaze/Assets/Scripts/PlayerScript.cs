@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 public class PlayerScript : MovingObject {
@@ -30,23 +31,32 @@ public class PlayerScript : MovingObject {
     {
         animator = GetComponent<Animator>();
 
-        food = GameManager.instance.playerFoodPoints;
-        health = GameManager.instance.playerHealthPoints;
+        if (GameManager.instance != null)
+        {
+            food = GameManager.instance.playerFoodPoints;
+            health = GameManager.instance.playerHealthPoints;
+        }
 
-        foodText.text = "Food: " + food;
-        healthText.text = "Health: " + health;
+        if (foodText != null)
+            foodText.text = "Food: " + food;
+        if (healthText != null)
+            healthText.text = "Health: " + health;
+
         base.Start();
 	}
 
     private void OnDisable()
     {
-        GameManager.instance.playerFoodPoints = food;
-        GameManager.instance.playerHealthPoints = health;
+        if (GameManager.instance != null)
+        {
+            GameManager.instance.playerFoodPoints = food;
+            GameManager.instance.playerHealthPoints = health;
+        }
     }
 
     // Update is called once per frame
     void Update () {
-        if (!GameManager.instance.playerTurn) return;
+        if (GameManager.instance == null || !GameManager.instance.playerTurn) return;
 
         int horizontal = 0;
         int vertical = 0;
@@ -98,38 +108,48 @@ public class PlayerScript : MovingObject {
     protected override void AttemptMove<T>(int xDir, int yDir)
     {
         food--;
-        foodText.text = "Food: " + food;
-        healthText.text = "Health: " + health;
+        if (foodText != null)
+            foodText.text = "Food: " + food;
+        if (healthText != null)
+            healthText.text = "Health: " + health;
 
         base.AttemptMove<T>(xDir, yDir);
 
         RaycastHit2D hit;
         if(Move(xDir, yDir, out hit))
         {
-            SoundManager.instance.RandomizeSfx(moveSound1, moveSound2);
+            if (SoundManager.instance != null)
+                SoundManager.instance.RandomizeSfx(moveSound1, moveSound2);
         }
         CheckIfGameOver();
 
-        GameManager.instance.playerTurn = false;
+        if (GameManager.instance != null)
+            GameManager.instance.playerTurn = false;
     }
 
     protected void AttemptGathering()
     {
         food--;
-        foodText.text = "Food: " + food;
-        healthText.text = "Health: " + health;
+        if (foodText != null)
+            foodText.text = "Food: " + food;
+        if (healthText != null)
+            healthText.text = "Health: " + health;
 
         CheckIfGameOver();
 
         if (onCarrot)
         {
             food += pointsPerFood;
-            foodText.text = "Food: " + food + "+" + pointsPerFood;
-            SoundManager.instance.RandomizeSfx(eatSound1, eatSound2);
-            tmpCarrot.SetActive(false);
+            if (foodText != null)
+                foodText.text = "Food: " + food + "+" + pointsPerFood;
+            if (SoundManager.instance != null)
+                SoundManager.instance.RandomizeSfx(eatSound1, eatSound2);
+            if (tmpCarrot != null)
+                tmpCarrot.SetActive(false);
         }
 
-        GameManager.instance.playerTurn = false;
+        if (GameManager.instance != null)
+            GameManager.instance.playerTurn = false;
     }
 
     private void OnTriggerEnter2D(Collider2D other)
@@ -142,22 +162,28 @@ public class PlayerScript : MovingObject {
         else if (other.tag == "Food")
         {
             food += pointsPerFood;
-            foodText.text = "Food: " + food + "+" + pointsPerFood;
-            SoundManager.instance.RandomizeSfx(eatSound1, eatSound2);
+            if (foodText != null)
+                foodText.text = "Food: " + food + "+" + pointsPerFood;
+            if (SoundManager.instance != null)
+                SoundManager.instance.RandomizeSfx(eatSound1, eatSound2);
             other.gameObject.SetActive(false);
         }
         else if (other.tag == "Soda")
         {
             food += pointsPerSoda;
-            foodText.text = "Food: " + food + "+" + pointsPerSoda;
-            SoundManager.instance.RandomizeSfx(drinkSound1, drinkSound2);
+            if (foodText != null)
+                foodText.text = "Food: " + food + "+" + pointsPerSoda;
+            if (SoundManager.instance != null)
+                SoundManager.instance.RandomizeSfx(drinkSound1, drinkSound2);
             other.gameObject.SetActive(false);
         }
         else if (other.tag == "Aid")
         {
             health += pointsPerAid;
-            healthText.text = "Health: " + health + "+" + pointsPerAid;
-            SoundManager.instance.RandomizeSfx(drinkSound1, drinkSound2); //Zmienić dźwięk!!!
+            if (healthText != null)
+                healthText.text = "Health: " + health + "+" + pointsPerAid;
+            if (SoundManager.instance != null)
+                SoundManager.instance.RandomizeSfx(drinkSound1, drinkSound2); //Zmienić dźwięk!!!
             other.gameObject.SetActive(false);
         }
         if (other.tag == "Carrot")
@@ -175,20 +201,23 @@ public class PlayerScript : MovingObject {
     protected override void OnCantMove<T>(T component)
     {
         Wall hitWall = component as Wall;
-        hitWall.DamageWall(wallDamage);
-        animator.SetTrigger("playerChop");
+        if (hitWall != null)
+            hitWall.DamageWall(wallDamage);
+        if (animator != null)
+            animator.SetTrigger("playerChop");
     }
 
     private void Restart()
     {
-        Application.LoadLevel(Application.loadedLevel);
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
     public void LoseHealth (int loss)
     {
         animator.SetTrigger("playerHit");
         health -= loss;
-        healthText.text =  "Health: " + health + "-" + loss;
+        if (healthText != null)
+            healthText.text =  "Health: " + health + "-" + loss;
         CheckIfGameOver();
     }
 
@@ -196,8 +225,10 @@ public class PlayerScript : MovingObject {
     {
         if (food <= 0 || health <= 0)
         {
-            SoundManager.instance.RandomizeSfx(gameOverSound);
-            GameManager.instance.GameOver(food <= 0 ? true : false);
+            if (SoundManager.instance != null)
+                SoundManager.instance.RandomizeSfx(gameOverSound);
+            if (GameManager.instance != null)
+                GameManager.instance.GameOver(food <= 0 ? true : false);
         }    
     }
 }

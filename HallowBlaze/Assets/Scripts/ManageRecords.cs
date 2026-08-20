@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.UI;
 
 public class ManageRecords : MonoBehaviour {
@@ -15,7 +16,7 @@ public class ManageRecords : MonoBehaviour {
     public Scrollbar scrollbar;
 
     //Dreamlo specific variables
-    readonly string webserviceURL = "http://dreamlo.com/lb/";
+    readonly string webserviceURL = "https://dreamlo.com/lb/";
     public string privateCode = "EWoIz_OEmEKKefw2XQ49kge9Rh8wnyZE-WvSX9kxb0kA";
     public string publicCode = "5ba67a28613a880614fe3ace";
 
@@ -87,26 +88,55 @@ public class ManageRecords : MonoBehaviour {
         StartCoroutine(AddScoreWithPipe(this.playerName, PlayerPrefs.GetInt("HighScore", 0)));
     }
 
+    void OnEnable()
+    {
+        StartCoroutine(LoadScoresSafe());
+    }
+
+    IEnumerator LoadScoresSafe()
+    {
+        yield return null;
+        if (resultsText != null)
+            resultsText.text = string.Empty;
+        LoadScores();
+    }
+
     // This function saves a trip to the server. Adds the score and retrieves results in one trip.
     IEnumerator AddScoreWithPipe(string playerName, int totalScore)
     {
         playerName = Clean(playerName);
-        WWW www = new WWW(webserviceURL + this.privateCode + "/add-pipe/" + WWW.EscapeURL(playerName) + "/" + totalScore.ToString());
-        yield return www;
+        string url = webserviceURL + this.privateCode + "/add-pipe/" + UnityWebRequest.EscapeURL(playerName) + "/" + totalScore.ToString();
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            yield return request.SendWebRequest();
 
-        highScores = www.text;
-        LoadSingleScore();
-        ListScores();
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogWarning("Leaderboard request failed: " + request.error);
+                yield break;
+            }
+
+            highScores = request.downloadHandler.text;
+            LoadSingleScore();
+            ListScores();
+        }
     }
 
     IEnumerator GetScores()
     {
-        
-        WWW www = new WWW(webserviceURL + publicCode + "/pipe");
-        yield return www;
+        using (UnityWebRequest request = UnityWebRequest.Get(webserviceURL + publicCode + "/pipe"))
+        {
+            yield return request.SendWebRequest();
 
-        highScores = www.text;
-        ListScores();
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogWarning("Leaderboard request failed: " + request.error);
+                yield break;
+            }
+
+            highScores = request.downloadHandler.text;
+            ListScores();
+        }
     }
 
     public void ListScores()
@@ -122,23 +152,32 @@ public class ManageRecords : MonoBehaviour {
 
     IEnumerator GetSingleScore()
     {
-        WWW www = new WWW(webserviceURL + publicCode + "/pipe-get/" + WWW.EscapeURL(this.playerName));
-        yield return www;
+        string url = webserviceURL + publicCode + "/pipe-get/" + UnityWebRequest.EscapeURL(this.playerName);
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            yield return request.SendWebRequest();
 
-        UpdateUploadedRecordText(www);
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogWarning("Leaderboard request failed: " + request.error);
+                yield break;
+            }
+
+            UpdateUploadedRecordText(request.downloadHandler.text);
+        }
     }
 
-    public void UpdateUploadedRecordText(WWW www)
+    public void UpdateUploadedRecordText(string responseText)
     {
         string uploadedRecord = "0";
 
-        if (www.text == string.Empty)
+        if (responseText == string.Empty)
         {
             uploadedRecordText.text = string.Format("Player {0} has no uploaded record.", this.playerName);
         }
         else
         {
-            uploadedRecord = www.text.Split('|')[1];
+            uploadedRecord = responseText.Split('|')[1];
             uploadedRecordText.text = string.Format("Your uploaded record is {0} days.", uploadedRecord);
         }
 

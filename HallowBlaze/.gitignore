@@ -1,0 +1,50 @@
+# Unity-generated directories (relative to this project root)
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Local builds and automated test output
+/[Bb]uild/
+/[Bb]uilds/
+/[Tt]est[Rr]esults/
+/[Tt]est[Rr]esults*.xml
+/[Cc]ode[Cc]overage/
+/[Cc]overage[Rr]eport/
+
+# IDE caches and generated project/solution files
+/.vs/
+/.idea/
+/.gradle/
+/.consulo/
+/ExportedObj/
+/*.csproj
+/*.csproj.user
+/*.unityproj
+/*.sln
+/*.slnx
+/*.suo
+/*.tmp
+/*.user
+/*.userprefs
+/*.pidb
+/*.booproj
+/*.svd
+/*.pdb
+/*.mdb
+/*.opendb
+/*.VC.db
+/*.DotSettings.user
+
+# Root-level Unity crash and build artifacts
+/sysinfo.txt
+/crashlytics-build.properties
+/*.apk
+/*.aab
+/*.app
+
+# Intentionally versioned: Assets/, Packages/, ProjectSettings/, Docs/,
+# .vscode/, .vsconfig, and Unity .meta files.
