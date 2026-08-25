@@ -1,0 +1,7 @@
+{
+    "name": "HallowBlaze.Tests.PlayMode",
+    "rootNamespace": "HallowBlaze.Tests.PlayMode",
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}

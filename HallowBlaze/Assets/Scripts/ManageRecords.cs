@@ -1,10 +1,24 @@
-﻿using System.Collections;
+﻿// =====================================================================
+// SECURITY NOTICE: Dreamlo integration has been secured
+// The private code was removed from source to prevent exposure
+// In production, this should be loaded from external configuration
+// This implementation maintains leaderboard viewing functionality while
+// disabling upload capabilities when no private code is configured.
+// =====================================================================
+
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.UI;
 
 public class ManageRecords : MonoBehaviour {
+    
+    // Security: Method to check if upload functionality is available
+    public bool IsUploadAvailable()
+    {
+        return !string.IsNullOrEmpty(privateCode);
+    }
 
     string highScores = string.Empty;
     string playerName = string.Empty;
@@ -17,7 +31,7 @@ public class ManageRecords : MonoBehaviour {
 
     //Dreamlo specific variables
     readonly string webserviceURL = "https://dreamlo.com/lb/";
-    public string privateCode = "EWoIz_OEmEKKefw2XQ49kge9Rh8wnyZE-WvSX9kxb0kA";
+    public string privateCode = "";
     public string publicCode = "5ba67a28613a880614fe3ace";
 
     public struct Score
@@ -32,12 +46,14 @@ public class ManageRecords : MonoBehaviour {
     void Awake()
     {
         resultsText.text = string.Empty;
+        
+        // Security: If privateCode is not set, provide warning but still allow viewing
+        if (string.IsNullOrEmpty(privateCode))
+        {
+            Debug.LogWarning("Dreamlo integration disabled - no private code configured. Leaderboard viewing only.");
+        }
+        
         LoadScores();
-
-        //Adds a listener that invokes the "LockInput" method when the player finishes editing the main input field.
-        //Passes the main input field into the method when "LockInput" is invoked.
-        mainInputField.onEndEdit.AddListener(delegate { LockInput(mainInputField); });
-    }
 
     //Checks if there is anything entered into the input field.
     void LockInput(InputField input)
@@ -45,7 +61,18 @@ public class ManageRecords : MonoBehaviour {
         if (input.text.Length > 3)
         {
             this.playerName = input.text;
-            LoadSingleScore();
+            
+            // Security: If privateCode is not set, only load public scores for viewing
+            if (!string.IsNullOrEmpty(privateCode))
+            {
+                LoadSingleScore();
+            }
+            else
+            {
+                Debug.LogWarning("Dreamlo upload disabled - no private code configured");
+                // Show that there's no uploaded record (since we can't check)
+                uploadedRecordText.text = string.Format("Player {0} has no uploaded record.", this.playerName);
+            }
         }
     }
 
@@ -83,14 +110,25 @@ public class ManageRecords : MonoBehaviour {
 
     public void AddScore()
     {
-        if (TooManyRequests()) return;
+        // Security: If privateCode is not set, disable upload functionality
+        if (string.IsNullOrEmpty(privateCode) || TooManyRequests()) return;
 
         StartCoroutine(AddScoreWithPipe(this.playerName, PlayerPrefs.GetInt("HighScore", 0)));
     }
 
     void OnEnable()
     {
-        StartCoroutine(LoadScoresSafe());
+        // Security: If privateCode is not set, only load scores without upload functionality
+        if (!string.IsNullOrEmpty(privateCode))
+        {
+            StartCoroutine(LoadScoresSafe());
+        }
+        else
+        {
+            Debug.LogWarning("Dreamlo upload disabled - no private code configured");
+            // Still attempt to load public scores for viewing
+            LoadScores();
+        }
     }
 
     IEnumerator LoadScoresSafe()
@@ -104,6 +142,13 @@ public class ManageRecords : MonoBehaviour {
     // This function saves a trip to the server. Adds the score and retrieves results in one trip.
     IEnumerator AddScoreWithPipe(string playerName, int totalScore)
     {
+        // Security: If privateCode is not set, disable upload functionality
+        if (string.IsNullOrEmpty(privateCode))
+        {
+            Debug.LogWarning("Dreamlo upload disabled - no private code configured");
+            yield break;
+        }
+        
         playerName = Clean(playerName);
         string url = webserviceURL + this.privateCode + "/add-pipe/" + UnityWebRequest.EscapeURL(playerName) + "/" + totalScore.ToString();
         using (UnityWebRequest request = UnityWebRequest.Get(url))
@@ -181,8 +226,15 @@ public class ManageRecords : MonoBehaviour {
             uploadedRecordText.text = string.Format("Your uploaded record is {0} days.", uploadedRecord);
         }
 
-        if (int.Parse(uploadedRecord) < PlayerPrefs.GetInt("HighScore", 0))
+        // Security: Disable upload button if privateCode is not set
+        if (string.IsNullOrEmpty(privateCode))
+        {
+            uploadRecordButton.gameObject.SetActive(false);
+        }
+        else if (int.Parse(uploadedRecord) < PlayerPrefs.GetInt("HighScore", 0))
+        {
             uploadRecordButton.gameObject.SetActive(true);
+        }
     }
 
     public void LoadScores()

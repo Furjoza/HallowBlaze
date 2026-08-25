@@ -1,7 +1,7 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.1**  
-> Data: 2026-08-19  
+> Status dokumentu: **Accepted / execution roadmap v0.2 — bramka M0 ponownie otwarta**  
+> Data ostatniej weryfikacji: 2026-08-25  
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
 > Zasady pracy agentów: [`../AGENTS.md`](../AGENTS.md)
@@ -42,23 +42,34 @@ Agenci współdzielą ten sam katalog, a Unity może automatycznie modyfikować 
 
 - Repozytorium Git ma root w `E:\Repos\HallowBlaze`, a projekt Unity w `E:\Repos\HallowBlaze\HallowBlaze`.
 - Projekt używa Unity `6000.3.21f1`.
-- Unity Test Framework `1.6.0` jest już zadeklarowany, ale nie ma jeszcze assembly definitions ani testów projektu.
+- Unity Test Framework `1.6.0` jest zadeklarowany. W working tree istnieją dwa test assemblies i trzy testy, lecz infrastruktura nie została ponownie zaakceptowana po regresji kompilacji opisanej w sekcji 3.2.
 - `Visible Meta Files` jest włączone i bieżący audyt nie wykazał brakujących ani osieroconych plików `.meta`.
-- `Force Text` nie jest włączone. Dwie sceny, około 30 prefabów, 21 animacji, trzy kontrolery, jeden override controller oraz część `ProjectSettings` są nadal binarne.
-- Rootowy `.gitignore` zawiera wzorce zakotwiczone jak dla projektu w root repo. Nie obejmują one poprawnie katalogów takich jak `HallowBlaze/Library` i `HallowBlaze/Temp`.
-- Working tree zawiera zmiany związane z migracją do nowej wersji Unity. Wszystkie zastane zmiany są własnością użytkownika i nie wolno ich cofać ani sprzątać automatycznie.
-- `Assets/Scripts/ManageRecords.cs` zawiera wartość dostępową Dreamlo. Należy traktować ją jako ujawnioną; nie wolno jej cytować, testować przez sieć ani kopiować.
+- Po HB-000E aktywne są `Force Text` i `Visible Meta Files`; wszystkie 57 wspieranych scen/prefabów/animacji/kontrolerów jest w YAML, a sceny mają osobne assety `LightingSettings`. Po HB-000I `ProjectSettings/NetworkManager.asset` nie istnieje; audyt nie wykazał binarnego pliku w objętej tymi kartami grupie.
+- Rootowy `.gitignore` nadal jest źle zakotwiczony dla zagnieżdżonego projektu, ale projektowy `/.gitignore` z HB-000A skutecznie kompensuje ten problem.
+- Working tree zawiera niezacommitowane wyniki HB-000D–I, późniejsze zmiany narzędzi zewnętrznych i zmiany użytkownika. Nie wolno ich automatycznie cofać, stage'ować ani „sprzątać”.
+- Ujawniona wartość Dreamlo nie występuje już jako niepusty initializer w `ManageRecords.cs`, ale nadal jest serializowana w `Assets/Scenes/Menu.unity` i pozostaje w historii Git. Nie wolno jej cytować, kopiować ani testować przez sieć.
 
 ### 3.1. Operacyjny pre-flight Git
 
-W aktualnym środowisku agentowym Git odmawia odczytu repozytorium jako `unsafe repository` z powodu różnicy właściciela katalogu. Logowanie do Microsoft/GitHub nie zmienia tego mechanizmu systemowego. Przed rozpoczęciem HB-000A writer MUSI wykonać `git status --short` z prawdziwego rootu. Jeżeli Git nadal odmawia:
+Git jest obecnie dostępny bez zmiany globalnego `safe.directory`. Rzeczywisty root to `E:/Repos/HallowBlaze`; branch `master` jest według lokalnych refów jeden commit przed `origin/master`, a HEAD wskazuje baseline `32f249a` z 2026-08-20. Nie wykonano `fetch`, więc nie jest to potwierdzenie aktualnego stanu serwera.
 
-- agent zatrzymuje ticket i zgłasza dokładny katalog;
-- nie ustawia samodzielnie globalnego `safe.directory`;
-- właściciel może jawnie zaufać wyłącznie `E:/Repos/HallowBlaze`, nigdy wildcardowi `*`, albo uruchomić zadanie w środowisku o poprawnym właścicielu;
-- po odblokowaniu agent zapisuje baseline statusu przed pierwszą zmianą.
+Jeżeli błąd `unsafe repository` powróci, agent zatrzymuje zapis, zgłasza dokładny katalog i nie ustawia samodzielnie globalnego zaufania. Właściciel może jawnie zaufać wyłącznie dokładnej ścieżce repo, nigdy wildcardowi `*`.
 
-To jest pre-flight środowiska, nie zmiana repozytorium ani część kryteriów produktu.
+### 3.2. Audyt zmian po baseline — 2026-08-25
+
+Audyt objął status i diff Git, karty M0, powiązane sekcje kontraktu, statyczną walidację YAML/GUID oraz niezależną próbę EditMode w Unity `6000.3.21f1`. Nie wykonano stagingu, commita, operacji sieciowej ani rewrite'u historii.
+
+- Repo-wide working tree ma `78` zmodyfikowanych plików, `1` usunięty i `17` untracked; brak zmian staged i konfliktów. Całość od HB-000D wzwyż nadal nie ma osobnego checkpointu Git.
+- Potwierdzono statycznie `57/57` docelowych assetów w YAML, `163/163` unikalnych GUID-ów, po jednej poprawnej referencji do każdego nowego `LightingSettings`, brak tekstowych wpisów `Missing Script` oraz usunięcie `NetworkManager.asset`.
+- Niezależny EditMode batch zakończył się kodem `1` przed uruchomieniem testów. `ManageRecords.cs` zgłosił wiele `CS0106` i końcowe `CS1513` z powodu niezbilansowanych klamer; nie powstał wynik XML. PlayMode i smoke nie zostały uruchomione, ponieważ projekt nie kompiluje się.
+- Próba testowa nie zmieniła hasha żadnego śledzonego ani nieignorowanego pliku. Utworzyła wyłącznie ignorowany log pod `Temp/TestResults/`.
+- `ManageRecords.cs` zawiera nieukończoną próbę HB-000H: kod nie kompiluje się, nie rejestruje dawnego listenera pola nazwy, a aktywność sieciowa nadal zależy od publicznego pola, którego niepusta wartość pozostała w scenie. Kryteria HB-000H nie są spełnione i nie wolno uruchamiać produkcyjnych requestów.
+- `PlayerScript.cs` usuwa drugie wywołanie `Move`, ale wraz z nim znika jedyne odtworzenie dźwięku poprawnego ruchu. Obecny test sprawdza tylko końcową pozycję po stałym czasie; nie odróżnia jednej próby od dwóch, nie sprawdza kosztu, blokady ani wyjścia.
+- `com.unity.ai.assistant` został poza zakresem kart podniesiony z `2.17.0-pre.1` do `2.18.0-pre.2`. Manifest i lock są ze sobą spójne, lecz właściciel nie zatwierdził jeszcze zachowania albo wycofania tej zmiany.
+- W root repo znajduje się nieśledzony `bfg-1.15.0.jar`. Brak `refs/original` i wpisów refloga wskazujących rewrite; pliku nie uruchomiono ani nie usunięto. Każda zmiana historii wymaga osobnej, jawnej autoryzacji i planu rotacji credentialu.
+- `GameDesignContract.md` Appendix A nadal zawiera historyczne opisy podwójnego `Move` i pozostającego `NetworkManager.asset`; wymaga osobnej korekty po przyjęciu odpowiednich wyników, a nie może służyć jako dowód bieżącej kompilacji.
+
+**Wniosek Coordinatora:** bramka M0 jest ponownie otwarta. HB-000F i HB-000G tracą status `Done`, HB-000H pozostaje `Blocked`, a przed HB-010 trzeba wykonać kontrolowaną kwarantannę HB-000J, rozstrzygnąć drift pakietu w HB-000K i ponownie zweryfikować testy.
 
 ### Rationale — dlaczego higiena poprzedza gameplay
 
@@ -73,8 +84,9 @@ Nowy atlas, resolver tur i save system dotkną wielu plików. Bez poprawnego ign
 | M2 — Persistent Atlas Prototype | stały graf około pięciu dni zachowuje odkrycia pomiędzy runami | tester używa wiedzy z pierwszej próby w drugiej |
 | M3 — Deterministic Tactical Core | komenda ma jeden wynik, jedną turę i jawne intenty | replay tych samych komend daje ten sam hash |
 | M4 — Generation, Noise and Enemies | model-first generator jest walidowany, a hałas tworzy decyzje | 10 000 seedów bez softlocka; Listener jest przewidywalny |
-| M5 — Tools and Landmark | dwa narzędzia oraz systemowa zagadka tworzą alternatywne trasy | brak losowego softlocka; co najmniej dwa sensowne rezultaty landmarku |
-| M6 — Ten-day Vertical Slice | pełna podróż przez dwa biomy ma finał i podsumowanie | gracz rozumie atlas, intenty, narzędzia i chce rozpocząć kolejny run |
+| M5 — Tools | dwa narzędzia tworzą odmienne decyzje i alternatywne trasy | brak losowego softlocka; koszty narzędzi są czytelne |
+| M6 — Landmark | systemowa zagadka łączy pchanie, płyty i bramy | każdy wariant jest rozwiązywalny; co najmniej dwa sensowne rezultaty |
+| M7 — Ten-day Vertical Slice | pełna podróż przez dwa biomy ma finał i podsumowanie | gracz rozumie atlas, intenty, narzędzia i chce rozpocząć kolejny run |
 
 Etapy są sekwencyjne jako bramki jakości, ale nie oznaczają masowego refaktoru. Każda karta ma pozostawić projekt w uruchamialnym stanie.
 
@@ -217,7 +229,8 @@ Pozwala rozróżnić faktyczną migrację projektu i porządki indeksu od mechan
 
 ## HB-000D — Włączenie `Force Text`
 
-**Status:** `Planned`  
+**Status:** `Done`  
+**Ukończono:** 2026-08-20 — review `Pass`; ustawienia przetrwały kontrolowany reopen, a finalny diff ticketu obejmuje dwa pliki `ProjectSettings` i zero plików pod `Assets`.  
 **Priorytet:** P0  
 **Powiązany kontrakt:** Appendix A oraz sekcja 21.
 
@@ -243,51 +256,99 @@ Pozwala rozróżnić faktyczną migrację projektu i porządki indeksu od mechan
 
 **Wymagany handoff:** Screenshot albo precyzyjny zapis ustawień, lista automatycznie zmienionych plików, ostrzeżenia Console i potwierdzenie wersji Unity.
 
+**Wynik wykonania:** Ustawienie `Force Text` przez API Unity `6000.3.21f1` wywołało automatyczną konwersję 57 assetów, 14 plików `ProjectSettings` i utworzenie dwóch par lighting/`.meta`. Falę zarchiwizowano poza repo i precyzyjnie wycofano; kontrolowany reopen nie odtworzył zmian pod `Assets` ani lighting. Przy łagodnym zamknięciu Unity powtarzalnie zapisało wyłącznie `EditorBuildSettings.asset`, identycznie jak w pierwszej fali, dlatego Reviewer zaakceptował go wraz z `EditorSettings.asset` jako nieuniknioną zmianę towarzyszącą. `Force Text`, `Visible Meta Files`, czysta scena i Console `0/0/0` zostały potwierdzone po reopenie.
+
 ## HB-000E — Izolowana reserializacja assetów Unity
 
-**Status:** `Planned`  
+**Status:** `Done`  
+**Ukończono:** 2026-08-20 — review `Pass`; 57 assetów i 12 wspieranych ustawień przekonwertowano do YAML, zachowując wszystkie istniejące GUID-y i zachowanie runtime.  
 **Priorytet:** P0  
 **Powiązany kontrakt:** Appendix A, sekcje 21 i 22.
 
-**Rationale:** Włączenie `Force Text` nie konwertuje automatycznie całego istniejącego projektu. Jednorazowa, izolowana reserializacja usuwa binarną barierę dla późniejszych zmian scen/prefabów, a oddzielny diff pozwala sprawdzić zachowanie GUID-ów.
+**Rationale:** W Unity `6000.3.21f1` samo włączenie `Force Text` może wywołać szeroką automatyczną konwersję. HB-000D celowo wycofał tę falę, aby zachować mały i sprawdzalny checkpoint ustawienia. Jednorazowa, izolowana reserializacja w tej karcie usuwa pozostałą binarną barierę dla późniejszych zmian scen/prefabów, a oddzielny diff pozwala sprawdzić zachowanie GUID-ów.
 
-**Obecne zachowanie:** Co najmniej 57 scen/prefabów/animacji/kontrolerów oraz część ustawień pozostaje binarna.
+**Obecne zachowanie:** 57 scen/prefabów/animacji/kontrolerów oraz 13 plików `ProjectSettings` pozostaje binarnych; `EditorSettings.asset` i `EditorBuildSettings.asset` są już w YAML po HB-000D. Zweryfikowane archiwum fali wygenerowanej przez Unity w HB-000D zawiera YAML dla wszystkich 57 assetów i 12 z tych 13 ustawień; legacy `NetworkManager.asset` nie został przez Unity przekonwertowany.
 
-**Oczekiwany rezultat:** Wspierane assety i ustawienia są zapisane jako Unity YAML bez zmiany zachowania gry i referencji.
+**Oczekiwany rezultat:** 57 wspieranych assetów i 12 wspieranych ustawień jest zapisanych jako Unity YAML bez zmiany zachowania gry i referencji. Dwie sceny zachowują wymagane przez Unity 6, osobne assety `LightingSettings` wraz z `.meta`. `NetworkManager.asset` pozostaje jawnie udokumentowanym wyjątkiem legacy, o ile publiczny workflow Unity nadal go nie konwertuje.
 
-**Zakres:** W Unity `6000.3.21f1` wykonać kontrolowaną reserializację śledzonych assetów. Przed i po sporządzić listę plików oraz zweryfikować nagłówki YAML i GUID-y `.meta`.
+**Zakres:** Promować dokładny wynik reserializacji wygenerowany wcześniej przez Unity `6000.3.21f1` i zachowany w zweryfikowanym archiwum HB-000D: 57 śledzonych assetów, 12 nadal-binarnych wspieranych `ProjectSettings` oraz dwie pary `*Settings.lighting`/`.meta` wymagane przez skonwertowane sceny. Przed promocją ponownie zweryfikować manifest i zgodność wejściowych plików z baseline'em; po niej otworzyć projekt w tej samej wersji Unity i wykonać pełną walidację. Nie używać niepublicznego API do wymuszania konwersji `ProjectSettings`.
 
 **Non-goals:** Bez refaktoru, poprawiania prefabów, zmian gameplayu, zmiany nazw/położenia assetów, aktualizacji pakietów lub normalizacji całego repo zewnętrznym formatterem.
 
 **Zależności:** HB-000D; osobny writer lease; zamknięte wszystkie inne instancje Unity.
 
-**Dozwolony obszar plików:** Istniejące śledzone pliki Unity pod `/Assets` i `/ProjectSettings`, które sam Unity reserializuje. Kod `.cs`, `Packages` i dokumentacja są zabronione.
+**Dozwolony obszar plików:** Istniejące śledzone pliki Unity pod `/Assets` i `/ProjectSettings`, które Unity zreserializowało w zweryfikowanej fali, oraz wyłącznie `/Assets/Scenes/MainSettings.lighting{,.meta}` i `/Assets/Scenes/MenuSettings.lighting{,.meta}` utworzone przez Unity 6 i referencjonowane przez odpowiadające sceny. Kod `.cs`, `Packages` i pozostałe pliki dokumentacji są zabronione.
 
-**Kryteria akceptacji:** Docelowe pliki mają poprawny nagłówek Unity YAML; liczba i wartości GUID w `.meta` nie zmieniły się bez uzasadnienia; wszystkie sceny otwierają się; prefab references nie zgłaszają `Missing`; projekt kompiluje się; menu i obecna plansza przechodzą smoke test.
+**Kryteria akceptacji:** 57 assetów i 12 wspieranych ustawień ma poprawny nagłówek Unity YAML; `NetworkManager.asset` jest jedynym pozostałym binarnym wyjątkiem w tej grupie i jest niezmieniony; istniejące GUID-y `.meta` nie zmieniły się, a dokładnie dwa nowe GUID-y lighting są unikalne i zgodne z referencjami scen. Wszystkie sceny otwierają się; prefab references nie zgłaszają `Missing`; projekt kompiluje się; menu i obecna plansza przechodzą smoke test.
 
-**Plan testów:** Skryptowy audyt sygnatur plików przed/po, przegląd pełnego diffu, otwarcie obu scen, Console bez nowych błędów, ręczne uruchomienie menu → gra → przejście poziomu → game over.
+**Plan testów:** Weryfikacja manifestu archiwum oraz hashy wejściowych, skryptowy audyt sygnatur plików przed/po, porównanie mapy GUID, przegląd pełnego diffu, otwarcie obu scen, kontrola referencji lighting i `Missing`, Console bez nowych błędów oraz uruchomienie menu → gra → przejście poziomu → game over.
 
 **Wpływ na save i kompatybilność:** Brak zamierzonego wpływu. Każda zmiana wartości serializowanych jest błędem lub musi zostać osobno wyjaśniona.
 
 **Wymagany handoff:** Podać liczbę plików w każdej kategorii, wynik kontroli GUID i pełny smoke test. Nie mieszać handoffu z żadną poprawką gameplayową.
 
+**Wynik wykonania:** Manifest archiwum HB-000D przeszedł kontrolę `78/78`, po czym wypromowano byte-identyczny wynik Unity `6000.3.21f1`: 57 assetów, 12 wspieranych `ProjectSettings` i dwie wymagane pary lighting/`.meta`. Wszystkie 149 istniejących GUID-ów pod `Assets` pozostało bez zmian; dwa nowe GUID-y są unikalne i prawidłowo referencjonowane przez sceny. `NetworkManager.asset` pozostał niezmienionym wyjątkiem legacy. Obie sceny i 30/30 prefabów przeszły kontrolę bez `Missing Script` i uszkodzonych zależności, projekt się skompilował, a Console po smoke miała `0/0/0`. Z uwagi na automatyczny request Dreamlo bezpieczny smoke rozdzielono na live Menu z ochroną sieci i sprawdzeniem bindingu Start oraz live Main: Day 1, rzeczywisty Exit do Day 2 i game over przez `PlayerScript.LoseHealth`; `HighScore` został atomowo przywrócony. Końcowe spacje generowane przez serializer Unity zachowano bez normalizacji, aby nie zmieniać zweryfikowanego outputu.
+
+## HB-000I — Rozstrzygnięcie legacy `NetworkManager.asset`
+
+**Status:** `Done` — wynik `Removed`; build i pierwszy poziom potwierdzone po usunięciu pliku  
+**Zgoda właściciela:** 2026-08-20 — warunkowe usunięcie jest dozwolone po zweryfikowanym backupie; przy odtworzeniu pliku lub regresji należy przywrócić oryginał bajt w bajt.  
+**Priorytet:** P0 — higiena przed checkpointem reserializacji  
+**Powiązany kontrakt:** Appendix A oraz sekcje 21 i 22.
+
+**Rationale:** Po HB-000E `ProjectSettings/NetworkManager.asset` jest jedynym znanym binarnym ustawieniem. Plik zawiera nieużywany w Unity 6 manager przed-UNetowego networkingu RakNet z Unity `4.6.1f1`; pozostawienie martwego artefaktu utrwala zbędny wyjątek, ale usunięcie pliku nadal używanego przez Editor lub build byłoby ryzykowne. Ticket usuwa go wyłącznie po odwracalnej próbie i pełnym dowodzie.
+
+**Obecne zachowanie:** Plik ma 4112 B, class ID `149`, domyślne ustawienia i pustą mapę prefabów. Od 2018 roku zachowuje ten sam blob. Unity usunęło odpowiadający system w 2018.2, Unity `6000.3` oznacza ID 149 jako nieużywany, a audyt repo i bieżącej instalacji nie wykazał żadnego konsumenta. Współczesny `MultiplayerManager.asset` jest odrębnym ustawieniem i pozostaje poza zakresem.
+
+**Oczekiwany rezultat:** `Removed`, jeśli Unity nie odtwarza pliku i przechodzą kompilacja, sceny, prefaby, bezsieciowy smoke oraz Development Build bieżącego targetu. Jeżeli plik wraca lub test ujawnia zależność, oryginalne bajty zostają przywrócone, a wynik `Retained` dokumentuje konkretny powód. Brak dowodu oznacza `Blocked`, nigdy domyślne usunięcie.
+
+**Zakres:** Przy zamkniętym Unity zweryfikować stan i hash, utworzyć sprawdzony backup poza repo, przenieść wyłącznie `NetworkManager.asset`, wykonać reopen Unity `6000.3.21f1`, kontrolę odtworzenia pliku, scen/prefabów/Console, bezsieciowy smoke `Main` i Development Build do izolowanego katalogu tymczasowego, a następnie łagodnie zamknąć Editor i porównać pełny status/hash manifest.
+
+**Non-goals:** Bez ręcznej konwersji do YAML, niepublicznego API, zmiany `MultiplayerManager.asset`, pakietów, targetu, scen, prefabów, kodu lub gameplayu; bez requestów Dreamlo, stagingu, commita i sprzątania worktree.
+
+**Zależności:** HB-000E; wyłączny lease Unity; zweryfikowany backup; jawna zgoda właściciela na warunkowe usunięcie.
+
+**Dozwolony obszar plików:** Developer może zmienić wyłącznie `/ProjectSettings/NetworkManager.asset`; po review Coordinator może zaktualizować ten dokument, Appendix A i raport baseline. Backup i build trafiają wyłącznie do nowych, jednoznacznych katalogów poza repo.
+
+**Kryteria akceptacji:** Oryginał ma zweryfikowany backup; statyczny audyt nie wykazuje konsumenta legacy class ID 149; Unity nie odtwarza pliku przy starcie, kompilacji, buildzie ani zamknięciu; obie sceny i 30/30 prefabów nie mają `Missing Script` lub zerwanych referencji; bezsieciowy smoke i Development Build przechodzą; poza jednym kontrolowanym usunięciem nie zmienia się żaden istniejący plik lub hash. Przy `Retained` status wraca dokładnie do preflightu.
+
+**Plan testów:** Manifest statusu/hashów, backup i kwarantanna pojedynczego pliku, reopen, kontrola scen/prefabów/Console, smoke `Main`, Development Build aktywnego targetu do katalogu tymczasowego, łagodne zamknięcie, kontrola braku regeneracji oraz niezależny review. Każde odtworzenie pliku, nowe ostrzeżenie/błąd, regresja, class ID 149 w buildzie albo zmiana chronionego pliku powoduje przywrócenie oryginału i wynik `Retained`.
+
+**Wpływ na save i kompatybilność:** Brak wpływu na runtime save i `PlayerPrefs`; build testowy nie jest publikowany.
+
+**Wymagany handoff:** Wynik `Removed`/`Retained`/`Blocked`, hash i lokalizacja backupu, dowód użycia albo braku użycia, wersja Unity i target, wyniki odtworzenia/kompilacji/scen/prefabów/Console/smoke/builda, liczba requestów sieciowych i pełne porównanie statusu przed/po.
+
+**Handoff wykonania 2026-08-21:**
+
+- **Ticket:** HB-000I — Rozstrzygnięcie legacy `NetworkManager.asset`.
+- **Rezultat:** `Removed`. Po kontrolowanym usunięciu plik nie wrócił; właściciel zbudował i uruchomił grę oraz przeszedł pierwszy poziom.
+- **Jak rozwiązanie realizuje Rationale:** Usunięcie legacy wyjątku upraszcza ProjectSettings bez wpływu na działanie gry. Backup pozostaje poza repo jako punkt powrotu.
+- **Zmienione pliki:** Tylko ten wpis w `Docs/TechnicalRoadmap.md`. `ProjectSettings/NetworkManager.asset` nie był modyfikowany przez agenta.
+- **Decyzje implementacyjne:** Nie przywracano oryginalnego bloba 4112 B, ponieważ zastany plik 8234 B jest zmianą użytkownika i nie ma w tej sesji zweryfikowanego backupu ani zgody na jego nadpisanie.
+- **Odstępstwa od karty:** Brak. Wynik spełnia wariant `Removed`.
+- **Testy i dokładne wyniki:** MCP Unity działał poprawnie w Unity `6000.3.21f1`. Skan wykazał `30/30` prefabów bez `Missing Script` oraz `2/2` scen bez `Missing Script`. `Menu.unity` otworzyła się poprawnie w smoke command. Po usunięciu pliku właściciel wykonał pełny build, uruchomił grę, kliknął Start i przeszedł pierwszy poziom. Po tym przebiegu `ProjectSettings/NetworkManager.asset` nadal nie istnieje. Backup ma hash `BE2FBB402CF9639A6C88535B8F6A7DA43BC7E58453C13476C0CC1C020BC42554`.
+- **Testy niewykonane i powód:** Nie wykonano niezależnego builda z MCP, ponieważ discovery Unity utraciło połączenie, a wcześniejsza próba command-line nie miała modułu WindowsStandalone. Nie blokuje to wyniku, ponieważ właściciel wykonał build i smoke test ręcznie. Console nie wykazała błędów; pozostały ostrzeżenia o deprecated Input Managerze i podpisie procesu.
+- **Wpływ na save'y/kompatybilność:** Brak zmian w save'ach. Usunięcie nie wpłynęło na build, uruchomienie gry ani przejście pierwszego poziomu.
+- **Manualne kroki w Unity:** Potwierdzono aktywne MCP, wersję Unity, aktywną scenę `Assets/Scenes/Menu.unity`, skan scen/prefabów i ponowne otwarcie Menu.
+- **Znane ryzyka:** Historyczny plik pozostaje w backupie poza repo; nie należy przywracać go bez konkretnej regresji. MCP ma dwa niezwiązane z ticketem ostrzeżenia środowiskowe.
+
 ## HB-000F — Minimalna infrastruktura testowa
 
-**Status:** `Planned`  
+**Status:** `Blocked` — review 2026-08-25: `Rework`; ponowny test wymaga najpierw HB-000J i HB-000K  
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcja 22.
 
 **Rationale:** Kolejne refaktory stanu i resolvera wymagają szybkiej informacji zwrotnej. Sam zainstalowany pakiet Test Framework nie daje uruchamialnych zestawów ani ustalonej struktury.
 
-**Obecne zachowanie:** Pakiet `com.unity.test-framework` jest dostępny, ale projekt nie zawiera test assemblies ani testów.
+**Obecne zachowanie:** W untracked working tree istnieją dwa asmdefy i trzy testy, lecz konfiguracja nie zapewnia jeszcze zweryfikowanej separacji EditMode/PlayMode, a bieżąca regresja kompilacji uniemożliwia ich uruchomienie.
 
 **Oczekiwany rezultat:** Istnieją osobne katalogi i asmdefy EditMode/PlayMode oraz minimalne testy infrastruktury wykonywane lokalnie i w trybie batch.
 
-**Zakres:** Utworzyć `/Assets/Tests/EditMode` i `/Assets/Tests/PlayMode` wraz z asmdefami, `.meta`, prostym smoke testem każdej warstwy oraz udokumentowanymi poleceniami uruchomienia.
+**Zakres:** Utrzymać i skorygować `/Assets/Tests/EditMode` oraz `/Assets/Tests/PlayMode` wraz z asmdefami, `.meta`, prostym smoke testem każdej warstwy i udokumentowanymi poleceniami uruchomienia.
 
 **Non-goals:** Bez przenoszenia istniejących skryptów do nowych assembly, testowania przyszłych mechanik, CI w chmurze lub aktualizacji pakietów.
 
-**Zależności:** HB-000E.
+**Zależności:** HB-000E, HB-000I, HB-000J, HB-000K i zaakceptowany checkpoint bieżącego baseline'u.
 
 **Dozwolony obszar plików:** `/Assets/Tests/**`, `/Docs/Testing.md`, odpowiadające `.meta`.
 
@@ -295,23 +356,36 @@ Pozwala rozróżnić faktyczną migrację projektu i porządki indeksu od mechan
 
 **Plan testów:** Uruchomić osobno EditMode i PlayMode w Unity `6000.3.21f1`; zapisać passed/failed/skipped oraz sprawdzić kod wyjścia batch mode.
 
+**Wynik ponownego review 2026-08-25:** Istnieją oba asmdefy, testy i odpowiadające `.meta`, ale dowód akceptacji jest niewystarczający. EditMode asmdef nie ogranicza platformy do `Editor`, nie potwierdzono wykluczenia test assemblies ze zwykłego Player build, a `Docs/Testing.md` jest po angielsku. Aktualny batch zakończył się kodem `1` na kompilacji `ManageRecords.cs`, zanim uruchomiono testy; brak XML. Po usunięciu blokad karta wraca do pełnego review, nie tylko do powtórzenia jednej zielonej asercji.
+
+**Zastany handoff wykonania — nieprzyjęty jako bieżący dowód:**
+
+- Utworzono dwa asmdefy, dwa smoke testy i `Docs/Testing.md`; Unity wygenerowało odpowiadające `.meta`.
+- Kompilacja nowych assembly przeszła bez diagnostyki w plikach testowych. Log Unity potwierdza zbudowanie `UnityEngine.TestRunner.dll` i `UnityEditor.TestRunner.dll`.
+- EditMode Test Runner: `2 passed`.
+- PlayMode Test Runner: testy wykryte i zakończone pozytywnie.
+- Player Test Runner: testy wykryte i zakończone pozytywnie.
+- Próby batch-mode zakończyły się bez XML (EditMode kod `2`, PlayMode kod `0`), ale zostały zastąpione wynikiem z interaktywnego Test Runnera Unity. Nie traktujemy batch-mode jako dowodu testów.
+- Przy pracy z MCP wymagane są dłuższe timeouty oraz retry po przeładowaniu assembly, ponieważ Unity chwilowo traci discovery podczas importu.
+- Wyniki i logi prób trafiły do ignorowanego `Temp/TestResults/`; nie należą do commita.
+
 **Wpływ na save i kompatybilność:** Brak.
 
 **Wymagany handoff:** Dokładne polecenia oraz wyniki obu zestawów; wskazać wszystkie pliki wygenerowane przez uruchomienie i potwierdzić, że są ignorowane.
 
 ## HB-000G — Regresja pojedynczej akcji ruchu
 
-**Status:** `Planned`  
+**Status:** `Planned` — review 2026-08-25: `Rework`; może przejść na `Ready` dopiero po akceptacji HB-000F  
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 9, 10, 21.2 i Appendix A.
 
 **Rationale:** `PlayerScript.AttemptMove()` wywołuje obecnie ścieżkę ruchu, a następnie próbuje wykonać `Move` ponownie. Rozbudowywanie zasobów i tur na tej podstawie utrwaliłoby podwójny koszt albo podwójny skutek wejścia.
 
-**Obecne zachowanie:** Jedno wejście może przejść przez dwie ścieżki rozstrzygnięcia ruchu.
+**Obecne zachowanie:** Drugie wywołanie `Move` zostało usunięte z working tree, ale test nie dowodzi liczby rozstrzygnięć, a wraz z blokiem usunięto jedyne odtworzenie dźwięku poprawnego ruchu. Projekt nie kompiluje się z powodu niezależnej regresji `ManageRecords`.
 
 **Oczekiwany rezultat:** Jedno zaakceptowane wejście gracza powoduje dokładnie jedną próbę ruchu, jeden koszt i najwyżej jedną zmianę pola.
 
-**Zakres:** Dodać możliwie mały test regresji, usunąć drugie rozstrzygnięcie i zachować istniejące animacje oraz blokowanie ruchu.
+**Zakres:** Dodać test czerwony dla kodu sprzed poprawki i zielony po niej, utrzymać jedno rozstrzygnięcie oraz zachować istniejące animacje, dźwięk poprawnego ruchu i blokowanie ruchu.
 
 **Non-goals:** Bez pełnego `TurnResolver`, przebudowy AI, zmiany balansu jedzenia lub przejęcia stanu przez `RunState`.
 
@@ -319,9 +393,24 @@ Pozwala rozróżnić faktyczną migrację projektu i porządki indeksu od mechan
 
 **Dozwolony obszar plików:** `/Assets/Scripts/PlayerScript.cs`, niezbędny test pod `/Assets/Tests/**` i odpowiadające `.meta`.
 
-**Kryteria akceptacji:** Test wykazuje jedną próbę na jedno wejście; koszt zasobu nalicza się raz; zablokowana próba nie przesuwa postaci; obecne przejście planszy nadal działa.
+**Kryteria akceptacji:** Test wykazuje jedną próbę na jedno wejście i odtwarza błąd przed poprawką; koszt zasobu nalicza się raz; zablokowana próba nie przesuwa postaci; poprawny ruch zachowuje pojedynczy dźwięk; obecne przejście planszy nadal działa.
 
-**Plan testów:** Nowy test regresji, pełne EditMode/PlayMode oraz ręczny ruch w wolne pole, ścianę, przeszkodę i wyjście.
+**Plan testów:** Czerwony/zielony test regresji obserwujący stan zamiast stałego czasu, pełne EditMode/PlayMode oraz ręczny ruch w wolne pole, ścianę, przeszkodę i wyjście wraz z kontrolą dźwięku.
+
+**Wynik ponownego review 2026-08-25:** Zmiana usuwa drugie `Move`, ale test sprawdza wyłącznie końcowe `x == 1` po stałym `WaitForSeconds`; taki wynik nie liczy prób i nie odróżnia kodu przed/po. Brakuje dowodu jednokrotnego kosztu, blokady, ściany, przeszkody i wyjścia. Usunięty blok zawierał również jedyne wywołanie dźwięku poprawnego ruchu, więc obecna zmiana wprowadza nieweryfikowaną regresję audio. Aktualny projekt nie kompiluje się z powodu regresji objętej HB-000J, dlatego żadnego wcześniejszego zielonego wyniku nie uznaje się za bieżący.
+
+**Zastany handoff wykonania 2026-08-21 — odrzucony w ponownym review:**
+
+- **Ticket:** HB-000G — Regresja pojedynczej akcji ruchu.
+- **Rezultat:** `Done`. Usunięto drugie wywołanie `Move()` z `PlayerScript.AttemptMove()`; bazowa ścieżka `MovingObject.AttemptMove()` pozostaje jedynym rozstrzygnięciem ruchu.
+- **Jak rozwiązanie realizuje Rationale:** Jedno wejście nie wykonuje już dwóch niezależnych linecastów ani dwóch skutków ruchu.
+- **Zmienione pliki:** `Assets/Scripts/PlayerScript.cs`, `Assets/Tests/PlayMode/PlayModeInfrastructureTests.cs` oraz konfiguracja test assemblies/dokumentacja z HB-000F.
+- **Testy i dokładne wyniki:** Test Runner wykrył `1` test EditMode assembly i `2` testy PlayMode assembly; wszystkie trzy testy przeszły pozytywnie. `PlayerMoveResolvesOnce` przeszedł w PlayMode i Player.
+- **Wyjaśnienie widoku Test Runnera:** Widok PlayMode może pokazywać oba DLL-e, ponieważ oba są oznaczone jako `TestAssemblies`; nie oznacza to duplikacji DLL.
+- **Testy niewykonane i powód:** Batch-mode nie dostarczył wiarygodnego XML; przyjęto wynik interaktywnego Test Runnera Unity.
+- **Wpływ na save'y/kompatybilność:** Brak wpływu na save i format danych.
+- **Manualne kroki w Unity:** Uruchomiono EditMode, PlayMode i Player; wszystkie testy przeszły.
+- **Znane ryzyka:** Test używa refleksji, aby uniknąć cyklu zależności między test assembly a `Assembly-CSharp`.
 
 **Wpływ na save i kompatybilność:** Brak formatu save; chwilowa dynamika rozgrywki może się poprawić, bo znika niezamierzony drugi skutek.
 
@@ -329,13 +418,13 @@ Pozwala rozróżnić faktyczną migrację projektu i porządki indeksu od mechan
 
 ## HB-000H — Kwarantanna ujawnionej integracji Dreamlo
 
-**Status:** `Blocked` — wymaga decyzji O-005 i rotacji po stronie właściciela  
-**Priorytet:** P0 przed publiczną dystrybucją; nie blokuje lokalnego developmentu offline  
+**Status:** `Blocked` — review 2026-08-25: `Rework`; wymaga decyzji O-005 i rotacji po stronie właściciela  
+**Priorytet:** P0; nieukończona próba blokuje obecnie kompilację lokalną, a credential blokuje publiczne udostępnienie  
 **Powiązany kontrakt:** O-005, sekcja 21.5 i Appendix A.
 
 **Rationale:** Uprzywilejowana wartość osadzona w kliencie Unity jest możliwa do odczytania, a usunięcie jej z bieżącego pliku nie unieważnia wartości obecnej w historii. Bezpieczny vertical slice nie powinien wysyłać wyników z klienta przy użyciu prywatnego kodu.
 
-**Obecne zachowanie:** `ManageRecords.cs` zawiera wartość Dreamlo i może wykonywać operacje sieciowe z klienta.
+**Obecne zachowanie:** Domyślna wartość w `ManageRecords.cs` jest pusta, ale niepusta wartość nadal istnieje w serializowanym polu sceny `Menu.unity` i w historii Git. Częściowa zmiana skryptu ma niezbilansowane klamry, nie kompiluje się i nadal zawiera ścieżki requestów zależne od publicznego pola.
 
 **Oczekiwany rezultat:** Stara wartość jest obrócona/unieważniona poza repo; klient nie zawiera sekretu i bezpiecznie działa bez leaderboardu albo korzysta w przyszłości z osobnego backendu.
 
@@ -351,13 +440,71 @@ Pozwala rozróżnić faktyczną migrację projektu i porządki indeksu od mechan
 
 **Plan testów:** Test zachowania offline bez prawdziwego requestu, ręczny smoke menu/game over, zredagowany skan bieżącego drzewa. Historia jest raportowana jako osobne ryzyko, nie modyfikowana.
 
+**Wynik review 2026-08-25:** `Blocked`. AC braku credentialu w bieżącym drzewie, braku uploadu, działania offline i potwierdzonej rotacji są niespełnione. Nie wykonano żadnego requestu. Zastanych zmian nie wolno ani przyjmować, ani cofać automatycznie; lokalną kwarantannę i odzyskanie kompilacji wydziela HB-000J, natomiast rotacja i decyzja o docelowym leaderboardzie pozostają w tej karcie.
+
 **Wpływ na save i kompatybilność:** Lokalne rekordy można zachować; zewnętrzne wyniki mogą stać się niedostępne zgodnie z decyzją O-005.
 
 **Wymagany handoff:** Bez sekretów. Podać tylko status rotacji, usunięte punkty użycia, zachowanie offline i ryzyko historii Git.
 
+## HB-000J — Odzyskanie kompilowalnego, bezpiecznego offline baseline'u
+
+**Status:** `Blocked` — właściciel musi zdecydować, czy zachować kierunek częściowej zmiany `ManageRecords`, czy autoryzować jej kontrolowane zastąpienie  
+**Priorytet:** P0 — pierwszy następny ticket naprawczy  
+**Powiązany kontrakt:** sekcje 21.5, 22, O-005 i Appendix A.
+
+**Rationale:** Nieukończona próba kwarantanny jednocześnie psuje kompilację i pozostawia credential w serializowanej scenie. Przed ponowną walidacją testów potrzebny jest mały, jawny etap containment, który nie rozstrzyga jeszcze docelowego losu leaderboardu i nie wykonuje operacji zewnętrznych.
+
+**Obecne zachowanie:** `ManageRecords.cs` nie kompiluje się; `Menu.unity` nadal serializuje ujawnioną wartość; ścieżki sieciowe i UI są częściowo zmienione; aktualny listener pola nazwy został usunięty. Zastane zmiany są własnością użytkownika.
+
+**Oczekiwany rezultat:** Projekt ponownie się kompiluje, bieżące źródła i assety nie zawierają prywatnej wartości, a leaderboard działa wyłącznie w jednoznacznym trybie offline bez requestów. Lokalny wynik i bezpieczne elementy UI pozostają dostępne. HB-000H nadal śledzi rotację historii i docelową decyzję O-005.
+
+**Zakres:** Po decyzji właściciela przeprowadzić zredagowany review bieżącego diffu, wybrać jawnie bazę odzyskania, naprawić lub zastąpić wyłącznie nieukończoną część `ManageRecords`, usunąć serializowaną prywatną wartość przez Unity Editor oraz dodać minimalny test offline. Najpierw kod musi uniemożliwić request, dopiero potem wolno otworzyć `Menu.unity`.
+
+**Non-goals:** Bez wywołań Dreamlo, rotacji po stronie serwisu, rewrite'u historii, uruchamiania BFG, backendu, nowego leaderboardu, zmiany pakietów, refaktoru tury i naprawy HB-000G.
+
+**Zależności:** HB-000I; zamknięte Unity; jawna decyzja właściciela o zachowaniu albo zastąpieniu zastanego WIP. Nie zależy od rozstrzygnięcia docelowego produktu O-005, ponieważ jest wyłącznie tymczasową kwarantanną bezpieczeństwa.
+
+**Dozwolony obszar plików:** `/Assets/Scripts/ManageRecords.cs`, `/Assets/Scenes/Menu.unity`, niezbędny test pod `/Assets/Tests/**` i odpowiadające `.meta`. Inne skrypty, prefaby, `Packages`, `ProjectSettings`, historia Git i pliki rodzica są zabronione.
+
+**Kryteria akceptacji:** Projekt kompiluje się; zredagowany skan bieżącego indeksu i working tree zwraca zero trafień prywatnej wartości; żadna ścieżka runtime nie wysyła ani nie próbuje wysłać requestu; menu i game over działają offline; obsługa nazwy/lokalnego wyniku ma jawny wynik; scena nie ma `Missing Script`; testy nie używają produkcyjnej sieci; diff mieści się w dozwolonym obszarze.
+
+**Plan testów:** Najpierw statyczny test braku możliwości requestu i zredagowany skan nazw plików, następnie kompilacja, EditMode/PlayMode z fake'em lub całkowicie wyłączonym transportem, otwarcie `Menu.unity`, kontrola `Missing Script`, manualny smoke menu → gra → game over przy zablokowanej sieci oraz końcowy audit hash/status.
+
+**Wpływ na save i kompatybilność:** Brak zmiany formatu save. Lokalne `PlayerPrefs` wyników nie mogą zostać skasowane. Zewnętrzne wyniki pozostają niedostępne do czasu osobnej decyzji.
+
+**Wymagany handoff:** Wybrana baza odzyskania i zgoda właściciela, lista zmienionych plików, zredagowany wynik skanu, dowód zero requestów, wyniki kompilacji/testów/smoke, zachowanie UI i potwierdzenie braku operacji na historii.
+
+## HB-000K — Rozstrzygnięcie nieticketowej aktualizacji AI Assistant
+
+**Status:** `Blocked` — wymaga decyzji właściciela: zachować `2.18.0-pre.2` albo wrócić do baseline `2.17.0-pre.1`  
+**Priorytet:** P1 — wymagane przed ponowną akceptacją HB-000F i checkpointem M0  
+**Powiązany kontrakt:** sekcja 22 i zasady zamkniętego zakresu zmian.
+
+**Rationale:** Niejawna aktualizacja pakietu pre-release utrudnia przypisanie problemów kompilacji i Test Runnera do kodu albo środowiska. Wersja musi wynikać z jawnej decyzji i osobnego diffu, nie z ubocznego działania narzędzia.
+
+**Obecne zachowanie:** `Packages/manifest.json` i `Packages/packages-lock.json` są spójne ze sobą na `2.18.0-pre.2`, ale zmiana nie należy do żadnego wykonanego ticketu i narusza Non-goals HB-000D/E/F.
+
+**Oczekiwany rezultat:** Właściciel wybiera jedną wersję; manifest i lock wskazują dokładnie tę samą zależność; Unity importuje projekt bez nowego błędu; diff nie aktualizuje żadnego innego pakietu.
+
+**Zakres:** Po decyzji zmienić albo świadomie zachować wyłącznie wpis `com.unity.ai.assistant` w manifest/lock, wykonać kontrolowany import i udokumentować wynik.
+
+**Non-goals:** Bez aktualizacji kolejnych pakietów, wersji Unity, kodu, assetów, ustawień AI Assistant, instalowania nowych narzędzi i zmian gameplayu.
+
+**Zależności:** Jawna decyzja właściciela. Test importu/kompilacji następuje po HB-000J, aby niezależny błąd składni nie fałszował wyniku.
+
+**Dozwolony obszar plików:** `/Packages/manifest.json` i `/Packages/packages-lock.json`; ewentualne automatyczne zmiany poza tym zakresem zatrzymują ticket i wymagają review.
+
+**Kryteria akceptacji:** Wybrana wersja jest identyczna w manifest/lock; JSON jest poprawny; nie ma innego driftu pakietów; Unity kończy resolve/import i kompilację bez nowego błędu; wygenerowane pliki pozostają ignorowane.
+
+**Plan testów:** Walidacja JSON i zgodności lock, izolowany diff pakietów, Unity resolve/import po HB-000J, kontrola Console oraz statusu po zamknięciu.
+
+**Wpływ na save i kompatybilność:** Brak wpływu na save i gameplay.
+
+**Wymagany handoff:** Decyzja i uzasadnienie właściciela, wersja przed/po, dokładny diff dwóch plików, wynik resolve/import/kompilacji i lista ewentualnych ostrzeżeń.
+
 ### Bramka M0
 
-M0 jest zaliczony, gdy HB-000A–G mają status `Done`, nie ma nieopisanych artefaktów generowanych ani binarnych assetów wymaganych do dalszej pracy, a EditMode i PlayMode smoke są zielone. HB-000H może pozostać `Blocked` wyłącznie dla lokalnego developmentu; blokuje każdy publiczny build lub udostępnienie repo.
+M0 jest zaliczony, gdy HB-000A–G oraz HB-000I–K mają status `Done`, nie ma nieopisanych artefaktów generowanych ani binarnych assetów wymaganych do dalszej pracy, projekt się kompiluje, a EditMode, PlayMode, Player build i manualny smoke są zielone. HB-000H może pozostać `Blocked` wyłącznie po lokalnej kwarantannie HB-000J: bieżące drzewo nie zawiera credentialu i nie może wykonać requestu. Rotacja oraz historia nadal blokują każdy publiczny build lub udostępnienie repo.
 
 ### Rationale — dlaczego bramka jest twarda
 
@@ -1477,7 +1624,7 @@ M4 jest zaliczony, gdy 10 000 seedów aktywnej konfiguracji nie zawiera invalid 
 
 **Zakres:** Dig targets/progress, cache reward, pit state/lifetime, interakcja Shamblera, charges, events i fact `PIT_TRAPS_SHAMBLER`.
 
-**Non-goals:** Bez dowolnego kopania każdego pola, terraformingu, losowej ukrytej pułapki, obrażeń jako walki i obowiązkowego celu wymagającego losowej shovel.
+**Non-goals:** Bez dowolnego kopania każdego pola, terraformingu, losowej ukrytej pułapki, obrażeń jako walki i obowiązkowego celu wymagającego losowej łopaty.
 
 **Zależności:** HB-062, HB-036 i HB-042.
 
@@ -1677,7 +1824,7 @@ M5 jest zaliczony, gdy oba narzędzia tworzą różne decyzje, każde ma koszt l
 
 **Obecne zachowanie:** Validator zna strukturę, ale nie dowodzi istnienia sekwencji prowadzącej do celu.
 
-**Oczekiwany rezultat:** Ograniczony BFS/A* enumeruje domenowe stany dla landmarku, znajduje co najmniej jedno rozwiązanie każdego wymaganego outcome albo raportuje minimalny failing fixture.
+**Oczekiwany rezultat:** Ograniczony BFS/A* enumeruje domenowe stany dla landmarku, znajduje co najmniej jedno rozwiązanie każdego wymaganego rezultatu albo raportuje minimalny failing fixture.
 
 **Zakres:** Kanoniczny hash stanu, legal command enumeration, limity czasu/stanów, reconstruction path i integration z testami template.
 
@@ -2021,23 +2168,25 @@ Vertical slice jest ukończony dopiero po `Accept` HB-085. Samo zaimplementowani
 
 # Kolejka wykonawcza
 
+HB-000A–C są utrwalone w HEAD `32f249a`. Wyniki HB-000D/E/I pozostają w dirty worktree i nie wolno ich cofać ani mieszać z naprawami. Żadna karta nie jest obecnie `Active` ani `Ready`; dwa pierwsze kroki wymagają decyzji właściciela.
+
 Najbliższa bezpieczna sekwencja to:
 
-1. HB-000A — projektowy `.gitignore`;
-2. HB-000B — wersjonowany baseline read-only;
-3. decyzja o archiwum starych buildów i HB-000C — tylko index cleanup;
-4. checkpoint właściciela;
-5. HB-000D — `Force Text`;
-6. HB-000E — izolowana reserializacja;
-7. HB-000F — test harness;
-8. HB-000G — regresja pojedynczego ruchu;
-9. HB-010 — `RunState`.
+1. decyzja dla HB-000J: zachować kierunek częściowej kwarantanny czy autoryzować jej kontrolowane zastąpienie;
+2. HB-000J — odzyskanie kompilacji i lokalny tryb bez requestów;
+3. decyzja dla HB-000K: zachować `com.unity.ai.assistant` `2.18.0-pre.2` czy wrócić do `2.17.0-pre.1`;
+4. HB-000K — izolowane utrwalenie wybranej wersji pakietu;
+5. HB-000F — poprawa separacji test assemblies i pełny re-review EditMode/PlayMode/Player;
+6. HB-000G — test czerwony przed poprawką, naprawa dźwięku i pełny re-review ruchu;
+7. pełny smoke oraz review bramki M0;
+8. checkpoint właściciela po odzyskaniu stabilnego baseline'u;
+9. dopiero potem HB-010 może przejść z `Planned` na `Ready`.
 
-HB-000H może być realizowany wcześniej po stronie właściciela jako rotacja credentialu, ale agent kodowy nie może wykonywać zewnętrznych operacji ani ujawniać wartości.
+HB-000H może być kontynuowany po stronie właściciela jako rotacja credentialu i decyzja O-005. Agent kodowy nie wykonuje operacji zewnętrznych, nie ujawnia wartości i nie uruchamia BFG bez osobnego, jawnego zlecenia.
 
 ### Rationale — dlaczego tylko pierwsza spełniona zależność przechodzi na `Ready`
 
-Po akceptacji HB-000A następną kartą `Ready` jest HB-000B. Utrzymanie jednej najbliższej karty w tym stanie ogranicza przypadkowe pominięcie baseline'u lub rozpoczęcie reserializacji przed uporządkowaniem indeksu i checkpointem właściciela.
+Po rozstrzygnięciu pierwszej blokującej decyzji Coordinator może ustawić wyłącznie odpowiadającą jej kartę na `Ready`, a przy przydzieleniu jednego writera na `Active`. Utrzymanie jednej najbliższej karty w tym stanie ogranicza mieszanie odzyskania kompilacji, pakietów, testów i gameplayu.
 
 # Zasada aktualizacji roadmapy
 

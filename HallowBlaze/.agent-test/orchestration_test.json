@@ -1,0 +1,7 @@
+{
+  "created_by": "qwen-developer-test",
+  "purpose": "validate Copilot-Qwen-Copilot orchestration",
+  "numbers": [2, 3, 5, 7, 11],
+  "sum": 28,
+  "status": "ready_for_review"
+}

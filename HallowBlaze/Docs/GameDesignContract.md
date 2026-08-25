@@ -1082,7 +1082,7 @@ Ta sekcja jest opisowa i wyjaśnia, dlaczego fundamenty pojawiają się przed ro
 - `Wall` przechowuje autorytatywne HP w komponencie widoku.
 - Brakuje jawnego stanu zwycięstwa; istnieje głównie rosnący licznik dni i game over.
 - `ManageRecords` zawiera prywatny identyfikator leaderboardu w kodzie. Przed publiczną dystrybucją należy go unieważnić/obrócić i wynieść z repozytorium.
-- Sceny, prefaby i część ustawień projektu są nadal zapisane binarnie. To utrudnia bezpieczny diff, code review i pracę agentów.
+- Po HB-000E sceny, prefaby, animacje i wspierane ustawienia projektu są zapisane jako Unity YAML. Jedynym znanym binarnym wyjątkiem w `ProjectSettings` pozostaje legacy `NetworkManager.asset`, którego publiczny workflow Unity `6000.3.21f1` nie konwertuje; nie stanowi on bariery dla diffu assetów gry.
 - Repozytorium Git znajduje się katalog wyżej niż projekt Unity, natomiast główny `.gitignore` używa wzorców zakotwiczonych tak, jakby leżał w katalogu projektu. W efekcie wygenerowane katalogi projektu mogą nie być prawidłowo ignorowane.
 
 ### Rationale — dlaczego ta lista istnieje

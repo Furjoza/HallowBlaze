@@ -20,6 +20,10 @@ repo root/
 
 Celem tych zasad jest utrzymanie spójności projektu gry, ochrona zmian użytkownika i bezpieczna praca z assetami Unity. Role agentów są mechanizmem ograniczania zakresu oraz uprawnień, a nie substytutem testów i code review.
 
+## 1.1. Język komunikacji
+
+Wszystkie komunikaty i dokumentacje powinny być pisane po polsku, zgodnie z wytycznymi badań o efektywności komunikacji. To ułatwia zrozumienie dla polskojęzycznych użytkowników i współpracowników.
+
 ## 2. Hierarchia źródeł prawdy
 
 Przy sprzeczności stosuj następującą kolejność:
@@ -307,3 +311,7 @@ Do czasu ukończenia pierwszych ticketów higieny obowiązują dodatkowe ogranic
 - zachowaj wszystkie zmiany migracyjne użytkownika.
 
 Pierwszym zadaniem implementacyjnym powinien być pierwszy nieukończony ticket higieny repo w `Docs/TechnicalRoadmap.md`.
+
+## 15. Bezpieczeństwo historii Git
+
+W przypadku eksponowanych sekretów w historii Git, należy zastosować odpowiednie narzędzia do oczyszczenia historii (np. BFG Repo Cleaner lub git filter-branch) i zasugerować rotację sekretów po ich usunięciu.
