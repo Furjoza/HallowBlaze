@@ -45,14 +45,21 @@ Jeżeli aktywne zadanie zależy od decyzji oznaczonej jako `Open` w `GameDesignC
 
 - utrzymuje kontrakt, roadmapę, kolejność zależności i kartę aktywnego zadania;
 - analizuje repozytorium w trybie read-only, chyba że użytkownik jawnie zlecił zmianę dokumentacji;
+- przed delegacją zapisuje ograniczony preflight: status, istnienie i hash zastanych zmian tracked/untracked z pominięciem wygenerowanych katalogów Unity;
+- przekazuje Developerowi zamknięty allowlist ścieżek do zapisu;
 - wyznacza dokładnie jednego writera;
+- po pracy Developera porównuje preflight z postflightem i zatrzymuje workflow przy utracie baseline'u albo zmianie poza allowlistem;
+- weryfikuje dowody z kompilacji i testów Developera; sam uruchamia tylko brakującą lub niejednoznaczną walidację;
 - przyjmuje wynik albo zwraca zadanie do poprawy;
 - jako jedyny aktualizuje status ticketu w roadmapie po weryfikacji.
 
 ### Developer
 
 - jest jedynym agentem zapisującym pliki podczas aktywnego zadania;
+- korzysta z narzędzi `read`, `search`, `edit` i `execute`; terminal służy do bezpiecznej inspekcji, buildów i testów;
 - implementuje wyłącznie wybrany ticket i jego konieczne testy;
+- zapisuje wyłącznie ścieżki z allowlistu;
+- nie usuwa, nie przenosi, nie zmienia nazw, nie przywraca i nie sprząta plików; taką potrzebę zgłasza Coordinatorowi;
 - nie rozpoczyna kolejnego ticketu;
 - nie aktualizuje sam statusu zadania na `Done`;
 - kończy pracę ustrukturyzowanym handoffem.
@@ -61,6 +68,7 @@ Jeżeli aktywne zadanie zależy od decyzji oznaczonej jako `Open` w `GameDesignC
 
 - pracuje po zakończeniu zapisu przez Developera;
 - domyślnie działa tylko do odczytu;
+- wymaga wyniku bramki integralności i sprawdza zgodność zmian z allowlistem;
 - sprawdza każde kryterium akceptacji i uruchamia adekwatne testy;
 - raportuje błędy wraz z reprodukcją oraz lokalizacją;
 - nie naprawia kodu „przy okazji”; poprawki wracają do Developera jako osobna iteracja.
@@ -104,10 +112,10 @@ Agent MUSI:
 2. przeczytać powiązane sekcje `Docs/GameDesignContract.md`;
 3. przeczytać całą kartę aktywnego `HB-xxx`, w tym `Rationale` i `Non-goals`;
 4. sprawdzić istniejące ADR-y mające zastosowanie;
-5. sprawdzić stan odpowiednich plików i, jeśli Git jest dostępny, bieżący status/diff;
+5. sprawdzić stan odpowiednich plików i, jeśli Git jest dostępny, bieżący status/diff; Coordinator zapisuje preflight zastanych zmian;
 6. wskazać istniejące zmiany użytkownika, których nie wolno nadpisać;
 7. potwierdzić zależności oraz otwarte decyzje;
-8. zaplanować minimalny zestaw plików i testów.
+8. zaplanować minimalny zestaw plików i testów oraz zamknięty allowlist ścieżek do zapisu.
 
 Jeżeli karta nie posiada `Rationale`, kryteriów akceptacji lub jest zbyt szeroka na jedną spójną zmianę, Developer nie rozpoczyna implementacji. Coordinator musi najpierw poprawić kartę.
 
@@ -125,16 +133,23 @@ Jeżeli karta nie posiada `Rationale`, kryteriów akceptacji lub jest zbyt szero
 
 Developer MUSI:
 
-1. uruchomić testy wymagane przez kartę;
-2. wykonać adekwatny smoke test lub jawnie wskazać, dlaczego nie był możliwy;
-3. sprawdzić zmienione pliki oraz diff bez włączania zmian użytkownika do własnego zakresu;
-4. potwierdzić każde kryterium akceptacji albo oznaczyć je jako niespełnione;
-5. przekazać handoff według sekcji 12;
-6. zatrzymać się bez rozpoczynania następnego ticketu.
+1. sprawdzić treść zmienionych plików z allowlistu;
+2. uruchomić testy wymagane przez kartę i przekazać dokładne komendy, kody wyjścia oraz artefakty;
+3. potwierdzić każde kryterium akceptacji albo oznaczyć je jako niespełnione;
+4. przekazać handoff według sekcji 12;
+5. zatrzymać się bez rozpoczynania następnego ticketu.
+
+Coordinator MUSI następnie:
+
+1. porównać preflight z postflightem przed review i dodatkową walidacją Coordinatora;
+2. zatrzymać workflow bez automatycznego restore'u, gdy zniknął baseline albo zmieniła się ścieżka poza allowlistem;
+3. po przejściu bramki integralności zweryfikować dowody testów Developera i uruchomić tylko brakującą lub niejednoznaczną kontrolę;
+4. przekazać Reviewerowi allowlist, wynik bramki integralności oraz rzeczywiste wyniki testów.
 
 ## 6. Bezpieczeństwo Git i worktree
 
 - Traktuj istniejące zmiany oraz pliki untracked jako własność użytkownika.
+- Dirty worktree nie jest błędem ani poleceniem sprzątania.
 - Nie używaj `git reset --hard`, `git clean`, `git checkout --`, `git restore`, force-push ani destrukcyjnego rebase bez jawnego polecenia użytkownika.
 - Nie wykonuj `git add -A` ani szerokich commitów obejmujących wygenerowane katalogi.
 - Nie twórz commitów, branchy ani PR-ów bez jawnego polecenia użytkownika lub zakresu ticketu.
@@ -215,6 +230,7 @@ Dobierz minimalny wymagany poziom weryfikacji:
 
 Zasady testów:
 
+- Developer uruchamia kompilację i testy; Coordinator nie duplikuje ich bez potrzeby, ale weryfikuje wyniki po przejściu bramki integralności.
 - Test nie może pisać do prawdziwego katalogu profilu gracza.
 - Testy deterministyczne raportują seed i identyfikator węzła przy błędzie.
 - Gameplay i kosmetyka nie korzystają z tego samego strumienia RNG.

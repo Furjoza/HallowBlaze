@@ -1,36 +1,68 @@
 # HallowBlaze Testing
 
-## HB-000F
+## M0.7
 
-The project uses Unity `6000.3.21f1` and Unity Test Framework `1.6.0`.
+Projekt używa Unity `6000.3.21f1` i Unity Test Framework `1.6.0`.
 
-Test assemblies:
+Zestawy testów:
 
 - `Assets/Tests/EditMode/HallowBlaze.Tests.EditMode.asmdef`
 - `Assets/Tests/PlayMode/HallowBlaze.Tests.PlayMode.asmdef`
 
-Both assemblies are marked as Unity Test Assemblies. EditMode runs in the
-Editor; PlayMode can run in the Editor and in a Player test target.
+Oba zestawy są oznaczone jako Unity Test Assemblies. EditMode działa w Edytorze; PlayMode może działać w Edytorze i w celu testowym Playera.
 
-The Test Runner may list the same test assembly in more than one platform
-view. A standard NUnit `[Test]` can be shown in the PlayMode tree as well as
-the EditMode tree; the assembly name identifies its owner. Player view is a
-separate execution target, not a separate copy of the tests.
+Test Runner może wyświetlać ten sam zestaw testów w więcej niż jednym widoku platformy. Standardowy NUnit `[Test]` może być wyświetlany w drzewie PlayMode oraz EditMode; nazwa zestawu identyfikuje jego właściciela. Widok Playera to osobny cel wykonania, nie osobna kopia testów.
 
 ## Unity Test Runner
 
-Run each test platform in a separate Unity process. Do not start two Unity instances for this project at the same time.
+Uruchamiaj każdą platformę testową w osobnym procesie Unity. Nie uruchamiaj dwóch instancji Unity dla tego projektu jednocześnie.
 
-From the repository root:
+Po każdej komendzie trzeba sprawdzić `$LASTEXITCODE` i nie uruchamiać następnej instancji, zanim poprzednia się zakończy.
+
+Z katalogu głównego repozytorium:
 
 ```powershell
 $unity = 'C:\Program Files\Unity\Hub\Editor\6000.3.21f1\Editor\Unity.exe'
 $project = 'E:\Repos\HallowBlaze\HallowBlaze'
-& $unity -batchmode -nographics -projectPath $project -runTests -testPlatform editmode -testResults "$project\Temp\TestResults\HB-000F-EditMode.xml" -logFile "$project\Temp\TestResults\HB-000F-EditMode.log"
+& $unity -batchmode -nographics -projectPath $project -runTests -testPlatform editmode -testResults "$project\Temp\TestResults\M0.7-EditMode.xml" -logFile "$project\Temp\TestResults\M0.7-EditMode.log"
 ```
 
 ```powershell
-& $unity -batchmode -nographics -projectPath $project -runTests -testPlatform playmode -testResults "$project\Temp\TestResults\HB-000F-PlayMode.xml" -logFile "$project\Temp\TestResults\HB-000F-PlayMode.log"
+& $unity -batchmode -nographics -projectPath $project -runTests -testPlatform playmode -testResults "$project\Temp\TestResults\M0.7-PlayMode.xml" -logFile "$project\Temp\TestResults\M0.7-PlayMode.log"
 ```
 
-The commands return Unity's process exit code. Test result XML and logs are generated under `Temp/TestResults/`, which is ignored and must not be committed.
+Dla filtrowanych testów infrastruktury użyj:
+```powershell
+& $unity -batchmode -nographics -projectPath $project -runTests -testPlatform editmode -testResults "$project\Temp\TestResults\M0.7-EditModeInfrastructure.xml" -logFile "$project\Temp\TestResults\M0.7-EditModeInfrastructure.log" -testFilter "HallowBlaze.Tests.EditMode.EditModeInfrastructureTests.EditModeAssemblyLoads"
+```
+
+```powershell
+& $unity -batchmode -nographics -projectPath $project -runTests -testPlatform playmode -testResults "$project\Temp\TestResults\M0.7-PlayModeInfrastructure.xml" -logFile "$project\Temp\TestResults\M0.7-PlayModeInfrastructure.log" -testFilter "HallowBlaze.Tests.PlayMode.PlayModeInfrastructureTests.PlayModeAssemblyLoads"
+```
+
+## Build Playera dla M0.7
+
+```powershell
+& $unity -batchmode -nographics -projectPath $project -buildWindows64Player "$project\Build\M0.7Validation\HallowBlaze.exe" -logFile "$project\Temp\TestResults\M0.7-PlayerBuild.log" -quit
+```
+
+## Ścieżki logów i XML dla M0.7
+
+- Log EditMode: `Temp/TestResults/M0.7-EditMode.log`
+- XML EditMode: `Temp/TestResults/M0.7-EditMode.xml`
+- Log PlayMode: `Temp/TestResults/M0.7-PlayMode.log`
+- XML PlayMode: `Temp/TestResults/M0.7-PlayMode.xml`
+- Log infrastruktury PlayMode: `Temp/TestResults/M0.7-PlayModeInfrastructure.log`
+- XML infrastruktury PlayMode: `Temp/TestResults/M0.7-PlayModeInfrastructure.xml`
+- Log infrastruktury EditMode: `Temp/TestResults/M0.7-EditModeInfrastructure.log`
+- XML infrastruktury EditMode: `Temp/TestResults/M0.7-EditModeInfrastructure.xml`
+- Log Playera: `Temp/TestResults/M0.7-PlayerBuild.log`
+- Wykonanie: `Build/M0.7Validation/HallowBlaze.exe`
+
+## Sprawdzenie buildu
+
+```powershell
+$LASTEXITCODE # Oczekiwany: 0
+Get-ChildItem -Path "$project\Build\M0.7Validation" -Recurse -File | Measure-Object # Oczekiwany: liczba wszystkich plików builda > 0
+Get-ChildItem -Path "$project\Build\M0.7Validation" -Recurse -File -Filter "HallowBlaze.Tests*.dll" | Measure-Object # Oczekiwany: count HallowBlaze.Tests*.dll = 0
+```
