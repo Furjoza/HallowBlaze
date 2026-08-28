@@ -1,7 +1,7 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.4 — bramka M0 ponownie otwarta**
-> Data ostatniej weryfikacji: 2026-08-26
+> Status dokumentu: **Accepted / execution roadmap v0.4 — M0 zakończone**
+> Data ostatniej weryfikacji: 2026-08-28
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
 > Zasady pracy agentów: [`../AGENTS.md`](../AGENTS.md)
@@ -75,7 +75,7 @@ Audyt objął status i diff Git, karty M0, powiązane sekcje kontraktu, statyczn
 - W root repo znajduje się nieśledzony `bfg-1.15.0.jar`. Brak `refs/original` i wpisów refloga wskazujących rewrite; pliku nie uruchomiono ani nie usunięto. Każda zmiana historii wymaga osobnej, jawnej autoryzacji i planu rotacji credentialu.
 - `GameDesignContract.md` Appendix A nadal zawiera historyczne opisy podwójnego `Move` i pozostającego `NetworkManager.asset`; wymaga osobnej korekty po przyjęciu odpowiednich wyników, a nie może służyć jako dowód bieżącej kompilacji.
 
-**Wniosek Coordinatora:** bramka M0 pozostaje otwarta do ponownej akceptacji `M0.7`, `M0.8` i `M0.11`. `M0.9` jest świadomie odłożone po ukończeniu lokalnej kwarantanny `M0.10`; nie blokuje development milestone, ale zachowuje jawne ryzyko historii Git.
+**Wniosek Coordinatora 2026-08-28:** blokady audytu zostały zamknięte: `M0.7`, `M0.8` i `M0.11` przeszły niezależne review, a pełna bramka M0 jest zielona. `M0.9` pozostaje świadomie odłożone po ukończeniu lokalnej kwarantanny `M0.10`; nie blokuje development milestone, ale zachowuje jawne ryzyko historii Git.
 
 ### Rationale — dlaczego higiena poprzedza gameplay
 
@@ -406,7 +406,7 @@ Pozwala rozróżnić faktyczną migrację projektu i porządki indeksu od mechan
 
 ## `M0.8` — Regresja pojedynczej akcji ruchu
 
-**Status:** `Blocked` — próba 2026-08-27 wycofana po dwóch niespełnionych completion retries; wymagany nowy writer
+**Status:** `Done`
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 9, 10, 21.2 i Appendix A.
 
@@ -427,6 +427,10 @@ Pozwala rozróżnić faktyczną migrację projektu i porządki indeksu od mechan
 **Kryteria akceptacji:** Test wykazuje jedną próbę na jedno wejście i odtwarza błąd przed poprawką; koszt zasobu nalicza się raz; zablokowana próba nie przesuwa postaci; poprawny ruch zachowuje pojedynczy dźwięk; obecne przejście planszy nadal działa.
 
 **Plan testów:** Czerwony/zielony test regresji obserwujący stan zamiast stałego czasu, pełne EditMode/PlayMode oraz ręczny ruch w wolne pole, ścianę, przeszkodę i wyjście wraz z kontrolą dźwięku.
+
+**Wynik wykonania 2026-08-28:** `PlayerScript.AttemptMove()` wykonuje jeden linecast i rozstrzyga z jego wyniku wolny ruch, interakcję albo odrzucenie. Test jednoudarowej ściany był czerwony na legacy (`0/1`) i zielony po poprawce (`1/1`); pełne EditMode przeszło `1/1`, a pełne PlayMode `5/5`. Testy potwierdzają pojedynczy koszt i brak wejścia na pole zwolnionej ściany, odrzucenie zwykłej blokady bez kosztu oraz wolny ruch z zachowaniem dźwięku.
+
+**Wynik niezależnego review 2026-08-28:** `qwen-reviewer` — `Pass`; wszystkie kryteria akceptacji spełnione. Reviewer potwierdził jedno wywołanie `Move`, prawidłowe ścieżki kosztu, blokady i audio oraz brak zmiany obsługi `Exit`. Manualny smoke przejścia planszy pozostaje częścią końcowej bramki M0.
 
 **Wynik ponownego review 2026-08-25:** Zmiana usuwa drugie `Move`, ale test sprawdza wyłącznie końcowe `x == 1` po stałym `WaitForSeconds`; taki wynik nie liczy prób i nie odróżnia kodu przed/po. Brakuje dowodu jednokrotnego kosztu, blokady, ściany, przeszkody i wyjścia. Usunięty blok zawierał również jedyne wywołanie dźwięku poprawnego ruchu, więc obecna zmiana wprowadza nieweryfikowaną regresję audio. Aktualny projekt nie kompiluje się z powodu regresji objętej `M0.10`, dlatego żadnego wcześniejszego zielonego wyniku nie uznaje się za bieżący.
 
@@ -558,6 +562,10 @@ Pozwala rozróżnić faktyczną migrację projektu i porządki indeksu od mechan
 ### Bramka M0
 
 M0 jest zaliczony, gdy `M0.1`–`M0.8` oraz `M0.10`–`M0.11` mają status `Done`, nie ma nieopisanych artefaktów generowanych ani binarnych assetów wymaganych do dalszej pracy, projekt się kompiluje, a EditMode, PlayMode, Player build i manualny smoke są zielone. `M0.9` może pozostać `Deferred` po lokalnej kwarantannie `M0.10`: bieżące drzewo nie zawiera credentialu i nie może wykonać requestu. Historyczna wartość pozostaje jawnym, zaakceptowanym ryzykiem i nie jest uznawana za technicznie unieważnioną.
+
+**Wynik bramki 2026-08-28:** `Pass` — `M0.1`–`M0.8` oraz `M0.10`–`M0.11` mają status `Done`, a `M0.9` pozostaje zaakceptowane jako `Deferred`. EditMode przeszło `1/1`, PlayMode `5/5`, a Windows Player build zakończył się kodem `0`, utworzył `201` plików i nie zawiera `HallowBlaze.Tests*.dll`. Manualny smoke potwierdził Menu → Start, wolny ruch o jedno pole z jednym dźwiękiem, interakcję ze ścianą bez wejścia na zwolnione pole, zwykłą przeszkodę bez ruchu oraz przejście przez `Exit`; log Playera zawiera `0` markerów wyjątków runtime.
+
+Odzyskany test offline M0.10 wraz z odpowiadającym `.meta` jest częścią zamykanego milestone. Po akceptacji właściciela usunięto artefakty robocze, które nie są wymagane przez build ani dalszy development: śledzone i nieśledzone sondy `.agent-test`, wcześniejsze wyniki w `System.Xml.XmlDocument`, nieaktualne podsumowanie i jednorazowy skrypt testowy oraz nieuruchomione narzędzie `../bfg-1.15.0.jar`.
 
 ### Rationale — dlaczego bramka jest twarda
 

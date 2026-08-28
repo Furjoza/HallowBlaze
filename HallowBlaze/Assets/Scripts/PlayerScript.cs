@@ -107,20 +107,24 @@ public class PlayerScript : MovingObject {
 
     protected override void AttemptMove<T>(int xDir, int yDir)
     {
+        RaycastHit2D hit;
+        bool canMove = Move(xDir, yDir, out hit);
+        T hitComponent = hit.transform == null ? null : hit.transform.GetComponent<T>();
+
+        if (!canMove && hitComponent == null)
+            return;
+
         food--;
         if (foodText != null)
             foodText.text = "Food: " + food;
         if (healthText != null)
             healthText.text = "Health: " + health;
 
-        base.AttemptMove<T>(xDir, yDir);
+        if (!canMove)
+            OnCantMove(hitComponent);
+        else if (SoundManager.instance != null)
+            SoundManager.instance.RandomizeSfx(moveSound1, moveSound2);
 
-        RaycastHit2D hit;
-        if(Move(xDir, yDir, out hit))
-        {
-            if (SoundManager.instance != null)
-                SoundManager.instance.RandomizeSfx(moveSound1, moveSound2);
-        }
         CheckIfGameOver();
 
         if (GameManager.instance != null)

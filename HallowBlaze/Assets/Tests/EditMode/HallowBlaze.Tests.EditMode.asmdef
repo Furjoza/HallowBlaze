@@ -3,5 +3,8 @@
     "rootNamespace": "HallowBlaze.Tests.EditMode",
     "optionalUnityReferences": [
         "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
     ]
 }

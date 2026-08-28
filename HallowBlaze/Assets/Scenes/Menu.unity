@@ -1269,8 +1269,6 @@ MonoBehaviour:
   uploadedRecordText: {fileID: 214054671}
   resultsText: {fileID: 503626035}
   scrollbar: {fileID: 115215225}
-  privateCode: EWoIz_OEmEKKefw2XQ49kge9Rh8wnyZE-WvSX9kxb0kA
-  publicCode: 5ba67a28613a880614fe3ace
 --- !u!4 &197587417
 Transform:
   m_ObjectHideFlags: 0
