@@ -1065,7 +1065,12 @@ Poniższe pytania mają status **Open**. Agent nie może rozstrzygnąć ich sam,
 | O-002 | Co wygrywa, gdy ta sama akcja osiąga wyjście i próg śmierci z głodu? | wyjście, jeśli gracz faktycznie wszedł na pole celu | ostateczne testy kontraktu tury |
 | O-003 | Czy drobne przedmioty są podnoszone automatycznie przy wejściu, czy wymagają `Interact`? | jedzenie automatycznie; narzędzia przez świadomą interakcję | pickupy i UI zamiany |
 | O-004 | Która platforma jest referencyjna dla vertical slice: PC, mobile czy obie równorzędnie? | PC jako referencja, mobile zachowuje tę samą semantykę po ustabilizowaniu interakcji | docelowy input i layout UI |
-| O-005 | Co zastępuje leaderboard „liczba przeżytych dni” po dodaniu skończonego finału? | leaderboard poza MVP; najpierw prywatne podsumowanie wyprawy | przebudowę `ManageRecords` |
+
+### Decyzje rozstrzygnięte dla bieżącego zakresu
+
+| ID | Decyzja właściciela | Warunek ponownego otwarcia |
+| --- | --- | --- |
+| O-005 | 2026-08-27 — leaderboard online nie jest częścią bieżącego projektu; najpierw powstaje prywatne podsumowanie wyprawy. Usuniętej integracji Dreamlo nie przywracamy, a rotację starej wartości właściciel świadomie odkłada. | Osobna decyzja produktowa o ponownym wprowadzeniu funkcji online; wtedy wymagane są nowy model bezpieczeństwa, nowa integracja i poświadczenia, bez ponownego użycia historycznej wartości. |
 
 Wskazówki tras w MVP nie są decyzją otwartą: MUSZĄ być prawdziwe w odniesieniu do obserwowalnych, stabilnych cech. Mogą być niepełne, a dynamiczne warunki mogą zmienić wartość drogi, lecz gra nie wprowadza celowo fałszywego opisu.
 
@@ -1081,7 +1086,7 @@ Ta sekcja jest opisowa i wyjaśnia, dlaczego fundamenty pojawiają się przed ro
 - Losowość rozgrywki korzysta z globalnego `UnityEngine.Random`.
 - `Wall` przechowuje autorytatywne HP w komponencie widoku.
 - Brakuje jawnego stanu zwycięstwa; istnieje głównie rosnący licznik dni i game over.
-- `ManageRecords` zawiera prywatny identyfikator leaderboardu w kodzie. Przed publiczną dystrybucją należy go unieważnić/obrócić i wynieść z repozytorium.
+- Historyczna integracja `ManageRecords` zawierała prywatny identyfikator leaderboardu. Bieżący klient nie zawiera transportu ani tej wartości i działa wyłącznie offline. Właściciel 2026-08-27 świadomie odłożył rotację do ewentualnego powrotu funkcji online; nie oznacza to technicznego unieważnienia starej wartości, dlatego nie wolno jej ponownie użyć, a publiczne udostępnienie historii nadal wymaga osobnej akceptacji ryzyka albo oczyszczenia historii i unieważnienia po stronie usługi.
 - Po HB-000E sceny, prefaby, animacje i wspierane ustawienia projektu są zapisane jako Unity YAML. Jedynym znanym binarnym wyjątkiem w `ProjectSettings` pozostaje legacy `NetworkManager.asset`, którego publiczny workflow Unity `6000.3.21f1` nie konwertuje; nie stanowi on bariery dla diffu assetów gry.
 - Repozytorium Git znajduje się katalog wyżej niż projekt Unity, natomiast główny `.gitignore` używa wzorców zakotwiczonych tak, jakby leżał w katalogu projektu. W efekcie wygenerowane katalogi projektu mogą nie być prawidłowo ignorowane.
 
