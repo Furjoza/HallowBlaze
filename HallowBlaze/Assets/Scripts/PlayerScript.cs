@@ -129,19 +129,34 @@ public class PlayerScript : MovingObject {
 
     protected override void AttemptMove<T>(int xDir, int yDir)
     {
-        // Update state through RunState
+        RaycastHit2D hit;
+        bool canMove = Move(xDir, yDir, out hit);
+        T hitComponent = hit.transform == null ? null : hit.transform.GetComponent<T>();
+
+        if (!canMove && hitComponent == null)
+            return;
+
         if (GameManager.instance != null && GameManager.instance.runState != null)
         {
             GameManager.instance.runState.DecrementFoodPoints();
-            
-            // Update UI directly since we already have the current values
-            if (foodText != null)
-                foodText.text = "Food: " + GameManager.instance.runState.playerFoodPoints;
-            if (healthText != null)
-                healthText.text = "Health: " + GameManager.instance.runState.playerHealthPoints;
+            food = GameManager.instance.runState.playerFoodPoints;
+            health = GameManager.instance.runState.playerHealthPoints;
+        }
+        else
+        {
+            food--;
         }
 
-        base.AttemptMove<T>(xDir, yDir);
+        if (foodText != null)
+            foodText.text = "Food: " + food;
+        if (healthText != null)
+            healthText.text = "Health: " + health;
+
+        if (!canMove)
+            OnCantMove(hitComponent);
+        else if (SoundManager.instance != null)
+            SoundManager.instance.RandomizeSfx(moveSound1, moveSound2);
+
         CheckIfGameOver();
 
         // Set player turn to false through RunState

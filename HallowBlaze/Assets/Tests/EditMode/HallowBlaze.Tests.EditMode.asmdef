@@ -1,0 +1,10 @@
+{
+    "name": "HallowBlaze.Tests.EditMode",
+    "rootNamespace": "HallowBlaze.Tests.EditMode",
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ]
+}
