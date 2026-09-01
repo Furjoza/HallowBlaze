@@ -620,7 +620,8 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 
 ## `M1.2` — Autorytatywny `RunState`
 
-**Status:** `Planned`  
+**Status:** `Done` — writer: `codex-lead` po trzech przerwanych sesjach `qwen-developer`; review 2026-09-01: `Pass`
+**Ukończono:** 2026-09-01 — filtrowane EditMode `16/16`, pełne EditMode `17/17`, pełne PlayMode `15/15`, integrity gate `PASS`.
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 6.1, 6.2, 21.1–21.3 i przykład z sekcji 23.
 
@@ -645,6 +646,12 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 **Wpływ na save i kompatybilność:** Brak trwałego zapisu w tym tickecie. Struktura staje się źródłem przyszłego DTO, ale nie jest nim bezpośrednio.
 
 **Wymagany handoff:** Opisać inwarianty i uzasadnić każde pole. Wskazać, jak potraktowano próbę z `3d10d54` oraz które obecne komponenty nadal przechowują kopie do czasu `M1.4`.
+
+**Wynik wykonania 2026-09-01:** Dodano niezależną od Unity assembly `HallowBlaze.Core.State` z `noEngineReferences = true`. `RunState` posiada caller-supplied `RunId` i deterministyczny `RunSeed` jako tożsamość wyprawy, `CurrentDay` i stabilny tekstowy `WorldNodeId` jako postęp, `Health` i `Food` jako nieujemne zasoby, dokładnie dwa niezmienne placeholdery `ToolSlotState`, historię trasy tylko do odczytu oraz jawny status `Active` / `Dead` / `Won`. Jedna walidowana `RunStateConfiguration` dostarcza wszystkie wartości początkowe. Puste ID i ID z brzegowymi białymi znakami są odrzucane; zużycie zasobów clampuje do zera bez automatycznego wyboru wyniku, wzrost używa kontrolowanego overflow, a terminalny run odrzuca dalsze mutacje. Reset przyjmuje nową tożsamość i seed, odtwarza konfigurację, czyści trasę oraz oba sloty i ponownie ustawia `Active`.
+
+Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`; nie została przyjęta jako domenowy model ani zmieniona w tej karcie. `Assets/Scripts/RunState.cs`, `GameManager` i `PlayerScript` pozostają tymczasowymi kopiami/integracją legacy do migracji w `M1.4`. Nie dodano DTO, JSON-a, UI, profilu ani mechaniki używania narzędzi.
+
+**Wynik walidacji:** Filtrowane `RunStateTests` przeszły `16/16`, pełne EditMode `17/17`, a pełne PlayMode `15/15`; wszystkie przebiegi Unity `6000.3.21f1` zakończyły się kodem `0`. `git diff --check`, diagnostyka edytora, komplet wymaganych `.meta`, zamknięta allowlista oraz brak zmian w legacy i `ProjectSettings` przeszły końcowy gate. Pierwszy niezależny review wykrył akceptowanie ID z brzegowym whitespace i zakończył się `Fail`; po dodaniu walidacji i testów regresji ponowny `qwen-reviewer` nie znalazł materialnych problemów i wydał `Pass`.
 
 ---
 

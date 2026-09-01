@@ -6,5 +6,8 @@
     ],
     "includePlatforms": [
         "Editor"
+    ],
+    "references": [
+        "HallowBlaze.Core.State"
     ]
 }

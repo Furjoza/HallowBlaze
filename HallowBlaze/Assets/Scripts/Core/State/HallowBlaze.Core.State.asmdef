@@ -1,0 +1,5 @@
+{
+    "name": "HallowBlaze.Core.State",
+    "rootNamespace": "HallowBlaze.Core.State",
+    "noEngineReferences": true
+}
