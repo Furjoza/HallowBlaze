@@ -1,333 +1,288 @@
 # AGENTS.md — HallowBlaze
 
-## 1. Zakres i cel
+## 1. Scope
 
-Ten plik obowiązuje wszystkich agentów pracujących w katalogu projektu Unity `HallowBlaze/` i jego podkatalogach.
+This file applies to all agents working in the HallowBlaze Unity project and its subdirectories.
 
-Repozytorium Git znajduje się jeden poziom wyżej niż projekt Unity:
+Repository layout:
 
 ```text
 repo root/
   .git/
   .gitignore
-  HallowBlaze/          ← Unity project root i zakres tego AGENTS.md
+  HallowBlaze/          ← Unity project / workspace root
     AGENTS.md
+    .github/
+      agents/
     Assets/
     Docs/
     Packages/
     ProjectSettings/
 ```
 
-Celem tych zasad jest utrzymanie spójności projektu gry, ochrona zmian użytkownika i bezpieczna praca z assetami Unity. Role agentów są mechanizmem ograniczania zakresu oraz uprawnień, a nie substytutem testów i code review.
+The Git repository root is one level above the Unity project root.
 
-## 1.1. Język komunikacji
+Unity project commands should normally be run from the Unity project root.
 
-Wszystkie komunikaty i dokumentacje powinny być pisane po polsku, zgodnie z wytycznymi badań o efektywności komunikacji. To ułatwia zrozumienie dla polskojęzycznych użytkowników i współpracowników.
+Project Unity version is currently `6000.3.21f1`. When version-specific behavior matters, verify `ProjectSettings/ProjectVersion.txt` instead of relying on this document.
 
-## 2. Hierarchia źródeł prawdy
+## 2. Communication
 
-Przy sprzeczności stosuj następującą kolejność:
+User-facing communication and agent handoffs should be written in Polish.
 
-1. bieżące instrukcje systemowe, deweloperskie i jawne polecenie użytkownika;
-2. ten `AGENTS.md` dla procesu pracy i bezpieczeństwa repozytorium;
-3. `Docs/GameDesignContract.md` dla zachowania gry i zaakceptowanych decyzji projektowych;
-4. zaakceptowane ADR-y w `Docs/Decisions/` dla konkretnych decyzji technicznych;
-5. aktywna karta `HB-xxx` w `Docs/TechnicalRoadmap.md` dla zakresu zadania;
-6. istniejący kod i dotychczasowe wzorce, o ile nie są oznaczone jako legacy lub błąd.
+Preserve the existing language and conventions of source code, identifiers, comments, and project documentation unless the task explicitly requires changing them.
 
-Istniejące zachowanie prototypu nie jest automatycznie zamierzonym designem. Appendix A w `GameDesignContract.md` wymienia znane ograniczenia legacy.
+## 3. Sources of truth
 
-Jeżeli aktywne zadanie zależy od decyzji oznaczonej jako `Open` w `GameDesignContract.md`, zatrzymaj implementację tej części i poproś właściciela projektu o decyzję. Nie wybieraj sam wariantu zmieniającego zachowanie gracza, semantykę resetu ani format save'a.
+When instructions conflict, use this order:
 
-## 3. Obowiązkowy podział ról
+1. system/developer instructions and the user's explicit current request;
+2. this `AGENTS.md` for repository-wide working rules;
+3. `Docs/GameDesignContract.md` for intended game behavior and accepted design decisions;
+4. accepted ADRs in `Docs/Decisions/`;
+5. the active `HB-xxx` card in `Docs/TechnicalRoadmap.md`;
+6. existing implementation and established project patterns, unless documented as legacy or incorrect.
 
-### Coordinator / Planner
+Existing prototype behavior is not automatically intended design.
 
-- utrzymuje kontrakt, roadmapę, kolejność zależności i kartę aktywnego zadania;
-- analizuje repozytorium w trybie read-only, chyba że użytkownik jawnie zlecił zmianę dokumentacji;
-- przed delegacją zapisuje ograniczony preflight: status, istnienie i hash zastanych zmian tracked/untracked z pominięciem wygenerowanych katalogów Unity;
-- przekazuje Developerowi zamknięty allowlist ścieżek do zapisu;
-- wyznacza dokładnie jednego writera;
-- po pracy Developera porównuje preflight z postflightem i zatrzymuje workflow przy utracie baseline'u albo zmianie poza allowlistem;
-- weryfikuje dowody z kompilacji i testów Developera; sam uruchamia tylko brakującą lub niejednoznaczną walidację;
-- przyjmuje wynik albo zwraca zadanie do poprawy;
-- jako jedyny aktualizuje status ticketu w roadmapie po weryfikacji.
+If a task depends on a decision marked `Open` in `GameDesignContract.md`, do not invent a behavior-changing answer.
 
-### Developer
+Escalate decisions that materially affect:
 
-- jest jedynym agentem zapisującym pliki podczas aktywnego zadania;
-- korzysta z narzędzi `read`, `search`, `edit` i `execute`; terminal służy do bezpiecznej inspekcji, buildów i testów;
-- implementuje wyłącznie wybrany ticket i jego konieczne testy;
-- zapisuje wyłącznie ścieżki z allowlistu;
-- nie usuwa, nie przenosi, nie zmienia nazw, nie przywraca i nie sprząta plików; taką potrzebę zgłasza Coordinatorowi;
-- nie rozpoczyna kolejnego ticketu;
-- nie aktualizuje sam statusu zadania na `Done`;
-- kończy pracę ustrukturyzowanym handoffem.
+- player-facing behavior,
+- reset semantics,
+- save compatibility or format,
+- major architectural boundaries.
 
-### Reviewer / Tester
+## 4. Shared working rules
 
-- pracuje po zakończeniu zapisu przez Developera;
-- domyślnie działa tylko do odczytu;
-- wymaga wyniku bramki integralności i sprawdza zgodność zmian z allowlistem;
-- sprawdza każde kryterium akceptacji i uruchamia adekwatne testy;
-- raportuje błędy wraz z reprodukcją oraz lokalizacją;
-- nie naprawia kodu „przy okazji”; poprawki wracają do Developera jako osobna iteracja.
+Work on one scoped task/ticket at a time.
 
-### Specialist ad hoc
+Prefer:
 
-- wykonuje ograniczoną analizę, np. algorytmu, UX, save'ów lub generatora;
-- domyślnie działa tylko do odczytu;
-- nie rozszerza zakresu poza zlecony problem.
+- minimal, local changes;
+- existing project patterns;
+- explicit behavior;
+- small diffs;
+- focused validation.
 
-Planner i technical lead są na tym etapie jedną rolą. Niezależny lead/reviewer może zostać uruchomiony dla zmian architektury, save'ów, scen lub generatora.
+Do not:
 
-## 4. Zasada jednego writera
+- implement future tickets opportunistically;
+- perform unrelated cleanup or refactoring;
+- overwrite unrelated user work;
+- treat a dirty worktree as something that must be cleaned;
+- modify protected agent configuration unless the user explicitly requested agent-configuration changes.
 
-W jednym współdzielonym worktree dokładnie jeden agent może modyfikować pliki.
+Protected configuration:
 
-Równolegle wolno wykonywać wyłącznie prace bez zapisu, takie jak:
+- `.github/agents/**`
+- `AGENTS.md`
+- `Docs/AgentTeam.md`
 
-- eksploracja kodu;
-- research;
-- projekt testów;
-- analiza architektury;
-- przegląd zakończonego diffu.
+Exactly one agent may write project files during an implementation iteration.
 
-Nie wolno równolegle:
+Read-only analysis may run separately, but review begins only after the implementation writer has finished.
 
-- edytować kodu w dwóch agentach;
-- modyfikować scen, prefabów, assetów, `.meta`, `ProjectSettings` albo `Packages`;
-- uruchamiać dwóch instancji Unity Editor na tym samym katalogu projektu;
-- prowadzić review podczas gdy writer nadal zmienia te same pliki.
+Before any agent receives write ownership, the coordinator must create and verify the baseline snapshot described in section 6. A writer must not begin without its snapshot ID, location, and closed write allowlist.
 
-Równoległe pisanie może zostać dopuszczone dopiero na osobnych branchach/worktree, po ustabilizowaniu granic modułów i CI. Nawet wtedy jeden agent jest właścicielem konkretnej sceny lub prefabu.
+## 5. Architecture invariants
 
-## 5. Protokół pojedynczego ticketu
+Implementations must preserve these rules unless an explicitly approved design change says otherwise:
 
-### Przed zmianami
+- `ProfileState`, `RunState`, and `BoardState` have separate responsibilities.
+- Starting a new run does not erase profile knowledge or the atlas.
+- Grid state, not physics or `Transform`, is the target gameplay source of truth.
+- Input produces a command; a central resolver produces results/events; presentation reproduces them.
+- A rejected command does not consume a turn, food, or a tool.
+- Intent shown to the player is the intent that will execute or be explicitly blocked.
+- Domain code does not store `GameObject`, `MonoBehaviour`, `Transform`, prefabs, colliders, or Unity `InstanceID`.
+- Gameplay RNG is deterministic and separated from cosmetic randomness.
+- Saves use stable textual IDs and versioned DTOs rather than direct Unity-object serialization.
+- Discovering a fact documents an existing rule; it does not unlock that rule.
+- A randomly found tool cannot be required for a mandatory exit.
 
-Agent MUSI:
+When existing legacy code violates these rules, migrate only within the scope of the active task. Do not perform a big-bang rewrite.
 
-1. przeczytać w całości ten `AGENTS.md`;
-2. przeczytać powiązane sekcje `Docs/GameDesignContract.md`;
-3. przeczytać całą kartę aktywnego `HB-xxx`, w tym `Rationale` i `Non-goals`;
-4. sprawdzić istniejące ADR-y mające zastosowanie;
-5. sprawdzić stan odpowiednich plików i, jeśli Git jest dostępny, bieżący status/diff; Coordinator zapisuje preflight zastanych zmian;
-6. wskazać istniejące zmiany użytkownika, których nie wolno nadpisać;
-7. potwierdzić zależności oraz otwarte decyzje;
-8. zaplanować minimalny zestaw plików i testów oraz zamknięty allowlist ścieżek do zapisu.
+## 6. Git and worktree safety
 
-Jeżeli karta nie posiada `Rationale`, kryteriów akceptacji lub jest zbyt szeroka na jedną spójną zmianę, Developer nie rozpoczyna implementacji. Coordinator musi najpierw poprawić kartę.
+Treat pre-existing tracked and untracked changes as user-owned baseline.
 
-### Podczas zmian
+### Required baseline snapshot before a writer
 
-- Zachowuj minimalny zakres potrzebny do spełnienia kryteriów.
-- Nie implementuj przyszłych ticketów „przy okazji”.
-- Nie wykonuj szerokiego formatowania, rename'ów ani porządków niezwiązanych z zadaniem.
-- Zachowuj kompatybilność save'ów, chyba że ticket jawnie definiuje migrację lub reset.
-- Każde nieuniknione odejście od karty zapisz w handoffie wraz z powodem.
-- Dla plików tekstowych używaj małych, kontrolowanych patchy.
-- Nie generuj ani nie edytuj ręcznie GUID-ów Unity.
+Before every implementation or configuration iteration that can write project files, create a new local snapshot outside the repository worktree. Do not reuse a snapshot from an earlier writer iteration.
 
-### Po zmianach
+The snapshot must contain:
 
-Developer MUSI:
+- a unique snapshot ID and local path;
+- UTC timestamp, real Git root, branch, `HEAD`, task/ticket, writer, and closed write allowlist;
+- `git status --short --branch --untracked-files=normal`;
+- staged and unstaged name/status lists;
+- the untracked-path list;
+- `git diff --binary` and `git diff --cached --binary`, written directly by Git without shell text re-encoding;
+- SHA-256 hashes for every existing file in the write allowlist;
+- exact local copies, preserving relative paths, of existing allowlisted files, including untracked files.
 
-1. sprawdzić treść zmienionych plików z allowlistu;
-2. uruchomić testy wymagane przez kartę i przekazać dokładne komendy, kody wyjścia oraz artefakty;
-3. potwierdzić każde kryterium akceptacji albo oznaczyć je jako niespełnione;
-4. przekazać handoff według sekcji 12;
-5. zatrzymać się bez rozpoczynania następnego ticketu.
+Verify that the manifest and expected artifacts exist before delegating. If snapshot creation or verification fails, do not grant write ownership.
 
-Coordinator MUSI następnie:
+The coordinator must provide the snapshot ID, snapshot path, and allowlist in the writer handoff. The writer must refuse to edit when any of them is missing or when the snapshot manifest does not match the handoff.
 
-1. porównać preflight z postflightem przed review i dodatkową walidacją Coordinatora;
-2. zatrzymać workflow bez automatycznego restore'u, gdy zniknął baseline albo zmieniła się ścieżka poza allowlistem;
-3. po przejściu bramki integralności zweryfikować dowody testów Developera i uruchomić tylko brakującą lub niejednoznaczną kontrolę;
-4. przekazać Reviewerowi allowlist, wynik bramki integralności oraz rzeczywiste wyniki testów.
+After the writer returns, compare repository state and allowlisted hashes with the snapshot before review. If baseline content disappeared or a path outside the allowlist changed, stop the normal workflow. Preserve the evidence and do not restore automatically; recovery requires an explicit user decision.
 
-## 6. Bezpieczeństwo Git i worktree
+Snapshots are local recovery artifacts. Do not add them to Git or send their code, patches, or hashes to external services.
 
-- Traktuj istniejące zmiany oraz pliki untracked jako własność użytkownika.
-- Dirty worktree nie jest błędem ani poleceniem sprzątania.
-- Nie używaj `git reset --hard`, `git clean`, `git checkout --`, `git restore`, force-push ani destrukcyjnego rebase bez jawnego polecenia użytkownika.
-- Nie wykonuj `git add -A` ani szerokich commitów obejmujących wygenerowane katalogi.
-- Nie twórz commitów, branchy ani PR-ów bez jawnego polecenia użytkownika lub zakresu ticketu.
-- Nie zmieniaj globalnej konfiguracji Git, w tym `safe.directory`, bez zgody użytkownika. Jeżeli Git odmawia pracy z powodu własności katalogu, zgłoś ograniczenie i kontynuuj bezpiecznymi kontrolami plików, o ile to wystarcza.
-- Przed operacją obejmującą katalog nadrzędny potwierdź rzeczywisty repo root i dokładny zakres. Domyślnie nie zmieniaj plików poza projektem Unity.
-- Ticket higieny może jawnie autoryzować zmianę rootowego `../.gitignore` lub `../.gitattributes`; nie rozszerzaj tego na inne pliki rodzica.
+Never automatically use destructive operations such as:
 
-Do czasu zakończenia ticketów higieny repo zakładaj, że rootowy `.gitignore` niepoprawnie obsługuje zagnieżdżony projekt. Nie skanuj rekurencyjnie ani nie stage'uj:
+- `git reset --hard`;
+- `git clean`;
+- `git checkout --` on unrelated work;
+- `git restore` on unrelated work;
+- force push;
+- destructive rebase;
+- automatic stash of user changes.
 
-- `Library/`;
-- `Temp/`;
-- `obj/`;
-- `Logs/`;
-- `Build/` i `Builds/`;
-- `UserSettings/`;
-- innych wygenerowanych wyników Unity lub IDE.
+Do not create commits, branches, tags, or pull requests unless explicitly requested.
 
-## 7. Bezpieczeństwo assetów Unity
+Do not modify global Git configuration without explicit approval.
 
-Projekt używa Unity `6000.3.21f1`.
+Before operating on the parent repository directory, confirm the real Git root and exact intended scope.
 
-### Przed ukończeniem tekstowej serializacji
+Do not recursively inspect, stage, or manipulate generated Unity/IDE directories such as:
 
-- Traktuj `.unity`, `.prefab`, większość `.asset` i część `ProjectSettings` jako potencjalnie binarne.
-- Nie modyfikuj binarnego assetu ręcznie.
-- Zmianę `Force Text`, `Visible Meta Files` i reserializację wykonuj wyłącznie w przeznaczonym do tego tickecie, przez Unity Editor i w osobnej zmianie.
-- Nie mieszaj reserializacji z modyfikacją rozgrywki.
+- `Library/`
+- `Temp/`
+- `obj/`
+- `Logs/`
+- `Build/`
+- `Builds/`
+- `UserSettings/`
 
-### Po ukończeniu tekstowej serializacji
+A task may explicitly authorize changes to repository-root files such as `../.gitignore` or `../.gitattributes`. Such authorization does not extend to other parent files.
 
-- YAML nadal nie jest bezpieczny do ślepego automatycznego merge'owania.
-- Jedna scena, prefab lub `ProjectSettings` ma jednego writera w danej iteracji.
-- Nie rozwiązuj konfliktów YAML przez wybieranie całej jednej strony bez inspekcji referencji i GUID-ów.
+History rewriting is always a separate, explicitly authorized operation.
 
-### Zasady ogólne
+## 7. Unity asset safety
 
-- Nie usuwaj ani nie przenoś assetu bez jego `.meta`.
-- Preferuj przenoszenie i zmianę nazw przez Unity Editor, jeżeli operacja dotyczy asset database.
-- Nie regeneruj `.meta` istniejącego assetu.
-- Nie zmieniaj wersji Unity ani pakietów przy okazji innego zadania.
-- `Packages/manifest.json`, `Packages/packages-lock.json` oraz `ProjectSettings` zmieniaj tylko wtedy, gdy karta jawnie je wymienia.
-- Po zmianie sceny lub prefabu sprawdź brak `Missing Script` i utraconych referencji.
-- Tester uruchamia Unity dopiero po zamknięciu instancji używanej przez Developera.
+Do not manually invent or edit Unity GUIDs.
 
-## 8. Niezmienne zasady architektury
+Do not regenerate the `.meta` file of an existing asset.
 
-Szczegóły i rationale znajdują się w `Docs/GameDesignContract.md`. Każda implementacja MUSI zachować poniższe reguły:
+Do not delete, move, or rename an asset independently of its `.meta`.
 
-- `ProfileState`, `RunState` i `BoardState` mają rozdzieloną odpowiedzialność.
-- Nowy run nie usuwa atlasu ani wiedzy profilu.
-- Stan siatki, a nie fizyka ani `Transform`, jest docelowym źródłem prawdy.
-- Wejście tworzy komendę; centralny resolver zwraca wynik i zdarzenia; prezentacja tylko je odtwarza.
-- Odrzucona komenda nie kosztuje tury, jedzenia ani narzędzia.
-- Intent pokazany graczowi jest tym intentem, który zostanie wykonany lub jawnie zablokowany.
-- Kod domenowy nie przechowuje `GameObject`, `MonoBehaviour`, `Transform`, prefabów, colliderów ani Unity `InstanceID`.
-- Gameplay RNG jest deterministyczny i oddzielony od losowości kosmetycznej.
-- Save używa stabilnych tekstowych ID i wersjonowanych DTO, nie bezpośredniej serializacji obiektów Unity.
-- Odkryty fakt dokumentuje istniejącą regułę; nie odblokowuje jej działania.
-- Losowo znalezione narzędzie nie może być wymagane do obowiązkowego wyjścia.
+Prefer Unity-aware operations for asset database moves and renames.
 
-Jeżeli istniejący kod łamie te reguły, migruj go etapami zgodnie z ticketem. Nie wykonuj big-bang rewrite bez osobnej zgody.
+Treat scenes, prefabs, serialized assets, `ProjectSettings`, and package configuration as sensitive project state.
 
-## 9. Testy i weryfikacja
+Do not change:
 
-Unity Test Framework `1.6.0` jest już zainstalowany. Nie dodawaj innego frameworka bez ticketu.
+- Unity version;
+- `Packages/manifest.json`;
+- `Packages/packages-lock.json`;
+- `ProjectSettings`;
 
-Dobierz minimalny wymagany poziom weryfikacji:
+unless the active task requires it.
 
-| Rodzaj zmiany | Minimalna weryfikacja |
+Do not mix mass reserialization with unrelated gameplay changes.
+
+Text/YAML serialization does not make blind merge conflict resolution safe.
+
+A scene or prefab has one writer per iteration.
+
+After scene/prefab changes, verify relevant references and check for missing scripts where practical.
+
+Run only one Unity Editor instance against this project directory.
+
+## 8. Unity CLI and Pipeline
+
+Unity CLI with the Unity Pipeline package is the primary automation interface to the running Unity Editor.
+
+The legacy Unity AI Assistant MCP Server is not part of the primary workflow.
+
+For this project environment, use:
+
+```powershell
+unity pipeline list
+unity command
+```
+
+Use `unity command` to discover commands exposed by the connected Editor.
+
+For focused C# inspection or small controlled Editor operations:
+
+```powershell
+unity command eval "<valid C# statements>;"
+```
+
+Example:
+
+```powershell
+unity command eval "UnityEngine.Debug.Log(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);"
+```
+
+In the currently installed CLI/Pipeline combination, use `unity command eval`, not top-level `unity eval`.
+
+Code passed to `eval` must be valid compilable C# statements and should normally terminate statements with `;`.
+
+Prefer `eval` for inspection, diagnostics, and narrowly scoped Editor interaction.
+
+Do not use large opaque `eval` scripts as a substitute for maintainable source-controlled code or dedicated Editor/Pipeline tooling.
+
+If an Editor operation changes persistent project state:
+
+- make the mutation intentional;
+- save the affected state explicitly;
+- inspect resulting repository changes;
+- verify the result.
+
+## 9. Validation
+
+Use the smallest validation level that gives meaningful evidence.
+
+| Change type | Minimum expected validation |
 | --- | --- |
-| wyłącznie dokumentacja | kontrola struktury, linków i zgodności źródeł prawdy |
-| czysta logika domenowa | EditMode tests |
-| integracja `MonoBehaviour`, sceny lub UI | EditMode, odpowiednie PlayMode tests i smoke test |
-| generator | test deterministyczności, walidator i partia seedów |
-| save/profil/run | test round-trip, reset semantics, uszkodzony zapis i katalog tymczasowy |
-| prefab/scena | otwarcie w Unity, brak brakujących skryptów/referencji i odpowiedni smoke test |
-| input/tura | test „jedna zaakceptowana komenda = jedna tura” oraz odrzuconych komend |
+| Documentation only | structure, links, source-of-truth consistency |
+| Pure domain logic | relevant EditMode tests |
+| `MonoBehaviour`, scene, or UI integration | relevant EditMode/PlayMode validation and smoke check |
+| Generator | determinism test, validator, representative seeds |
+| Save/profile/run state | round-trip, reset semantics, corrupt-data handling, isolated temp location |
+| Prefab/scene | open/inspect in Unity, relevant references, smoke check |
+| Input/turn logic | accepted-command turn behavior and rejected-command behavior |
 
-Zasady testów:
+Unity Test Framework `1.6.0` is already installed. Do not introduce another test framework without an explicit requirement.
 
-- Developer uruchamia kompilację i testy; Coordinator nie duplikuje ich bez potrzeby, ale weryfikuje wyniki po przejściu bramki integralności.
-- Test nie może pisać do prawdziwego katalogu profilu gracza.
-- Testy deterministyczne raportują seed i identyfikator węzła przy błędzie.
-- Gameplay i kosmetyka nie korzystają z tego samego strumienia RNG.
-- Test PlayMode nie może polegać wyłącznie na czasie animacji, jeżeli może obserwować stan.
-- Nie deklaruj testu jako przechodzącego, jeżeli nie został uruchomiony.
-- Jeżeli środowisko, licencja lub otwarty Editor blokują test, oznacz wynik jako `Not run` i podaj konkretną przyczynę.
+Tests must not write to the player's real profile directory.
 
-Domyślna instalacja Unity wykryta dla tego środowiska:
+Deterministic failures should report enough information to reproduce them, including seed/node identifiers where relevant.
 
-```text
-C:\Program Files\Unity\Hub\Editor\6000.3.21f1\Editor\Unity.exe
-```
+Gameplay and cosmetic randomness must not share the same RNG stream.
 
-Nie zakładaj, że ścieżka jest identyczna na innej maszynie. Wersję projektu odczytuj z `ProjectSettings/ProjectVersion.txt`.
+Do not claim that a build or test passed unless it was actually run and observed.
 
-## 10. Sekrety, sieć i dane zewnętrzne
+If validation cannot run because of the environment, report it as `Not run` with the concrete reason.
 
-- Nie dodawaj sekretów, tokenów, prywatnych kodów ani danych logowania do repozytorium, logów, promptów i raportów.
-- Prywatny kod Dreamlo obecny w `ManageRecords.cs` traktuj jako ujawniony. Nie powtarzaj jego wartości. Rotacja/usunięcie wymaga osobnego ticketu i ewentualnej akcji właściciela usługi.
-- Nie wysyłaj wyników, kodu ani telemetrii do zewnętrznego serwisu bez jawnej autoryzacji użytkownika.
-- Testy leaderboardu używają fake'a albo kontrolowanego endpointu, nigdy produkcyjnego sekretu.
-- Lokalna telemetria playtestowa ma być opt-in podczas developmentu i zapisywana poza profilem gracza.
+## 10. Definition of done
 
-## 11. Definicja ukończenia
+A task is complete only when:
 
-Ticket może zostać przyjęty jako `Done` wyłącznie, gdy:
+- its acceptance criteria have evidence;
+- required behavior is implemented;
+- relevant compilation/tests/validation passed, or an explicit limitation was accepted;
+- no unintended user changes were overwritten;
+- scope did not silently expand;
+- save changes include compatible versioning/migration or an explicitly approved reset;
+- documentation/configuration was updated when the task changed a public contract;
+- implementation received the required independent review.
 
-- jego `Rationale` nadal jest realizowane przez rozwiązanie;
-- wszystkie kryteria akceptacji mają dowód;
-- wymagane testy zostały uruchomione i przeszły albo właściciel jawnie zaakceptował ograniczenie;
-- projekt kompiluje się w zakresie objętym zmianą;
-- nie ma niezamierzonych zmian w plikach użytkownika;
-- nie rozpoczęto pracy z kolejnego ticketu;
-- zmiany save'a posiadają wersję/migrację albo jawnie zatwierdzony reset;
-- dokumentacja i konfiguracja zostały zaktualizowane, jeżeli zmienił się kontrakt lub publiczne API;
-- Developer przekazał handoff, a Reviewer/Coordinator zaakceptował rezultat.
+Partial implementation, token limits, or plausible-looking code are not evidence of completion.
 
-Brak czasu, limit tokenów lub częściowo działający prototyp nie są podstawą do oznaczenia `Done`.
+## 11. Security and external data
 
-## 12. Wymagany handoff Developera
+Do not add or expose secrets, credentials, private codes, or tokens in repository content, logs, prompts, or reports.
 
-Użyj formatu:
+Do not repeat values of credentials already present in legacy code.
 
-```text
-Ticket:
-Rezultat:
-Jak rozwiązanie realizuje Rationale:
-Zmienione pliki:
-Decyzje implementacyjne:
-Odstępstwa od karty:
-Testy i dokładne wyniki:
-Testy niewykonane i powód:
-Wpływ na save'y/kompatybilność:
-Manualne kroki w Unity:
-Znane ryzyka:
-```
+Do not send project code, telemetry, results, or player data to external services without explicit authorization.
 
-Handoff nie zawiera implementacji kolejnego zadania. Może wskazać następny ticket wynikający z zależności.
+Tests involving external services should use fakes, isolated test infrastructure, or explicitly approved endpoints.
 
-## 13. Wymagany raport Reviewera / Testera
-
-Użyj formatu:
-
-```text
-Ticket:
-Werdykt: Pass / Rework / Blocked
-Kryteria akceptacji:
-- AC1: Pass/Fail — dowód
-- AC2: Pass/Fail — dowód
-Wykonane testy:
-Ustalenia:
-- [P0/P1/P2/P3] plik:linia — problem, wpływ, reprodukcja
-Ryzyka nieweryfikowalne w środowisku:
-```
-
-Priorytety:
-
-- `P0` — utrata danych, destrukcyjna operacja, krytyczny problem bezpieczeństwa;
-- `P1` — crash, softlock, złamanie kontraktu lub brak możliwości ukończenia;
-- `P2` — istotny błąd zachowania albo regresja bez utraty danych;
-- `P3` — niewielki problem nieblokujący kryteriów.
-
-Reviewer nie zgłasza uwag wyłącznie stylistycznych, jeżeli nie wpływają na poprawność, czytelność kontraktu albo utrzymanie kodu.
-
-## 14. Aktualna bramka bezpieczeństwa
-
-Do czasu ukończenia pierwszych ticketów higieny obowiązują dodatkowe ograniczenia:
-
-- nie uruchamiaj równoległych writerów;
-- nie wykonuj masowej reserializacji bez otwartego Unity i osobnego zakresu;
-- nie próbuj automatycznie „sprzątać” całego dirty worktree;
-- nie stage'uj wygenerowanych katalogów;
-- nie zaczynaj refaktoru rozgrywki przed utrwaleniem baseline'u i uruchomieniem minimalnych testów;
-- zachowaj wszystkie zmiany migracyjne użytkownika.
-
-Pierwszym zadaniem implementacyjnym powinien być pierwszy nieukończony ticket higieny repo w `Docs/TechnicalRoadmap.md`.
-
-## 15. Bezpieczeństwo historii Git
-
-W przypadku eksponowanych sekretów w historii Git, należy zastosować odpowiednie narzędzia do oczyszczenia historii (np. BFG Repo Cleaner lub git filter-branch) i zasugerować rotację sekretów po ich usunięciu.
+Security cleanup, credential rotation, and Git-history rewriting are separate tasks that require explicit scope.

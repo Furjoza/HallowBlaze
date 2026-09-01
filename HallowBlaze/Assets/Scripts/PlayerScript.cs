@@ -31,10 +31,10 @@ public class PlayerScript : MovingObject {
     {
         animator = GetComponent<Animator>();
 
-        if (GameManager.instance != null)
+        if (GameManager.instance != null && GameManager.instance.runState != null)
         {
-            food = GameManager.instance.playerFoodPoints;
-            health = GameManager.instance.playerHealthPoints;
+            food = GameManager.instance.runState.playerFoodPoints;
+            health = GameManager.instance.runState.playerHealthPoints;
         }
 
         if (foodText != null)
@@ -42,21 +42,44 @@ public class PlayerScript : MovingObject {
         if (healthText != null)
             healthText.text = "Health: " + health;
 
+        // Subscribe to state changes
+        if (GameManager.instance != null && GameManager.instance.runState != null)
+        {
+            GameManager.instance.runState.OnFoodChanged += OnFoodChanged;
+            GameManager.instance.runState.OnHealthChanged += OnHealthChanged;
+        }
+
         base.Start();
 	}
 
     private void OnDisable()
     {
-        if (GameManager.instance != null)
+        // Unsubscribe from state changes
+        if (GameManager.instance != null && GameManager.instance.runState != null)
         {
-            GameManager.instance.playerFoodPoints = food;
-            GameManager.instance.playerHealthPoints = health;
+            GameManager.instance.runState.OnFoodChanged -= OnFoodChanged;
+            GameManager.instance.runState.OnHealthChanged -= OnHealthChanged;
         }
+    }
+
+    private void OnFoodChanged(int newFood)
+    {
+        food = newFood;
+        if (foodText != null)
+            foodText.text = "Food: " + food;
+    }
+
+    private void OnHealthChanged(int newHealth)
+    {
+        health = newHealth;
+        if (healthText != null)
+            healthText.text = "Health: " + health;
     }
 
     // Update is called once per frame
     void Update () {
-        if (GameManager.instance == null || !GameManager.instance.playerTurn) return;
+        // Don't process input when gameplay is blocked or game is not running
+        if (GameManager.instance == null || !GameManager.instance.IsGameplayInputEnabled) return;
 
         int horizontal = 0;
         int vertical = 0;
@@ -114,7 +137,17 @@ public class PlayerScript : MovingObject {
         if (!canMove && hitComponent == null)
             return;
 
-        food--;
+        if (GameManager.instance != null && GameManager.instance.runState != null)
+        {
+            GameManager.instance.runState.DecrementFoodPoints();
+            food = GameManager.instance.runState.playerFoodPoints;
+            health = GameManager.instance.runState.playerHealthPoints;
+        }
+        else
+        {
+            food--;
+        }
+
         if (foodText != null)
             foodText.text = "Food: " + food;
         if (healthText != null)
@@ -127,37 +160,54 @@ public class PlayerScript : MovingObject {
 
         CheckIfGameOver();
 
-        if (GameManager.instance != null)
-            GameManager.instance.playerTurn = false;
+        // Set player turn to false through RunState
+        if (GameManager.instance != null && GameManager.instance.runState != null)
+            GameManager.instance.runState.SetPlayerTurn(false);
     }
 
     protected void AttemptGathering()
     {
-        food--;
-        if (foodText != null)
-            foodText.text = "Food: " + food;
-        if (healthText != null)
-            healthText.text = "Health: " + health;
+        // Update state through RunState
+        if (GameManager.instance != null && GameManager.instance.runState != null)
+        {
+            GameManager.instance.runState.DecrementFoodPoints();
+            
+            // Update UI directly since we already have the current values
+            if (foodText != null)
+                foodText.text = "Food: " + GameManager.instance.runState.playerFoodPoints;
+            if (healthText != null)
+                healthText.text = "Health: " + GameManager.instance.runState.playerHealthPoints;
+        }
 
         CheckIfGameOver();
 
         if (onCarrot)
         {
-            food += pointsPerFood;
-            if (foodText != null)
-                foodText.text = "Food: " + food + "+" + pointsPerFood;
-            if (SoundManager.instance != null)
-                SoundManager.instance.RandomizeSfx(eatSound1, eatSound2);
-            if (tmpCarrot != null)
-                tmpCarrot.SetActive(false);
+            // Update state through RunState
+            if (GameManager.instance != null && GameManager.instance.runState != null)
+            {
+                GameManager.instance.runState.IncrementFoodPoints(pointsPerFood);
+                
+                // Update UI directly since we already have the current values
+                if (foodText != null)
+                    foodText.text = "Food: " + GameManager.instance.runState.playerFoodPoints + "+" + pointsPerFood;
+                if (SoundManager.instance != null)
+                    SoundManager.instance.RandomizeSfx(eatSound1, eatSound2);
+                if (tmpCarrot != null)
+                    tmpCarrot.SetActive(false);
+            }
         }
 
-        if (GameManager.instance != null)
-            GameManager.instance.playerTurn = false;
+        // Set player turn to false through RunState
+        if (GameManager.instance != null && GameManager.instance.runState != null)
+            GameManager.instance.runState.SetPlayerTurn(false);
     }
 
     private void OnTriggerEnter2D(Collider2D other)
     {
+        // Don't process collisions when gameplay is blocked
+        if (GameManager.instance != null && GameManager.instance.IsGameplayInputBlocked) return;
+
         if(other.tag == "Exit")
         {
             Invoke("Restart", restartLevelDelay);
@@ -165,30 +215,48 @@ public class PlayerScript : MovingObject {
         }
         else if (other.tag == "Food")
         {
-            food += pointsPerFood;
-            if (foodText != null)
-                foodText.text = "Food: " + food + "+" + pointsPerFood;
-            if (SoundManager.instance != null)
-                SoundManager.instance.RandomizeSfx(eatSound1, eatSound2);
-            other.gameObject.SetActive(false);
+            // Update state through RunState
+            if (GameManager.instance != null && GameManager.instance.runState != null)
+            {
+                GameManager.instance.runState.IncrementFoodPoints(pointsPerFood);
+                
+                // Update UI directly since we already have the current values
+                if (foodText != null)
+                    foodText.text = "Food: " + GameManager.instance.runState.playerFoodPoints + "+" + pointsPerFood;
+                if (SoundManager.instance != null)
+                    SoundManager.instance.RandomizeSfx(eatSound1, eatSound2);
+                other.gameObject.SetActive(false);
+            }
         }
         else if (other.tag == "Soda")
         {
-            food += pointsPerSoda;
-            if (foodText != null)
-                foodText.text = "Food: " + food + "+" + pointsPerSoda;
-            if (SoundManager.instance != null)
-                SoundManager.instance.RandomizeSfx(drinkSound1, drinkSound2);
-            other.gameObject.SetActive(false);
+            // Update state through RunState
+            if (GameManager.instance != null && GameManager.instance.runState != null)
+            {
+                GameManager.instance.runState.IncrementFoodPoints(pointsPerSoda);
+                
+                // Update UI directly since we already have the current values
+                if (foodText != null)
+                    foodText.text = "Food: " + GameManager.instance.runState.playerFoodPoints + "+" + pointsPerSoda;
+                if (SoundManager.instance != null)
+                    SoundManager.instance.RandomizeSfx(drinkSound1, drinkSound2);
+                other.gameObject.SetActive(false);
+            }
         }
         else if (other.tag == "Aid")
         {
-            health += pointsPerAid;
-            if (healthText != null)
-                healthText.text = "Health: " + health + "+" + pointsPerAid;
-            if (SoundManager.instance != null)
-                SoundManager.instance.RandomizeSfx(drinkSound1, drinkSound2); //Zmienić dźwięk!!!
-            other.gameObject.SetActive(false);
+            // Update state through RunState
+            if (GameManager.instance != null && GameManager.instance.runState != null)
+            {
+                GameManager.instance.runState.IncrementHealthPoints(pointsPerAid);
+                
+                // Update UI directly since we already have the current values
+                if (healthText != null)
+                    healthText.text = "Health: " + GameManager.instance.runState.playerHealthPoints + "+" + pointsPerAid;
+                if (SoundManager.instance != null)
+                    SoundManager.instance.RandomizeSfx(drinkSound1, drinkSound2); //Zmienić dźwięk!!!
+                other.gameObject.SetActive(false);
+            }
         }
         if (other.tag == "Carrot")
         {
@@ -199,6 +267,9 @@ public class PlayerScript : MovingObject {
 
     private void OnTriggerExit2D(Collider2D other)
     {
+        // Don't process exit collisions when gameplay is blocked
+        if (GameManager.instance != null && GameManager.instance.IsGameplayInputBlocked) return;
+
         if (other.tag == "Carrot")
             onCarrot = false;
     }
@@ -218,21 +289,38 @@ public class PlayerScript : MovingObject {
 
     public void LoseHealth (int loss)
     {
+        if (GameManager.instance != null && GameManager.instance.IsGameplayInputBlocked)
+            return;
+
         animator.SetTrigger("playerHit");
-        health -= loss;
-        if (healthText != null)
-            healthText.text =  "Health: " + health + "-" + loss;
+        
+        // Update state through RunState
+        if (GameManager.instance != null && GameManager.instance.runState != null)
+        {
+            GameManager.instance.runState.DecrementHealthPoints(loss);
+            
+            // Update UI directly since we already have the current values
+            if (healthText != null)
+                healthText.text =  "Health: " + GameManager.instance.runState.playerHealthPoints + "-" + loss;
+        }
+        
         CheckIfGameOver();
     }
 
     private void CheckIfGameOver()
     {
-        if (food <= 0 || health <= 0)
+        if (GameManager.instance == null || GameManager.instance.IsGameplayInputBlocked)
+            return;
+
+        if (GameManager.instance != null && GameManager.instance.runState != null)
         {
-            if (SoundManager.instance != null)
-                SoundManager.instance.RandomizeSfx(gameOverSound);
-            if (GameManager.instance != null)
-                GameManager.instance.GameOver(food <= 0 ? true : false);
-        }    
+            if (GameManager.instance.runState.playerFoodPoints <= 0 || GameManager.instance.runState.playerHealthPoints <= 0)
+            {
+                if (SoundManager.instance != null)
+                    SoundManager.instance.RandomizeSfx(gameOverSound);
+                if (GameManager.instance != null)
+                    GameManager.instance.GameOver(GameManager.instance.runState.playerFoodPoints <= 0 ? true : false);
+            }    
+        }
     }
 }

@@ -25,11 +25,49 @@ public class SoundManager : MonoBehaviour {
     // When the script instance is being started check saved sound settings and set audio sources accordingly.
     private void Start ()
     {
-        if (PlayerPrefs.GetString("Music") == "Off")
-            musicSource.Stop();
+        ApplySavedSettings();
+    }
 
-        if (PlayerPrefs.GetString("Sound") == "Off")
-            efxSource.mute = true;
+    public bool MusicEnabled
+    {
+        get { return PlayerPrefs.GetString("Music", "On") != "Off"; }
+    }
+
+    public bool SoundEnabled
+    {
+        get { return PlayerPrefs.GetString("Sound", "On") != "Off"; }
+    }
+
+    public void SetMusicEnabled(bool enabled)
+    {
+        PlayerPrefs.SetString("Music", enabled ? "On" : "Off");
+
+        if (musicSource == null)
+            return;
+
+        if (enabled)
+        {
+            if (!musicSource.isPlaying)
+                musicSource.Play();
+        }
+        else
+        {
+            musicSource.Stop();
+        }
+    }
+
+    public void SetSoundEnabled(bool enabled)
+    {
+        PlayerPrefs.SetString("Sound", enabled ? "On" : "Off");
+
+        if (efxSource != null)
+            efxSource.mute = !enabled;
+    }
+
+    public void ApplySavedSettings()
+    {
+        SetMusicEnabled(MusicEnabled);
+        SetSoundEnabled(SoundEnabled);
     }
 
     public void PlaySingle (AudioClip clip)
