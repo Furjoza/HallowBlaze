@@ -2,7 +2,7 @@
 name: qwen-reviewer
 description: Independent adversarial code reviewer running on a separate local Qwen model. Reviews implementation against requirements and actively searches for bugs, regressions, broken assumptions, and incomplete validation.
 argument-hint: A task specification, acceptance criteria, implementation report, and changed files to independently review.
-model: qwen3.6:27b (ollama-models)
+model: Auto (copilot)
 tools: ['read', 'search']
 user-invocable: false
 ---
