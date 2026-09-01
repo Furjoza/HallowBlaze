@@ -1,7 +1,7 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.4 — M0 zakończone**
-> Data ostatniej weryfikacji: 2026-08-28
+> Status dokumentu: **Accepted / execution roadmap v0.5 — M1 otwarte**
+> Data ostatniej weryfikacji: 2026-08-29
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
 > Zasady pracy agentów: [`../AGENTS.md`](../AGENTS.md)
@@ -48,16 +48,17 @@ Agenci współdzielą ten sam katalog, a Unity może automatycznie modyfikować 
 
 - Repozytorium Git ma root w `E:\Repos\HallowBlaze`, a projekt Unity w `E:\Repos\HallowBlaze\HallowBlaze`.
 - Projekt używa Unity `6000.3.21f1`.
-- Unity Test Framework `1.6.0` jest zadeklarowany. W working tree istnieją dwa test assemblies i trzy testy, lecz infrastruktura nie została ponownie zaakceptowana po regresji kompilacji opisanej w sekcji 3.2.
+- Unity Test Framework `1.6.0` jest zadeklarowany. Dwa test assemblies są zaakceptowane; końcowa bramka M0 wykonała EditMode `1/1` i PlayMode `5/5`, a Player build nie zawierał assembly testowych.
 - `Visible Meta Files` jest włączone i bieżący audyt nie wykazał brakujących ani osieroconych plików `.meta`.
 - Po `M0.5` aktywne są `Force Text` i `Visible Meta Files`; wszystkie 57 wspieranych scen/prefabów/animacji/kontrolerów jest w YAML, a sceny mają osobne assety `LightingSettings`. Po `M0.6` `ProjectSettings/NetworkManager.asset` nie istnieje; audyt nie wykazał binarnego pliku w objętej tymi kartami grupie.
 - Rootowy `.gitignore` nadal jest źle zakotwiczony dla zagnieżdżonego projektu, ale projektowy `/.gitignore` z `M0.1` skutecznie kompensuje ten problem.
-- Working tree zawiera niezacommitowane wyniki `M0.4`–`M0.9`, późniejsze zmiany narzędzi zewnętrznych i zmiany użytkownika. Nie wolno ich automatycznie cofać, stage'ować ani „sprzątać”.
+- Wyniki M0 zostały scalone do `master` przez PR #1. Preflight przed rozpoczęciem M1 wykazał czysty working tree bez zmian staged, unstaged i nieignorowanych untracked; każdą późniejszą zmianę nadal należy traktować jako własność jej autora i chronić zgodnie z `AGENTS.md`.
+- Branch `M1/StateFoundation` zawiera wcześniejszą, niezaakceptowaną próbę `RunState` z commita `3d10d54`. Jej obecność nie zmienia statusu żadnej karty i nie stanowi dowodu spełnienia kryteriów `M1.2`.
 - Po `M0.10` bieżący klient nie zawiera wartości Dreamlo ani transportu leaderboardu i działa wyłącznie offline. Historyczna wartość pozostaje w Git; nie wolno jej cytować, kopiować, ponownie używać ani testować przez sieć.
 
 ### 3.1. Operacyjny pre-flight Git
 
-Git jest obecnie dostępny bez zmiany globalnego `safe.directory`. Rzeczywisty root to `E:/Repos/HallowBlaze`; branch `master` jest według lokalnych refów jeden commit przed `origin/master`, a HEAD wskazuje baseline `32f249a` z 2026-08-20. Nie wykonano `fetch`, więc nie jest to potwierdzenie aktualnego stanu serwera.
+Git jest dostępny bez zmiany globalnego `safe.directory`, a rzeczywisty root to `E:/Repos/HallowBlaze`. Dnia 2026-08-29 wykonano `fetch --prune`: `origin/master` wskazuje `68080fa`, czyli merge PR #1 zawierający zaakceptowany tip M0 `4813b5a`. Lokalny `master` został zaktualizowany wyłącznie przez fast-forward, następnie scalony do `M1/StateFoundation` jako `b36c689`; merge zachowuje także wcześniejszy `3d10d54`. Jedyny konflikt tekstowy w `PlayerScript.cs` połączył zaakceptowane pojedyncze rozstrzygnięcie ruchu z zastaną delegacją kosztu do `RunState`; po merge nie pozostały wpisy unmerged ani zmiany w working tree.
 
 Jeżeli błąd `unsafe repository` powróci, agent zatrzymuje zapis, zgłasza dokładny katalog i nie ustawia samodzielnie globalnego zaufania. Właściciel może jawnie zaufać wyłącznie dokładnej ścieżce repo, nigdy wildcardowi `*`.
 
@@ -86,7 +87,7 @@ Nowy atlas, resolver tur i save system dotkną wielu plików. Bez poprawnego ign
 | Etap | Rezultat | Bramka przejścia |
 | --- | --- | --- |
 | M0 — Safe Repository | repo jest czytelne dla Git, Unity i agentów; istnieje baseline oraz test runner | brak katalogów generowanych w statusie, tekstowe assety, zielony smoke test |
-| M1 — State Foundation | `RunState` i `ProfileState` mają jednego właściciela i bezpieczny zapis | restart sceny i aplikacji nie miesza profilu z runem |
+| M1 — State Foundation | pauza nie mutuje planszy, a `RunState` i `ProfileState` mają jednego właściciela i bezpieczny zapis | pause/exit są bezpieczne; restart sceny i aplikacji nie miesza profilu z runem |
 | M2 — Persistent Atlas Prototype | stały graf około pięciu dni zachowuje odkrycia pomiędzy runami | tester używa wiedzy z pierwszej próby w drugiej |
 | M3 — Deterministic Tactical Core | komenda ma jeden wynik, jedną turę i jawne intenty | replay tych samych komend daje ten sam hash |
 | M4 — Generation, Noise and Enemies | model-first generator jest walidowany, a hałas tworzy decyzje | 10 000 seedów bez softlocka; Listener jest przewidywalny |
@@ -104,7 +105,7 @@ Dozwolony obszar plików w karcie jest zamkniętą listą. Pliki `.meta` odpowia
 
 ### 5.2. Save compatibility
 
-Do czasu powstania `M1.4` nie ma gwarancji kompatybilności prototypowych `PlayerPrefs`. Od `M1.4` każda zmiana DTO musi:
+Do czasu powstania `M1.5` nie ma gwarancji kompatybilności prototypowych `PlayerPrefs`. Od `M1.5` każda zmiana DTO musi:
 
 - zwiększyć `schemaVersion`, jeśli zmienia format;
 - dostarczyć migrację albo jawnie odrzucić starszy zapis z bezpiecznym komunikatem;
@@ -577,7 +578,47 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 
 ---
 
-## `M1.1` — Autorytatywny `RunState`
+## `M1.1` — Menu pauzy i bezpieczny powrót do menu głównego
+
+**Status:** `Done`  
+**Ukończono:** 2026-09-01 — niezależny review `Accept`; integrity gate `PASS`; EditMode `1/1`, PlayMode `15/15`, Windows build `Succeeded`.  
+**Priorytet:** P0  
+**Powiązany kontrakt:** sekcja 6.6 oraz sekcje 18, 21.5 i 22.
+
+**Rationale:** Gracz nie ma obecnie bezpiecznej drogi przerwania rozgrywki ani dostępu do ustawień z aktywnej planszy. Jawna granica `Running / Paused / Settings / Exit` musi powstać przed dalszą migracją stanu, aby nakładka UI nie wykonywała komend, nie naliczała kosztów i nie pozostawiała starego runu w obiektach `DontDestroyOnLoad`. Jedna współdzielona funkcjonalność ustawień zapobiega rozjazdowi zachowania pomiędzy menu głównym i rozgrywką.
+
+**Obecne zachowanie:** Escape w scenie `Main` jest ignorowany. Bieżące opcje istnieją wyłącznie jako animowany `SettingsMenuPanel` w scenie `Menu`; osobne skrypty Music/Sound zapisują `PlayerPrefs` i są związane z referencjami do scenowych `AudioSource`. `GameManager` i `SoundManager` przeżywają zmianę sceny, więc samo `SceneManager.LoadScene("Menu")` nie gwarantuje świeżego następnego startu. Branch zawiera wcześniejszą, niezaakceptowaną próbę `RunState`; ten ticket nie może uzależniać od niej działania pauzy ani rozszerzać jej zakresu.
+
+**Oczekiwany rezultat:** Podczas aktywnej planszy Escape otwiera modalne menu z angielskimi etykietami `Resume`, `Settings` i `Exit to Menu`. Rozgrywka oraz jej input są zatrzymane. `Settings` otwiera tę samą współdzieloną funkcjonalność Music/Sound co menu główne. `Exit to Menu` przywraca normalny czas, porzuca niezapisany legacy run i wraca do menu bez usuwania ustawień ani lokalnego rekordu.
+
+**Zakres:** Dodać kontroler z jawnymi stanami `Closed`, `PauseRoot` i `Settings`; obsłużyć Escape również przy `Time.timeScale == 0`; zarządzać fokusem `EventSystem`; wydzielić współdzielony prefab i kontroler bieżących ustawień audio używany w obu scenach; kierować ustawienia do żywego `SoundManager`; dodać niezależną od skali czasu bramkę wejścia rozgrywkowego oraz jawną operację porzucenia legacy runu. Każda ścieżka wznowienia, wyjścia, wyłączenia kontrolera lub zmiany sceny musi przywrócić `Time.timeScale = 1` i zdjąć blokadę wejścia.
+
+**Non-goals:** Bez implementacji lub poprawiania `RunState`, `ProfileState`, `GameSession`, save/`Continue`, dialogu potwierdzenia wyjścia, nowego Input Systemu, mobilnego przycisku pauzy, nowych opcji lub sliderów, zmiany balansu, resolvera tur, przebudowy całego menu głównego oraz zmian `Packages` lub `ProjectSettings`.
+
+**Zależności:** Zielona bramka M0 i zaakceptowana decyzja właściciela z 2026-08-29: Escape oraz `Resume` zamykają pauzę; `Exit to Menu` porzuca legacy run bez zapisu i potwierdzenia; opcje używają wspólnej implementacji; etykiety pozostają angielskie. Ticket nie zależy od docelowego `RunState`.
+
+**Dozwolony obszar plików:** `/Assets/Scripts/MenuScripts/PauseMenuController.cs`, `/Assets/Scripts/MenuScripts/SettingsPanelController.cs`, `/Assets/Scripts/MenuScripts/PanelScript.cs`, `/Assets/Scripts/MenuScripts/MusicOnBttnScript.cs`, `/Assets/Scripts/MenuScripts/MusicOffBttnScript.cs`, `/Assets/Scripts/MenuScripts/SoundOnBttnScript.cs`, `/Assets/Scripts/MenuScripts/SoundOffBttnScript.cs`, `/Assets/Scripts/GameManager.cs`, `/Assets/Scripts/PlayerScript.cs`, `/Assets/Scripts/SoundManager.cs`, `/Assets/Scripts/RunState.cs.meta`, `/Assets/Prefabs/SettingsPanel.prefab`, `/Assets/Scenes/Menu.unity`, `/Assets/Scenes/Main.unity`, `/Assets/Tests/PlayMode/PauseMenuTests.cs`, `/Docs/Validation/M1.1.md` i odpowiadające `.meta`. `RunState.cs.meta` jest jednorazowym uzupełnieniem brakującego assetu z zastanego commita `3d10d54`, generowanym wyłącznie przez Unity; kod `RunState.cs` pozostaje poza zakresem. Inne skrypty menu, sceny, prefaby, animacje, `Packages` i `ProjectSettings` są zabronione.
+
+**Kryteria akceptacji:**
+
+- Na aktywnej planszy pierwsze Escape otwiera dokładnie jedną instancję `PauseRoot`, ustawia `Time.timeScale` na `0`, blokuje wejście rozgrywkowe i ustawia fokus na `Resume`.
+- Ponowne Escape w `PauseRoot` oraz przycisk `Resume` zamykają nakładkę, przywracają `Time.timeScale = 1`, odblokowują input i nie zmieniają stanu planszy.
+- `Settings` otwiera współdzielony panel ustawień. Escape i `Back` wracają z niego do `PauseRoot`; dopiero kolejna akcja wznawia grę.
+- Podczas `PauseRoot` i `Settings` ruch, gathering, AI, pozycje, numer tury, food i health pozostają niezmienione także po próbie użycia klawiszy rozgrywkowych.
+- Music/Sound On/Off działają natychmiast na aktywnym `SoundManager`, zachowują istniejące klucze `PlayerPrefs` i po ponownym otwarciu pokazują ten sam stan zarówno w menu głównym, jak i w pauzie.
+- `Exit to Menu` jest odporne na wielokrotne wywołanie: zdejmuje pauzę, porzuca tylko aktywny legacy run, ładuje scenę `Menu`, a kolejne `Start` rozpoczyna grę od wartości początkowych. `HighScore`, `Music`, `Sound` i przyszły profil pozostają nietknięte; kod nie używa `PlayerPrefs.DeleteAll`.
+- Escape nie otwiera pauzy w scenie `Menu`, podczas końcowego ekranu game over ani zanim plansza przyjmie input. Wyłączenie lub zniszczenie kontrolera nigdy nie pozostawia `Time.timeScale == 0`.
+- Obie sceny otwierają się bez `Missing Script` i utraconych referencji; nawigacja klawiaturą i myszą działa przy zatrzymanej skali czasu, a UI nie tworzy własnej kopii stanu rozgrywki.
+
+**Plan testów:** Dodać PlayMode dla pełnej tabeli przejść `Closed ↔ PauseRoot ↔ Settings`, wielokrotnego Escape, bramki ruchu/gatheringu, braku kosztu, zatrzymania AI, odtworzenia czasu po disable/load, synchronizacji ustawień w obu hostach oraz ścieżki `Main → Exit to Menu → Menu → Start` ze świeżym legacy runem. Osobne przypadki udowadniają idempotencję dwóch wywołań `Exit to Menu` oraz brak otwarcia pauzy w scenie `Menu`, podczas game over i przed gotowością inputu. Testy snapshotują i dokładnie przywracają dotknięte klucze `PlayerPrefs`; nie używają prawdziwych save'ów. Uruchomić pełne EditMode i PlayMode, otworzyć obie sceny w Unity, sprawdzić `Missing Script`, wykonać Windows Player build oraz ręczny smoke: Menu → Start → ruch → Escape → próby ruchu/space bez skutku → Settings → Back → Resume → Escape → Exit to Menu → Start od świeżego stanu.
+
+**Wpływ na save i kompatybilność:** Bez nowej schemy i bez trwałego zapisu runu. Wyjście świadomie porzuca wyłącznie bieżący, niezapisany legacy run. Klucze `Music`, `Sound` i `HighScore` zachowują znaczenie; docelowa relacja tej akcji z wersjonowanym `Continue` zostanie rozstrzygnięta w O-006 przed `M1.7`.
+
+**Wymagany handoff:** Diagram przejść UI, lista wszystkich punktów blokowania inputu i przywracania czasu, wskazanie wspólnego prefabu/kontrolera używanego przez obie sceny, opis tymczasowego cleanupu legacy do zastąpienia w `M1.4`/`M1.7`, dokładne wyniki testów/builda/smoke, kontrola `Missing Script` i potwierdzenie braku zmian poza allowlistą.
+
+---
+
+## `M1.2` — Autorytatywny `RunState`
 
 **Status:** `Planned`  
 **Priorytet:** P0  
@@ -585,7 +626,7 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 
 **Rationale:** Dane wyprawy są obecnie kopiowane pomiędzy `GameManager` i prefab gracza. Jeden czysty właściciel zapobiega resetom sceny, współdzieleniu danych i rozbieżnym kosztom akcji.
 
-**Obecne zachowanie:** Zdrowie i jedzenie istnieją w kilku komponentach, a `OnDisable` uczestniczy w zachowaniu danych.
+**Obecne zachowanie:** Zdrowie i jedzenie istnieją w kilku komponentach, a `OnDisable` uczestniczy w zachowaniu danych. Branch zawiera wcześniejszą, niezaakceptowaną próbę z commita `3d10d54`: `RunState` jest w niej `MonoBehaviour`, zależy od `UnityEngine` i został częściowo podłączony do komponentów legacy. Próba jest zastanym materiałem migracyjnym, nie dowodem realizacji tej karty, i musi zostać oceniona od początku względem Rationale oraz kryteriów akceptacji.
 
 **Oczekiwany rezultat:** Czysty C# `RunState` posiada zasoby, bieżący etap, seed, wyposażenie i wynik wyprawy; można go utworzyć, zmienić i zresetować bez sceny.
 
@@ -593,7 +634,7 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 
 **Non-goals:** Bez JSON-a, atlasu, generatora, pełnego snapshotu planszy, UI lub przepisywania wszystkich komponentów.
 
-**Zależności:** Bramka M0.
+**Zależności:** `M1.1` i zielona bramka M0.
 
 **Dozwolony obszar plików:** `/Assets/Scripts/Core/State/**`, odpowiedni asmdef, `/Assets/Tests/EditMode/**` i `.meta`.
 
@@ -603,11 +644,11 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 
 **Wpływ na save i kompatybilność:** Brak trwałego zapisu w tym tickecie. Struktura staje się źródłem przyszłego DTO, ale nie jest nim bezpośrednio.
 
-**Wymagany handoff:** Opisać inwarianty i uzasadnić każde pole. Wskazać, które obecne komponenty nadal przechowują kopie do czasu `M1.3`.
+**Wymagany handoff:** Opisać inwarianty i uzasadnić każde pole. Wskazać, jak potraktowano próbę z `3d10d54` oraz które obecne komponenty nadal przechowują kopie do czasu `M1.4`.
 
 ---
 
-## `M1.2` — Autorytatywny `ProfileState`
+## `M1.3` — Autorytatywny `ProfileState`
 
 **Status:** `Planned`  
 **Priorytet:** P0  
@@ -623,7 +664,7 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 
 **Non-goals:** Bez UI atlasu, zapisu plikowego, procentu ukończenia, bonusów statystyk, odkrywania ukrytej topologii ani rozstrzygnięcia fabularnego O-001.
 
-**Zależności:** `M1.1`.
+**Zależności:** `M1.2`.
 
 **Dozwolony obszar plików:** `/Assets/Scripts/Core/State/**`, `/Assets/Tests/EditMode/**` i `.meta`.
 
@@ -637,7 +678,7 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 
 ---
 
-## `M1.3` — `GameSession` i migracja własności stanu
+## `M1.4` — `GameSession` i migracja własności stanu
 
 **Status:** `Planned`  
 **Priorytet:** P0  
@@ -653,7 +694,7 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 
 **Non-goals:** Bez docelowego resolvera tur, atlas UI, JSON-a, nowego menu czy zmiany balansu.
 
-**Zależności:** `M1.1` i `M1.2`.
+**Zależności:** `M1.2` i `M1.3`.
 
 **Dozwolony obszar plików:** `/Assets/Scripts/Core/Session/**`, `GameManager.cs`, `PlayerScript.cs`, bezpośrednie adaptery UI, testy i jawnie wymagane prefaby/sceny dopiero po zatwierdzeniu przez Coordinatora.
 
@@ -667,7 +708,7 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 
 ---
 
-## `M1.4` — Wersjonowane DTO i mapowanie stanu
+## `M1.5` — Wersjonowane DTO i mapowanie stanu
 
 **Status:** `Planned`  
 **Priorytet:** P0  
@@ -683,7 +724,7 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 
 **Non-goals:** Bez produkcyjnego zapisu plikowego, atomowej zamiany, backupu, chmury, szyfrowania, leaderboardu, pełnego mid-board snapshotu lub importu dowolnych starych wersji prototypu.
 
-**Zależności:** `M1.3`.
+**Zależności:** `M1.4`.
 
 **Dozwolony obszar plików:** `/Assets/Scripts/Core/Persistence/Dto/**`, `/Mapping/**`, testy; `Packages` i sceny zabronione.
 
@@ -697,7 +738,7 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 
 ---
 
-## `M1.5` — Atomowy file store, backup i recovery
+## `M1.6` — Atomowy file store, backup i recovery
 
 **Status:** `Planned`  
 **Priorytet:** P0  
@@ -713,7 +754,7 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 
 **Non-goals:** Bez menu/lifecycle, chmury, background sync, szyfrowania, mid-board snapshotu i pisania do prawdziwych danych użytkownika w testach.
 
-**Zależności:** `M1.4` i rozstrzygnięta O-004 dla gwarancji platformowych filesystemu.
+**Zależności:** `M1.5` i rozstrzygnięta O-004 dla gwarancji platformowych filesystemu.
 
 **Dozwolony obszar plików:** `/Assets/Scripts/Core/Persistence/Storage/**`, adapter Unity persistence path, tests i dokumentacja formatu; `Packages` zabronione.
 
@@ -727,11 +768,11 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 
 ---
 
-## `M1.6` — Cykl `New Run`, `Continue`, `Dead`, `Won`
+## `M1.7` — Cykl `New Run`, `Continue`, `Dead`, `Won`
 
-**Status:** `Planned`  
+**Status:** `Planned` — nie może przejść na `Ready` bez decyzji O-006  
 **Priorytet:** P0  
-**Powiązany kontrakt:** sekcje 6.2, 19 i O-001.
+**Powiązany kontrakt:** sekcje 6.2, 6.6, 19 oraz O-001 i O-006.
 
 **Rationale:** Oddzielne modele i zapis muszą zostać spięte jawną maszyną stanów. Inaczej śmierć może skasować profil albo `Continue` wznowić nieprawidłowy moment.
 
@@ -739,25 +780,25 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 
 **Oczekiwany rezultat:** Sesja obsługuje tworzenie runu, wznowienie między planszami, zakończenie `Dead`/`Won` oraz powrót do profilu bez utraty odkryć.
 
-**Zakres:** Jawne przejścia lifecycle, autosave na granicach plansz, bezpieczne menu actions i komunikaty dla braku/uszkodzonego run save.
+**Zakres:** Jawne przejścia lifecycle, autosave na granicach plansz, bezpieczne menu actions, zachowanie `Exit to Menu` zgodne z rozstrzygniętą O-006 oraz komunikaty dla braku/uszkodzonego run save.
 
 **Non-goals:** Bez pełnego finału fabularnego, mid-board save, atlasowej grafiki i ostatecznej narracji tożsamości postaci.
 
-**Zależności:** `M1.5`; O-001 może pozostać nierozstrzygnięte tylko na poziomie tekstu, nie semantyki wspólnego profilu.
+**Zależności:** `M1.6` i zaakceptowana decyzja O-006 wpisana do `GameDesignContract.md`; O-001 może pozostać nierozstrzygnięte tylko na poziomie tekstu, nie semantyki wspólnego profilu.
 
 **Dozwolony obszar plików:** Sesja/persistence, adapter scen/menu, jawnie wskazane sceny/prefaby UI i testy.
 
-**Kryteria akceptacji:** `Continue` istnieje tylko dla aktywnego poprawnego runu; death/win zamykają run save po zapisaniu profilu; crash pomiędzy planszami wraca do ostatniej zatwierdzonej granicy; nowy run nie czyści profilu.
+**Kryteria akceptacji:** `Continue` istnieje tylko dla aktywnego poprawnego runu; `ActiveSavedRun + ExitToMenu` zachowuje albo zamyka run save dokładnie według zaakceptowanej O-006, nigdy nie usuwa profilu i pozostawia widoczność `Continue` spójną z wynikiem; death/win zamykają run save po zapisaniu profilu; crash pomiędzy planszami wraca do ostatniej zatwierdzonej granicy; nowy run nie czyści profilu.
 
-**Plan testów:** EditMode tabela wszystkich dozwolonych/zabronionych przejść; PlayMode restart aplikacji na każdej granicy; ręczne testy przycisków i błędnego save.
+**Plan testów:** EditMode tabela wszystkich dozwolonych/zabronionych przejść, w tym `ActiveSavedRun + ExitToMenu` według O-006; PlayMode powrót do menu i restart aplikacji na każdej granicy; ręczne testy przycisków, widoczności `Continue` i błędnego save.
 
-**Wpływ na save i kompatybilność:** Używa schema v1; każda zmiana musi przejść przez repozytorium i backup.
+**Wpływ na save i kompatybilność:** Używa schema v1; semantyka zachowania lub zamknięcia run save wynika wyłącznie z zaakceptowanej O-006, a każda zmiana musi przejść przez repozytorium i backup.
 
-**Wymagany handoff:** Tabela stanów/przejść oraz lista dokładnych momentów autosave.
+**Wymagany handoff:** Odniesienie do rozstrzygniętej O-006, tabela stanów/przejść wraz z `ActiveSavedRun + ExitToMenu` oraz lista dokładnych momentów autosave.
 
 ---
 
-## `M1.7` — Test kontraktu własności i trwałości
+## `M1.8` — Test kontraktu własności i trwałości
 
 **Status:** `Planned`  
 **Priorytet:** P0  
@@ -769,13 +810,13 @@ Po M0 zaczynają się zmiany własności stanu i zapisu. Ich review nie może by
 
 **Oczekiwany rezultat:** Automatyczna macierz potwierdza własność danych, granice zapisu i izolację kolejnych runów.
 
-**Zakres:** Testy scenariuszy: nowy profil, nowy run, przejście planszy, restart, death, kolejny run, win, uszkodzony save i dwa profile w izolacji.
+**Zakres:** Testy scenariuszy: nowy profil, nowy run, pauza i wznowienie, porzucenie legacy runu, `Exit to Menu` dla docelowego runu zgodne z rozstrzygniętą O-006, przejście planszy, restart, death, kolejny run, win, uszkodzony save i dwa profile w izolacji.
 
 **Non-goals:** Bez nowego gameplayu, balansu, UI atlasu lub optymalizacji.
 
-**Zależności:** `M1.1`–`M1.6`.
+**Zależności:** `M1.1`–`M1.7`.
 
-**Dozwolony obszar plików:** `/Assets/Tests/**`, fixtures/fakes persistence i `/Docs/Validation/M1.7.md`.
+**Dozwolony obszar plików:** `/Assets/Tests/**`, fixtures/fakes persistence i `/Docs/Validation/M1.8.md`.
 
 **Kryteria akceptacji:** Wszystkie przejścia z kontraktu mają test pozytywny i istotne przejścia zabronione test negatywny; testy nie dotykają prawdziwych save'ów; kolejność uruchomienia nie wpływa na wynik.
 
@@ -871,7 +912,7 @@ M1 jest zaliczony, gdy istnieje dokładnie jeden właściciel profilu i runu, pr
 
 **Non-goals:** Bez procentu mapy, fog-of-war lokalnej planszy, UI, fałszywych wskazówek lub automatycznego odsłaniania sąsiadów poza regułą zadania.
 
-**Zależności:** `M2.1` i `M1.2`.
+**Zależności:** `M2.1` i `M1.3`.
 
 **Dozwolony obszar plików:** Core World/State, persistence mapping jeśli schema tego wymaga, testy.
 
@@ -931,7 +972,7 @@ M1 jest zaliczony, gdy istnieje dokładnie jeden właściciel profilu i runu, pr
 
 **Non-goals:** Bez finalnego atlas UI, fałszywych podpowiedzi, cofania wyboru po zatwierdzeniu i bez rozstrzygnięcia O-002 w kodzie poza istniejącą rekomendację.
 
-**Zależności:** `M2.4` i `M1.6`.
+**Zależności:** `M2.4` i `M1.7`.
 
 **Dozwolony obszar plików:** Core World/Session, adapter LevelFlow, testy; scena UI tylko po jawnej zgodzie w karcie aktywnej.
 
@@ -1675,7 +1716,7 @@ M4 jest zaliczony, gdy 10 000 seedów aktywnej konfiguracji nie zawiera invalid 
 
 **Non-goals:** Bez użycia narzędzia, craftingu, stacków, napraw, ulepszeń, losowych affixów i trwałego przenoszenia narzędzi między runami.
 
-**Zależności:** `M5.1` i `M1.1`.
+**Zależności:** `M5.1` i `M1.2`.
 
 **Dozwolony obszar plików:** Core Tools/State, GameData/Tools, Presentation/HUD, tests.
 
@@ -2338,7 +2379,8 @@ Vertical slice jest ukończony dopiero po `Accept` `M7.6`. Samo zaimplementowani
 | O-001 — fikcja atlasu | `M7.4` i `M7.5` | uzgodnić z użytkownikiem, zaktualizować kontrakt i teksty |
 | O-002 — exit i śmierć w tej samej akcji | `M3.5` | uzgodnić, dopisać jednoznaczny priorytet i test kontraktowy |
 | O-003 — semantyka pickup | `M3.4`, jeśli zawiera pickup; bezwzględnie `M5.6` | uzgodnić osobno jedzenie i narzędzia |
-| O-004 — platforma referencyjna | `M1.5` dla gwarancji filesystemu; najpóźniej `M2.6` dla UI | potwierdzić PC/mobile, zapis i kryteria inputu/layoutu |
+| O-004 — platforma referencyjna | `M1.6` dla gwarancji filesystemu; najpóźniej `M2.6` dla UI | potwierdzić PC/mobile, zapis i kryteria inputu/layoutu |
+| O-006 — `Exit to Menu` a `Continue` | `M1.7` | ustalić, czy poprawny run save pozostaje dostępny, czy jest jawnie zamykany; zaktualizować kontrakt i macierz lifecycle |
 
 ### Rationale — dlaczego decyzje mają deadline
 
@@ -2346,21 +2388,19 @@ Vertical slice jest ukończony dopiero po `Accept` `M7.6`. Samo zaimplementowani
 
 # Kolejka wykonawcza
 
-`M0.1`–`M0.6` oraz `M0.10`–`M0.11` są zaakceptowane, a `M0.9` jest świadomie odłożone. Wyniki części kart pozostają w dirty worktree i nie wolno ich cofać ani mieszać z naprawami. Żadna karta nie jest `Active`; `M0.7` jest jedyną kartą `Ready`.
+M0 jest zamknięte: `M0.1`–`M0.8` oraz `M0.10`–`M0.11` są zaakceptowane, a `M0.9` pozostaje świadomie odłożone. `master` wskazuje merge `68080fa`, a branch roboczy M1 wskazuje `b36c689`. `M1.1` zakończyło się niezależnym `Accept`; żadna karta nie jest obecnie `Active`.
 
 Najbliższa bezpieczna sekwencja to:
 
-1. `M0.7` — poprawa separacji test assemblies i pełny re-review EditMode/PlayMode/Player;
-2. `M0.8` — test czerwony przed poprawką, naprawa dźwięku i pełny re-review ruchu;
-3. pełny smoke, Player build oraz review bramki M0;
-4. checkpoint właściciela po odzyskaniu stabilnego baseline'u;
-5. dopiero potem `M1.1` może przejść z `Planned` na `Ready`.
+1. wykonać osobny preflight `M1.2`, w tym od początku ocenić całą zastaną próbę z commita `3d10d54` względem kontraktu i kryteriów karty;
+2. doprecyzować zamkniętą allowlistę oraz plan migracji bez rozszerzania zakresu na przyszłe karty M1;
+3. dopiero po spełnieniu zależności zmienić `M1.2` z `Planned` na `Ready`, a następnie przydzielić jednego writera i utworzyć dla niego świeży snapshot.
 
 `M0.9` pozostaje odłożone zgodnie z decyzją właściciela. Agent kodowy nie wykonuje operacji zewnętrznych, nie ujawnia historycznej wartości i nie uruchamia BFG bez osobnego, jawnego zlecenia.
 
 ### Rationale — dlaczego tylko pierwsza spełniona zależność przechodzi na `Ready`
 
-`M0.7` jest jedyną kartą `Ready` i może przejść na `Active` dopiero po przydzieleniu jednego writera. Dopiero po jej niezależnej akceptacji Coordinator reaktywuje `M0.8`; taka kolejność ogranicza mieszanie infrastruktury testowej i gameplayu.
+Niezależna akceptacja `M1.1` otwiera preflight `M1.2`, ale sama nie zatwierdza zastanego kodu z `3d10d54` ani nie przydziela nowego writera. Karta pozostaje `Planned`, dopóki jej granice i zależności nie zostaną ponownie potwierdzone.
 
 # Zasada aktualizacji roadmapy
 

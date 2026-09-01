@@ -78,7 +78,8 @@ public class PlayerScript : MovingObject {
 
     // Update is called once per frame
     void Update () {
-        if (GameManager.instance == null || GameManager.instance.runState == null || !GameManager.instance.runState.playerTurn) return;
+        // Don't process input when gameplay is blocked or game is not running
+        if (GameManager.instance == null || !GameManager.instance.IsGameplayInputEnabled) return;
 
         int horizontal = 0;
         int vertical = 0;
@@ -204,6 +205,9 @@ public class PlayerScript : MovingObject {
 
     private void OnTriggerEnter2D(Collider2D other)
     {
+        // Don't process collisions when gameplay is blocked
+        if (GameManager.instance != null && GameManager.instance.IsGameplayInputBlocked) return;
+
         if(other.tag == "Exit")
         {
             Invoke("Restart", restartLevelDelay);
@@ -263,6 +267,9 @@ public class PlayerScript : MovingObject {
 
     private void OnTriggerExit2D(Collider2D other)
     {
+        // Don't process exit collisions when gameplay is blocked
+        if (GameManager.instance != null && GameManager.instance.IsGameplayInputBlocked) return;
+
         if (other.tag == "Carrot")
             onCarrot = false;
     }
@@ -282,6 +289,9 @@ public class PlayerScript : MovingObject {
 
     public void LoseHealth (int loss)
     {
+        if (GameManager.instance != null && GameManager.instance.IsGameplayInputBlocked)
+            return;
+
         animator.SetTrigger("playerHit");
         
         // Update state through RunState
@@ -299,6 +309,9 @@ public class PlayerScript : MovingObject {
 
     private void CheckIfGameOver()
     {
+        if (GameManager.instance == null || GameManager.instance.IsGameplayInputBlocked)
+            return;
+
         if (GameManager.instance != null && GameManager.instance.runState != null)
         {
             if (GameManager.instance.runState.playerFoodPoints <= 0 || GameManager.instance.runState.playerHealthPoints <= 0)

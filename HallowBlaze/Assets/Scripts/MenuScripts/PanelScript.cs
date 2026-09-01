@@ -10,12 +10,15 @@ public class PanelScript : MonoBehaviour {
 
     void Update()
     {
-        //if (Input.GetAxisRaw("Vertical") != 0 && buttonSelected == false)
-        if (buttonSelected == false)
-        {
-            eventSystem.SetSelectedGameObject(selectedObject);
-            buttonSelected = true;
-        }
+        if (buttonSelected || selectedObject == null)
+            return;
+
+        EventSystem activeEventSystem = eventSystem != null ? eventSystem : EventSystem.current;
+        if (activeEventSystem == null)
+            return;
+
+        activeEventSystem.SetSelectedGameObject(selectedObject);
+        buttonSelected = true;
     }
 
     private void OnDisable()

@@ -3,8 +3,8 @@
 | Pole | Wartość |
 | --- | --- |
 | Status | Żywy kontrakt; obowiązuje do jawnej zmiany |
-| Wersja | 0.1 |
-| Ostatnia aktualizacja | 2026-08-19 |
+| Wersja | 0.2 |
+| Ostatnia aktualizacja | 2026-08-29 |
 | Zakres | Pierwszy grywalny vertical slice i fundament dalszej produkcji |
 
 ## 1. Cel dokumentu
@@ -342,6 +342,32 @@ Zapis po każdej animowanej klatce zwiększyłby koszt pierwszego vertical slice
 - Profil i aktywny run są osobnymi, wersjonowanymi DTO.
 - Zapis używa stabilnych tekstowych ID, nie referencji Unity ani `InstanceID`.
 - Zapis powinien być atomowy i posiadać ostatnią poprawną kopię.
+
+### 6.6. Pauza, ustawienia i powrót do menu głównego
+
+#### Decyzja
+
+Podczas aktywnej planszy na PC i w Editorze klawisz Escape otwiera modalne menu pauzy z akcjami `Resume`, `Settings` i `Exit to Menu`.
+
+- `Resume` oraz ponowne naciśnięcie Escape w głównym widoku pauzy wznawiają dokładnie tę samą planszę.
+- `Settings` otwiera tę samą funkcjonalność ustawień dźwięku i muzyki, która jest dostępna w menu głównym. Escape albo `Back` wraca z ustawień najpierw do głównego widoku pauzy, nie bezpośrednio do gry.
+- Gdy widoczna jest pauza lub jej ustawienia, wejście rozgrywkowe nie tworzy komend, nie wykonuje AI i nie zmienia tury, pozycji, zdrowia, jedzenia ani stanu narzędzi.
+- `Exit to Menu` na etapie legacy objętym pierwszym zadaniem M1 porzuca aktywny, niezapisany run bez dodatkowego potwierdzenia i wraca do menu głównego. Nie usuwa profilu, ustawień audio ani lokalnego rekordu.
+- Przed wznowieniem, wyjściem, wyłączeniem kontrolera albo zmianą sceny gra przywraca normalny upływ czasu i usuwa blokadę wejścia.
+
+Mobilny sposób otwierania pauzy pozostaje poza tym zakresem do rozstrzygnięcia O-004. Docelowa relacja `Exit to Menu` z wersjonowanym `Continue` ma status **Open** jako O-006 i musi zostać rozstrzygnięta przed rozpoczęciem zadania lifecycle; nie może po cichu odziedziczyć ograniczeń legacy.
+
+#### Rationale — dlaczego
+
+Menu otwierane podczas rozgrywki jest granicą sterowania, a nie kosmetyczną nakładką. Samo zatrzymanie `Time.timeScale` nie blokuje kodu czytającego input w `Update`, więc bez jawnej bramki gracz mógłby tracić zasoby lub wykonywać akcje pod menu. Jedna współdzielona funkcjonalność ustawień zapobiega rozjazdowi wartości i prezentacji pomiędzy scenami, a jawne porzucenie legacy runu chroni kolejny start przed stanem pozostawionym przez obiekty `DontDestroyOnLoad`.
+
+#### Konsekwencje implementacyjne
+
+- Stan widoku pauzy jest przejściowym stanem prezentacji i nie należy do `ProfileState`, `RunState` ani formatu save.
+- Kontroler pauzy musi osobno zarządzać widocznością UI, fokusem `EventSystem`, blokadą wejścia oraz odtworzeniem upływu czasu.
+- Menu główne i pauza korzystają ze wspólnego panelu lub kontrolera ustawień; nie utrzymują dwóch niezależnych implementacji tych samych przełączników.
+- Powrót do menu wykonuje jawny cleanup legacy runu przed załadowaniem sceny i jest bezpieczny przy wielokrotnym wywołaniu.
+- Test integracyjny musi udowodnić brak kosztu podczas pauzy, poprawne przejścia Escape/Back oraz świeży start po `Exit to Menu`.
 
 ## 7. Atlas i świat
 
@@ -1065,6 +1091,7 @@ Poniższe pytania mają status **Open**. Agent nie może rozstrzygnąć ich sam,
 | O-002 | Co wygrywa, gdy ta sama akcja osiąga wyjście i próg śmierci z głodu? | wyjście, jeśli gracz faktycznie wszedł na pole celu | ostateczne testy kontraktu tury |
 | O-003 | Czy drobne przedmioty są podnoszone automatycznie przy wejściu, czy wymagają `Interact`? | jedzenie automatycznie; narzędzia przez świadomą interakcję | pickupy i UI zamiany |
 | O-004 | Która platforma jest referencyjna dla vertical slice: PC, mobile czy obie równorzędnie? | PC jako referencja, mobile zachowuje tę samą semantykę po ustabilizowaniu interakcji | docelowy input i layout UI |
+| O-006 | Czy `Exit to Menu` przy aktywnym, poprawnie zapisanym runie zachowuje go dla `Continue`, czy jawnie go porzuca? | zachować zapisany run dla `Continue`; trwałe porzucenie udostępnić jako osobną, jednoznaczną akcję | lifecycle zapisanego runu i testy `Continue` |
 
 ### Decyzje rozstrzygnięte dla bieżącego zakresu
 

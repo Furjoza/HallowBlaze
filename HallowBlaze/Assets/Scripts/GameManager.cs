@@ -18,6 +18,60 @@ public class GameManager : MonoBehaviour
     private GameObject restartButton;
     private List<Enemy> enemies;
     private bool doingSetup;
+    private bool gameplayInputBlocked;
+    private int gameplayInputResumeFrame = -1;
+
+    public bool IsGameplayInputEnabled
+    {
+        get
+        {
+            return enabled
+                && !doingSetup
+                && !gameplayInputBlocked
+                && Time.frameCount > gameplayInputResumeFrame
+                && runState != null
+                && runState.playerTurn;
+        }
+    }
+
+    public bool IsGameplayInputBlocked
+    {
+        get { return gameplayInputBlocked; }
+    }
+
+    public bool CanPauseGameplay
+    {
+        get
+        {
+            return enabled && !doingSetup && !gameplayInputBlocked && runState != null && !runState.doingSetup;
+        }
+    }
+
+    public void SetGameplayInputBlocked(bool blocked)
+    {
+        gameplayInputBlocked = blocked;
+
+        if (!blocked)
+            gameplayInputResumeFrame = Time.frameCount;
+    }
+
+    public void AbandonLegacyRun()
+    {
+        gameplayInputBlocked = true;
+        StopAllCoroutines();
+
+        if (runState != null && runState.gameObject != gameObject)
+            Destroy(runState.gameObject);
+
+        runState = null;
+
+        if (instance == this)
+            instance = null;
+
+        // Properly destroy the GameManager to avoid memory leaks
+        // But don't destroy the SoundManager which should persist across scenes
+        Destroy(gameObject);
+    }
 
     //Awake is always called before any Start functions
     void Awake()
@@ -115,12 +169,12 @@ public class GameManager : MonoBehaviour
         if (levelText != null)
         {
             if (isStarved)
-                levelText.text = "After " + level + " days, you've starved.";
+                levelText.text = "After " + runState.level + " days, you've starved.";
             else
-                levelText.text = "After " + level + " days, your brain has been eaten.";
+                levelText.text = "After " + runState.level + " days, your brain has been eaten.";
         }
 
-        int score = ManageScore(level);
+        int score = ManageScore(runState.level);
 
         if (levelImage != null)
             levelImage.SetActive(true);
@@ -149,7 +203,8 @@ public class GameManager : MonoBehaviour
     //Update is called every frame.
     void Update()
     {
-        if (runState == null || runState.playerTurn || runState.enemiesMoving || runState.doingSetup)
+        // Don't process gameplay input when paused or during setup
+        if (gameplayInputBlocked || runState == null || runState.playerTurn || runState.enemiesMoving || runState.doingSetup)
             return;
 
         StartCoroutine(MoveEnemies());
@@ -165,16 +220,29 @@ public class GameManager : MonoBehaviour
     {
         runState.enemiesMoving = true;
         yield return new WaitForSeconds(turnDelay);
+        yield return WaitWhileGameplayBlocked();
+
         if (enemies.Count == 0)
+        {
             yield return new WaitForSeconds(turnDelay);
+            yield return WaitWhileGameplayBlocked();
+        }
 
         for (int i = 0; i < enemies.Count; i++)
         {
+            yield return WaitWhileGameplayBlocked();
             enemies[i].MoveEnemy();
             yield return new WaitForSeconds(enemies[i].moveTime);
         }
 
+        yield return WaitWhileGameplayBlocked();
         runState.playerTurn = true;
         runState.enemiesMoving = false;
+    }
+
+    private IEnumerator WaitWhileGameplayBlocked()
+    {
+        while (gameplayInputBlocked)
+            yield return null;
     }
 }
