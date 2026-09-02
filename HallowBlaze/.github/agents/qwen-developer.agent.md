@@ -2,7 +2,7 @@
 name: qwen-developer
 description: Local implementation developer running on qwen3-coder through Ollama. Reads the existing code, implements the Lead's plan, validates its own work, and reports exact changes.
 argument-hint: An implementation task with scope, requirements, and acceptance criteria supplied by the Technical Lead.
-model: devstral-small-2:24b (ollama-models)
+model: qwen3-coder:30b (ollama-models)
 tools: ['read', 'search', 'edit', 'execute']
 user-invocable: false
 ---
