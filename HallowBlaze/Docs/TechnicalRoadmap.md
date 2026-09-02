@@ -657,7 +657,8 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 ## `M1.3` — Autorytatywny `ProfileState`
 
-**Status:** `Planned`  
+**Status:** `Done` — writer: `qwen-developer`; review 2026-09-03: `Pass`
+**Ukończono:** 2026-09-03 — ProfileStateTests `15/15`, pełne EditMode `32/32`, pełne PlayMode `15/15`, integrity gate `PASS_WITH_AUTHORIZED_EXCEPTIONS`.
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 4, 5, 6.1–6.3 i 21.3.
 
@@ -682,6 +683,14 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 **Wpływ na save i kompatybilność:** Definiuje przyszłe dane trwałe, ale jeszcze ich nie zapisuje. Nie importuje automatycznie obecnych rekordów.
 
 **Wymagany handoff:** Macierz „żyje w Profile / Run / późniejszym BoardState” oraz lista świadomie pominiętych danych.
+
+**Wynik wykonania 2026-09-03:** Dodano czysty `ProfileState` z niezmienną tożsamością profilu i wersją świata, uporządkowanymi widokami tylko do odczytu dla trwałych ID oraz idempotentnymi operacjami discovery. `ProfileRunSummary` przyjmuje terminalne `Dead`/`Won`; duplikaty są idempotentne, konflikty kontrolowane, a agregaty runów i dni aktualizowane transakcyjnie z kontrolą overflow. Kod nie zależy od Unity.
+
+**Macierz własności:** profil posiada tożsamość świata, trwałą wiedzę, terminalne summaries i agregaty; run posiada seed, dzień, bieżący węzeł, zasoby, trasę, wynik i narzędzia; przyszły BoardState posiada siatkę, aktorów, przedmioty i efekty pola.
+
+**Świadomie pominięto:** stopnie discovery M2.3, pełne summary M7.5, persistence, UI, session i BoardState. Profil nie zawiera health, food, weather ani tools.
+
+**Walidacja:** Unity 6000.3.21f1: `15/15`, `32/32`, `15/15`, wszystkie kody `0`; build, diagnostyka, `git diff --check`, `.meta` i integrity gate przeszły. Właściciel zaakceptował usunięcie nieużywanego `SENTIS_ANALYTICS_ENABLED`. Niezależny `qwen-reviewer`: `Pass`.
 
 ---
 
