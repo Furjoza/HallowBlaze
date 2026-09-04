@@ -3,6 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using HallowBlaze.Core.Session;
+using HallowBlaze.Core.State;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -20,12 +22,11 @@ namespace HallowBlaze.Tests.PlayMode
         private Type gameManagerType;
         private Type pauseMenuType;
         private Type playerType;
-        private Type runStateType;
         private Type settingsPanelType;
         private Type soundManagerType;
         private Component gameManager;
         private Component pauseMenu;
-        private Component runState;
+        private GameSession session;
         private GameObject pauseRoot;
         private GameObject settingsRoot;
         private GameObject resumeButton;
@@ -48,7 +49,6 @@ namespace HallowBlaze.Tests.PlayMode
             gameManagerType = RequireType(gameAssembly, "GameManager");
             pauseMenuType = RequireType(gameAssembly, "PauseMenuController");
             playerType = RequireType(gameAssembly, "PlayerScript");
-            runStateType = RequireType(gameAssembly, "RunState");
             settingsPanelType = RequireType(gameAssembly, "SettingsPanelController");
             soundManagerType = RequireType(gameAssembly, "SoundManager");
 
@@ -106,8 +106,8 @@ namespace HallowBlaze.Tests.PlayMode
         [Test]
         public void PauseCanOpenDuringEnemyTurnAndEnemyGateWaits()
         {
-            SetField(runState, "playerTurn", false);
-            SetField(runState, "enemiesMoving", true);
+            SetField(gameManager, "playerTurn", false);
+            SetField(gameManager, "enemiesMoving", true);
 
             Assert.That(GetProperty<bool>(gameManager, "CanPauseGameplay"), Is.True);
             Invoke(pauseMenu, "OpenPause");
@@ -123,13 +123,12 @@ namespace HallowBlaze.Tests.PlayMode
         [Test]
         public void PauseAndSettingsRejectPlayerCostsPickupsAndDamage()
         {
-            SetField(runState, "playerFoodPoints", 73);
-            SetField(runState, "playerHealthPoints", 61);
-            SetField(runState, "playerTurn", true);
+            SetRunResources(73, 61);
+            SetField(gameManager, "playerTurn", true);
 
-            GameObject playerObject = Track(new GameObject("M1.1 Player"));
+            GameObject playerObject = Track(new GameObject("M1.4 Player"));
             Component player = playerObject.AddComponent(playerType);
-            GameObject pickupObject = Track(new GameObject("M1.1 Food"));
+            GameObject pickupObject = Track(new GameObject("M1.4 Food"));
             pickupObject.tag = "Food";
             BoxCollider2D pickup = pickupObject.AddComponent<BoxCollider2D>();
             Vector3 originalPosition = playerObject.transform.position;
@@ -144,9 +143,9 @@ namespace HallowBlaze.Tests.PlayMode
             Invoke(player, "LoseHealth", 17);
 
             Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.False);
-            Assert.That(GetField<int>(runState, "playerFoodPoints"), Is.EqualTo(73));
-            Assert.That(GetField<int>(runState, "playerHealthPoints"), Is.EqualTo(61));
-            Assert.That(GetField<bool>(runState, "playerTurn"), Is.True);
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(73));
+            Assert.That(session.ActiveRun.Health, Is.EqualTo(61));
+            Assert.That(GetField<bool>(gameManager, "playerTurn"), Is.True);
             Assert.That(playerObject.transform.position, Is.EqualTo(originalPosition));
             Assert.That(pickupObject.activeSelf, Is.True);
 
@@ -159,22 +158,22 @@ namespace HallowBlaze.Tests.PlayMode
         [Test]
         public void MovementTriggersRemainActiveOutsidePauseAfterPlayerTurnEnds()
         {
-            SetField(runState, "playerFoodPoints", 73);
-            SetField(runState, "playerTurn", false);
+            SetRunResources(73, 100);
+            SetField(gameManager, "playerTurn", false);
 
-            GameObject playerObject = Track(new GameObject("M1.1 Moving Player"));
+            GameObject playerObject = Track(new GameObject("M1.4 Moving Player"));
             Component player = playerObject.AddComponent(playerType);
-            GameObject pickupObject = Track(new GameObject("M1.1 Moving Food"));
+            GameObject pickupObject = Track(new GameObject("M1.4 Moving Food"));
             pickupObject.tag = "Food";
             BoxCollider2D pickup = pickupObject.AddComponent<BoxCollider2D>();
-            GameObject carrotObject = Track(new GameObject("M1.1 Moving Carrot"));
+            GameObject carrotObject = Track(new GameObject("M1.4 Moving Carrot"));
             carrotObject.tag = "Carrot";
             BoxCollider2D carrot = carrotObject.AddComponent<BoxCollider2D>();
 
             Invoke(player, "OnTriggerEnter2D", pickup);
             Invoke(player, "OnTriggerEnter2D", carrot);
 
-            Assert.That(GetField<int>(runState, "playerFoodPoints"), Is.EqualTo(83));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(83));
             Assert.That(pickupObject.activeSelf, Is.False);
             Assert.That(GetField<bool>(player, "onCarrot"), Is.True);
 
@@ -262,39 +261,42 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(firstSoundOff.color, Is.EqualTo((Color)new Color32(50, 50, 50, 255)));
         }
 
-        [UnityTest]
-        public IEnumerator AbandonLegacyRunPreservesPreferencesAndNextManagerStartsFresh()
+        [Test]
+        public void AbandonRunPreservesProfilePreferencesAndStartsNextRunFresh()
         {
             PlayerPrefs.SetString("Music", "Off");
             PlayerPrefs.SetString("Sound", "Off");
             PlayerPrefs.SetInt("HighScore", 27182);
-            SetField(runState, "playerFoodPoints", 7);
-            SetField(runState, "playerHealthPoints", 9);
-            SetField(runState, "level", 4);
+            ProfileState profile = session.Profile;
+            profile.DiscoverFact("fact.persistence");
+            SetRunResources(7, 9);
+            for (int day = 0; day < 4; day++)
+                session.AdvanceDay();
 
-            Invoke(gameManager, "AbandonLegacyRun");
-            Assert.That(GetStaticField(gameManagerType, "instance"), Is.Null);
-            yield return null;
+            Invoke(gameManager, "AbandonRun");
 
-            GameObject nextManagerObject = Track(new GameObject("M1.1 Fresh GameManager"));
-            Component nextManager = nextManagerObject.AddComponent(gameManagerType);
-            Component nextRunState = (Component)GetField(nextManager, "runState");
-            Track(nextRunState.gameObject);
+            Assert.That(session.ActiveRun, Is.Null);
+            Assert.That(session.Profile, Is.SameAs(profile));
+            Assert.That(profile.DiscoveredFactIds, Does.Contain("fact.persistence"));
 
-            Assert.That(GetField<int>(nextRunState, "playerFoodPoints"), Is.EqualTo(100));
-            Assert.That(GetField<int>(nextRunState, "playerHealthPoints"), Is.EqualTo(100));
-            Assert.That(GetField<int>(nextRunState, "level"), Is.EqualTo(0));
+            Invoke(gameManager, "StartNewRun");
+
+            Assert.That(session.Profile, Is.SameAs(profile));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(session.ActiveRun.Health, Is.EqualTo(100));
+            Assert.That(session.ActiveRun.CurrentDay, Is.Zero);
             Assert.That(PlayerPrefs.GetString("Music"), Is.EqualTo("Off"));
             Assert.That(PlayerPrefs.GetString("Sound"), Is.EqualTo("Off"));
             Assert.That(PlayerPrefs.GetInt("HighScore"), Is.EqualTo(27182));
         }
 
         [Test]
-        public void ExitToMenuRestoresRuntimeAndRequestsSceneOnce()
+        public void ExitToMenuRestoresRuntimeAbandonsRunAndRequestsSceneOnce()
         {
             int sceneLoadCount = 0;
             string requestedScene = null;
-            SetField(pauseMenu, "menuSceneName", "M1.1 Menu");
+            ProfileState profile = session.Profile;
+            SetField(pauseMenu, "menuSceneName", "M1.4 Menu");
             SetField(pauseMenu, "sceneLoader", (Action<string>)(sceneName =>
             {
                 sceneLoadCount++;
@@ -306,29 +308,32 @@ namespace HallowBlaze.Tests.PlayMode
             Invoke(pauseMenu, "ExitToMenu");
 
             Assert.That(sceneLoadCount, Is.EqualTo(1));
-            Assert.That(requestedScene, Is.EqualTo("M1.1 Menu"));
+            Assert.That(requestedScene, Is.EqualTo("M1.4 Menu"));
             Assert.That(Time.timeScale, Is.EqualTo(1f));
-            Assert.That(GetStaticField(gameManagerType, "instance"), Is.Null);
+            Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputBlocked"), Is.False);
+            Assert.That(GetStaticField(gameManagerType, "instance"), Is.SameAs(gameManager));
+            Assert.That(session.ActiveRun, Is.Null);
+            Assert.That(session.Profile, Is.SameAs(profile));
         }
 
         private void CreateGameplayHost()
         {
-            GameObject managerObject = Track(new GameObject("M1.1 GameManager"));
+            GameObject managerObject = Track(new GameObject("M1.4 GameManager"));
             gameManager = managerObject.AddComponent(gameManagerType);
-            runState = (Component)GetField(gameManager, "runState");
-            Track(runState.gameObject);
+            Invoke(gameManager, "StartNewRun");
+            session = GetProperty<GameSession>(gameManager, "Session");
         }
 
         private void CreatePauseHost()
         {
-            GameObject eventSystemObject = Track(new GameObject("M1.1 EventSystem"));
+            GameObject eventSystemObject = Track(new GameObject("M1.4 EventSystem"));
             eventSystemObject.AddComponent<EventSystem>();
 
             pauseRoot = Track(new GameObject("PauseRoot"));
             settingsRoot = Track(new GameObject("SettingsRoot"));
             resumeButton = Track(new GameObject("Resume"));
             settingsBackButton = Track(new GameObject("Back"));
-            GameObject pauseObject = Track(new GameObject("M1.1 PauseMenu"));
+            GameObject pauseObject = Track(new GameObject("M1.4 PauseMenu"));
             pauseMenu = pauseObject.AddComponent(pauseMenuType);
 
             SetField(pauseMenu, "pauseRoot", pauseRoot);
@@ -340,9 +345,15 @@ namespace HallowBlaze.Tests.PlayMode
             settingsRoot.SetActive(false);
         }
 
+        private void SetRunResources(int food, int health)
+        {
+            session.ConsumeFood(session.ActiveRun.Food - food);
+            session.TakeDamage(session.ActiveRun.Health - health);
+        }
+
         private Component CreateSoundManager(out AudioSource effectsSource, out AudioSource musicSource)
         {
-            GameObject soundObject = Track(new GameObject("M1.1 SoundManager"));
+            GameObject soundObject = Track(new GameObject("M1.4 SoundManager"));
             effectsSource = soundObject.AddComponent<AudioSource>();
             musicSource = soundObject.AddComponent<AudioSource>();
             Component soundManager = soundObject.AddComponent(soundManagerType);
@@ -387,12 +398,6 @@ namespace HallowBlaze.Tests.PlayMode
         {
             createdObjects.Add(gameObject);
             return gameObject;
-        }
-
-        private void Track(UnityEngine.Object value)
-        {
-            if (value != null && !createdObjects.Contains(value))
-                createdObjects.Add(value);
         }
 
         private static Type RequireType(Assembly assembly, string name)

@@ -696,7 +696,8 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 ## `M1.4` — `GameSession` i migracja własności stanu
 
-**Status:** `Planned`  
+**Status:** `Done` — writer: `GitHub Copilot`; review 2026-09-04: `Pass`
+**Ukończono:** 2026-09-04 — `GameSessionTests` `10/10`, pełne EditMode `42/42`, pełne PlayMode `21/21`, integrity gate `PASS`.
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 6, 21.2 i 21.5.
 
@@ -721,6 +722,10 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 **Wpływ na save i kompatybilność:** Obecne `PlayerPrefs` nie są jeszcze migrowane; w handoffie należy jawnie opisać tymczasowe zachowanie rekordów.
 
 **Wymagany handoff:** Diagram własności przed/po, lista usuniętych kopii oraz dowód przejścia cyklu sceny.
+
+**Wynik wykonania 2026-09-04:** Dodano niezależną od Unity assembly `HallowBlaze.Core.Session`. `GameSession` posiada jeden `ProfileState` i opcjonalny domenowy `RunState`, zapewnia jawne lifecycle i typowane eventy oraz odrzuca mutacje bez aktywnego runu. `GameManager` stał się composition root utrzymującym sesję między scenami, a `PlayerScript` adapterem bez zapisywalnych kopii health, food lub dnia. Usunięto legacy `RunState : MonoBehaviour`. Przejście `Main → Main` zachowuje run i zwiększa dzień raz; produkcyjny game over terminalizuje run, a restart przez przycisk tworzy świeży run `100/100/day 1` przy tej samej sesji i profilu. Gathering przestrzega walidacji, nagrody przed kosztem i jednej tury. `HighScore` świadomie pozostaje w `PlayerPrefs`; save/`Continue` i pełny resolver tur nie weszły do zakresu.
+
+**Wynik walidacji:** Unity `6000.3.21f1`: filtrowane `GameSessionTests` `10/10`, `PlayModeInfrastructureTests` `6/6`, `GameSessionLifecycleTests` `4/4`, pełne EditMode `42/42` i pełne PlayMode `21/21`; wszystkie końcowe przebiegi miały kod `0`, bez failed/skipped. Diagnostyka, logi Unity, `git diff --check`, legacy GUID, chroniony `.meta` i porównanie ze snapshotami przeszły końcowy gate. Niezależny `qwen-reviewer` nie znalazł materialnych problemów i wydał `Pass`. Pełny raport: [`Validation/M1.4.md`](Validation/M1.4.md).
 
 ---
 

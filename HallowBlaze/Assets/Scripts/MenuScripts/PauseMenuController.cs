@@ -35,10 +35,8 @@ public class PauseMenuController : MonoBehaviour
 
     private void Update()
     {
-        if (!Input.GetKeyDown(KeyCode.Escape))
-            return;
-
-        HandleEscape();
+        if (Input.GetKeyDown(KeyCode.Escape))
+            HandleEscape();
     }
 
     private void HandleEscape()
@@ -99,12 +97,11 @@ public class PauseMenuController : MonoBehaviour
             return;
 
         isExiting = true;
+
+        if (GameManager.instance != null)
+            GameManager.instance.AbandonRun();
+
         RestoreRuntimeState();
-
-        GameManager manager = GameManager.instance;
-        if (manager != null)
-            manager.AbandonLegacyRun();
-
         sceneLoader(menuSceneName);
     }
 
@@ -134,11 +131,11 @@ public class PauseMenuController : MonoBehaviour
 
     private static void Select(GameObject target)
     {
-        if (EventSystem.current != null)
-        {
-            EventSystem.current.SetSelectedGameObject(null);
-            EventSystem.current.SetSelectedGameObject(target);
-        }
+        if (EventSystem.current == null)
+            return;
+
+        EventSystem.current.SetSelectedGameObject(null);
+        EventSystem.current.SetSelectedGameObject(target);
     }
 
     private void OnDisable()
