@@ -1,25 +1,39 @@
-﻿using UnityEngine;
+using System.Collections;
+using System.Collections.Generic;
+using HallowBlaze.Core.Session;
+using HallowBlaze.Core.State;
+using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
-using System.Collections;
-using System.Collections.Generic;       //Allows us to use Lists. 
 
 public class GameManager : MonoBehaviour
 {
+    private const int InitialHealth = 100;
+    private const int InitialFood = 100;
+    private const string InitialWorldNodeId = "forest.start";
+
     public float levelStartDelay = 2f;
     public float turnDelay = .1f;
-    public static GameManager instance = null;              //Static instance of GameManager which allows it to be accessed by any other script.
-    public BoardManager boardScript;                       //Store a reference to our BoardManager which will set up the level.
-    public RunState runState;                              //Centralized state management for the current game run
+    public static GameManager instance = null;
+    public BoardManager boardScript;
 
     private Text levelText;
     private Text scoreText;
     private GameObject levelImage;
     private GameObject restartButton;
     private List<Enemy> enemies;
+    private bool playerTurn = true;
+    private bool enemiesMoving;
     private bool doingSetup;
     private bool gameplayInputBlocked;
     private int gameplayInputResumeFrame = -1;
+    private int nextRunSequence;
+    private GameSession session;
+
+    public GameSession Session
+    {
+        get { return session; }
+    }
 
     public bool IsGameplayInputEnabled
     {
@@ -29,8 +43,10 @@ public class GameManager : MonoBehaviour
                 && !doingSetup
                 && !gameplayInputBlocked
                 && Time.frameCount > gameplayInputResumeFrame
-                && runState != null
-                && runState.playerTurn;
+                && playerTurn
+                && session != null
+                && session.ActiveRun != null
+                && session.ActiveRun.Status == RunStatus.Active;
         }
     }
 
@@ -43,7 +59,12 @@ public class GameManager : MonoBehaviour
     {
         get
         {
-            return enabled && !doingSetup && !gameplayInputBlocked && runState != null && !runState.doingSetup;
+            return enabled
+                && !doingSetup
+                && !gameplayInputBlocked
+                && session != null
+                && session.ActiveRun != null
+                && session.ActiveRun.Status == RunStatus.Active;
         }
     }
 
@@ -55,77 +76,63 @@ public class GameManager : MonoBehaviour
             gameplayInputResumeFrame = Time.frameCount;
     }
 
-    public void AbandonLegacyRun()
+    private void Awake()
     {
-        gameplayInputBlocked = true;
-        StopAllCoroutines();
-
-        if (runState != null && runState.gameObject != gameObject)
-            Destroy(runState.gameObject);
-
-        runState = null;
-
-        if (instance == this)
-            instance = null;
-
-        // Properly destroy the GameManager to avoid memory leaks
-        // But don't destroy the SoundManager which should persist across scenes
-        Destroy(gameObject);
-    }
-
-    //Awake is always called before any Start functions
-    void Awake()
-    {
-        //Check if instance already exists
-        if (instance == null)
-            //if not, set instance to this
-            instance = this;
-
-        //If instance already exists and it's not this:
-        else if (instance != this)
-            //Then destroy this. This enforces our singleton pattern, meaning there can only ever be one instance of a GameManager.
-            Destroy(gameObject);
-
-        //Sets this to not be destroyed when reloading scene
-        DontDestroyOnLoad(gameObject);
-
-        //
-        enemies = new List<Enemy>();
-
-        //Get a component reference to the attached BoardManager script
-        boardScript = GetComponent<BoardManager>();
-        
-        // Get or create RunState component
-        runState = FindObjectOfType<RunState>();
-        if (runState == null)
+        if (instance != null && instance != this)
         {
-            // Create a new RunState GameObject if one doesn't exist
-            GameObject runStateGO = new GameObject("RunState");
-            runState = runStateGO.AddComponent<RunState>();
+            enabled = false;
+            Destroy(gameObject);
+            return;
         }
+
+        instance = this;
+        DontDestroyOnLoad(gameObject);
+        enemies = new List<Enemy>();
+        boardScript = GetComponent<BoardManager>();
+        session = new GameSession(new ProfileState("default-profile", "world-1", 1));
     }
 
     private void OnEnable()
     {
         SceneManager.sceneLoaded += OnSceneLoaded;
+
+        if (session != null)
+        {
+            session.OnRunStarted += OnRunStarted;
+            session.OnRunAbandoned += OnRunAbandoned;
+        }
     }
 
     private void OnDisable()
     {
         SceneManager.sceneLoaded -= OnSceneLoaded;
+
+        if (session != null)
+        {
+            session.OnRunStarted -= OnRunStarted;
+            session.OnRunAbandoned -= OnRunAbandoned;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (instance == this)
+            instance = null;
     }
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        if (scene.buildIndex == 1)
-        {
-            runState.IncrementLevel();
-            InitGame();
-        }
+        if (scene.buildIndex != 1)
+            return;
+
+        if (!session.IsRunActive() || session.ActiveRun.Status != RunStatus.Active)
+            StartNewRun();
+
+        session.AdvanceDay();
+        InitGame();
     }
 
-    //Initializes the game for each level.
-    void InitGame()
+    private void InitGame()
     {
         doingSetup = true;
 
@@ -137,7 +144,7 @@ public class GameManager : MonoBehaviour
         if (levelTextObject != null)
             levelText = levelTextObject.GetComponent<Text>();
         if (levelText != null)
-            levelText.text = "Day: " + runState.level;
+            levelText.text = "Day: " + session.GetCurrentRun().CurrentDay;
 
         restartButton = GameObject.Find("RestartBttn");
         if (restartButton != null)
@@ -149,32 +156,40 @@ public class GameManager : MonoBehaviour
         if (scoreText != null)
             scoreText.text = string.Empty;
 
+        CancelInvoke(nameof(HideLevelImage));
         Invoke(nameof(HideLevelImage), levelStartDelay);
         enemies.Clear();
-        
-        //Call the SetupScene function of the BoardManager script, pass it current level number.
-        if (boardScript != null)
-            boardScript.SetupScene(runState.level);
 
+        if (boardScript != null)
+            boardScript.SetupScene(session.GetCurrentRun().CurrentDay);
     }
 
     private void HideLevelImage()
     {
-        levelImage.SetActive(false);
+        if (levelImage != null)
+            levelImage.SetActive(false);
+
         doingSetup = false;
     }
 
     public void GameOver(bool isStarved)
     {
+        if (session == null || session.ActiveRun == null)
+            return;
+
+        RunState run = session.ActiveRun;
+        if (run.Status == RunStatus.Active)
+            session.MarkDead();
+
         if (levelText != null)
         {
             if (isStarved)
-                levelText.text = "After " + runState.level + " days, you've starved.";
+                levelText.text = "After " + run.CurrentDay + " days, you've starved.";
             else
-                levelText.text = "After " + runState.level + " days, your brain has been eaten.";
+                levelText.text = "After " + run.CurrentDay + " days, your brain has been eaten.";
         }
 
-        int score = ManageScore(runState.level);
+        int score = ManageScore(run.CurrentDay);
 
         if (levelImage != null)
             levelImage.SetActive(true);
@@ -195,20 +210,21 @@ public class GameManager : MonoBehaviour
         if (score > PlayerPrefs.GetInt("HighScore", 0))
             PlayerPrefs.SetInt("HighScore", score);
 
-        score = PlayerPrefs.GetInt("HighScore", 0);
-
-        return score;
+        return PlayerPrefs.GetInt("HighScore", 0);
     }
 
-    //Update is called every frame.
-    void Update()
+    private void Update()
     {
-        // Don't process gameplay input when paused or during setup
-        if (gameplayInputBlocked || runState == null || runState.playerTurn || runState.enemiesMoving || runState.doingSetup)
+        if (gameplayInputBlocked
+            || doingSetup
+            || session == null
+            || session.ActiveRun == null
+            || session.ActiveRun.Status != RunStatus.Active
+            || playerTurn
+            || enemiesMoving)
             return;
 
         StartCoroutine(MoveEnemies());
-
     }
 
     public void AddEnemytoList(Enemy script)
@@ -216,9 +232,17 @@ public class GameManager : MonoBehaviour
         enemies.Add(script);
     }
 
-    IEnumerator MoveEnemies()
+    public void EndPlayerTurn()
     {
-        runState.enemiesMoving = true;
+        if (!IsGameplayInputEnabled)
+            return;
+
+        playerTurn = false;
+    }
+
+    private IEnumerator MoveEnemies()
+    {
+        enemiesMoving = true;
         yield return new WaitForSeconds(turnDelay);
         yield return WaitWhileGameplayBlocked();
 
@@ -228,21 +252,69 @@ public class GameManager : MonoBehaviour
             yield return WaitWhileGameplayBlocked();
         }
 
-        for (int i = 0; i < enemies.Count; i++)
+        for (int index = 0; index < enemies.Count; index++)
         {
             yield return WaitWhileGameplayBlocked();
-            enemies[i].MoveEnemy();
-            yield return new WaitForSeconds(enemies[i].moveTime);
+            enemies[index].MoveEnemy();
+            yield return new WaitForSeconds(enemies[index].moveTime);
         }
 
         yield return WaitWhileGameplayBlocked();
-        runState.playerTurn = true;
-        runState.enemiesMoving = false;
+        playerTurn = true;
+        enemiesMoving = false;
     }
 
     private IEnumerator WaitWhileGameplayBlocked()
     {
         while (gameplayInputBlocked)
             yield return null;
+    }
+
+    private void OnRunStarted(RunState runState)
+    {
+        StopAllCoroutines();
+        playerTurn = true;
+        enemiesMoving = false;
+        doingSetup = false;
+        gameplayInputBlocked = false;
+        gameplayInputResumeFrame = Time.frameCount;
+    }
+
+    private void OnRunAbandoned(RunState runState)
+    {
+        StopAllCoroutines();
+        playerTurn = false;
+        enemiesMoving = false;
+        doingSetup = false;
+        gameplayInputBlocked = true;
+    }
+
+    public void StartNewRun()
+    {
+        if (!enabled)
+            enabled = true;
+
+        nextRunSequence = checked(nextRunSequence + 1);
+        RunStateConfiguration configuration = new RunStateConfiguration(
+            InitialHealth,
+            InitialFood,
+            0,
+            InitialWorldNodeId);
+        session.StartNewRun(
+            session.Profile.ProfileId + "-run-" + nextRunSequence,
+            12345 + nextRunSequence,
+            configuration);
+    }
+
+    public void AbandonRun()
+    {
+        if (session != null)
+            session.AbandonRun();
+    }
+
+    public void RestartGame()
+    {
+        StartNewRun();
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 }

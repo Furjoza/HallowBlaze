@@ -1,6 +1,10 @@
 {
     "name": "HallowBlaze.Tests.PlayMode",
     "rootNamespace": "HallowBlaze.Tests.PlayMode",
+    "references": [
+        "HallowBlaze.Core.State",
+        "HallowBlaze.Core.Session"
+    ],
     "optionalUnityReferences": [
         "TestAssemblies"
     ]

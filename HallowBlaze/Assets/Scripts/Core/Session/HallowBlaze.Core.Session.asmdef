@@ -1,0 +1,8 @@
+{
+    "name": "HallowBlaze.Core.Session",
+    "rootNamespace": "HallowBlaze.Core.Session",
+    "references": [
+        "HallowBlaze.Core.State"
+    ],
+    "noEngineReferences": true
+}
