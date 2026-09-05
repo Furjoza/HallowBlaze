@@ -731,7 +731,8 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 ## `M1.5` — Wersjonowane DTO i mapowanie stanu
 
-**Status:** `Planned`  
+**Status:** `Done` — writer: `GitHub Copilot`; review 2026-09-05: `Pass`
+**Ukończono:** 2026-09-05 — `PersistenceDtoTests` `18/18`, pełne EditMode `60/60`, integrity gate `PASS`.
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 6.3 i 21.3–21.4.
 
@@ -756,6 +757,10 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 **Wpływ na save i kompatybilność:** Powstaje logiczna schema v1. Prototypowe `PlayerPrefs` pozostają nietknięte, chyba że Coordinator zatwierdzi osobną prostą migrację.
 
 **Wymagany handoff:** Przykład zredagowanego DTO, tabela pole domeny ↔ pole DTO i błędów walidacji.
+
+**Wynik wykonania 2026-09-05:** Dodano niezależną od `UnityEngine` assembly `HallowBlaze.Core.Persistence` z osobnymi DTO schema v1 dla profilu i runu, jawnymi mapperami oraz tekstowym serializerem Json.NET. Mappery odtwarzają pełny `ProfileState` i `RunState`, zachowując kolejność kolekcji, oba sloty narzędzi i status terminalny. Walidacja odbywa się przed utworzeniem obserwowalnego stanu, odrzuca brakujące pola, niepoprawne i zduplikowane stabilne ID, wadliwe wartości, duplikaty właściwości JSON oraz każdą wersję inną niż v1. Komunikaty błędów nie zawierają danych profilu. Nie dodano store'a, I/O, backupu, migracji `PlayerPrefs`, `Continue` ani snapshotu planszy.
+
+**Wynik walidacji:** Unity `6000.3.21f1`: filtrowane `PersistenceDtoTests` `18/18` i pełne EditMode `60/60`; oba końcowe przebiegi miały kod `0`, bez failed/skipped/inconclusive. Diagnostyka, `git diff --check`, komplet `.meta`, zamknięta allowlista i porównanie ze snapshotami przeszły. Pierwszy review wykrył akceptowanie `null` jako pustego `toolId`; po naprawie i teście regresji ponowny niezależny `qwen-reviewer` wydał `Pass`. Pełny raport: [`Validation/M1.5.md`](Validation/M1.5.md).
 
 ---
 
