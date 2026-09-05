@@ -1,0 +1,9 @@
+{
+    "name": "HallowBlaze.Core.Persistence",
+    "rootNamespace": "HallowBlaze.Core.Persistence",
+    "references": [
+        "HallowBlaze.Core.State",
+        "Unity.Newtonsoft.Json"
+    ],
+    "noEngineReferences": true
+}
