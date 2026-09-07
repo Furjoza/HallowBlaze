@@ -5,12 +5,12 @@
 | Role | Agent | Model | Writes project files |
 |---|---|---|---|
 | Tech Lead | `codex-lead` | Selected in VS Code Chat | No |
-| Developer | `qwen-developer` | `qwen3-coder:30b` via Ollama | Yes |
-| Reviewer | `qwen-reviewer` | `qwen3.6:27b` via Ollama | No |
+| Developer | `qwen-developer` | `devstral-small-2:24b` via gateway and Ollama | Yes |
+| Reviewer | `qwen-reviewer` | Auto (Copilot) | No |
 
 `codex-lead` is the user-facing coordinator.
 
-The two local Qwen agents are internal subagents and run sequentially.
+The local Developer and Reviewer are internal subagents and run sequentially.
 
 ## Workflow
 
@@ -144,6 +144,10 @@ Project-wide rules:
 Role-specific behavior:
 
 `.github/agents/*.agent.md`
+
+Versioned local Developer harness:
+
+`Tools/LocalAgentHarness/`
 
 Game-design contract:
 

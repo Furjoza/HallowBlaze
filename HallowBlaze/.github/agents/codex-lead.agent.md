@@ -95,9 +95,19 @@ Provide:
 
 Require the Developer to confirm that the snapshot manifest matches the supplied task, writer, repository, and allowlist before its first edit. A missing or mismatched snapshot is a blocker, not permission to continue.
 
+Arm the snapshot write allowlist before delegation with:
+
+`Tools/LocalAgentHarness/LocalDeveloperGuard.ps1 -ArmSnapshot <snapshot-path>`
+
 Do not prescribe unnecessary implementation details when repository inspection should determine them.
 
 Routine coding belongs to the Developer.
+
+# Truncated Developer response
+
+If `qwen-developer` ends with `finish_reason=length`, inspect the repository state and actual artifacts. Do not increase the output budget. Split any remaining work into a smaller operation and delegate another normal Developer round.
+
+A transport retry with no repository mutation does not itself require a snapshot. A new writer session still requires a fresh snapshot according to `AGENTS.md`.
 
 If the Developer reports `ARCHITECTURE_DECISION_REQUIRED`, `SCOPE_CHANGE_REQUIRED`, or `BASELINE_SNAPSHOT_REQUIRED`, evaluate the issue before authorizing any write.
 
