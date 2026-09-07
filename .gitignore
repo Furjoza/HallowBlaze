@@ -47,6 +47,11 @@ ExportedObj/
 *.opendb
 *.VC.db
 
+# Versioned local-agent gateway; keep its generated outputs local.
+!HallowBlaze/Tools/LocalAgentHarness/Gateway/LocalAgentGateway.csproj
+HallowBlaze/Tools/LocalAgentHarness/Gateway/bin/
+HallowBlaze/Tools/LocalAgentHarness/Gateway/obj/
+
 # Unity3D generated meta files
 *.pidb.meta
 *.pdb.meta
