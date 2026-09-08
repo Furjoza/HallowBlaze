@@ -766,8 +766,8 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 ## `M1.6` — Atomowy file store, backup i recovery
 
-**Status:** `Planned`  
-**Priorytet:** P0  
+**Status:** `Done`
+**Priorytet:** P0
 **Powiązany kontrakt:** sekcje 6.3 i 21.4.
 
 **Rationale:** Poprawny format nie wystarcza, jeśli przerwany zapis może skasować atlas. Oddzielny ticket filesystemu pozwala wstrzykiwać awarie i reviewować operacje I/O bez równoczesnej zmiany lifecycle gry.
@@ -792,7 +792,9 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Wymagany handoff:** Diagram plik temp/current/backup, tabela błędów/reakcji, lokalizacje testowe i potwierdzenie cleanupu wyłącznie własnego katalogu tymczasowego.
 
----
+**Wynik wykonania 2026-09-08:** Dodano niezależny od Unity filesystem store dla osobnych plików profilu i runu. Zapis używa unikalnego pliku tymczasowego w katalogu docelowym, trwałego flushu oraz `File.Replace` z ostatnią poprawną kopią na referencyjnym PC. Load zwraca typowane wyniki dla braku, uszkodzenia, recovery, przyszłej schemy i błędów I/O. Minimalna migracja v0→v1 zmienia wyłącznie jawną wersję dokumentu, waliduje pełne v1 przed zastąpieniem i zachowuje źródło jako backup. Adapter Unity izoluje testowe katalogi pod `persistentDataPath/tests`.
+
+**Wynik walidacji:** Unity `6000.3.21f1`: filtrowane `PersistenceStorageTests` `9/9`, pełne EditMode `69/69` i filtrowane PlayMode `PersistencePathTests` `1/1`; wszystkie przebiegi zakończone kodem `0`, bez failed/skipped/inconclusive. Pełny raport: [`Validation/M1.6.md`](Validation/M1.6.md).
 
 ## `M1.7` — Cykl `New Run`, `Continue`, `Dead`, `Won`
 
