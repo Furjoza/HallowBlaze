@@ -1090,13 +1090,13 @@ Poniższe pytania mają status **Open**. Agent nie może rozstrzygnąć ich sam,
 | O-001 | Czy atlas fabularnie należy do tej samej postaci, czy do schronienia i kolejnych zwiadowców? | wspólny atlas schronienia, ponieważ naturalnie tłumaczy śmierć i kolejne runy | narrację podsumowania i nowego runu |
 | O-002 | Co wygrywa, gdy ta sama akcja osiąga wyjście i próg śmierci z głodu? | wyjście, jeśli gracz faktycznie wszedł na pole celu | ostateczne testy kontraktu tury |
 | O-003 | Czy drobne przedmioty są podnoszone automatycznie przy wejściu, czy wymagają `Interact`? | jedzenie automatycznie; narzędzia przez świadomą interakcję | pickupy i UI zamiany |
-| O-004 | Która platforma jest referencyjna dla vertical slice: PC, mobile czy obie równorzędnie? | PC jako referencja, mobile zachowuje tę samą semantykę po ustabilizowaniu interakcji | docelowy input i layout UI |
 | O-006 | Czy `Exit to Menu` przy aktywnym, poprawnie zapisanym runie zachowuje go dla `Continue`, czy jawnie go porzuca? | zachować zapisany run dla `Continue`; trwałe porzucenie udostępnić jako osobną, jednoznaczną akcję | lifecycle zapisanego runu i testy `Continue` |
 
 ### Decyzje rozstrzygnięte dla bieżącego zakresu
 
 | ID | Decyzja właściciela | Warunek ponownego otwarcia |
 | --- | --- | --- |
+| O-004 | 2026-09-08 — PC jest platformą referencyjną dla vertical slice. Mobile ma zachować tę samą semantykę po ustabilizowaniu interakcji. | Osobna decyzja produktowa zmieniająca platformę referencyjną lub wymagająca równorzędnej walidacji filesystemu na mobile. |
 | O-005 | 2026-08-27 — leaderboard online nie jest częścią bieżącego projektu; najpierw powstaje prywatne podsumowanie wyprawy. Usuniętej integracji Dreamlo nie przywracamy, a rotację starej wartości właściciel świadomie odkłada. | Osobna decyzja produktowa o ponownym wprowadzeniu funkcji online; wtedy wymagane są nowy model bezpieczeństwa, nowa integracja i poświadczenia, bez ponownego użycia historycznej wartości. |
 
 Wskazówki tras w MVP nie są decyzją otwartą: MUSZĄ być prawdziwe w odniesieniu do obserwowalnych, stabilnych cech. Mogą być niepełne, a dynamiczne warunki mogą zmienić wartość drogi, lecz gra nie wprowadza celowo fałszywego opisu.
