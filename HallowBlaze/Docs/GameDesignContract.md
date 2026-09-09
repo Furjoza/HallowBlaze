@@ -352,10 +352,11 @@ Podczas aktywnej planszy na PC i w Editorze klawisz Escape otwiera modalne menu 
 - `Resume` oraz ponowne naciśnięcie Escape w głównym widoku pauzy wznawiają dokładnie tę samą planszę.
 - `Settings` otwiera tę samą funkcjonalność ustawień dźwięku i muzyki, która jest dostępna w menu głównym. Escape albo `Back` wraca z ustawień najpierw do głównego widoku pauzy, nie bezpośrednio do gry.
 - Gdy widoczna jest pauza lub jej ustawienia, wejście rozgrywkowe nie tworzy komend, nie wykonuje AI i nie zmienia tury, pozycji, zdrowia, jedzenia ani stanu narzędzi.
-- `Exit to Menu` na etapie legacy objętym pierwszym zadaniem M1 porzuca aktywny, niezapisany run bez dodatkowego potwierdzenia i wraca do menu głównego. Nie usuwa profilu, ustawień audio ani lokalnego rekordu.
+- `Exit to Menu` zapisuje aktywny run na granicy planszy, odłącza go od bieżącej sesji i wraca do menu głównego. Poprawny zapis pozostaje dostępny dla `Continue`; akcja nie usuwa profilu, ustawień audio ani lokalnego rekordu.
+- Trwałe porzucenie runu jest osobną, jednoznaczną akcją. Usuwa bieżący i zapasowy plik runu, ale nigdy plik profilu.
 - Przed wznowieniem, wyjściem, wyłączeniem kontrolera albo zmianą sceny gra przywraca normalny upływ czasu i usuwa blokadę wejścia.
 
-Mobilny sposób otwierania pauzy pozostaje poza tym zakresem do rozstrzygnięcia O-004. Docelowa relacja `Exit to Menu` z wersjonowanym `Continue` ma status **Open** jako O-006 i musi zostać rozstrzygnięta przed rozpoczęciem zadania lifecycle; nie może po cichu odziedziczyć ograniczeń legacy.
+Mobilny sposób otwierania pauzy pozostaje poza tym zakresem do rozstrzygnięcia O-004. Relacja `Exit to Menu` z wersjonowanym `Continue` została rozstrzygnięta w O-006: poprawny run save pozostaje dostępny do wznowienia.
 
 #### Rationale — dlaczego
 
@@ -1090,7 +1091,6 @@ Poniższe pytania mają status **Open**. Agent nie może rozstrzygnąć ich sam,
 | O-001 | Czy atlas fabularnie należy do tej samej postaci, czy do schronienia i kolejnych zwiadowców? | wspólny atlas schronienia, ponieważ naturalnie tłumaczy śmierć i kolejne runy | narrację podsumowania i nowego runu |
 | O-002 | Co wygrywa, gdy ta sama akcja osiąga wyjście i próg śmierci z głodu? | wyjście, jeśli gracz faktycznie wszedł na pole celu | ostateczne testy kontraktu tury |
 | O-003 | Czy drobne przedmioty są podnoszone automatycznie przy wejściu, czy wymagają `Interact`? | jedzenie automatycznie; narzędzia przez świadomą interakcję | pickupy i UI zamiany |
-| O-006 | Czy `Exit to Menu` przy aktywnym, poprawnie zapisanym runie zachowuje go dla `Continue`, czy jawnie go porzuca? | zachować zapisany run dla `Continue`; trwałe porzucenie udostępnić jako osobną, jednoznaczną akcję | lifecycle zapisanego runu i testy `Continue` |
 
 ### Decyzje rozstrzygnięte dla bieżącego zakresu
 
@@ -1098,6 +1098,7 @@ Poniższe pytania mają status **Open**. Agent nie może rozstrzygnąć ich sam,
 | --- | --- | --- |
 | O-004 | 2026-09-08 — PC jest platformą referencyjną dla vertical slice. Mobile ma zachować tę samą semantykę po ustabilizowaniu interakcji. | Osobna decyzja produktowa zmieniająca platformę referencyjną lub wymagająca równorzędnej walidacji filesystemu na mobile. |
 | O-005 | 2026-08-27 — leaderboard online nie jest częścią bieżącego projektu; najpierw powstaje prywatne podsumowanie wyprawy. Usuniętej integracji Dreamlo nie przywracamy, a rotację starej wartości właściciel świadomie odkłada. | Osobna decyzja produktowa o ponownym wprowadzeniu funkcji online; wtedy wymagane są nowy model bezpieczeństwa, nowa integracja i poświadczenia, bez ponownego użycia historycznej wartości. |
+| O-006 | 2026-09-09 — `Exit to Menu` zachowuje poprawny run save dla `Continue`; trwałe porzucenie jest osobną, jednoznaczną akcją. | Osobna decyzja produktowa zmieniająca oczekiwania gracza wobec wznowienia lub zamknięcia runu. |
 
 Wskazówki tras w MVP nie są decyzją otwartą: MUSZĄ być prawdziwe w odniesieniu do obserwowalnych, stabilnych cech. Mogą być niepełne, a dynamiczne warunki mogą zmienić wartość drogi, lecz gra nie wprowadza celowo fałszywego opisu.
 

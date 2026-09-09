@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using HallowBlaze.Core.Session;
@@ -35,6 +36,7 @@ namespace HallowBlaze.Tests.PlayMode
         private PreferenceSnapshot musicPreference;
         private PreferenceSnapshot soundPreference;
         private IntPreferenceSnapshot highScorePreference;
+        private string persistenceRoot;
 
         [SetUp]
         public void SetUp()
@@ -54,6 +56,10 @@ namespace HallowBlaze.Tests.PlayMode
 
             DestroySingleton(gameManagerType);
             DestroySingleton(soundManagerType);
+            persistenceRoot = Path.Combine(
+                Path.GetTempPath(),
+                "HallowBlaze-M1.7-Pause-" + Guid.NewGuid().ToString("N"));
+            SetStaticField(gameManagerType, "PersistenceRootOverride", persistenceRoot);
             CreateGameplayHost();
             CreatePauseHost();
         }
@@ -72,6 +78,9 @@ namespace HallowBlaze.Tests.PlayMode
             createdObjects.Clear();
             DestroySingleton(gameManagerType);
             DestroySingleton(soundManagerType);
+            SetStaticField(gameManagerType, "PersistenceRootOverride", null);
+            if (Directory.Exists(persistenceRoot))
+                Directory.Delete(persistenceRoot, true);
             RestoreStringPreference("Music", musicPreference);
             RestoreStringPreference("Sound", soundPreference);
             RestoreIntPreference("HighScore", highScorePreference);
@@ -291,11 +300,12 @@ namespace HallowBlaze.Tests.PlayMode
         }
 
         [Test]
-        public void ExitToMenuRestoresRuntimeAbandonsRunAndRequestsSceneOnce()
+        public void ExitToMenuRestoresRuntimePreservesSavedRunAndRequestsSceneOnce()
         {
             int sceneLoadCount = 0;
             string requestedScene = null;
             ProfileState profile = session.Profile;
+            string runId = session.ActiveRun.RunId;
             SetField(pauseMenu, "menuSceneName", "M1.4 Menu");
             SetField(pauseMenu, "sceneLoader", (Action<string>)(sceneName =>
             {
@@ -314,6 +324,9 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetStaticField(gameManagerType, "instance"), Is.SameAs(gameManager));
             Assert.That(session.ActiveRun, Is.Null);
             Assert.That(session.Profile, Is.SameAs(profile));
+            Assert.That(File.Exists(Path.Combine(persistenceRoot, "run.json")), Is.True);
+            Assert.That(File.ReadAllText(Path.Combine(persistenceRoot, "run.json")),
+                Does.Contain(runId));
         }
 
         private void CreateGameplayHost()
@@ -445,6 +458,15 @@ namespace HallowBlaze.Tests.PlayMode
             FieldInfo field = type.GetField(fieldName, BindingFlags.Public | BindingFlags.Static);
             Assert.That(field, Is.Not.Null, fieldName + " must exist.");
             return field.GetValue(null);
+        }
+
+        private static void SetStaticField(Type type, string fieldName, object value)
+        {
+            FieldInfo field = type.GetField(
+                fieldName,
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(field, Is.Not.Null, fieldName + " must exist.");
+            field.SetValue(null, value);
         }
 
         private static void DestroySingleton(Type type)

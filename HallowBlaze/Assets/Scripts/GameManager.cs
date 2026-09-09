@@ -1,5 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
+using HallowBlaze.Core.Persistence;
+using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
 using UnityEngine;
@@ -11,6 +13,15 @@ public class GameManager : MonoBehaviour
     private const int InitialHealth = 100;
     private const int InitialFood = 100;
     private const string InitialWorldNodeId = "forest.start";
+
+    public enum RunLaunchMode
+    {
+        NewRun,
+        Continue
+    }
+
+    private static RunLaunchMode requestedLaunchMode = RunLaunchMode.NewRun;
+    internal static string PersistenceRootOverride;
 
     public float levelStartDelay = 2f;
     public float turnDelay = .1f;
@@ -29,6 +40,7 @@ public class GameManager : MonoBehaviour
     private int gameplayInputResumeFrame = -1;
     private int nextRunSequence;
     private GameSession session;
+    private RunLifecycleService lifecycle;
 
     public GameSession Session
     {
@@ -53,6 +65,16 @@ public class GameManager : MonoBehaviour
     public bool IsGameplayInputBlocked
     {
         get { return gameplayInputBlocked; }
+    }
+
+    public static void RequestNewRun()
+    {
+        requestedLaunchMode = RunLaunchMode.NewRun;
+    }
+
+    public static void RequestContinue()
+    {
+        requestedLaunchMode = RunLaunchMode.Continue;
     }
 
     public bool CanPauseGameplay
@@ -125,10 +147,39 @@ public class GameManager : MonoBehaviour
         if (scene.buildIndex != 1)
             return;
 
+        EnsurePersistence();
+        bool continuedRun = false;
         if (!session.IsRunActive() || session.ActiveRun.Status != RunStatus.Active)
-            StartNewRun();
+        {
+            if (requestedLaunchMode == RunLaunchMode.Continue)
+            {
+                SaveStoreResult<RunState> continueResult = lifecycle.ContinueRun();
+                if (continueResult.IsFailure)
+                {
+                    Debug.LogError("Continue failed: " + continueResult.Type);
+                    return;
+                }
 
-        session.AdvanceDay();
+                continuedRun = true;
+            }
+            else
+            {
+                StartNewRun();
+            }
+        }
+
+        requestedLaunchMode = RunLaunchMode.NewRun;
+        if (!continuedRun)
+        {
+            session.AdvanceDay();
+            SaveStoreResult boundaryResult = lifecycle.SaveBoardBoundary();
+            if (boundaryResult.IsFailure)
+            {
+                Debug.LogError("Board boundary save failed: " + boundaryResult.Type);
+                return;
+            }
+        }
+
         InitGame();
     }
 
@@ -179,7 +230,12 @@ public class GameManager : MonoBehaviour
 
         RunState run = session.ActiveRun;
         if (run.Status == RunStatus.Active)
-            session.MarkDead();
+        {
+            EnsurePersistence();
+            SaveStoreResult result = lifecycle.MarkDead();
+            if (result.IsFailure)
+                Debug.LogError("Run completion save failed: " + result.Type);
+        }
 
         if (levelText != null)
         {
@@ -300,21 +356,82 @@ public class GameManager : MonoBehaviour
             InitialFood,
             0,
             InitialWorldNodeId);
-        session.StartNewRun(
-            session.Profile.ProfileId + "-run-" + nextRunSequence,
+        string runId = session.Profile.ProfileId + "-run-" +
+            System.DateTime.UtcNow.Ticks + "-" + nextRunSequence;
+
+        if (lifecycle == null)
+        {
+            session.StartNewRun(runId, 12345 + nextRunSequence, configuration);
+            return;
+        }
+
+        SaveStoreResult result = lifecycle.StartNewRun(
+            runId,
             12345 + nextRunSequence,
             configuration);
+        if (result.IsFailure)
+            Debug.LogError("New run save failed: " + result.Type);
     }
 
     public void AbandonRun()
     {
-        if (session != null)
-            session.AbandonRun();
+        EnsurePersistence();
+        SaveStoreResult result = lifecycle.DeleteRunAndAbandon();
+        if (result.IsFailure)
+            Debug.LogError("Run abandon failed: " + result.Type);
+    }
+
+    public bool ExitToMenu()
+    {
+        EnsurePersistence();
+        SaveStoreResult result = lifecycle.ExitToMenu();
+        if (result.IsFailure)
+            Debug.LogError("Exit save failed: " + result.Type);
+
+        return result.IsSuccess;
+    }
+
+    public void WinGame()
+    {
+        EnsurePersistence();
+        SaveStoreResult result = lifecycle.MarkWon();
+        if (result.IsFailure)
+            Debug.LogError("Run completion save failed: " + result.Type);
     }
 
     public void RestartGame()
     {
+        RequestNewRun();
         StartNewRun();
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+    private void EnsurePersistence()
+    {
+        if (lifecycle != null)
+            return;
+
+        string saveRoot = string.IsNullOrEmpty(PersistenceRootOverride)
+            ? PersistencePathProvider.GetSaveRoot()
+            : PersistenceRootOverride;
+        ISaveStore store = new FileSystemSaveStore(saveRoot);
+        SaveStoreResult<ProfileState> profileResult = store.LoadProfile();
+        ProfileState profile = profileResult.IsSuccess
+            ? profileResult.Data
+            : session.Profile;
+
+        if (profileResult.Type != SaveStoreResultType.Missing && profileResult.IsFailure)
+            Debug.LogError("Profile load failed: " + profileResult.Type);
+
+        if (!ReferenceEquals(profile, session.Profile))
+        {
+            session.OnRunStarted -= OnRunStarted;
+            session.OnRunAbandoned -= OnRunAbandoned;
+            session = new GameSession(profile);
+            session.OnRunStarted += OnRunStarted;
+            session.OnRunAbandoned += OnRunAbandoned;
+        }
+
+        lifecycle = new RunLifecycleService(session, store);
     }
 }
