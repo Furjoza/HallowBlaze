@@ -136,7 +136,7 @@ Powtarzanie tych samych zasad w kilkudziesięciu miejscach tworzyłoby sprzeczne
 
 ## `M0.1` — Project-local Unity `.gitignore`
 
-**Status:** `Done`  
+**Status:** `Done`
 **Ukończono:** 2026-08-20 — review `Pass`; 17/17 testów pozytywnych i 8/8 negatywnych `git check-ignore`.  
 **Priorytet:** P0  
 **Powiązany kontrakt:** Appendix A oraz sekcja 22.
@@ -798,7 +798,7 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 ## `M1.7` — Cykl `New Run`, `Continue`, `Dead`, `Won`
 
-**Status:** `Planned` — nie może przejść na `Ready` bez decyzji O-006  
+**Status:** `Done`  
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 6.2, 6.6, 19 oraz O-001 i O-006.
 
@@ -823,6 +823,10 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 **Wpływ na save i kompatybilność:** Używa schema v1; semantyka zachowania lub zamknięcia run save wynika wyłącznie z zaakceptowanej O-006, a każda zmiana musi przejść przez repozytorium i backup.
 
 **Wymagany handoff:** Odniesienie do rozstrzygniętej O-006, tabela stanów/przejść wraz z `ActiveSavedRun + ExitToMenu` oraz lista dokładnych momentów autosave.
+
+**Wynik wykonania 2026-09-09:** O-006 rozstrzygnięto na zachowanie poprawnego run save po `Exit to Menu`. Dodano domenowy koordynator lifecycle dla `New Run`, `Continue`, checkpointów planszy, `Dead`, `Won` i jawnego porzucenia. Menu pokazuje osobny `Continue`, aktywny wyłącznie dla poprawnego aktywnego save. Terminalny wynik zapisuje podsumowanie profilu, usuwa oba pliki runu i może bezpiecznie ponowić persistence po błędzie bez duplikowania podsumowania.
+
+**Wynik walidacji:** Unity `6000.3.21f1`: końcowe pełne EditMode `78/78`, pełne PlayMode `23/23`, inspekcja scen `Menu` i `Main` przez Unity CLI bez Missing Script oraz poprawny callback `ContinueByName`; failed/skipped/inconclusive `0`. Niezależny review doprowadził do ujednolicenia walidacji `Continue` dla UI i wykonania. Pełny raport: [`Validation/M1.7.md`](Validation/M1.7.md).
 
 ---
 

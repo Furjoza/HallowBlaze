@@ -32,5 +32,11 @@ namespace HallowBlaze.Core.Persistence.Storage
         /// </summary>
         /// <returns>A result containing the loaded run state or an error.</returns>
         SaveStoreResult<RunState> LoadRun();
+
+        /// <summary>
+        /// Removes the active run and its recovery copy from persistent storage.
+        /// </summary>
+        /// <returns>A result indicating success or failure.</returns>
+        SaveStoreResult DeleteRun();
     }
 }

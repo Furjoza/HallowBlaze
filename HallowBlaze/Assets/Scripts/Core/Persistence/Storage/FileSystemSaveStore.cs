@@ -67,6 +67,20 @@ namespace HallowBlaze.Core.Persistence.Storage
                 PersistenceJsonSerializer.DeserializeRun);
         }
 
+        public SaveStoreResult DeleteRun()
+        {
+            try
+            {
+                DeleteIfExists(Path.Combine(rootPath, RunFileName));
+                DeleteIfExists(Path.Combine(rootPath, RunBackupFileName));
+                return SaveStoreResult.Success();
+            }
+            catch (Exception exception) when (IsIoException(exception))
+            {
+                return SaveStoreResult.IoError("The run save could not be removed.");
+            }
+        }
+
         private SaveStoreResult Save(
             string fileName,
             string backupFileName,
@@ -202,6 +216,12 @@ namespace HallowBlaze.Core.Persistence.Storage
             catch (Exception exception) when (IsIoException(exception))
             {
             }
+        }
+
+        private static void DeleteIfExists(string path)
+        {
+            if (File.Exists(path))
+                File.Delete(path);
         }
     }
 }

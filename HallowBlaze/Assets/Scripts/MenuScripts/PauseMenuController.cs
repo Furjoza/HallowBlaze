@@ -98,8 +98,11 @@ public class PauseMenuController : MonoBehaviour
 
         isExiting = true;
 
-        if (GameManager.instance != null)
-            GameManager.instance.AbandonRun();
+        if (GameManager.instance != null && !GameManager.instance.ExitToMenu())
+        {
+            isExiting = false;
+            return;
+        }
 
         RestoreRuntimeState();
         sceneLoader(menuSceneName);

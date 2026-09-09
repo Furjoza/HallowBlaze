@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using HallowBlaze.Core.Session;
@@ -22,6 +23,7 @@ namespace HallowBlaze.Tests.PlayMode
         private Type soundManagerType;
         private bool hadHighScore;
         private int originalHighScore;
+        private string persistenceRoot;
 
         [SetUp]
         public void SetUp()
@@ -35,12 +37,20 @@ namespace HallowBlaze.Tests.PlayMode
             playerType = RequireType(gameAssembly, "PlayerScript");
             restartButtonType = RequireType(gameAssembly, "RestartBttnScript");
             DestroyGameManagerSingleton();
+            persistenceRoot = Path.Combine(
+                Path.GetTempPath(),
+                "HallowBlaze-M1.7-Lifecycle-" + Guid.NewGuid().ToString("N"));
+            SetStaticField(gameManagerType, "PersistenceRootOverride", persistenceRoot);
+            InvokeStatic(gameManagerType, "RequestNewRun");
         }
 
         [TearDown]
         public void TearDown()
         {
             DestroyGameManagerSingleton();
+            SetStaticField(gameManagerType, "PersistenceRootOverride", null);
+            if (Directory.Exists(persistenceRoot))
+                Directory.Delete(persistenceRoot, true);
 
             if (hadHighScore)
                 PlayerPrefs.SetInt("HighScore", originalHighScore);
@@ -170,6 +180,39 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
             yield return SceneManager.UnloadSceneAsync("Main");
         }
+
+        [UnityTest]
+        public IEnumerator ContinueRestoresLastCommittedDayWithoutAdvancing()
+        {
+            AsyncOperation firstLoad = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            while (!firstLoad.isDone)
+                yield return null;
+            yield return null;
+
+            Component manager = GetStaticField(gameManagerType, "instance") as Component;
+            GameSession firstSession = GetProperty<GameSession>(manager, "Session");
+            RunState firstRun = firstSession.ActiveRun;
+            Assert.That(firstRun.CurrentDay, Is.EqualTo(1));
+            firstSession.ConsumeFood(9);
+            Assert.That((bool)Invoke(manager, "ExitToMenu"), Is.True);
+            Assert.That(firstSession.ActiveRun, Is.Null);
+
+            InvokeStatic(gameManagerType, "RequestContinue");
+            AsyncOperation reload = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            while (!reload.isDone)
+                yield return null;
+            yield return null;
+
+            GameSession continuedSession = GetProperty<GameSession>(manager, "Session");
+            Assert.That(continuedSession.ActiveRun.RunId, Is.EqualTo(firstRun.RunId));
+            Assert.That(continuedSession.ActiveRun.CurrentDay, Is.EqualTo(1));
+            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(91));
+
+            Scene cleanupScene = SceneManager.CreateScene("M1.7 Continue Cleanup " + Guid.NewGuid().ToString("N"));
+            Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
         [UnityTest]
         public IEnumerator DisabledAndRecreatedPlayerRendersSessionWithoutOwningResources()
         {
@@ -281,6 +324,22 @@ namespace HallowBlaze.Tests.PlayMode
             FieldInfo field = type.GetField(fieldName, BindingFlags.Public | BindingFlags.Static);
             Assert.That(field, Is.Not.Null, fieldName + " must exist.");
             return field.GetValue(null);
+        }
+
+        private static void SetStaticField(Type type, string fieldName, object value)
+        {
+            FieldInfo field = type.GetField(
+                fieldName,
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(field, Is.Not.Null, fieldName + " must exist.");
+            field.SetValue(null, value);
+        }
+
+        private static object InvokeStatic(Type type, string methodName)
+        {
+            MethodInfo method = type.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static);
+            Assert.That(method, Is.Not.Null, methodName + " must exist.");
+            return method.Invoke(null, null);
         }
 
         private static void DestroySingleton(Type type)

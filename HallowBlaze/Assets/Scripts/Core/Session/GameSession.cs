@@ -26,10 +26,18 @@ namespace HallowBlaze.Core.Session
         {
             RunState nextRun = new RunState(runId, runSeed, configuration);
 
-            AbandonRun();
-            activeRunState = nextRun;
-            OnRunStarted?.Invoke(nextRun);
+            AttachRun(nextRun);
             return nextRun;
+        }
+
+        public void ContinueRun(RunState run)
+        {
+            if (run == null)
+                throw new ArgumentNullException(nameof(run));
+            if (run.Status != RunStatus.Active)
+                throw new InvalidOperationException("Only an active run can be continued.");
+
+            AttachRun(run);
         }
 
         public void AbandonRun()
@@ -95,6 +103,13 @@ namespace HallowBlaze.Core.Session
             RunState run = GetCurrentRun();
             mutation(run);
             OnRunChanged?.Invoke(run);
+        }
+
+        private void AttachRun(RunState run)
+        {
+            AbandonRun();
+            activeRunState = run;
+            OnRunStarted?.Invoke(run);
         }
     }
 }

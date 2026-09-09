@@ -51,6 +51,22 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
+        public void DeleteRunRemovesCurrentAndBackupWithoutTouchingProfile()
+        {
+            FileSystemSaveStore store = new FileSystemSaveStore(testRootPath);
+            store.SaveProfile(CreateProfile("profile-main"));
+            store.SaveRun(CreateRun("run-first"));
+            store.SaveRun(CreateRun("run-second"));
+
+            SaveStoreResult result = store.DeleteRun();
+
+            Assert.That(result.IsSuccess, Is.True);
+            Assert.That(store.LoadRun().Type, Is.EqualTo(SaveStoreResultType.Missing));
+            Assert.That(store.LoadProfile().Data.ProfileId, Is.EqualTo("profile-main"));
+            Assert.That(File.Exists(Path.Combine(testRootPath, "run.backup.json")), Is.False);
+        }
+
+        [Test]
         public void SecondSaveCreatesLastKnownGoodBackup()
         {
             FileSystemSaveStore store = new FileSystemSaveStore(testRootPath);
