@@ -832,8 +832,8 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 ## `M1.8` — Test kontraktu własności i trwałości
 
-**Status:** `Planned`  
-**Priorytet:** P0  
+**Status:** `Planned`
+**Priorytet:** P0
 **Powiązany kontrakt:** sekcje 6, 19 i 22.
 
 **Rationale:** M1 jest refaktorem ryzykownym, bo błędy ujawniają się dopiero po zmianie sceny, śmierci lub restarcie procesu. Jedna macierz integracyjna chroni przed regresją w kolejnych etapach.
@@ -858,9 +858,93 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Wymagany handoff:** Macierz scenariusz → test → wynik oraz wszystkie niepokryte zachowania.
 
+## `M1.9` — Regresja ruchu kafelkowego i kontaktu z zombie
+
+**Status:** `Planned`
+**Priorytet:** P0
+**Powiązany kontrakt:** sekcje 6.4, 9.2, 9.3 i 22.
+
+**Rationale:** Ręczny smoke M1.8 ujawnił regresję podstawowej pętli gry: postać nie przesuwa się stabilnie o dokładnie jedno pole na zaakceptowane wejście, a kontakt z zombie rzadko wywołuje oczekiwaną interakcję. Dalsza walidacja lifecycle nie jest wiarygodna, jeśli ruch, koszt tury i kolizja zależą od chwilowego położenia colliderów lub trwającej coroutine.
+
+**Obecne zachowanie:** `PlayerScript` i `MovingObject` nadal używają `Transform`/`Rigidbody2D`, `Physics2D.Linecast`, colliderów i coroutine jako bieżącego rozstrzygnięcia ruchu. W smoke postać poruszała się nieregularnie, a atak przy spotkaniu z zombie był trudny do wywołania. Wcześniejszy M0.8 potwierdził pojedynczą próbę wejścia, ale nie chroni obecnej geometrii ruchu i kontaktu po zmianach M1.
+
+**Oczekiwany rezultat:** Jedno zaakceptowane wejście przesuwa gracza z centrum jednego pola do centrum dokładnie jednego sąsiedniego pola, nalicza dokładnie jeden koszt i uruchamia jedną fazę przeciwników. Odrzucone wejście nie przesuwa i nie kosztuje. Kontakt gracza i zombie jest rozstrzygany niezawodnie dla właściwego pola, bez wymagania przypadkowego nakładania colliderów.
+
+**Zakres:** Odtworzyć regresję testem, ustalić jednoznaczny stan wejścia/ruchu podczas animacji, naprawić snap do siatki i blokadę kolejnego wejścia do końca rozstrzygnięcia oraz ustabilizować wykrywanie interakcji gracz–zombie. Zachować obecną prezentację i delegację kosztów do `RunState`.
+
+**Non-goals:** Bez pełnego resolvera M3, nowego Input Systemu, pathfindingu, nowych typów przeciwników, balansu obrażeń, przebudowy generatora i zmian save schema.
+
+**Zależności:** `M1.7`; blokuje domknięcie `M1.8` i bramkę M1.
+
+**Dozwolony obszar plików:** `PlayerScript`, `MovingObject`, `Enemy`, niezbędne adaptery tury oraz skupione testy EditMode/PlayMode. Sceny i prefaby tylko wtedy, gdy test wykaże błędną konfigurację istniejących colliderów lub Rigidbody2D.
+
+**Kryteria akceptacji:** Test przed poprawką odtwarza nieregularny lub wielopolowy ruch albo zawodny kontakt; po poprawce seria wejść kończy się zawsze na całkowitych współrzędnych siatki; jedno wejście daje najwyżej jeden ruch, jeden koszt i jedną fazę zombie; wejście podczas animacji nie tworzy kolejnego rozstrzygnięcia; ściana i zwykła przeszkoda pozostają darmowe; kontakt z zombie wywołuje dokładnie jeden właściwy skutek; przejście przez wyjście nadal działa.
+
+**Plan testów:** Skupione PlayMode bez stałego oczekiwania jako jedynej asercji: szybkie naprzemienne wejścia, przytrzymanie klawisza, ruch po czterech kierunkach, blokada, ściana, wyjście i kontakt z zombie z obu osi. Następnie pełne EditMode/PlayMode oraz ręczny smoke na co najmniej dwóch wygenerowanych planszach z kontrolą pozycji, food, numeru dnia i rytmu zombie.
+
+**Wpływ na save i kompatybilność:** Bez zmiany schematu. Naprawa nie może zapisywać pozycji scenowego `Transform` jako stanu domenowego.
+
+**Wymagany handoff:** Minimalna reprodukcja przed poprawką, opis przyczyny źródłowej, tabela wejście → ruch → koszt → faza zombie oraz wynik manualnego kontaktu z zombie.
+
+## `M1.10` — Stabilna plansza po `Continue`
+
+**Status:** `Planned`
+**Priorytet:** P0
+**Powiązany kontrakt:** sekcje 6.5, 7, 16 i 19.
+
+**Rationale:** Ręczny smoke M1.8 wykazał, że `Continue` zachowuje dzień i zasoby runu, lecz ponowne załadowanie sceny generuje inny układ planszy i ustawia gracza w pozycji startowej. Pozwala to bez kosztu wielokrotnie wracać do menu i losować korzystniejszą sytuację, więc zapis granicy planszy nie odtwarza faktycznie zatwierdzonego stanu.
+
+**Obecne zachowanie:** M1.7 zapisuje `RunState` na granicy planszy, ale nie zapisuje pełnego snapshotu środka planszy. `BoardManager` generuje układ przy wejściu do sceny z losowości niezwiązanej wystarczająco z trwałym identyfikatorem bieżącej planszy. Sam `runSeed` nie gwarantuje obecnie identycznego układu po `Continue`.
+
+**Oczekiwany rezultat:** `Exit to Menu` i restart aplikacji na zatwierdzonej granicy wczytują ten sam układ planszy oraz tę samą pozycję startową dla danego runu i etapu. Powtarzanie `Continue` nie rerolluje przeszkód, zasobów ani zombie. Mid-board resume pozostaje poza zakresem: niezapisane akcje wracają do początku tej samej zatwierdzonej planszy.
+
+**Zakres:** Wprowadzić stabilną tożsamość/seeda lokalnej planszy wyprowadzoną z trwałych danych runu i etapu albo zapisać minimalny deterministyczny opis potrzebny do rekonstrukcji. Rozdzielić RNG gameplayowe od kosmetycznego i dopiąć rekonstrukcję w ścieżce `Continue`.
+
+**Non-goals:** Bez pełnego `BoardState` snapshotu środka planszy, wyboru trasy M2, nowego generatora model-first, solvera, balansu i zmian kosmetycznych.
+
+**Zależności:** `M1.7`; rozwiązanie ma pozostać kompatybilne z planowanymi `M2.1`–`M2.6` i nie zastępować ich.
+
+**Dozwolony obszar plików:** Minimalny stan runu/persistence potrzebny dla identyfikacji planszy, `BoardManager` i adapter uruchomienia sceny, migracja save v1 jeśli konieczna oraz testy i `/Docs/Validation/M1.10.md`.
+
+**Kryteria akceptacji:** Dwa kolejne `Continue` tego samego zapisu dają identyczny hash gameplayowego układu i tę samą pozycję startową; inny run lub zatwierdzony następny etap może dać inny układ; dodatkowy dźwięk/animacja nie zmienia planszy; powrót po niezapisanej akcji nie zachowuje tej akcji, ale nie rerolluje planszy; istniejące save'y mają jawną migrację lub zaakceptowaną obsługę braku nowego pola.
+
+**Plan testów:** EditMode deterministycznego wyprowadzenia seeda i round-trip/migracji; PlayMode New Run → hash planszy → Exit to Menu → Continue → ten sam hash, wykonane wielokrotnie i po restarcie procesu. Negatywny test oddzielnego runu oraz ręczna próba wielokrotnego `Continue` bez możliwości rerollu.
+
+**Wpływ na save i kompatybilność:** Potencjalne rozszerzenie wersjonowanego DTO runu. Nie wolno uzależniać od `UnityEngine.Random.state`, kolejności `Instantiate`, czasu ani `InstanceID`.
+
+**Wymagany handoff:** Definicja tożsamości planszy, reguła seeda, wynik hashy przed/po restartach oraz decyzja migracyjna dla istniejącego save v1.
+
+## `M1.11` — Powrót do menu z ekranu porażki
+
+**Status:** `Planned`
+**Priorytet:** P1
+**Powiązany kontrakt:** sekcje 6.5, 6.6 i 19.
+
+**Rationale:** Ekran porażki udostępnia obecnie tylko natychmiastowy restart. W ręcznym smoke M1.8 wymuszało to rozpoczęcie kolejnego runu i uniemożliwiało naturalne sprawdzenie, że zakończony run nie oferuje `Continue` w menu głównym.
+
+**Obecne zachowanie:** Po `GameOver` aktywowany jest `RestartBttn`, który wywołuje `RestartGame`. Brakuje jawnej akcji powrotu do menu z terminalnego stanu.
+
+**Oczekiwany rezultat:** Widok porażki oferuje rozłączne akcje `Restart` i `Menu`. `Menu` wraca do menu głównego bez tworzenia nowego runu; zakończony run pozostaje zamknięty, profil i jego podsumowanie są zachowane, a `Continue` nie jest dostępne dla zakończonego runu.
+
+**Zakres:** Dodać akcję i kontrolkę `Menu` do istniejącego widoku game over, wykorzystać obecną ścieżkę terminalizacji i bezpiecznie załadować scenę menu. Ujednolicić blokadę wielokrotnego kliknięcia z restartem.
+
+**Non-goals:** Bez nowego ekranu podsumowania, UI atlasu, leaderboardu sieciowego, zmiany warunków death/win i redesignu menu głównego.
+
+**Zależności:** `M1.7`; blokuje manualne domknięcie `M1.8`.
+
+**Dozwolony obszar plików:** `GameManager`, istniejący ekran game over i jego skrypty/przyciski, konieczna scena/prefab oraz skupione testy PlayMode i `/Docs/Validation/M1.11.md`.
+
+**Kryteria akceptacji:** Po death przyciski `Restart` i `Menu` są widoczne i działają dokładnie raz; `Menu` nie tworzy runu ani nie usuwa profilu; po wejściu do menu `Continue` jest niedostępne dla zakończonego runu; `Restart` nadal tworzy świeży run; czas i input nie pozostają zablokowane; scena nie ma brakujących referencji ani `Missing Script`.
+
+**Plan testów:** PlayMode death → Menu → brak `Continue` → zachowany profil oraz death → Restart → świeży run. Ręczny smoke obu przycisków, wielokrotnego kliknięcia i powrotu do menu.
+
+**Wpływ na save i kompatybilność:** Bez zmiany schematu. Akcja `Menu` korzysta z już zakończonego lifecycle i nie może ponownie dopisywać podsumowania.
+
+**Wymagany handoff:** Zrzut struktury widoku game over, tabela obu akcji i stanów persistence oraz wynik ręcznego smoke’a.
+
 ### Bramka M1
 
-M1 jest zaliczony, gdy istnieje dokładnie jeden właściciel profilu i runu, przejścia lifecycle są jawne, save v1 przechodzi test uszkodzenia/backup, a restart sceny i aplikacji nie przenosi danych do niewłaściwej warstwy.
+M1 jest zaliczony, gdy istnieje dokładnie jeden właściciel profilu i runu, przejścia lifecycle są jawne, save v1 przechodzi test uszkodzenia/backup, restart sceny i aplikacji nie przenosi danych do niewłaściwej warstwy ani nie rerolluje zatwierdzonej planszy, podstawowy ruch pozostaje kafelkowy i jednoznaczny, a z terminalnego widoku można wrócić do menu bez rozpoczęcia nowego runu.
 
 ---
 
