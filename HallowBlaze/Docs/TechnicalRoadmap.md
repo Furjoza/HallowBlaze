@@ -832,7 +832,7 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 ## `M1.8` — Test kontraktu własności i trwałości
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priorytet:** P0
 **Powiązany kontrakt:** sekcje 6, 19 i 22.
 
@@ -858,9 +858,13 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Wymagany handoff:** Macierz scenariusz → test → wynik oraz wszystkie niepokryte zachowania.
 
+**Wynik wykonania 2026-09-10:** Rozszerzono macierz o strukturalne potwierdzenie schema v1, odrzucenie `Continue` przy uszkodzonym profilu bez mutowania poprawnych plików runu oraz PlayMode dla odtworzenia zatwierdzonej granicy przez świeży `GameManager`, `GameOver` i `WinGame`. Wszystkie testy używają izolowanych katalogów tymczasowych. Właściciel zaakceptował ręczny smoke: ruch kafelkowy i kontakt z zombie działały poprawnie, a `Continue` zachował właściwy dzień. Brak odtworzenia układu planszy pozostaje osobnym zakresem M1.10; powrót z ekranu porażki pozostaje osobnym M1.11.
+
+**Wynik walidacji:** Unity `6000.3.21f1`: Pass 1 EditMode → PlayMode `85/85` i `26/26`; Pass 2 PlayMode → EditMode `26/26` i `85/85`; failed/skipped/inconclusive `0`. Niezależny review nie wykazał materialnych błędów automatycznej macierzy. Pełny raport: [`Validation/M1.8.md`](Validation/M1.8.md).
+
 ## `M1.9` — Regresja ruchu kafelkowego i kontaktu z zombie
 
-**Status:** `Planned`
+**Status:** `Deferred` — regresja nie odtworzyła się w powtórzonym smoke 2026-09-10; wraca do realizacji po deterministycznej reprodukcji
 **Priorytet:** P0
 **Powiązany kontrakt:** sekcje 6.4, 9.2, 9.3 i 22.
 
@@ -874,7 +878,7 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Non-goals:** Bez pełnego resolvera M3, nowego Input Systemu, pathfindingu, nowych typów przeciwników, balansu obrażeń, przebudowy generatora i zmian save schema.
 
-**Zależności:** `M1.7`; blokuje domknięcie `M1.8` i bramkę M1.
+**Zależności:** `M1.7`; ewentualne ponowne otwarcie wymaga deterministycznej reprodukcji.
 
 **Dozwolony obszar plików:** `PlayerScript`, `MovingObject`, `Enemy`, niezbędne adaptery tury oraz skupione testy EditMode/PlayMode. Sceny i prefaby tylko wtedy, gdy test wykaże błędną konfigurację istniejących colliderów lub Rigidbody2D.
 
@@ -930,7 +934,7 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Non-goals:** Bez nowego ekranu podsumowania, UI atlasu, leaderboardu sieciowego, zmiany warunków death/win i redesignu menu głównego.
 
-**Zależności:** `M1.7`; blokuje manualne domknięcie `M1.8`.
+**Zależności:** `M1.7`; pozostaje wymagane do domknięcia bramki całego M1.
 
 **Dozwolony obszar plików:** `GameManager`, istniejący ekran game over i jego skrypty/przyciski, konieczna scena/prefab oraz skupione testy PlayMode i `/Docs/Validation/M1.11.md`.
 
