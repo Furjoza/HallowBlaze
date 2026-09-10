@@ -4,6 +4,7 @@ using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace HallowBlaze.Tests.EditMode
 {
@@ -162,6 +163,38 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
+        public void CorruptProfileRejectsContinueWithoutMutatingValidRunFiles()
+        {
+            string corruptRoot = Path.Combine(testRoot, "corrupt-profile");
+            FileSystemSaveStore store = new FileSystemSaveStore(corruptRoot);
+            GameSession sourceSession = new GameSession(CreateProfile("profile-valid"));
+            RunLifecycleService sourceLifecycle = new RunLifecycleService(sourceSession, store);
+
+            Assert.That(sourceLifecycle.StartNewRun(
+                "run-valid",
+                606,
+                CreateConfiguration()).IsSuccess, Is.True);
+            sourceSession.ConsumeFood(20);
+            Assert.That(sourceLifecycle.SaveBoardBoundary().IsSuccess, Is.True);
+
+            string runPath = Path.Combine(corruptRoot, "run.json");
+            string runBackupPath = Path.Combine(corruptRoot, "run.backup.json");
+            byte[] runBefore = File.ReadAllBytes(runPath);
+            byte[] runBackupBefore = File.ReadAllBytes(runBackupPath);
+            File.WriteAllText(Path.Combine(corruptRoot, "profile.json"), "not-json");
+
+            GameSession continuedSession = new GameSession(CreateProfile("profile-fallback"));
+            SaveStoreResult<RunState> result =
+                new RunLifecycleService(continuedSession, store).ContinueRun();
+
+            Assert.That(result.Type, Is.EqualTo(SaveStoreResultType.Corrupt));
+            Assert.That(result.Data, Is.Null);
+            Assert.That(continuedSession.ActiveRun, Is.Null);
+            CollectionAssert.AreEqual(runBefore, File.ReadAllBytes(runPath));
+            CollectionAssert.AreEqual(runBackupBefore, File.ReadAllBytes(runBackupPath));
+        }
+
+        [Test]
         public void SeparateRootsKeepProfilesRunsAndCleanupIsolated()
         {
             string firstRoot = Path.Combine(testRoot, "first");
@@ -191,6 +224,33 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(secondStore.LoadProfile().Data.ProfileId, Is.EqualTo("profile-second"));
             Assert.That(secondStore.LoadRun().Data.RunId, Is.EqualTo("run-second"));
             Assert.That(secondStore.LoadRun().Data.Food, Is.EqualTo(70));
+        }
+
+        [Test]
+        public void PersistedFixturesDeclareSchemaVersionOne()
+        {
+            FileSystemSaveStore store = new FileSystemSaveStore(testRoot);
+            GameSession session = new GameSession(CreateProfile("profile-schema"));
+            RunLifecycleService lifecycle = new RunLifecycleService(session, store);
+
+            Assert.That(lifecycle.StartNewRun(
+                "run-schema",
+                707,
+                CreateConfiguration()).IsSuccess, Is.True);
+
+            SchemaEnvelope profileEnvelope = JsonUtility.FromJson<SchemaEnvelope>(
+                File.ReadAllText(Path.Combine(testRoot, "profile.json")));
+            SchemaEnvelope runEnvelope = JsonUtility.FromJson<SchemaEnvelope>(
+                File.ReadAllText(Path.Combine(testRoot, "run.json")));
+
+            Assert.That(profileEnvelope.schemaVersion, Is.EqualTo(1));
+            Assert.That(runEnvelope.schemaVersion, Is.EqualTo(1));
+        }
+
+        [Serializable]
+        private sealed class SchemaEnvelope
+        {
+            public int schemaVersion = -1;
         }
 
         private static GameSession LoadSession(FileSystemSaveStore store)
