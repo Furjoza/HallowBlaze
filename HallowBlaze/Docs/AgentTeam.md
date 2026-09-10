@@ -21,8 +21,8 @@ User
 codex-lead
   │
   ├─ inspect context
-  ├─ establish baseline + write allowlist
-  ├─ create and verify recovery snapshot outside repo
+  ├─ verify clean Git baseline
+  ├─ establish write allowlist
   ├─ define acceptance criteria
   └─ plan
   │
@@ -34,7 +34,7 @@ qwen-developer
   └─ handoff
   │
   ▼
-Lead completion + integrity gate
+Lead validation + integrity gate
   │
   ├─ incomplete/invalid ───────► qwen-developer retry
   │
@@ -63,7 +63,7 @@ Owns:
 - scope;
 - acceptance criteria;
 - architectural decisions;
-- preflight snapshot and integrity checks;
+- clean Git baseline and integrity checks;
 - delegation;
 - review arbitration;
 - final acceptance.
@@ -92,13 +92,13 @@ Owns:
 
 It never repairs the implementation.
 
-## Snapshot before every writer
+## Git baseline and write allowlist
 
-Before each implementation, configuration, or correction iteration, `codex-lead` creates a new local recovery snapshot outside the Git worktree. The snapshot records the Git baseline, staged and unstaged binary patches, untracked paths, the closed allowlist, SHA-256 hashes, and exact copies of existing allowlisted files.
+Before a normal ticket, `codex-lead` records the Git root, branch, and `HEAD`, then requires a clean worktree. The user commits and pushes manual changes before agent work. An unexpected dirty worktree stops the workflow for a user decision; it is not automatically stashed, cleaned, or snapshotted.
 
-The Lead verifies the artifacts and passes the snapshot ID and path to `qwen-developer`. The Developer must return `BASELINE_SNAPSHOT_REQUIRED` without editing when the snapshot is absent, incomplete, or inconsistent with the handoff.
+The Lead defines a closed repo-relative allowlist and arms it in the Guard before delegating. The Developer must return `BASELINE_REQUIRED` without editing when the Git baseline or allowlist is missing.
 
-Every transfer of write ownership requires a fresh snapshot. After the writer returns, the Lead compares repository state with that snapshot before starting review. Unexpected changes stop the workflow; restoration is never automatic.
+Validation and review corrections continue from the current ticket state without creating a new baseline. After the writer returns, the Lead compares repository changes with the original Git baseline and allowlist before starting review. Unexpected changes stop the workflow; restoration is never automatic.
 
 ## Unity integration
 

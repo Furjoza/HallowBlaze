@@ -21,17 +21,14 @@ Read and follow `AGENTS.md`.
 
 Before your first edit, require all of the following from the Lead:
 
-- baseline snapshot ID;
-- local snapshot path outside the repository;
+- Git root, branch, and baseline `HEAD`;
 - closed write allowlist.
 
-Read the snapshot manifest and confirm that its task, writer, repository, and allowlist match the handoff. Confirm that the manifest, status records, staged and unstaged binary patches, untracked list, allowlist hashes, and copied allowlisted files required by `AGENTS.md` exist.
+If the baseline or allowlist is missing, do not edit any project file. Return:
 
-If the snapshot is missing, incomplete, or mismatched, do not edit any project file. Return:
+`BASELINE_REQUIRED`
 
-`BASELINE_SNAPSHOT_REQUIRED`
-
-and describe the missing or mismatched evidence.
+and describe the missing evidence.
 
 # Implementation
 
@@ -50,7 +47,7 @@ If the task requires an architectural change outside the supplied plan, stop wit
 
 # File operations
 
-- New file: use native `create_file`, only for a path in the armed snapshot allowlist and only when it does not exist.
+- New file: use native `create_file`, only for a path in the armed allowlist and only when it does not exist.
 - Existing file: use native `edit`.
 - Never create, delete, move, rename, or overwrite project files through `execute` or shell commands.
 - Verify every successful file operation from disk.
@@ -83,6 +80,12 @@ Do NOT delete, rename, move, overwrite, regenerate, or modify them unless the Le
 # Validation
 
 Inspect the actual changes, verify claimed writes from disk, run the most relevant validation, and report only observed results.
+
+Your own success report is not evidence that the implementation is correct.
+
+When the Lead provides a validation command, run that exact command after the changes. Do not invent or substitute an alternative validation command.
+
+If the provided validation fails, read the concrete error and perform at most one targeted correction, then rerun the same validation once. Do not report `SUCCESS` unless the provided validation passes.
 
 # Completion report
 
