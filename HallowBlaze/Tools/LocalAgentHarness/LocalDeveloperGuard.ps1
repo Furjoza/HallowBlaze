@@ -1,5 +1,5 @@
 param(
-    [string] $ArmSnapshot
+    [string[]] $ArmAllowlist
 )
 
 $ErrorActionPreference = 'Stop'
@@ -267,38 +267,9 @@ function Get-PolicyForSession([string] $sessionId) {
     }
 }
 
-function Arm-WritePolicy([string] $snapshotPath) {
-    $requiredArtifacts = @(
-        'manifest.json',
-        'status-short-branch.txt',
-        'staged-name-status.txt',
-        'unstaged-name-status.txt',
-        'untracked-paths.txt',
-        'staged.patch',
-        'unstaged.patch',
-        'allowlist-hashes.json'
-    )
-    foreach ($artifact in $requiredArtifacts) {
-        if (-not (Test-Path -LiteralPath (Join-Path $snapshotPath $artifact) -PathType Leaf)) {
-            throw "Snapshot artifact is missing: $artifact"
-        }
-    }
-
-    $manifest = Read-JsonFile (Join-Path $snapshotPath 'manifest.json')
-    $snapshotRoot = [IO.Path]::GetFullPath([string] $manifest.GitRoot).TrimEnd('\', '/')
-    if (-not $snapshotRoot.Equals($repoRoot.TrimEnd('\', '/'), [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Snapshot Git root does not match this repository.'
-    }
-    if ([string] $manifest.Writer -cne $targetAgent) {
-        throw "Snapshot writer must be $targetAgent."
-    }
-    if ([string] $manifest.Head -cne (& git -C $repoRoot rev-parse HEAD).Trim() `
-        -or [string] $manifest.Branch -cne (& git -C $repoRoot branch --show-current).Trim()) {
-        throw 'Snapshot HEAD or branch no longer matches the repository.'
-    }
-
-    $allowlist = @($manifest.Allowlist | ForEach-Object { [string] $_ })
-    if ($allowlist.Count -eq 0) { throw 'Snapshot allowlist is empty.' }
+function Arm-WritePolicy([string[]] $allowlist) {
+    $allowlist = @($allowlist | ForEach-Object { [string] $_ })
+    if ($allowlist.Count -eq 0) { throw 'Write allowlist is empty.' }
     $fullPaths = [Collections.Generic.List[string]]::new()
     $repoPrefix = $repoRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
     foreach ($relativePath in $allowlist) {
@@ -314,8 +285,9 @@ function Arm-WritePolicy([string] $snapshotPath) {
 
     $policy = [PSCustomObject]@{
         policyId = [Guid]::NewGuid().ToString('N')
-        snapshotId = [string] $manifest.SnapshotId
         gitRoot = $repoRoot
+        baselineHead = (& git -C $repoRoot rev-parse HEAD).Trim()
+        baselineBranch = (& git -C $repoRoot branch --show-current).Trim()
         expiresUtc = [DateTimeOffset]::UtcNow.Add($taskLimit).ToString('o')
         allowlistFullPaths = @($fullPaths)
         consumedSessionId = $null
@@ -324,7 +296,7 @@ function Arm-WritePolicy([string] $snapshotPath) {
     Write-Output "Write policy armed for $($allowlist.Count) path(s); expires in 10 minutes."
 }
 
-if ($ArmSnapshot) {
+if ($ArmAllowlist) {
     $mutex = [Threading.Mutex]::new($false, $mutexName)
     $lockTaken = $false
     try {
@@ -334,7 +306,7 @@ if ($ArmSnapshot) {
         if ($null -ne $activeState -and $activeState.active -eq $true) {
             throw 'A local developer session is already active.'
         }
-        Arm-WritePolicy ([IO.Path]::GetFullPath($ArmSnapshot))
+        Arm-WritePolicy $ArmAllowlist
     }
     finally {
         if ($lockTaken) { $mutex.ReleaseMutex() }
@@ -364,11 +336,6 @@ $toolName = [string] (Get-ObjectProperty $payload 'tool_name')
 $toolInput = Get-ObjectProperty $payload 'tool_input'
 $agentTypeMissing = [string]::IsNullOrWhiteSpace($agentType)
 $explicitTargetAgent = -not $agentTypeMissing -and $agentType -ceq $targetAgent
-
-if (-not $agentTypeMissing -and -not $explicitTargetAgent) {
-    Write-HookOutput @{}
-    exit 0
-}
 
 $isRiskyPreTool = $eventName -eq 'PreToolUse' `
     -and ((Test-FileMutationTool $toolName) -or (Test-ExecutionTool $toolName))
@@ -401,6 +368,44 @@ try {
         exit 0
     }
 
+    $expiredMatchingSession = $false
+    try {
+        $existingState = Read-JsonFile $statePath
+        $existingStartedUtc = [string] (Get-ObjectProperty $existingState 'startedUtc')
+        $existingCreatedUtc = [string] (Get-ObjectProperty $existingState 'createdUtc')
+        $staleReferenceUtc = if (-not [string]::IsNullOrWhiteSpace($existingStartedUtc)) {
+            $existingStartedUtc
+        }
+        else {
+            $existingCreatedUtc
+        }
+        if ($null -ne $existingState `
+            -and $existingState.active -eq $true `
+            -and -not [string]::IsNullOrWhiteSpace($staleReferenceUtc) `
+            -and [DateTimeOffset]::UtcNow - [DateTimeOffset]::Parse($staleReferenceUtc) -ge $taskLimit) {
+            $expiredMatchingSession = $explicitTargetAgent `
+                -and [string] $existingState.sessionId -ceq $sessionId
+            Remove-BoundPolicy $existingState
+            Remove-Item -LiteralPath $statePath -Force
+        }
+    }
+    catch {
+        if ($eventName -eq 'PreToolUse' -and $explicitTargetAgent) {
+            Deny 'Local developer state is invalid.'
+            exit 0
+        }
+    }
+
+    if ($expiredMatchingSession -and $eventName -eq 'PreToolUse') {
+        Deny 'Local developer task limit of 10 minutes was reached.'
+        exit 0
+    }
+
+    if (-not $agentTypeMissing -and -not $explicitTargetAgent) {
+        Write-HookOutput @{}
+        exit 0
+    }
+
     if ($eventName -eq 'SubagentStart') {
         if (-not $explicitTargetAgent) {
             Write-HookOutput @{}
@@ -416,13 +421,8 @@ try {
         }
 
         if ($null -ne $existingState -and $existingState.active -eq $true) {
-            $startedUtc = [DateTimeOffset]::Parse([string] $existingState.startedUtc)
-            if ([DateTimeOffset]::UtcNow - $startedUtc -lt $taskLimit) {
-                Stop-Agent 'Another qwen-developer session is already active.'
-                exit 0
-            }
-            Remove-BoundPolicy $existingState
-            Remove-Item -LiteralPath $statePath -Force
+            Stop-Agent 'Another qwen-developer session is already active.'
+            exit 0
         }
 
         $policy = Get-PolicyForSession $sessionId
@@ -431,7 +431,8 @@ try {
             active = $true
             sessionId = $sessionId
             agentType = $targetAgent
-            startedUtc = [DateTimeOffset]::UtcNow.ToString('o')
+            createdUtc = [DateTimeOffset]::UtcNow.ToString('o')
+            startedUtc = $null
             toolCalls = 0
             noProgressOutcomes = 0
             allowlistFingerprint = Get-AllowlistFingerprint $allowedPaths
@@ -444,7 +445,7 @@ try {
         }
         Write-JsonFile $statePath $state
         $writeContext = if ($state.writePolicyArmed) {
-            'Writes are restricted to the snapshot allowlist. Use create_file for new files, native edit for existing files, and never write project files through the shell.'
+            'Writes are restricted to the armed allowlist. Use create_file for new files, native edit for existing files, and never write project files through the shell.'
         }
         else {
             'No write policy is armed. File mutations are blocked; read-only work is available.'
@@ -489,7 +490,7 @@ try {
         $state = Read-JsonFile $statePath
     }
     catch {
-        if ($isRiskyPreTool -and ($explicitTargetAgent -or $agentTypeMissing)) {
+        if ($eventName -eq 'PreToolUse' -and ($explicitTargetAgent -or $agentTypeMissing)) {
             Deny 'Local developer state is invalid.'
         }
         else { Write-HookOutput @{} }
@@ -501,7 +502,7 @@ try {
         -and [string] $state.agentType -ceq $targetAgent `
         -and [string] $state.sessionId -ceq $sessionId
     if (-not $stateMatches) {
-        if ($isRiskyPreTool -and $explicitTargetAgent) {
+        if ($eventName -eq 'PreToolUse' -and $explicitTargetAgent) {
             Deny 'Local developer state is missing or belongs to another session.'
         }
         else { Write-HookOutput @{} }
@@ -509,9 +510,9 @@ try {
     }
 
     if ($eventName -eq 'PreToolUse') {
-        if ([DateTimeOffset]::UtcNow - [DateTimeOffset]::Parse([string] $state.startedUtc) -ge $taskLimit) {
-            Deny 'Local developer task limit of 10 minutes was reached.'
-            exit 0
+        if ([string]::IsNullOrWhiteSpace([string] $state.startedUtc)) {
+            $state.startedUtc = [DateTimeOffset]::UtcNow.ToString('o')
+            Write-JsonFile $statePath $state
         }
         if ([int] $state.noProgressOutcomes -ge $maxNoProgressOutcomes) {
             Deny 'Local developer reached 3 no-progress outcomes.'
@@ -569,7 +570,7 @@ try {
                 } | Select-Object -First 1
                 if ($null -eq $isAllowed) {
                     Write-JsonFile $statePath $state
-                    Deny 'File mutation is outside the armed snapshot allowlist.'
+                    Deny 'File mutation is outside the armed allowlist.'
                     exit 0
                 }
             }
