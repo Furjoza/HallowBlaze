@@ -352,7 +352,7 @@ Podczas aktywnej planszy na PC i w Editorze klawisz Escape otwiera modalne menu 
 - `Resume` oraz ponowne naciśnięcie Escape w głównym widoku pauzy wznawiają dokładnie tę samą planszę.
 - `Settings` otwiera tę samą funkcjonalność ustawień dźwięku i muzyki, która jest dostępna w menu głównym. Escape albo `Back` wraca z ustawień najpierw do głównego widoku pauzy, nie bezpośrednio do gry.
 - Gdy widoczna jest pauza lub jej ustawienia, wejście rozgrywkowe nie tworzy komend, nie wykonuje AI i nie zmienia tury, pozycji, zdrowia, jedzenia ani stanu narzędzi.
-- `Exit to Menu` zapisuje aktywny run na granicy planszy, odłącza go od bieżącej sesji i wraca do menu głównego. Poprawny zapis pozostaje dostępny dla `Continue`; akcja nie usuwa profilu, ustawień audio ani lokalnego rekordu.
+- `Exit to Menu` zachowuje ostatnią zatwierdzoną granicę planszy, odłącza aktywny run od bieżącej sesji i wraca do menu głównego. Nie zapisuje zmian wykonanych w środku planszy. Poprawny zapis pozostaje dostępny dla `Continue`; akcja nie usuwa profilu, ustawień audio ani lokalnego rekordu.
 - Trwałe porzucenie runu jest osobną, jednoznaczną akcją. Usuwa bieżący i zapasowy plik runu, ale nigdy plik profilu.
 - Przed wznowieniem, wyjściem, wyłączeniem kontrolera albo zmianą sceny gra przywraca normalny upływ czasu i usuwa blokadę wejścia.
 
@@ -367,8 +367,8 @@ Menu otwierane podczas rozgrywki jest granicą sterowania, a nie kosmetyczną na
 - Stan widoku pauzy jest przejściowym stanem prezentacji i nie należy do `ProfileState`, `RunState` ani formatu save.
 - Kontroler pauzy musi osobno zarządzać widocznością UI, fokusem `EventSystem`, blokadą wejścia oraz odtworzeniem upływu czasu.
 - Menu główne i pauza korzystają ze wspólnego panelu lub kontrolera ustawień; nie utrzymują dwóch niezależnych implementacji tych samych przełączników.
-- Powrót do menu wykonuje jawny cleanup legacy runu przed załadowaniem sceny i jest bezpieczny przy wielokrotnym wywołaniu.
-- Test integracyjny musi udowodnić brak kosztu podczas pauzy, poprawne przejścia Escape/Back oraz świeży start po `Exit to Menu`.
+- Powrót do menu odłącza run od sesji bez usuwania ani nadpisywania ostatniego checkpointu i jest bezpieczny przy wielokrotnym wywołaniu.
+- Test integracyjny musi udowodnić brak kosztu podczas pauzy, poprawne przejścia Escape/Back oraz odtworzenie ostatniej zatwierdzonej granicy po `Exit to Menu` i `Continue`.
 
 ## 7. Atlas i świat
 

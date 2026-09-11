@@ -79,11 +79,9 @@ namespace HallowBlaze.Core.Session
 
         public SaveStoreResult ExitToMenu()
         {
-            SaveStoreResult saveResult = SaveBoardBoundary();
-            if (saveResult.IsSuccess)
-                session.AbandonRun();
-
-            return saveResult;
+            RequireActiveRun();
+            session.AbandonRun();
+            return SaveStoreResult.Success();
         }
 
         public SaveStoreResult DeleteRunAndAbandon()

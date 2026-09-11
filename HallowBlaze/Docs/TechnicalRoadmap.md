@@ -892,7 +892,7 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 ## `M1.10` — Stabilna plansza po `Continue`
 
-**Status:** `Planned`
+**Status:** `Done` — writer: `codex-lead` po dwóch błędach `502` lokalnego writera; review 2026-09-11: `Pass`
 **Priorytet:** P0
 **Powiązany kontrakt:** sekcje 6.5, 7, 16 i 19.
 
@@ -917,6 +917,10 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 **Wpływ na save i kompatybilność:** Potencjalne rozszerzenie wersjonowanego DTO runu. Nie wolno uzależniać od `UnityEngine.Random.state`, kolejności `Instantiate`, czasu ani `InstanceID`.
 
 **Wymagany handoff:** Definicja tożsamości planszy, reguła seeda, wynik hashy przed/po restartach oraz decyzja migracyjna dla istniejącego save v1.
+
+**Wynik wykonania 2026-09-11:** Tożsamość planszy jest wyprowadzana deterministycznie z wersjonowanej domeny `hallowblaze.board-layout.v1`, `RunId`, `RunSeed`, `CurrentDay` i `WorldNodeId`. Nowe `RunId` używa utrwalanego GUID zamiast zegara. Gameplayowy `System.Random` steruje pozycjami, liczbą i typem obiektów oraz dropem jedzenia; `UnityEngine.Random` pozostał wyłącznie w warstwie kosmetycznej. `Exit to Menu` zachowuje ostatni checkpoint i nie utrwala mutacji środka planszy. Schema v1 nie wymaga zmiany, ponieważ wszystkie składniki tożsamości były już zapisane.
+
+**Wynik walidacji:** Po korekcie review końcowa sekwencja w świeżych procesach Unity `6000.3.21f1`: PlayMode `26/26`, następnie EditMode `88/88`; failed/skipped/inconclusive `0`. Dwa kolejne `Continue` odtworzyły hash `7BFA4514C1D91EF0D9D3AD92A898CE523C0CF15AD424D45F9B07D72FF5CCFA2F` oraz pozycję startową `(0, 0, 0)`. Niezależny re-review zakończył się `Pass`; ręczny smoke pozostaje jawnie `Not run`. Pełny raport: [`Validation/M1.10.md`](Validation/M1.10.md).
 
 ## `M1.11` — Powrót do menu z ekranu porażki
 

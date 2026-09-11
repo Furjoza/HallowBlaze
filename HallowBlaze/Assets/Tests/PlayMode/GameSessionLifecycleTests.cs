@@ -206,7 +206,7 @@ namespace HallowBlaze.Tests.PlayMode
             GameSession continuedSession = GetProperty<GameSession>(manager, "Session");
             Assert.That(continuedSession.ActiveRun.RunId, Is.EqualTo(firstRun.RunId));
             Assert.That(continuedSession.ActiveRun.CurrentDay, Is.EqualTo(1));
-            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(91));
+            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(100));
 
             Scene cleanupScene = SceneManager.CreateScene("M1.7 Continue Cleanup " + Guid.NewGuid().ToString("N"));
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);

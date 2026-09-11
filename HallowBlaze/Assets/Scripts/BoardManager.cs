@@ -38,6 +38,7 @@ public class BoardManager : MonoBehaviour {
 
     private Transform boardHolder;                                  //A variable to store a reference to the transform of our Board object.
     private List<Vector3> gridPositions = new List<Vector3>();      //A list of possible locations to place tiles.
+    private System.Random gameplayRandom;
 
 
     //Clears our list gridPositions and prepares it to generate a new board.
@@ -93,7 +94,7 @@ public class BoardManager : MonoBehaviour {
     Vector3 RandomPosition()
     {
         //Declare an integer randomIndex, set it's value to a random number between 0 and the count of items in our List gridPositions.
-        int randomIndex = Random.Range(0, gridPositions.Count);
+        int randomIndex = gameplayRandom.Next(0, gridPositions.Count);
 
         //Declare a variable of type Vector3 called randomPosition, set it's value to the entry at randomIndex from our List gridPositions.
         Vector3 randomPosition = gridPositions[randomIndex];
@@ -110,7 +111,7 @@ public class BoardManager : MonoBehaviour {
     void LayoutObjectAtRandom(GameObject[] tileArray, int minimum, int maximum)
     {
         //Choose a random number of objects to instantiate within the minimum and maximum limits
-        int objectCount = Random.Range(minimum, maximum + 1);
+        int objectCount = gameplayRandom.Next(minimum, maximum + 1);
 
         //Instantiate objects until the randomly chosen limit objectCount is reached
         for (int i = 0; i < objectCount; i++)
@@ -119,14 +120,14 @@ public class BoardManager : MonoBehaviour {
             Vector3 randomPosition = RandomPosition();
 
             //Choose a random tile from tileArray and assign it to tileChoice
-            GameObject tileChoice = tileArray[Random.Range(0, tileArray.Length)];
+            GameObject tileChoice = tileArray[gameplayRandom.Next(0, tileArray.Length)];
 
             //Instantiate tileChoice at the position returned by RandomPosition with no change in rotation
             Instantiate(tileChoice, randomPosition, Quaternion.identity);
 
             if (tileChoice.tag == "InnerWall")
             {
-                if (Random.Range(0, 100) > 90)
+                if (gameplayRandom.Next(0, 100) > 90)
                 {
                     Instantiate(bushFoodTiles, randomPosition, Quaternion.identity);
                 }
@@ -136,8 +137,10 @@ public class BoardManager : MonoBehaviour {
 
 
     //SetupScene initializes our level and calls the previous functions to lay out the game board
-    public void SetupScene(int level)
+    public void SetupScene(int level, int boardSeed)
     {
+        gameplayRandom = new System.Random(boardSeed);
+
         //Creates the outer walls and floor.
         BoardSetup();
 
