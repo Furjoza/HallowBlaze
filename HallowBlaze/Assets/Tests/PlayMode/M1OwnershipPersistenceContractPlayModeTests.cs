@@ -3,6 +3,8 @@ using System.Collections;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
@@ -23,12 +25,14 @@ namespace HallowBlaze.Tests.PlayMode
         private string persistenceRoot;
         private bool hadHighScore;
         private int originalHighScore;
+        private UnityEngine.Random.State originalRandomState;
 
         [SetUp]
         public void SetUp()
         {
             hadHighScore = PlayerPrefs.HasKey("HighScore");
             originalHighScore = PlayerPrefs.GetInt("HighScore");
+            originalRandomState = UnityEngine.Random.state;
 
             Assembly gameAssembly = AppDomain.CurrentDomain.GetAssemblies()
                 .First(assembly => assembly.GetName().Name == "Assembly-CSharp");
@@ -50,6 +54,7 @@ namespace HallowBlaze.Tests.PlayMode
             InvokeStatic(gameManagerType, "RequestNewRun");
             SetStaticField(gameManagerType, "PersistenceRootOverride", null);
             Time.timeScale = 1f;
+            UnityEngine.Random.state = originalRandomState;
 
             Scene mainScene = SceneManager.GetSceneByName("Main");
             if (mainScene.IsValid() && mainScene.isLoaded)
@@ -81,9 +86,10 @@ namespace HallowBlaze.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator FreshGameManagerRecreationContinuesLastCommittedBoundary()
+        public IEnumerator RepeatedContinueRecreatesBoardAndLastCommittedBoundary()
         {
             InvokeStatic(gameManagerType, "RequestNewRun");
+            UnityEngine.Random.InitState(101);
             AsyncOperation firstLoad = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
             while (!firstLoad.isDone)
                 yield return null;
@@ -94,18 +100,19 @@ namespace HallowBlaze.Tests.PlayMode
             GameSession firstSession = GetProperty<GameSession>(firstManager, "Session");
             RunState firstRun = firstSession.ActiveRun;
             Assert.That(firstRun, Is.Not.Null);
+            string layoutHash = GetGameplayLayoutHash();
+            Vector3Int playerStart = GetPlayerGridPosition();
             firstSession.ConsumeFood(15);
             firstSession.TakeDamage(10);
 
             string runId = firstRun.RunId;
             int day = firstRun.CurrentDay;
-            int food = firstRun.Food;
-            int health = firstRun.Health;
             Assert.That((bool)Invoke(firstManager, "ExitToMenu"), Is.True);
             Assert.That(firstSession.ActiveRun, Is.Null);
 
             DestroyGameManagerSingleton();
             InvokeStatic(gameManagerType, "RequestContinue");
+            UnityEngine.Random.InitState(202);
             AsyncOperation secondLoad = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
             while (!secondLoad.isDone)
                 yield return null;
@@ -118,8 +125,38 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(continuedRun, Is.Not.Null);
             Assert.That(continuedRun.RunId, Is.EqualTo(runId));
             Assert.That(continuedRun.CurrentDay, Is.EqualTo(day));
-            Assert.That(continuedRun.Food, Is.EqualTo(food));
-            Assert.That(continuedRun.Health, Is.EqualTo(health));
+            Assert.That(continuedRun.Food, Is.EqualTo(100));
+            Assert.That(continuedRun.Health, Is.EqualTo(100));
+            string continuedLayoutHash = GetGameplayLayoutHash();
+            Assert.That(continuedLayoutHash, Is.EqualTo(layoutHash));
+            Assert.That(GetPlayerGridPosition(), Is.EqualTo(playerStart));
+
+            Assert.That((bool)Invoke(secondManager, "ExitToMenu"), Is.True);
+            DestroyGameManagerSingleton();
+            InvokeStatic(gameManagerType, "RequestContinue");
+            UnityEngine.Random.InitState(303);
+            AsyncOperation thirdLoad = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            while (!thirdLoad.isDone)
+                yield return null;
+            yield return null;
+
+            Component thirdManager = GetStaticField(gameManagerType, "instance") as Component;
+            Assert.That(thirdManager, Is.Not.Null);
+            Assert.That(thirdManager, Is.Not.SameAs(secondManager));
+            RunState repeatedRun = GetProperty<GameSession>(thirdManager, "Session").ActiveRun;
+            Assert.That(repeatedRun.RunId, Is.EqualTo(runId));
+            Assert.That(repeatedRun.CurrentDay, Is.EqualTo(day));
+            Assert.That(repeatedRun.Food, Is.EqualTo(100));
+            Assert.That(repeatedRun.Health, Is.EqualTo(100));
+            string repeatedLayoutHash = GetGameplayLayoutHash();
+            Assert.That(repeatedLayoutHash, Is.EqualTo(layoutHash));
+            Assert.That(GetPlayerGridPosition(), Is.EqualTo(playerStart));
+            TestContext.WriteLine(
+                "M1.10 layout hashes: initial={0}, continue1={1}, continue2={2}; playerStart={3}",
+                layoutHash,
+                continuedLayoutHash,
+                repeatedLayoutHash,
+                playerStart);
         }
 
         [UnityTest]
@@ -183,6 +220,45 @@ namespace HallowBlaze.Tests.PlayMode
         {
             GameObject managerObject = new GameObject(name);
             return managerObject.AddComponent(gameManagerType);
+        }
+
+        private static string GetGameplayLayoutHash()
+        {
+            string[] gameplayTags = { "InnerWall", "Food", "Soda", "Aid", "Carrot", "Enemy" };
+            GameObject[] gameplayObjects = UnityEngine.Object.FindObjectsByType<GameObject>(
+                    FindObjectsSortMode.None)
+                .Where(gameObject =>
+                    gameObject.scene.name == "Main" && gameplayTags.Contains(gameObject.tag))
+                .ToArray();
+            Assert.That(gameplayObjects, Is.Not.Empty);
+
+            string layout = string.Join("\n", gameplayObjects
+                .Select(gameObject =>
+                {
+                    Vector3 position = gameObject.transform.position;
+                    Assert.That(position.x, Is.EqualTo(Mathf.Round(position.x)));
+                    Assert.That(position.y, Is.EqualTo(Mathf.Round(position.y)));
+                    string objectName = gameObject.name.Replace("(Clone)", string.Empty);
+                    return gameObject.tag + "|" + objectName + "|" +
+                        Mathf.RoundToInt(position.x) + "|" + Mathf.RoundToInt(position.y);
+                })
+                .OrderBy(entry => entry, StringComparer.Ordinal));
+
+            using (SHA256 sha256 = SHA256.Create())
+            {
+                byte[] hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(layout));
+                return BitConverter.ToString(hash).Replace("-", string.Empty);
+            }
+        }
+
+        private static Vector3Int GetPlayerGridPosition()
+        {
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            Assert.That(player, Is.Not.Null);
+            Vector3 position = player.transform.position;
+            Assert.That(position.x, Is.EqualTo(Mathf.Round(position.x)));
+            Assert.That(position.y, Is.EqualTo(Mathf.Round(position.y)));
+            return Vector3Int.RoundToInt(position);
         }
 
         private bool IsOwnedPersistenceRoot()
