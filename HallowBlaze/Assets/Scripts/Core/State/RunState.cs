@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Text;
 
 namespace HallowBlaze.Core.State
 {
@@ -14,6 +15,10 @@ namespace HallowBlaze.Core.State
     public sealed class RunState
     {
         public const int ToolSlotCount = 2;
+
+        private const string BoardSeedDomain = "hallowblaze.board-layout.v1";
+        private const uint FnvOffsetBasis = 2166136261;
+        private const uint FnvPrime = 16777619;
 
         private readonly List<string> route = new List<string>();
         private readonly ReadOnlyCollection<string> routeView;
@@ -95,6 +100,17 @@ namespace HallowBlaze.Core.State
             WorldNodeId = worldNodeId;
         }
 
+        public int GetBoardSeed()
+        {
+            uint hash = FnvOffsetBasis;
+            AppendString(ref hash, BoardSeedDomain);
+            AppendString(ref hash, RunId);
+            AppendInt32(ref hash, RunSeed);
+            AppendInt32(ref hash, CurrentDay);
+            AppendString(ref hash, WorldNodeId);
+            return unchecked((int)hash);
+        }
+
         public void RecordRouteNode(string worldNodeId)
         {
             EnsureActive();
@@ -155,6 +171,27 @@ namespace HallowBlaze.Core.State
         {
             if (slotIndex < 0 || slotIndex >= ToolSlotCount)
                 throw new ArgumentOutOfRangeException(nameof(slotIndex));
+        }
+
+        private static void AppendString(ref uint hash, string value)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(value);
+            AppendInt32(ref hash, bytes.Length);
+            for (int index = 0; index < bytes.Length; index++)
+                AppendByte(ref hash, bytes[index]);
+        }
+
+        private static void AppendInt32(ref uint hash, int value)
+        {
+            AppendByte(ref hash, unchecked((byte)value));
+            AppendByte(ref hash, unchecked((byte)(value >> 8)));
+            AppendByte(ref hash, unchecked((byte)(value >> 16)));
+            AppendByte(ref hash, unchecked((byte)(value >> 24)));
+        }
+
+        private static void AppendByte(ref uint hash, byte value)
+        {
+            hash = unchecked((hash ^ value) * FnvPrime);
         }
     }
 }

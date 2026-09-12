@@ -9,23 +9,18 @@ namespace HallowBlaze.Tests.EditMode
     public sealed class RunLifecycleServiceTests
     {
         [Test]
-        public void ExitToMenuCommitsBoundaryAndPreservesContinue()
+        public void ExitToMenuPreservesExistingBoundaryWithoutSavingAgain()
         {
             FakeSaveStore store = new FakeSaveStore();
             GameSession firstSession = CreateSession();
             RunLifecycleService firstLifecycle = new RunLifecycleService(firstSession, store);
             Assert.That(firstLifecycle.StartNewRun("run-001", 7, CreateConfiguration()).IsSuccess, Is.True);
+            Assert.That(store.SaveRunCallCount, Is.EqualTo(1));
             firstSession.ConsumeFood(12);
 
             Assert.That(firstLifecycle.ExitToMenu().IsSuccess, Is.True);
             Assert.That(firstSession.ActiveRun, Is.Null);
-
-            GameSession restoredSession = CreateSession();
-            SaveStoreResult<RunState> continueResult =
-                new RunLifecycleService(restoredSession, store).ContinueRun();
-
-            Assert.That(continueResult.IsSuccess, Is.True);
-            Assert.That(restoredSession.ActiveRun.Food, Is.EqualTo(88));
+            Assert.That(store.SaveRunCallCount, Is.EqualTo(1));
         }
 
         [TestCase(RunStatus.Dead)]
@@ -52,7 +47,7 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
-        public void FailedExitSaveKeepsRunAttached()
+        public void ExitToMenuDoesNotRequireAnotherRunSave()
         {
             FakeSaveStore store = new FakeSaveStore();
             GameSession session = CreateSession();
@@ -62,8 +57,9 @@ namespace HallowBlaze.Tests.EditMode
 
             SaveStoreResult result = lifecycle.ExitToMenu();
 
-            Assert.That(result.Type, Is.EqualTo(SaveStoreResultType.IoError));
-            Assert.That(session.ActiveRun, Is.Not.Null);
+            Assert.That(result.IsSuccess, Is.True);
+            Assert.That(session.ActiveRun, Is.Null);
+            Assert.That(store.SaveRunCallCount, Is.EqualTo(1));
         }
 
         [Test]
@@ -156,6 +152,7 @@ namespace HallowBlaze.Tests.EditMode
             public RunState Run { get; set; }
             public bool FailRunSave { get; set; }
             public bool FailProfileSave { get; set; }
+            public int SaveRunCallCount { get; private set; }
 
             public SaveStoreResult SaveProfile(ProfileState profile)
             {
@@ -175,6 +172,7 @@ namespace HallowBlaze.Tests.EditMode
 
             public SaveStoreResult SaveRun(RunState run)
             {
+                SaveRunCallCount++;
                 if (FailRunSave)
                     return SaveStoreResult.IoError();
 
