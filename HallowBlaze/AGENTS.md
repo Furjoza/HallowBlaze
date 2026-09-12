@@ -84,7 +84,9 @@ Exactly one agent may write project files during an implementation iteration.
 
 Read-only analysis may run separately, but review begins only after the implementation writer has finished.
 
-Before any agent receives write ownership, the coordinator must create and verify the baseline snapshot described in section 6. A writer must not begin without its snapshot ID, location, and closed write allowlist.
+Before a normal ticket begins, the coordinator must verify that the worktree is clean and record the Git root, branch, and `HEAD`. The user commits and pushes any manual changes before starting agent work. If unexpected pre-existing changes are present, stop and ask the user how to proceed.
+
+A writer must not begin without a closed write allowlist enforced by the Guard.
 
 ## 5. Architecture invariants
 
@@ -108,28 +110,15 @@ When existing legacy code violates these rules, migrate only within the scope of
 
 Treat pre-existing tracked and untracked changes as user-owned baseline.
 
-### Required baseline snapshot before a writer
+### Git baseline before a writer
 
-Before every implementation or configuration iteration that can write project files, create a new local snapshot outside the repository worktree. Do not reuse a snapshot from an earlier writer iteration.
+For a new ticket, record the real Git root, branch, and `HEAD`, then require `git status --short --branch --untracked-files=normal` to show no staged, unstaged, or untracked project changes. The clean commit is the recovery baseline; do not create a separate snapshot.
 
-The snapshot must contain:
+Define a closed repo-relative write allowlist and arm it through the Guard before delegating. After the writer returns, compare the repository changes with the recorded baseline and allowlist before review.
 
-- a unique snapshot ID and local path;
-- UTC timestamp, real Git root, branch, `HEAD`, task/ticket, writer, and closed write allowlist;
-- `git status --short --branch --untracked-files=normal`;
-- staged and unstaged name/status lists;
-- the untracked-path list;
-- `git diff --binary` and `git diff --cached --binary`, written directly by Git without shell text re-encoding;
-- SHA-256 hashes for every existing file in the write allowlist;
-- exact local copies, preserving relative paths, of existing allowlisted files, including untracked files.
+Validation or review corrections continue from the current ticket state without creating a new baseline or snapshot. If the second validation fails, the Lead takes over implementation as defined by the completion gate.
 
-Verify that the manifest and expected artifacts exist before delegating. If snapshot creation or verification fails, do not grant write ownership.
-
-The coordinator must provide the snapshot ID, snapshot path, and allowlist in the writer handoff. The writer must refuse to edit when any of them is missing or when the snapshot manifest does not match the handoff.
-
-After the writer returns, compare repository state and allowlisted hashes with the snapshot before review. If baseline content disappeared or a path outside the allowlist changed, stop the normal workflow. Preserve the evidence and do not restore automatically; recovery requires an explicit user decision.
-
-Snapshots are local recovery artifacts. Do not add them to Git or send their code, patches, or hashes to external services.
+If a path outside the allowlist changes or baseline content disappears, stop the normal workflow. Preserve the evidence and do not restore automatically; recovery requires an explicit user decision.
 
 Never automatically use destructive operations such as:
 
