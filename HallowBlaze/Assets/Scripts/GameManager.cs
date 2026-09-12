@@ -189,7 +189,10 @@ public class GameManager : MonoBehaviour
 
         levelImage = GameObject.Find("LevelImage");
         if (levelImage != null)
+        {
+            levelImage.transform.SetAsFirstSibling();
             levelImage.SetActive(true);
+        }
 
         GameObject levelTextObject = GameObject.Find("LevelText");
         if (levelTextObject != null)
