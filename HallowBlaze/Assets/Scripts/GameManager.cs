@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using HallowBlaze.Core.Persistence;
@@ -13,6 +14,7 @@ public class GameManager : MonoBehaviour
     private const int InitialHealth = 100;
     private const int InitialFood = 100;
     private const string InitialWorldNodeId = "forest.start";
+    private const string MenuSceneName = "Menu";
 
     public enum RunLaunchMode
     {
@@ -32,6 +34,7 @@ public class GameManager : MonoBehaviour
     private Text scoreText;
     private GameObject levelImage;
     private GameObject restartButton;
+    private GameObject menuButton;
     private List<Enemy> enemies;
     private bool playerTurn = true;
     private bool enemiesMoving;
@@ -41,6 +44,8 @@ public class GameManager : MonoBehaviour
     private int nextRunSequence;
     private GameSession session;
     private RunLifecycleService lifecycle;
+    private bool terminalActionRequested;
+    private Action<string> sceneLoader = SceneManager.LoadScene;
 
     public GameSession Session
     {
@@ -186,6 +191,7 @@ public class GameManager : MonoBehaviour
     private void InitGame()
     {
         doingSetup = true;
+        terminalActionRequested = false;
 
         levelImage = GameObject.Find("LevelImage");
         if (levelImage != null)
@@ -200,6 +206,10 @@ public class GameManager : MonoBehaviour
         restartButton = GameObject.Find("RestartBttn");
         if (restartButton != null)
             restartButton.SetActive(false);
+
+        menuButton = GameObject.Find("MenuBttn");
+        if (menuButton != null)
+            menuButton.SetActive(false);
 
         GameObject scoreTextObject = GameObject.Find("ScoreText");
         if (scoreTextObject != null)
@@ -259,6 +269,8 @@ public class GameManager : MonoBehaviour
         enabled = false;
         if (restartButton != null)
             restartButton.SetActive(true);
+        if (menuButton != null)
+            menuButton.SetActive(true);
     }
 
     private int ManageScore(int score)
@@ -401,9 +413,53 @@ public class GameManager : MonoBehaviour
 
     public void RestartGame()
     {
+        if (!TryBeginTerminalAction())
+            return;
+
+        RestoreRuntimeState();
         RequestNewRun();
         StartNewRun();
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        sceneLoader(SceneManager.GetActiveScene().name);
+    }
+
+    public void ReturnToMenuAfterGameOver()
+    {
+        if (session == null || session.ActiveRun != null ||
+            !TryBeginTerminalAction())
+            return;
+
+        RestoreRuntimeState();
+        if (!enabled)
+            enabled = true;
+
+        sceneLoader(MenuSceneName);
+    }
+
+    private bool TryBeginTerminalAction()
+    {
+        if (terminalActionRequested)
+            return false;
+
+        terminalActionRequested = true;
+        SetButtonInteractable(restartButton, false);
+        SetButtonInteractable(menuButton, false);
+        return true;
+    }
+
+    private void RestoreRuntimeState()
+    {
+        Time.timeScale = 1f;
+        SetGameplayInputBlocked(false);
+    }
+
+    private static void SetButtonInteractable(GameObject target, bool interactable)
+    {
+        if (target == null)
+            return;
+
+        Button button = target.GetComponent<Button>();
+        if (button != null)
+            button.interactable = interactable;
     }
 
     private void EnsurePersistence()
@@ -411,10 +467,7 @@ public class GameManager : MonoBehaviour
         if (lifecycle != null)
             return;
 
-        string saveRoot = string.IsNullOrEmpty(PersistenceRootOverride)
-            ? PersistencePathProvider.GetSaveRoot()
-            : PersistenceRootOverride;
-        ISaveStore store = new FileSystemSaveStore(saveRoot);
+        ISaveStore store = new FileSystemSaveStore(GetPersistenceRoot());
         SaveStoreResult<ProfileState> profileResult = store.LoadProfile();
         ProfileState profile = profileResult.IsSuccess
             ? profileResult.Data
@@ -433,5 +486,12 @@ public class GameManager : MonoBehaviour
         }
 
         lifecycle = new RunLifecycleService(session, store);
+    }
+
+    internal static string GetPersistenceRoot()
+    {
+        return string.IsNullOrEmpty(PersistenceRootOverride)
+            ? PersistencePathProvider.GetSaveRoot()
+            : PersistenceRootOverride;
     }
 }
