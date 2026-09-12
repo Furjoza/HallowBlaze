@@ -916,7 +916,8 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 ## `M1.11` — Powrót do menu z ekranu porażki
 
-**Status:** `Planned`
+**Status:** `Done` — writer: `GitHub Copilot`; review 2026-09-12: `Pass`
+**Ukończono:** 2026-09-12 — pełne EditMode `83/83`, pełne PlayMode `27/27`, ręczny smoke przycisku `Menu` `Passed`.
 **Priorytet:** P1
 **Powiązany kontrakt:** sekcje 6.5, 6.6 i 19.
 
@@ -941,6 +942,10 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 **Wpływ na save i kompatybilność:** Bez zmiany schematu. Akcja `Menu` korzysta z już zakończonego lifecycle i nie może ponownie dopisywać podsumowania.
 
 **Wymagany handoff:** Zrzut struktury widoku game over, tabela obu akcji i stanów persistence oraz wynik ręcznego smoke’a.
+
+**Wynik wykonania 2026-09-12:** Widok game over udostępnia osobne przyciski `Restart` i `Menu` z jedną bramką dokładnie-raz. `Menu` jest dostępne wyłącznie po pełnym sukcesie terminalizacji, wraca do sceny menu bez tworzenia runu i zachowuje profil z pojedynczym podsumowaniem `Dead`; `Continue` pozostaje wtedy nieinteraktywne. `Restart` nadal tworzy jeden świeży run. Obie akcje przywracają czas i input, a `GameManager` zachowuje subskrypcję zmian scen. Schema save pozostała bez zmian.
+
+**Wynik walidacji:** Unity `6000.3.21f1`: końcowe pełne PlayMode `27/27`, pełne EditMode `83/83` oraz skupione przypadki Menu i błędu terminalizacji `2/2`; failed/skipped/inconclusive `0`. Rzeczywisty test scenowy wykonał serializowane callbacki `Restart` i `ReturnToMenu`, potwierdził brak `Missing Script`, zachowany `profile.json`, usunięty `run.json` i wyłączone `Continue`. Niezależny re-review zakończył się `Pass`. Właściciel potwierdził ręczny smoke nowego przycisku `Menu` jako poprawny; wielokrotne kliknięcie i nawigacja klawiaturą mają pokrycie automatyczne, ale nie były osobno potwierdzone ręcznie. Pełny raport: [`Validation/M1.11.md`](Validation/M1.11.md).
 
 ### Bramka M1
 
