@@ -957,33 +957,84 @@ M1 jest zaliczony, gdy istnieje dokładnie jeden właściciel profilu i runu, pr
 
 ---
 
-## `M2.1` — Stabilne ID i definicja pięciodniowego grafu
+## `M2.1` — Katalog świata: stabilne ID i definicja pięciodniowego grafu
 
 **Status:** `Planned`  
 **Priorytet:** P0  
-**Powiązany kontrakt:** sekcje 4, 5.1, 5.3, 7.1 i 20.
+**Powiązany kontrakt:** sekcje 4, 5, 6.1, 7.1, 7.2, 7.5, 8, 20 i 21.1.
 
 **Rationale:** Wiedza może być trwała tylko wtedy, gdy opisuje ten sam świat pomiędzy runami. Stały, mały graf pozwala sprawdzić obietnicę atlasu przed produkcją dziesięciu lub czterdziestu dni contentu.
 
-**Obecne zachowanie:** Poziomy są sekwencyjne i nie mają stabilnych węzłów, krawędzi ani alternatywnych tras.
+**Cel w jednym zdaniu:** Utworzyć jedno źródło prawdy opisujące, jakie stałe miejsca istnieją w świecie, jakimi drogami są połączone i pod jakimi ID mogą się do nich odwoływać run, profil oraz późniejszy atlas.
 
-**Oczekiwany rezultat:** Data-driven graf około pięciu dni zawiera stabilne `NodeId`/`EdgeId`, start, co najmniej dwie decyzje trasy, złączenie oraz placeholder landmarku.
+**Jak rozumieć tę kartę:** M2.1 definiuje katalog świata, a nie stan konkretnej wyprawy. `NodeId` oznacza to samo miejsce we wszystkich runach, nawet jeśli lokalna plansza, łupy lub zombie zostaną wygenerowane ponownie. `EdgeId` oznacza tę samą możliwość podróży między dwoma miejscami. Kolejność elementów w assetach, indeks listy, nazwa sceny, tekst wyświetlany graczowi ani Unity GUID nie są ich tożsamością.
 
-**Zakres:** Czyste definicje grafu i jeden ręcznie utworzony asset/fixture prototypu. ID są tekstowe, nie wynikają z indeksu listy.
+**Obecne zachowanie:** `RunState` i `ProfileState` potrafią przechować tekstowe ID, a `GameManager` zna zahardkodowane ID startu, ale nie istnieje definicja świata rozstrzygająca, które węzły i drogi istnieją, jak są połączone oraz jakie mają stabilne właściwości. Sekwencyjne poziomy nie modelują alternatywnych tras ani różnicy między stałym miejscem świata a ponownie generowaną planszą.
 
-**Non-goals:** Bez losowego makrografu, UI mapy, finalnej narracji, biome artu i generacji lokalnych plansz.
+**Oczekiwany rezultat:** Czysty, tylko do odczytu model grafu oraz jedna ręcznie przygotowana definicja prototypowego świata. Kod korzystający z modelu potrafi bez ładowania sceny:
+
+- znaleźć węzeł lub drogę po stabilnym ID;
+- odczytać start i cel prototypu;
+- pobrać drogi wychodzące z węzła oraz ich cele;
+- odróżnić stałą topologię świata od danych bieżącego runu i planszy.
+
+**Minimalny kontrakt danych:** Nazwy typów mogą zostać dopasowane do konwencji projektu, ale model MUSI reprezentować poniższe informacje.
+
+| Definicja | Minimalne dane | Znaczenie |
+| --- | --- | --- |
+| Świat | stabilne `WorldDefinitionId`, dodatni `Version`, `StartNodeId`, jawny cel prototypu, kolekcje węzłów i dróg | identyfikuje wersję stałego makrografu, do której odnosi się profil |
+| Węzeł | tekstowe `NodeId`, pozycja atlasowa, warstwa dystansu, rodzaj miejsca oraz klucz rodziny biomu | opisuje stałe miejsce; pozycja atlasowa nie jest pozycją `Transform` ani kaflem planszy |
+| Droga | tekstowe `EdgeId`, `FromNodeId`, `ToNodeId`, kierunek świata oraz dane lub klucz wskazówki | opisuje kierunkową możliwość podróży; droga powrotna, jeśli istnieje, musi być reprezentowana jawnie |
+
+Nazwy wyświetlane graczowi, tekst wskazówki i biome content mogą być placeholderami. Stabilne ID są jawnymi, czytelnymi stringami i nie są wyliczane z indeksu, pozycji ani nazwy assetu.
+
+**Minimalny kształt prototypowego fixture:**
+
+- jeden jawny start na południu;
+- placeholder landmarku jako jawny cel w okolicy piątego dnia;
+- co najmniej dwa osobne miejsca, w których bieżący węzeł ma więcej niż jedną drogę wychodzącą;
+- co najmniej jedno ponowne złączenie alternatywnych tras;
+- przynajmniej jedna pełna trasa od startu do celu oraz brak wymagania odwiedzenia wszystkich węzłów;
+- kierunki i pozycje atlasowe czytelnie pokazujące zasadniczy ruch z południa na północ.
+
+W tym fixture dzień oznacza jedno przejście krawędzi. Diagram i test topologii mają pokazać, po ilu przejściach każda zamierzona trasa dociera do landmarku; sformułowanie „około pięciu dni” nie oznacza pięciu węzłów ani pięciu scen.
+
+**Zakres:**
+
+- czyste definicje świata, węzła i drogi bez zależności od scen, prefabów, `MonoBehaviour`, `GameObject` ani `Transform`;
+- API lookupu po ID i odczytu dróg wychodzących, bez ujawniania modyfikowalnych kolekcji;
+- jedna ręcznie utworzona, data-driven definicja prototypowego grafu pod `/Assets/GameData/World/**` oraz kod potrzebny do zmaterializowania jej jako czystego modelu;
+- skupione testy EditMode opisujące znane ID, połączenia i trasy tego fixture.
+
+Topologia nie może być drugi raz zahardkodowana w `GameManager`, scenie ani UI. Jeżeli dane authoringowe używają typu Unity, granica ładowania przekazuje do domeny zwykłe wartości i nie zapisuje Unity object references w `ProfileState` ani `RunState`.
+
+**Granice względem kolejnych kart:**
+
+- M2.1 dostarcza dane i podstawowy odczyt; M2.2 dostarczy wielobłędowy walidator produkcyjny dla dowolnej definicji grafu;
+- M2.1 nie zmienia booleanowych odkryć w pełny model wiedzy; stany `Unknown`–`Visited` i ich persistence należą do M2.3;
+- M2.1 nie wybiera trasy, nie przesuwa runu, nie zwiększa dnia i nie zapisuje checkpointu; ten przepływ należy do M2.4–M2.5;
+- M2.1 nie renderuje mapy ani nie odsłania graczowi topologii; prezentacja należy do M2.6.
+
+**Non-goals:** Bez losowego makrografu, pełnego walidatora z M2.2, zmian schematu discovery, logiki podróży, UI mapy, finalnej narracji, biome artu, generacji lokalnych plansz i migracji istniejącego prototypu na wiele światów.
 
 **Zależności:** Bramka M1.
 
 **Dozwolony obszar plików:** `/Assets/Scripts/Core/World/**`, `/Assets/GameData/World/**`, EditMode tests i `.meta`.
 
-**Kryteria akceptacji:** Każdy node/edge ma unikalne stabilne ID; graf ma start i osiągalny cel prototypu; zmiana kolejności assetów nie zmienia tożsamości; model nie zależy od scen.
+**Kryteria akceptacji:**
 
-**Plan testów:** EditMode dla unikalności, lookupu ID i oczekiwanych tras; snapshot jawnej topologii fixture.
+1. Każdy węzeł i każda droga fixture mają niepuste, unikalne stabilne ID, a wszystkie końce dróg wskazują istniejące węzły.
+2. Lookup po ID oraz odczyt dróg wychodzących działają niezależnie od kolejności danych wejściowych; nieznane ID ma jawnie przetestowany, kontrolowany wynik.
+3. Fixture ma dokładnie jeden wskazany start, osiągalny placeholder celu, co najmniej dwa punkty decyzji i co najmniej jedno złączenie; jawny test wymienia oczekiwane połączenia i długości zamierzonych tras.
+4. Zmiana kolejności węzłów lub dróg nie zmienia ich tożsamości, połączeń ani wyniku lookupu.
+5. Model domenowy nie zależy od scen ani obiektów Unity i nie udostępnia zewnętrznemu kodowi możliwości mutowania definicji po utworzeniu.
+6. `WorldDefinitionId` i `Version` fixture mogą zostać jednoznacznie porównane z istniejącymi polami `ProfileState`; karta nie rozszerza jeszcze discovery ani nie mutuje profilu.
 
-**Wpływ na save i kompatybilność:** Profil może od tej chwili zapisywać te ID. Zmiana opublikowanego ID będzie wymagała migracji albo aliasu.
+**Plan testów:** EditMode dla lookupu poprawnego i nieznanego ID, unikalności ID w fixture, rozwiązywania końców dróg, dróg wychodzących, startu/celu i oczekiwanych tras. Osobny test buduje tę samą definicję z odwróconą kolejnością kolekcji i potwierdza identyczne wyniki. Snapshot topologii ma jawnie wymieniać `NodeId`, `EdgeId`, kierunek i końce krawędzi zamiast opierać się wyłącznie na snapshotcie serializowanego pliku. Testy M2.1 mogą sprawdzać poprawność znanego fixture, ale nie zastępują reużywalnego walidatora i tabeli błędów z M2.2.
 
-**Wymagany handoff:** Czytelny diagram grafu oraz rejestr stabilnych ID.
+**Wpływ na save i kompatybilność:** Bez oczekiwanej zmiany schematu save: istniejące stany już przechowują `WorldDefinitionId`, wersję i tekstowe ID. Od przyjęcia fixture jego opublikowane ID stają się częścią kontraktu zapisu. Zmiana lub usunięcie ID wymaga migracji albo aliasu, a nie cichego przemianowania; niekompatybilna zmiana topologii wymaga podniesienia wersji definicji świata.
+
+**Wymagany handoff:** Czytelny diagram grafu z warstwami dystansu, rejestr stabilnych ID i ich znaczeń, tabela wszystkich dróg `EdgeId → FromNodeId → ToNodeId → kierunek`, wyjaśnienie granicy danych authoringowych i czystego modelu oraz dokładne wyniki testów topologii.
 
 ---
 
