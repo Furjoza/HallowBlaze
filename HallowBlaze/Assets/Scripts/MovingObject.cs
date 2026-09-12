@@ -68,8 +68,7 @@ public abstract class MovingObject : MonoBehaviour
             //Find a new position proportionally closer to the end, based on the moveTime
             Vector3 newPostion = Vector3.MoveTowards(rb2D.position, end, inverseMoveTime * Time.deltaTime);
 
-            //Call MovePosition on attached Rigidbody2D and move it to the calculated position.
-            rb2D.MovePosition(newPostion);
+            rb2D.position = newPostion;
 
             //Recalculate the remaining distance after moving.
             sqrRemainingDistance = (transform.position - end).sqrMagnitude;

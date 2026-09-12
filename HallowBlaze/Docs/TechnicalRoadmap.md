@@ -832,7 +832,7 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 ## `M1.8` — Test kontraktu własności i trwałości
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priorytet:** P0
 **Powiązany kontrakt:** sekcje 6, 19 i 22.
 
@@ -858,9 +858,13 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Wymagany handoff:** Macierz scenariusz → test → wynik oraz wszystkie niepokryte zachowania.
 
+**Wynik wykonania 2026-09-10:** Rozszerzono macierz o strukturalne potwierdzenie schema v1, odrzucenie `Continue` przy uszkodzonym profilu bez mutowania poprawnych plików runu oraz PlayMode dla odtworzenia zatwierdzonej granicy przez świeży `GameManager`, `GameOver` i `WinGame`. Wszystkie testy używają izolowanych katalogów tymczasowych. Właściciel zaakceptował ręczny smoke: ruch kafelkowy i kontakt z zombie działały poprawnie, a `Continue` zachował właściwy dzień. Brak odtworzenia układu planszy pozostaje osobnym zakresem M1.10; powrót z ekranu porażki pozostaje osobnym M1.11.
+
+**Wynik walidacji:** Unity `6000.3.21f1`: Pass 1 EditMode → PlayMode `85/85` i `26/26`; Pass 2 PlayMode → EditMode `26/26` i `85/85`; failed/skipped/inconclusive `0`. Niezależny review nie wykazał materialnych błędów automatycznej macierzy. Pełny raport: [`Validation/M1.8.md`](Validation/M1.8.md).
+
 ## `M1.9` — Regresja ruchu kafelkowego i kontaktu z zombie
 
-**Status:** `Planned`
+**Status:** `Done` — poprawka, niezależny review i ponowny manualny smoke 2026-09-12: `Pass`
 **Priorytet:** P0
 **Powiązany kontrakt:** sekcje 6.4, 9.2, 9.3 i 22.
 
@@ -868,17 +872,17 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Obecne zachowanie:** `PlayerScript` i `MovingObject` nadal używają `Transform`/`Rigidbody2D`, `Physics2D.Linecast`, colliderów i coroutine jako bieżącego rozstrzygnięcia ruchu. W smoke postać poruszała się nieregularnie, a atak przy spotkaniu z zombie był trudny do wywołania. Wcześniejszy M0.8 potwierdził pojedynczą próbę wejścia, ale nie chroni obecnej geometrii ruchu i kontaktu po zmianach M1.
 
-**Oczekiwany rezultat:** Jedno zaakceptowane wejście przesuwa gracza z centrum jednego pola do centrum dokładnie jednego sąsiedniego pola, nalicza dokładnie jeden koszt i uruchamia jedną fazę przeciwników. Odrzucone wejście nie przesuwa i nie kosztuje. Kontakt gracza i zombie jest rozstrzygany niezawodnie dla właściwego pola, bez wymagania przypadkowego nakładania colliderów.
+**Oczekiwany rezultat:** Jedno zaakceptowane wejście przesuwa gracza z centrum jednego pola do centrum dokładnie jednego sąsiedniego pola i nalicza dokładnie jeden koszt. Przytrzymany kierunek wykonuje kolejne kroki, gdy sterowanie wraca do gracza. Zombie zachowują obecny rytm jednej faktycznej akcji na dwa ruchy gracza. Odrzucone wejście nie przesuwa i nie kosztuje. Kontakt gracza i zombie jest rozstrzygany niezawodnie dla właściwego pola, bez wymagania przypadkowego nakładania colliderów.
 
-**Zakres:** Odtworzyć regresję testem, ustalić jednoznaczny stan wejścia/ruchu podczas animacji, naprawić snap do siatki i blokadę kolejnego wejścia do końca rozstrzygnięcia oraz ustabilizować wykrywanie interakcji gracz–zombie. Zachować obecną prezentację i delegację kosztów do `RunState`.
+**Zakres:** Odtworzyć regresję testem, usunąć zależność tempa interpolacji od relacji klatek renderu do kroków fizyki oraz ustabilizować wykrywanie interakcji gracz–zombie. Zachować przytrzymane wejście, obecną turowość, rytm zombie i delegację kosztów do `RunState`; bez nowej synchronizacji ruchu.
 
 **Non-goals:** Bez pełnego resolvera M3, nowego Input Systemu, pathfindingu, nowych typów przeciwników, balansu obrażeń, przebudowy generatora i zmian save schema.
 
-**Zależności:** `M1.7`; blokuje domknięcie `M1.8` i bramkę M1.
+**Zależności:** `M1.7`; ewentualne ponowne otwarcie wymaga deterministycznej reprodukcji.
 
 **Dozwolony obszar plików:** `PlayerScript`, `MovingObject`, `Enemy`, niezbędne adaptery tury oraz skupione testy EditMode/PlayMode. Sceny i prefaby tylko wtedy, gdy test wykaże błędną konfigurację istniejących colliderów lub Rigidbody2D.
 
-**Kryteria akceptacji:** Test przed poprawką odtwarza nieregularny lub wielopolowy ruch albo zawodny kontakt; po poprawce seria wejść kończy się zawsze na całkowitych współrzędnych siatki; jedno wejście daje najwyżej jeden ruch, jeden koszt i jedną fazę zombie; wejście podczas animacji nie tworzy kolejnego rozstrzygnięcia; ściana i zwykła przeszkoda pozostają darmowe; kontakt z zombie wywołuje dokładnie jeden właściwy skutek; przejście przez wyjście nadal działa.
+**Kryteria akceptacji:** Test przed poprawką odtwarza nieregularny lub wielopolowy ruch albo zawodny kontakt; po poprawce seria wejść kończy się zawsze na całkowitych współrzędnych siatki; jedno rozstrzygnięcie daje najwyżej jeden ruch i jeden koszt; przytrzymany kierunek może wykonać kolejny ruch po odzyskaniu tury; zombie wykonuje jedną faktyczną akcję na dwa ruchy gracza; zwykła przeszkoda pozostaje darmowa, a ściana zużywa jedną turę; kontakt z zombie wywołuje dokładnie jeden właściwy skutek; przejście przez wyjście nadal działa.
 
 **Plan testów:** Skupione PlayMode bez stałego oczekiwania jako jedynej asercji: szybkie naprzemienne wejścia, przytrzymanie klawisza, ruch po czterech kierunkach, blokada, ściana, wyjście i kontakt z zombie z obu osi. Następnie pełne EditMode/PlayMode oraz ręczny smoke na co najmniej dwóch wygenerowanych planszach z kontrolą pozycji, food, numeru dnia i rytmu zombie.
 
@@ -886,9 +890,13 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Wymagany handoff:** Minimalna reprodukcja przed poprawką, opis przyczyny źródłowej, tabela wejście → ruch → koszt → faza zombie oraz wynik manualnego kontaktu z zombie.
 
+**Wynik wykonania 2026-09-12:** Po wycofaniu nieudanej blokady ruchu i latcha wejścia czerwony PlayMode potwierdził, że `Rigidbody2D.MovePosition` użyte w coroutine renderowej pozostawiało gracza na `x = 0.057` po sekundzie ruchu o skonfigurowanym czasie `0.2 s`. `MovingObject` aktualizuje teraz bezpośrednio pozycję kinematycznego body w istniejącej coroutine. Nie dodano stanu ruchu ani synchronizacji tur; `PlayerScript.Update()` i `Enemy.skipMove` pozostają zgodne z bazą M1.10. `LevelImage` jest przenoszony pod HUD Food/Health. Bez zmiany schematu save. Pełny raport: [`Validation/M1.9.md`](Validation/M1.9.md).
+
+**Wynik walidacji:** Unity `6000.3.21f1`: końcowe PlayMode `32/32`, EditMode `88/88`; failed/skipped/inconclusive `0`. Skupione testy potwierdziły czas ruchu, rozłączne pola gracza i zombie, rytm dwóch ruchów gracza na jedną akcję zombie oraz HUD realnej sceny. Niezależny review i ponowny ręczny smoke: `Pass`.
+
 ## `M1.10` — Stabilna plansza po `Continue`
 
-**Status:** `Planned`
+**Status:** `Done` — writer: `codex-lead` po dwóch błędach `502` lokalnego writera; review 2026-09-11: `Pass`
 **Priorytet:** P0
 **Powiązany kontrakt:** sekcje 6.5, 7, 16 i 19.
 
@@ -914,6 +922,10 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Wymagany handoff:** Definicja tożsamości planszy, reguła seeda, wynik hashy przed/po restartach oraz decyzja migracyjna dla istniejącego save v1.
 
+**Wynik wykonania 2026-09-11:** Tożsamość planszy jest wyprowadzana deterministycznie z wersjonowanej domeny `hallowblaze.board-layout.v1`, `RunId`, `RunSeed`, `CurrentDay` i `WorldNodeId`. Nowe `RunId` używa utrwalanego GUID zamiast zegara. Gameplayowy `System.Random` steruje pozycjami, liczbą i typem obiektów oraz dropem jedzenia; `UnityEngine.Random` pozostał wyłącznie w warstwie kosmetycznej. `Exit to Menu` zachowuje ostatni checkpoint i nie utrwala mutacji środka planszy. Schema v1 nie wymaga zmiany, ponieważ wszystkie składniki tożsamości były już zapisane.
+
+**Wynik walidacji:** Po korekcie review końcowa sekwencja w świeżych procesach Unity `6000.3.21f1`: PlayMode `26/26`, następnie EditMode `88/88`; failed/skipped/inconclusive `0`. Dwa kolejne `Continue` odtworzyły hash `7BFA4514C1D91EF0D9D3AD92A898CE523C0CF15AD424D45F9B07D72FF5CCFA2F` oraz pozycję startową `(0, 0, 0)`. Niezależny re-review zakończył się `Pass`; ręczny smoke pozostaje jawnie `Not run`. Pełny raport: [`Validation/M1.10.md`](Validation/M1.10.md).
+
 ## `M1.11` — Powrót do menu z ekranu porażki
 
 **Status:** `Planned`
@@ -930,7 +942,7 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Non-goals:** Bez nowego ekranu podsumowania, UI atlasu, leaderboardu sieciowego, zmiany warunków death/win i redesignu menu głównego.
 
-**Zależności:** `M1.7`; blokuje manualne domknięcie `M1.8`.
+**Zależności:** `M1.7`; pozostaje wymagane do domknięcia bramki całego M1.
 
 **Dozwolony obszar plików:** `GameManager`, istniejący ekran game over i jego skrypty/przyciski, konieczna scena/prefab oraz skupione testy PlayMode i `/Docs/Validation/M1.11.md`.
 
@@ -2382,19 +2394,31 @@ Vertical slice jest ukończony dopiero po `Accept` `M7.6`. Samo zaimplementowani
 
 ## `M8.1` — Snapshot i wznowienie środka planszy
 
-**Status:** `Deferred`  
-**Powiązany kontrakt:** sekcje 6.2, 10, 16 i 20.  
-**Rationale:** Wymaga stabilnego BoardState, versioned replay i wszystkich dynamicznych systemów; wcześniejszy snapshot podwoiłby koszt migracji.  
-**Obecne zachowanie:** Save działa na bezpiecznych granicach między planszami.  
-**Oczekiwany rezultat:** Atomowy snapshot pełnego board/turn/intent/noise state.  
-**Zakres:** DTO, migration, recovery i exact-turn resume.  
-**Non-goals:** Cloud sync.  
-**Zależności:** `M7.6`.
-**Dozwolony obszar plików:** Core Persistence/Board/Turns i testy.  
-**Kryteria akceptacji:** Wznowienie każdej wspieranej fazy daje ten sam stan/hash, a corruption wraca do bezpiecznego backupu.  
-**Plan testów:** Crash injection na granicach faz, round-trip każdego typu encji i porównanie replay/hash.  
-**Wpływ na save:** Nowa wersja schema z migracją.  
-**Wymagany handoff:** Tabela snapshot fields i wyniki crash injection.
+**Status:** `Deferred`
+
+**Powiązany kontrakt:** sekcje 6.2, 10, 16 i 20.
+
+**Rationale:** Wymaga stabilnego `BoardState`, resolvera, wersjonowanego replayu i wszystkich dynamicznych systemów; wcześniejszy snapshot podwoiłby koszt migracji. Bez niego gracz może celowo wyjść do menu lub zamknąć grę, a następnie użyć `Continue`, aby cofnąć niekorzystne akcje i odtworzyć początek tej samej planszy.
+
+**Obecne zachowanie:** M1.10 odtwarza deterministycznie ten sam początkowy układ planszy i ostatnią zatwierdzoną granicę runu. Nie zachowuje mutacji środka planszy: pozycji aktorów, zebranych przedmiotów, uszkodzonych lub zniszczonych przeszkód, stanu przeciwników, zasobów po turach, hałasu ani efektów pola. `Exit to Menu → Continue` działa więc jak reset bieżącej planszy.
+
+**Oczekiwany rezultat:** `Continue` po wyjściu do menu, kontrolowanym zamknięciu aplikacji lub awarii odtwarza ostatni atomowo zapisany, zakończony stan tury. Ponowne wczytywanie nie przywraca zużytych zasobów, zebranych łupów, pokonanych przeciwników ani zniszczonych przeszkód i nie pozwala rerollować wyniku RNG.
+
+**Zakres:** Wersjonowany DTO pełnego `BoardState` wraz z identyfikatorami encji i ich stanem, pozycją gracza i przeciwników, zasobami runu, numerem/fazą zakończonej tury, stanem narzędzi, przeszkód, przedmiotów, efektów, hałasu oraz deterministycznych strumieni RNG. Atomowy checkpoint na stabilnej granicy tury, obowiązkowy flush przed `Exit to Menu` i kontrolowanym zamknięciem, migracja, backup, recovery i exact-turn resume.
+
+**Non-goals:** Cloud sync, zapis w trakcie animacji lub nierozstrzygniętej komendy, serializacja `GameObject`, `Transform`, colliderów, prefabów albo Unity `InstanceID`.
+
+**Zależności:** `M3.2`, `M3.5`, `M3.10`, wszystkie dynamiczne systemy uwzględniane w snapshotach oraz `M7.6`.
+
+**Dozwolony obszar plików:** Core Persistence/Board/Turns i testy.
+
+**Kryteria akceptacji:** Po wykonaniu reprezentatywnej sekwencji tur `Exit to Menu → Continue` i zamknięcie aplikacji → ponowne uruchomienie dają ten sam kanoniczny hash planszy, runu i zakończonej tury. Wielokrotne `Continue` nie odnawia łupu, zdrowia, jedzenia, ładunków narzędzi, przeciwników ani przeszkód i nie zmienia kolejnych wyników gameplayowego RNG. Snapshot nigdy nie reprezentuje połowy komendy; corruption wraca do ostatniego poprawnego backupu bez łączenia stanów z różnych tur. Brak lub starsza wersja snapshotu ma jawną migrację albo zaakceptowany fallback do bezpiecznej granicy M1.10.
+
+**Plan testów:** Round-trip każdego typu encji i dynamicznego pola; hash przed wyjściem i po `Continue`; scenariusze po zebraniu łupu, zniszczeniu przeszkody, użyciu narzędzia, obrażeniach i ruchu/śmierci przeciwnika; wielokrotne `Exit to Menu → Continue`; restart procesu; crash injection przed zapisem, pomiędzy temp-write i replace oraz po replace; zgodność replay/hash i test migracji poprzedniej schemy.
+
+**Wpływ na save:** Nowa wersja schema z migracją. Dotychczasowy zapis granicy M1.10 pozostaje jednoznacznym fallbackiem dla save'ów bez snapshotu, jeśli migracja nie może odtworzyć stanu środka planszy.
+
+**Wymagany handoff:** Tabela wszystkich pól snapshotu i ich właścicieli, punkty checkpointu/flush, macierz exploitów resetu oraz wyniki round-trip, restart i crash injection.
 
 ---
 
