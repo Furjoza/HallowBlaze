@@ -2394,19 +2394,31 @@ Vertical slice jest ukończony dopiero po `Accept` `M7.6`. Samo zaimplementowani
 
 ## `M8.1` — Snapshot i wznowienie środka planszy
 
-**Status:** `Deferred`  
-**Powiązany kontrakt:** sekcje 6.2, 10, 16 i 20.  
-**Rationale:** Wymaga stabilnego BoardState, versioned replay i wszystkich dynamicznych systemów; wcześniejszy snapshot podwoiłby koszt migracji.  
-**Obecne zachowanie:** Save działa na bezpiecznych granicach między planszami.  
-**Oczekiwany rezultat:** Atomowy snapshot pełnego board/turn/intent/noise state.  
-**Zakres:** DTO, migration, recovery i exact-turn resume.  
-**Non-goals:** Cloud sync.  
-**Zależności:** `M7.6`.
-**Dozwolony obszar plików:** Core Persistence/Board/Turns i testy.  
-**Kryteria akceptacji:** Wznowienie każdej wspieranej fazy daje ten sam stan/hash, a corruption wraca do bezpiecznego backupu.  
-**Plan testów:** Crash injection na granicach faz, round-trip każdego typu encji i porównanie replay/hash.  
-**Wpływ na save:** Nowa wersja schema z migracją.  
-**Wymagany handoff:** Tabela snapshot fields i wyniki crash injection.
+**Status:** `Deferred`
+
+**Powiązany kontrakt:** sekcje 6.2, 10, 16 i 20.
+
+**Rationale:** Wymaga stabilnego `BoardState`, resolvera, wersjonowanego replayu i wszystkich dynamicznych systemów; wcześniejszy snapshot podwoiłby koszt migracji. Bez niego gracz może celowo wyjść do menu lub zamknąć grę, a następnie użyć `Continue`, aby cofnąć niekorzystne akcje i odtworzyć początek tej samej planszy.
+
+**Obecne zachowanie:** M1.10 odtwarza deterministycznie ten sam początkowy układ planszy i ostatnią zatwierdzoną granicę runu. Nie zachowuje mutacji środka planszy: pozycji aktorów, zebranych przedmiotów, uszkodzonych lub zniszczonych przeszkód, stanu przeciwników, zasobów po turach, hałasu ani efektów pola. `Exit to Menu → Continue` działa więc jak reset bieżącej planszy.
+
+**Oczekiwany rezultat:** `Continue` po wyjściu do menu, kontrolowanym zamknięciu aplikacji lub awarii odtwarza ostatni atomowo zapisany, zakończony stan tury. Ponowne wczytywanie nie przywraca zużytych zasobów, zebranych łupów, pokonanych przeciwników ani zniszczonych przeszkód i nie pozwala rerollować wyniku RNG.
+
+**Zakres:** Wersjonowany DTO pełnego `BoardState` wraz z identyfikatorami encji i ich stanem, pozycją gracza i przeciwników, zasobami runu, numerem/fazą zakończonej tury, stanem narzędzi, przeszkód, przedmiotów, efektów, hałasu oraz deterministycznych strumieni RNG. Atomowy checkpoint na stabilnej granicy tury, obowiązkowy flush przed `Exit to Menu` i kontrolowanym zamknięciem, migracja, backup, recovery i exact-turn resume.
+
+**Non-goals:** Cloud sync, zapis w trakcie animacji lub nierozstrzygniętej komendy, serializacja `GameObject`, `Transform`, colliderów, prefabów albo Unity `InstanceID`.
+
+**Zależności:** `M3.2`, `M3.5`, `M3.10`, wszystkie dynamiczne systemy uwzględniane w snapshotach oraz `M7.6`.
+
+**Dozwolony obszar plików:** Core Persistence/Board/Turns i testy.
+
+**Kryteria akceptacji:** Po wykonaniu reprezentatywnej sekwencji tur `Exit to Menu → Continue` i zamknięcie aplikacji → ponowne uruchomienie dają ten sam kanoniczny hash planszy, runu i zakończonej tury. Wielokrotne `Continue` nie odnawia łupu, zdrowia, jedzenia, ładunków narzędzi, przeciwników ani przeszkód i nie zmienia kolejnych wyników gameplayowego RNG. Snapshot nigdy nie reprezentuje połowy komendy; corruption wraca do ostatniego poprawnego backupu bez łączenia stanów z różnych tur. Brak lub starsza wersja snapshotu ma jawną migrację albo zaakceptowany fallback do bezpiecznej granicy M1.10.
+
+**Plan testów:** Round-trip każdego typu encji i dynamicznego pola; hash przed wyjściem i po `Continue`; scenariusze po zebraniu łupu, zniszczeniu przeszkody, użyciu narzędzia, obrażeniach i ruchu/śmierci przeciwnika; wielokrotne `Exit to Menu → Continue`; restart procesu; crash injection przed zapisem, pomiędzy temp-write i replace oraz po replace; zgodność replay/hash i test migracji poprzedniej schemy.
+
+**Wpływ na save:** Nowa wersja schema z migracją. Dotychczasowy zapis granicy M1.10 pozostaje jednoznacznym fallbackiem dla save'ów bez snapshotu, jeśli migracja nie może odtworzyć stanu środka planszy.
+
+**Wymagany handoff:** Tabela wszystkich pól snapshotu i ich właścicieli, punkty checkpointu/flush, macierz exploitów resetu oraz wyniki round-trip, restart i crash injection.
 
 ---
 
