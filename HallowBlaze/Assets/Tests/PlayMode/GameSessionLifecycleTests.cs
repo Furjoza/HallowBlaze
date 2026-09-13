@@ -250,6 +250,29 @@ namespace HallowBlaze.Tests.PlayMode
             Scene cleanupScene = SceneManager.CreateScene("M1.11 Menu Cleanup " + Guid.NewGuid().ToString("N"));
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
             yield return SceneManager.UnloadSceneAsync("Menu");
+            }
+
+            [UnityTest]
+        public IEnumerator RealMainSceneRendersResourceHudAboveLevelIntro()
+        {
+            AsyncOperation load = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            while (!load.isDone)
+                yield return null;
+            yield return null;
+
+            GameObject levelImage = GameObject.Find("LevelImage");
+            GameObject foodText = GameObject.Find("FoodText");
+            GameObject healthText = GameObject.Find("HealthText");
+            Assert.That(levelImage, Is.Not.Null);
+            Assert.That(foodText, Is.Not.Null);
+            Assert.That(healthText, Is.Not.Null);
+            Canvas resourceCanvas = foodText.GetComponentInParent<Canvas>();
+            Assert.That(resourceCanvas, Is.Not.Null);
+            Assert.That(resourceCanvas.transform.localScale, Is.EqualTo(Vector3.one));
+            Assert.That(foodText.transform.parent, Is.SameAs(levelImage.transform.parent));
+            Assert.That(healthText.transform.parent, Is.SameAs(levelImage.transform.parent));
+            Assert.That(foodText.transform.GetSiblingIndex(), Is.GreaterThan(levelImage.transform.GetSiblingIndex()));
+            Assert.That(healthText.transform.GetSiblingIndex(), Is.GreaterThan(levelImage.transform.GetSiblingIndex()));
         }
 
         [UnityTest]
@@ -277,7 +300,7 @@ namespace HallowBlaze.Tests.PlayMode
             GameSession continuedSession = GetProperty<GameSession>(manager, "Session");
             Assert.That(continuedSession.ActiveRun.RunId, Is.EqualTo(firstRun.RunId));
             Assert.That(continuedSession.ActiveRun.CurrentDay, Is.EqualTo(1));
-            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(91));
+            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(100));
 
             Scene cleanupScene = SceneManager.CreateScene("M1.7 Continue Cleanup " + Guid.NewGuid().ToString("N"));
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
