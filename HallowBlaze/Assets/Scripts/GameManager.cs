@@ -195,7 +195,10 @@ public class GameManager : MonoBehaviour
 
         levelImage = GameObject.Find("LevelImage");
         if (levelImage != null)
+        {
+            levelImage.transform.SetAsFirstSibling();
             levelImage.SetActive(true);
+        }
 
         GameObject levelTextObject = GameObject.Find("LevelText");
         if (levelTextObject != null)
@@ -222,7 +225,10 @@ public class GameManager : MonoBehaviour
         enemies.Clear();
 
         if (boardScript != null)
-            boardScript.SetupScene(session.GetCurrentRun().CurrentDay);
+        {
+            RunState run = session.GetCurrentRun();
+            boardScript.SetupScene(run.CurrentDay, run.GetBoardSeed());
+        }
     }
 
     private void HideLevelImage()
@@ -369,7 +375,7 @@ public class GameManager : MonoBehaviour
             0,
             InitialWorldNodeId);
         string runId = session.Profile.ProfileId + "-run-" +
-            System.DateTime.UtcNow.Ticks + "-" + nextRunSequence;
+            System.Guid.NewGuid().ToString("N");
 
         if (lifecycle == null)
         {

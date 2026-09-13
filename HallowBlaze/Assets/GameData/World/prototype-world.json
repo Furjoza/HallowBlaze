@@ -1,0 +1,137 @@
+{
+  "worldDefinitionId": "world-1",
+  "version": 1,
+  "startNodeId": "forest.start",
+  "goalNodeId": "landmark.radio-tower",
+  "nodes": [
+    {
+      "nodeId": "forest.start",
+      "atlasX": 0,
+      "atlasY": 0,
+      "distanceLayer": 0,
+      "placeKind": "shelter",
+      "biomeFamilyKey": "temperate-forest"
+    },
+    {
+      "nodeId": "forest.west-trail",
+      "atlasX": -2,
+      "atlasY": 1,
+      "distanceLayer": 1,
+      "placeKind": "trail",
+      "biomeFamilyKey": "temperate-forest"
+    },
+    {
+      "nodeId": "forest.east-creek",
+      "atlasX": 2,
+      "atlasY": 1,
+      "distanceLayer": 1,
+      "placeKind": "creek",
+      "biomeFamilyKey": "wet-forest"
+    },
+    {
+      "nodeId": "forest.old-road",
+      "atlasX": 0,
+      "atlasY": 2,
+      "distanceLayer": 2,
+      "placeKind": "crossroads",
+      "biomeFamilyKey": "temperate-forest"
+    },
+    {
+      "nodeId": "forest.west-grove",
+      "atlasX": -2,
+      "atlasY": 3,
+      "distanceLayer": 3,
+      "placeKind": "grove",
+      "biomeFamilyKey": "temperate-forest"
+    },
+    {
+      "nodeId": "forest.east-quarry",
+      "atlasX": 2,
+      "atlasY": 3,
+      "distanceLayer": 3,
+      "placeKind": "quarry",
+      "biomeFamilyKey": "rocky-foothills"
+    },
+    {
+      "nodeId": "forest.ridge",
+      "atlasX": 0,
+      "atlasY": 4,
+      "distanceLayer": 4,
+      "placeKind": "ridge",
+      "biomeFamilyKey": "rocky-foothills"
+    },
+    {
+      "nodeId": "landmark.radio-tower",
+      "atlasX": 0,
+      "atlasY": 5,
+      "distanceLayer": 5,
+      "placeKind": "landmark",
+      "biomeFamilyKey": "rocky-foothills"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "road.start-west-trail",
+      "fromNodeId": "forest.start",
+      "toNodeId": "forest.west-trail",
+      "direction": "northwest",
+      "clueKey": "clue.dense-trees"
+    },
+    {
+      "edgeId": "road.start-east-creek",
+      "fromNodeId": "forest.start",
+      "toNodeId": "forest.east-creek",
+      "direction": "northeast",
+      "clueKey": "clue.running-water"
+    },
+    {
+      "edgeId": "road.west-trail-old-road",
+      "fromNodeId": "forest.west-trail",
+      "toNodeId": "forest.old-road",
+      "direction": "northeast",
+      "clueKey": "clue.broken-signpost"
+    },
+    {
+      "edgeId": "road.east-creek-old-road",
+      "fromNodeId": "forest.east-creek",
+      "toNodeId": "forest.old-road",
+      "direction": "northwest",
+      "clueKey": "clue.dry-roadbed"
+    },
+    {
+      "edgeId": "road.old-road-west-grove",
+      "fromNodeId": "forest.old-road",
+      "toNodeId": "forest.west-grove",
+      "direction": "northwest",
+      "clueKey": "clue.ordered-treeline"
+    },
+    {
+      "edgeId": "road.old-road-east-quarry",
+      "fromNodeId": "forest.old-road",
+      "toNodeId": "forest.east-quarry",
+      "direction": "northeast",
+      "clueKey": "clue.stone-dust"
+    },
+    {
+      "edgeId": "road.west-grove-ridge",
+      "fromNodeId": "forest.west-grove",
+      "toNodeId": "forest.ridge",
+      "direction": "northeast",
+      "clueKey": "clue.rising-ground"
+    },
+    {
+      "edgeId": "road.east-quarry-ridge",
+      "fromNodeId": "forest.east-quarry",
+      "toNodeId": "forest.ridge",
+      "direction": "northwest",
+      "clueKey": "clue.cold-wind"
+    },
+    {
+      "edgeId": "road.ridge-radio-tower",
+      "fromNodeId": "forest.ridge",
+      "toNodeId": "landmark.radio-tower",
+      "direction": "north",
+      "clueKey": "clue.distant-metal"
+    }
+  ]
+}
