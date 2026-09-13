@@ -100,6 +100,24 @@ namespace HallowBlaze.Core.State
             WorldNodeId = worldNodeId;
         }
 
+        /// <summary>
+        /// Atomically advances the run to the next world node, increasing the current day by one and recording the node on the route.
+        /// </summary>
+        /// <param name="worldNodeId">The stable ID of the world node to advance to.</param>
+        /// <exception cref="ArgumentException">Thrown when <paramref name="worldNodeId"/> is not a valid stable ID.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the run is not active.</exception>
+        /// <exception cref="OverflowException">Thrown when the current day cannot be increased.</exception>
+        public void AdvanceToWorldNode(string worldNodeId)
+        {
+            EnsureActive();
+            ValidateStableId(worldNodeId, nameof(worldNodeId));
+            int nextDay = checked(CurrentDay + 1);
+
+            CurrentDay = nextDay;
+            WorldNodeId = worldNodeId;
+            route.Add(worldNodeId);
+        }
+
         public int GetBoardSeed()
         {
             uint hash = FnvOffsetBasis;

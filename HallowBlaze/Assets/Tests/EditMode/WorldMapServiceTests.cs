@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using HallowBlaze.Core.Persistence;
 using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
@@ -321,6 +322,199 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(store.SaveProfileCallCount, Is.Zero);
         }
 
+        [TestCase(StartEastEdgeId, EastNodeId)]
+        [TestCase(StartWestEdgeId, WestNodeId)]
+        public void ChooseRouteCommitsOneLegalEdgeAndPublishesAfterRunSave(
+            string edgeId,
+            string destinationNodeId)
+        {
+            ProfileState profile = CreateProfile();
+            FakeSaveStore store = new FakeSaveStore();
+            GameSession session = CreateSession(profile);
+            WorldMapService service = new WorldMapService(CreateWorld(), session, store);
+            List<RouteChosenEvent> events = new List<RouteChosenEvent>();
+            service.OnRouteChosen += routeEvent => events.Add(routeEvent);
+            RunState run = session.GetCurrentRun();
+            run.EquipTool(0, new ToolSlotState("tool.axe", 3));
+
+            WorldMapCommandResult begin = service.BeginRouteChoice();
+            WorldMapExitQueryResult choices = service.GetRouteChoices();
+            RouteChoiceCommandResult chosen = service.ChooseRoute(edgeId);
+            RouteChoiceCommandResult repeated = service.ChooseRoute(edgeId);
+
+            Assert.That(begin.IsSuccess, Is.True);
+            Assert.That(service.ChoiceState, Is.EqualTo(RouteChoiceState.Committed));
+            Assert.That(choices.IsSuccess, Is.True);
+            Assert.That(choices.Exits.Select(exit => exit.EdgeId),
+                Is.EqualTo(new[] { StartEastEdgeId, StartWestEdgeId }));
+            Assert.That(chosen.Status, Is.EqualTo(RouteChoiceCommandStatus.Applied));
+            Assert.That(repeated.Status, Is.EqualTo(RouteChoiceCommandStatus.NoChange));
+            Assert.That(repeated.RouteEvent, Is.SameAs(chosen.RouteEvent));
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.WorldNodeId, Is.EqualTo(destinationNodeId));
+            Assert.That(run.Route, Is.EqualTo(new[] { destinationNodeId }));
+            Assert.That(run.Food, Is.EqualTo(80));
+            Assert.That(run.ToolSlots[0].RemainingUses, Is.EqualTo(3));
+            Assert.That(profile.GetEdgeDiscoveryState(edgeId),
+                Is.EqualTo(EdgeDiscoveryState.Traversed));
+            Assert.That(store.SaveProfileCallCount, Is.EqualTo(2));
+            Assert.That(store.SaveRunCallCount, Is.EqualTo(1));
+            Assert.That(events, Has.Count.EqualTo(1));
+            Assert.That(events[0], Is.SameAs(chosen.RouteEvent));
+            Assert.That(events[0].FromNodeId, Is.EqualTo(StartNodeId));
+            Assert.That(events[0].ToNodeId, Is.EqualTo(destinationNodeId));
+            Assert.That(events[0].CurrentDay, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void ChooseRouteRejectsMissingUnknownIllegalAndStaleChoicesWithoutMutation()
+        {
+            ProfileState profile = CreateProfile();
+            FakeSaveStore store = new FakeSaveStore();
+            GameSession session = CreateSession(profile);
+            WorldMapService service = new WorldMapService(CreateWorld(), session, store);
+            RunState run = session.GetCurrentRun();
+
+            Assert.That(service.ChooseRoute(StartEastEdgeId).Status,
+                Is.EqualTo(RouteChoiceCommandStatus.Rejected));
+            Assert.That(service.BeginRouteChoice().IsSuccess, Is.True);
+            Assert.That(service.ChooseRoute("road.missing").Status,
+                Is.EqualTo(RouteChoiceCommandStatus.Rejected));
+            Assert.That(service.ChooseRoute(WestGoalEdgeId).Status,
+                Is.EqualTo(RouteChoiceCommandStatus.Rejected));
+            AssertRunUnchanged(run, StartNodeId, 0, Array.Empty<string>());
+            Assert.That(profile.GetEdgeDiscoveryState(StartEastEdgeId),
+                Is.EqualTo(EdgeDiscoveryState.Sighted));
+            Assert.That(store.SaveRunCallCount, Is.Zero);
+
+            session.AdvanceToWorldNode(WestNodeId);
+            RouteChoiceCommandResult stale = service.ChooseRoute(StartWestEdgeId);
+
+            Assert.That(stale.Status, Is.EqualTo(RouteChoiceCommandStatus.Rejected));
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.WorldNodeId, Is.EqualTo(WestNodeId));
+            Assert.That(run.Route, Is.EqualTo(new[] { WestNodeId }));
+            Assert.That(profile.GetEdgeDiscoveryState(StartWestEdgeId),
+                Is.EqualTo(EdgeDiscoveryState.Sighted));
+            Assert.That(store.SaveRunCallCount, Is.Zero);
+        }
+
+        [Test]
+        public void ProfileSaveFailureRequiresIdenticalRetryBeforeRunMutation()
+        {
+            ProfileState profile = CreateProfile();
+            FakeSaveStore store = new FakeSaveStore();
+            GameSession session = CreateSession(profile);
+            WorldMapService service = new WorldMapService(CreateWorld(), session, store);
+            RunState run = session.GetCurrentRun();
+            Assert.That(service.BeginRouteChoice().IsSuccess, Is.True);
+            store.FailProfileSave = true;
+
+            RouteChoiceCommandResult failed = service.ChooseRoute(StartEastEdgeId);
+            RouteChoiceCommandResult blocked = service.ChooseRoute(StartWestEdgeId);
+
+            Assert.That(failed.Status, Is.EqualTo(RouteChoiceCommandStatus.PersistenceFailed));
+            Assert.That(failed.PersistenceTarget, Is.EqualTo(RouteChoicePersistenceTarget.Profile));
+            Assert.That(blocked.Status, Is.EqualTo(RouteChoiceCommandStatus.Rejected));
+            AssertRunUnchanged(run, StartNodeId, 0, Array.Empty<string>());
+            Assert.That(store.SaveRunCallCount, Is.Zero);
+
+            store.FailProfileSave = false;
+            RouteChoiceCommandResult retry = service.ChooseRoute(StartEastEdgeId);
+
+            Assert.That(retry.Status, Is.EqualTo(RouteChoiceCommandStatus.Applied));
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.WorldNodeId, Is.EqualTo(EastNodeId));
+            Assert.That(run.Route, Is.EqualTo(new[] { EastNodeId }));
+            Assert.That(store.SaveRunCallCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void RunSaveFailureRetriesCheckpointWithoutMutatingRunTwice()
+        {
+            ProfileState profile = CreateProfile();
+            FakeSaveStore store = new FakeSaveStore { FailRunSave = true };
+            GameSession session = CreateSession(profile);
+            WorldMapService service = new WorldMapService(CreateWorld(), session, store);
+            List<RouteChosenEvent> events = new List<RouteChosenEvent>();
+            service.OnRouteChosen += routeEvent => events.Add(routeEvent);
+            Assert.That(service.BeginRouteChoice().IsSuccess, Is.True);
+
+            RouteChoiceCommandResult failed = service.ChooseRoute(StartEastEdgeId);
+            RouteChoiceCommandResult blocked = service.ChooseRoute(StartWestEdgeId);
+
+            Assert.That(failed.Status, Is.EqualTo(RouteChoiceCommandStatus.PersistenceFailed));
+            Assert.That(failed.PersistenceTarget, Is.EqualTo(RouteChoicePersistenceTarget.Run));
+            Assert.That(service.ChoiceState, Is.EqualTo(RouteChoiceState.RunSavePending));
+            Assert.That(blocked.Status, Is.EqualTo(RouteChoiceCommandStatus.Rejected));
+            Assert.That(session.ActiveRun.CurrentDay, Is.EqualTo(1));
+            Assert.That(session.ActiveRun.Route, Is.EqualTo(new[] { EastNodeId }));
+            Assert.That(events, Is.Empty);
+
+            store.FailRunSave = false;
+            RouteChoiceCommandResult retry = service.ChooseRoute(StartEastEdgeId);
+
+            Assert.That(retry.Status, Is.EqualTo(RouteChoiceCommandStatus.Applied));
+            Assert.That(session.ActiveRun.CurrentDay, Is.EqualTo(1));
+            Assert.That(session.ActiveRun.Route, Is.EqualTo(new[] { EastNodeId }));
+            Assert.That(store.SaveProfileCallCount, Is.EqualTo(2));
+            Assert.That(store.SaveRunCallCount, Is.EqualTo(2));
+            Assert.That(events, Has.Count.EqualTo(1));
+        }
+
+        [Test]
+        public void ANewBoardExitMustBeginAnotherChoiceAndCanReachTheNextNode()
+        {
+            ProfileState profile = CreateProfile();
+            FakeSaveStore store = new FakeSaveStore();
+            GameSession session = CreateSession(profile);
+            WorldMapService service = new WorldMapService(CreateWorld(), session, store);
+
+            Assert.That(service.BeginRouteChoice().IsSuccess, Is.True);
+            Assert.That(service.ChooseRoute(StartWestEdgeId).IsSuccess, Is.True);
+            Assert.That(service.ChooseRoute(WestGoalEdgeId).Status,
+                Is.EqualTo(RouteChoiceCommandStatus.Rejected));
+            Assert.That(service.BeginRouteChoice().IsSuccess, Is.True);
+            Assert.That(service.GetRouteChoices().Exits.Select(exit => exit.EdgeId),
+                Is.EqualTo(new[] { WestGoalEdgeId }));
+            Assert.That(service.ChooseRoute(WestGoalEdgeId).IsSuccess, Is.True);
+
+            Assert.That(session.ActiveRun.CurrentDay, Is.EqualTo(2));
+            Assert.That(session.ActiveRun.WorldNodeId, Is.EqualTo(GoalNodeId));
+            Assert.That(session.ActiveRun.Route, Is.EqualTo(new[] { WestNodeId, GoalNodeId }));
+            Assert.That(profile.GetEdgeDiscoveryState(StartWestEdgeId),
+                Is.EqualTo(EdgeDiscoveryState.Traversed));
+            Assert.That(profile.GetEdgeDiscoveryState(WestGoalEdgeId),
+                Is.EqualTo(EdgeDiscoveryState.Traversed));
+            Assert.That(store.SaveRunCallCount, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void SavedRouteCheckpointRestoresChosenNodeDayAndRouteAfterCrash()
+        {
+            ProfileState profile = CreateProfile();
+            FakeSaveStore store = new FakeSaveStore();
+            GameSession session = CreateSession(profile);
+            WorldMapService service = new WorldMapService(CreateWorld(), session, store);
+            Assert.That(service.BeginRouteChoice().IsSuccess, Is.True);
+            Assert.That(service.ChooseRoute(StartEastEdgeId).IsSuccess, Is.True);
+
+            GameSession restoredSession = new GameSession(profile);
+            restoredSession.ContinueRun(store.LoadRun().Data);
+            WorldMapService restoredService = new WorldMapService(
+                CreateWorld(),
+                restoredSession,
+                store);
+
+            Assert.That(restoredSession.ActiveRun.CurrentDay, Is.EqualTo(1));
+            Assert.That(restoredSession.ActiveRun.WorldNodeId, Is.EqualTo(EastNodeId));
+            Assert.That(restoredSession.ActiveRun.Route, Is.EqualTo(new[] { EastNodeId }));
+            Assert.That(restoredService.GetLegalExits().Exits.Select(exit => exit.EdgeId),
+                Is.EqualTo(new[] { "road.east-goal" }));
+            Assert.That(profile.GetEdgeDiscoveryState(StartEastEdgeId),
+                Is.EqualTo(EdgeDiscoveryState.Traversed));
+        }
+
         [Test]
         public void SessionAssemblyStillHasNoUnityDependency()
         {
@@ -474,7 +668,9 @@ namespace HallowBlaze.Tests.EditMode
             public ProfileState Profile { get; private set; }
             public RunState Run { get; private set; }
             public bool FailProfileSave { get; set; }
+            public bool FailRunSave { get; set; }
             public int SaveProfileCallCount { get; private set; }
+            public int SaveRunCallCount { get; private set; }
 
             public SaveStoreResult SaveProfile(ProfileState profile)
             {
@@ -495,7 +691,12 @@ namespace HallowBlaze.Tests.EditMode
 
             public SaveStoreResult SaveRun(RunState run)
             {
-                Run = run;
+                SaveRunCallCount++;
+                if (FailRunSave)
+                    return SaveStoreResult.IoError("Run save failed.");
+
+                Run = PersistenceJsonSerializer.DeserializeRun(
+                    PersistenceJsonSerializer.SerializeRun(run));
                 return SaveStoreResult.Success();
             }
 

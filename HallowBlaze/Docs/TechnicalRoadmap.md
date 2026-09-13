@@ -1174,13 +1174,13 @@ Topologia nie może być drugi raz zahardkodowana w `GameManager`, scenie ani UI
 
 ## `M2.5` — Logika wyboru trasy pomiędzy planszami
 
-**Status:** `Planned`  
+**Status:** `Done` — completed 2026-09-13; writer: `GitHub Copilot` after two failed delegated validation attempts; independent review: `PASS`
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 7.1, 7.3, 18 i O-002.
 
 **Rationale:** Atlas ma wpływać na decyzję, a nie być galerią odkryć. Wybór po ukończeniu planszy musi używać trwałej wiedzy, lecz zapisywać wybraną trasę tylko w bieżącym runie.
 
-**Obecne zachowanie:** Przejście poziomu zwiększa dzień i ładuje kolejny poziom bez wyboru węzła.
+**Obecne zachowanie:** Reaching Exit opens an explicit, save-backed route choice and blocks gameplay. A legal edge advances the run once and loads the next board only after the run checkpoint succeeds; a raw scene reload does not advance the day.
 
 **Oczekiwany rezultat:** Po wyjściu gracz otrzymuje legalne kierunki, wybiera jeden, zapisuje `currentNodeId`/trasę w runie i dopiero potem uruchamia następną planszę.
 
@@ -1196,9 +1196,11 @@ Topologia nie może być drugi raz zahardkodowana w `GameManager`, scenie ani UI
 
 **Plan testów:** EditMode wszystkich krawędzi grafu, podwójnego submitu i błędnego ID; PlayMode przejścia dwóch węzłów i restartu pomiędzy nimi.
 
-**Wpływ na save i kompatybilność:** Run DTO zapisuje bieżący node i trasę; wymaga jawnej migracji wersji, jeśli pola nie istniały.
+**Wpływ na save i kompatybilność:** The existing run schema v1 already stores the current node, day, and route, so no DTO migration is required. Traversal discovery remains in profile schema v2 and the chosen run checkpoint remains independently resumable.
 
 **Wymagany handoff:** Sekwencja zdarzeń od exit do rozpoczęcia nowej planszy oraz punkty zapisu profilu/runu.
+
+**Validation result:** Unity `6000.3.21f1` focused EditMode `54/54 Passed` and final lifecycle PlayMode `12/12 Passed`; failed, skipped, and inconclusive `0`. The final solution build passed with `0` errors and `2` pre-existing warnings. Exact baseline restoration for Unity-mutated `ProjectSettings` and the recovered test `.meta`, closed-scope integrity, and `git diff --check` passed. Independent final review: `PASS`. Full handoff: [`Validation/M2.5.md`](Validation/M2.5.md).
 
 ---
 

@@ -171,6 +171,75 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
+        public void AdvanceToWorldNodeAtomicallyMutatesDayNodeAndRouteAndNotifiesOnce()
+        {
+            GameSession session = new GameSession(CreateProfile());
+            RunState run = session.StartNewRun("run-001", 1, CreateConfiguration());
+            int changedCount = 0;
+            RunState notifiedRun = null;
+            session.OnRunChanged += changedRun =>
+            {
+                changedCount++;
+                notifiedRun = changedRun;
+            };
+
+            session.AdvanceToWorldNode("forest.clearing");
+
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.WorldNodeId, Is.EqualTo("forest.clearing"));
+            Assert.That(run.Route, Is.EqualTo(new[] { "forest.clearing" }));
+            Assert.That(changedCount, Is.EqualTo(1));
+            Assert.That(notifiedRun, Is.SameAs(run));
+        }
+
+        [Test]
+        public void AdvanceToWorldNodeWithInvalidIdDoesNotMutateStateOrNotify()
+        {
+            GameSession session = new GameSession(CreateProfile());
+            RunState run = session.StartNewRun("run-001", 1, CreateConfiguration());
+            int changedCount = 0;
+            session.OnRunChanged += _ => changedCount++;
+
+            Assert.Throws<ArgumentException>(() => session.AdvanceToWorldNode(" "));
+
+            Assert.That(run.CurrentDay, Is.Zero);
+            Assert.That(run.WorldNodeId, Is.EqualTo("forest.start"));
+            Assert.That(run.Route, Is.Empty);
+            Assert.That(changedCount, Is.Zero);
+        }
+
+        [Test]
+        public void AdvanceToWorldNodeWithOverflowDoesNotMutateStateOrNotify()
+        {
+            GameSession session = new GameSession(CreateProfile());
+            RunState run = session.StartNewRun(
+                "run-001",
+                1,
+                new RunStateConfiguration(100, 80, int.MaxValue, "forest.start"));
+            int changedCount = 0;
+            session.OnRunChanged += _ => changedCount++;
+
+            Assert.Throws<OverflowException>(() => session.AdvanceToWorldNode("forest.end"));
+
+            Assert.That(run.CurrentDay, Is.EqualTo(int.MaxValue));
+            Assert.That(run.WorldNodeId, Is.EqualTo("forest.start"));
+            Assert.That(run.Route, Is.Empty);
+            Assert.That(changedCount, Is.Zero);
+        }
+
+        [Test]
+        public void AdvanceToWorldNodeWithNoActiveRunDoesNotNotify()
+        {
+            GameSession session = new GameSession(CreateProfile());
+            int changedCount = 0;
+            session.OnRunChanged += _ => changedCount++;
+
+            Assert.Throws<InvalidOperationException>(() => session.AdvanceToWorldNode("forest.end"));
+
+            Assert.That(changedCount, Is.Zero);
+        }
+
+        [Test]
         public void SessionAssemblyDoesNotReferenceUnity()
         {
             string[] references = typeof(GameSession).Assembly

@@ -98,6 +98,18 @@ namespace HallowBlaze.Core.Session
             Mutate(run => run.MarkWon());
         }
 
+        /// <summary>
+        /// Atomically advances the active run to the specified world node, increasing the current day by one and recording the node on the route.
+        /// </summary>
+        /// <param name="worldNodeId">The stable ID of the world node to advance to.</param>
+        /// <exception cref="ArgumentException">Thrown when <paramref name="worldNodeId"/> is not a valid stable ID.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when there is no active run.</exception>
+        /// <exception cref="OverflowException">Thrown when the current day cannot be increased.</exception>
+        public void AdvanceToWorldNode(string worldNodeId)
+        {
+            Mutate(run => run.AdvanceToWorldNode(worldNodeId));
+        }
+
         private void Mutate(Action<RunState> mutation)
         {
             RunState run = GetCurrentRun();
