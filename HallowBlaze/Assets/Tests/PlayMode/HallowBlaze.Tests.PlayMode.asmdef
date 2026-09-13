@@ -3,7 +3,8 @@
     "rootNamespace": "HallowBlaze.Tests.PlayMode",
     "references": [
         "HallowBlaze.Core.State",
-        "HallowBlaze.Core.Session"
+        "HallowBlaze.Core.Session",
+        "HallowBlaze.Core.Persistence"
     ],
     "optionalUnityReferences": [
         "TestAssemblies"

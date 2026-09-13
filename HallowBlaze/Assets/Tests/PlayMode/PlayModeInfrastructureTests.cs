@@ -17,6 +17,7 @@ namespace HallowBlaze.Tests.PlayMode
 
         private readonly List<UnityEngine.Object> createdObjects = new List<UnityEngine.Object>();
         private Type gameManagerType;
+        private Type enemyType;
         private Type playerType;
         private Type soundManagerType;
         private Type wallType;
@@ -30,6 +31,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assembly gameAssembly = AppDomain.CurrentDomain.GetAssemblies()
                 .First(assembly => assembly.GetName().Name == "Assembly-CSharp");
             gameManagerType = RequireType(gameAssembly, "GameManager");
+            enemyType = RequireType(gameAssembly, "Enemy");
             playerType = RequireType(gameAssembly, "PlayerScript");
             soundManagerType = RequireType(gameAssembly, "SoundManager");
             wallType = RequireType(gameAssembly, "Wall");
@@ -177,6 +179,157 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(audioSource.clip, Is.SameAs(moveSound));
         }
 
+        [UnityTest]
+        public IEnumerator PlayerMoveCompletesWithinConfiguredDuration()
+        {
+            const float configuredMoveTime = 0.2f;
+            GameObject playerObject = CreatePlayer("M1.9 Timed Move Player", configuredMoveTime);
+            Component player = playerObject.GetComponent(playerType);
+            float movementStartedAt = Time.realtimeSinceStartup;
+
+            InvokeGenericAttemptMove(player, 1, 0);
+
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(9));
+
+            float movementDeadline = movementStartedAt + configuredMoveTime + 0.4f;
+            while ((playerObject.transform.position - Vector3.right).sqrMagnitude > float.Epsilon
+                && Time.realtimeSinceStartup < movementDeadline)
+                yield return null;
+
+            Assert.That(playerObject.transform.position.x, Is.EqualTo(1f).Within(0.001f));
+            Assert.That(playerObject.transform.position.y, Is.EqualTo(0f).Within(0.001f));
+            Assert.That(Time.realtimeSinceStartup, Is.LessThanOrEqualTo(movementDeadline));
+        }
+
+        [UnityTest]
+        public IEnumerator PlayerMovementSnapsAcrossAllFourDirections()
+        {
+            GameObject playerObject = CreatePlayer("M1.9 Four Direction Player", 0.01f);
+            Component player = playerObject.GetComponent(playerType);
+            Vector2 expectedPosition = Vector2.zero;
+            Vector2Int[] directions =
+            {
+                Vector2Int.right,
+                Vector2Int.up,
+                Vector2Int.left,
+                Vector2Int.down
+            };
+
+            foreach (Vector2Int direction in directions)
+            {
+                SetField(gameManager, "playerTurn", true);
+                InvokeGenericAttemptMove(player, direction.x, direction.y);
+                expectedPosition += new Vector2(direction.x, direction.y);
+
+                float movementDeadline = Time.realtimeSinceStartup + 2f;
+                while (((Vector2)playerObject.transform.position - expectedPosition).sqrMagnitude > float.Epsilon
+                    && Time.realtimeSinceStartup < movementDeadline)
+                    yield return null;
+
+                Assert.That(playerObject.transform.position.x, Is.EqualTo(expectedPosition.x).Within(0.001f));
+                Assert.That(playerObject.transform.position.y, Is.EqualTo(expectedPosition.y).Within(0.001f));
+            }
+
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(6));
+        }
+
+        [Test]
+        public void EnemyContactDamagesPlayerFromBothAxes()
+        {
+            GameObject playerObject = CreatePlayer("M1.9 Enemy Target", 0.01f);
+            playerObject.layer = 8;
+            playerObject.tag = "Player";
+            GameObject soundObject = Track(new GameObject("M1.9 Enemy SoundManager"));
+            AudioClip attackSound = Track(AudioClip.Create("M1.9 Enemy Attack", 1, 1, 44100, false));
+            CreateSoundManager(soundObject);
+            Component horizontalEnemy = CreateEnemy("M1.9 Horizontal Enemy", Vector2.right, attackSound);
+            Component verticalEnemy = CreateEnemy("M1.9 Vertical Enemy", Vector2.up, attackSound);
+            Physics2D.SyncTransforms();
+            int startingHealth = session.ActiveRun.Health;
+
+            Invoke(horizontalEnemy, "MoveEnemy");
+            Assert.That(session.ActiveRun.Health, Is.EqualTo(startingHealth - 10));
+
+            Invoke(verticalEnemy, "MoveEnemy");
+            Assert.That(session.ActiveRun.Health, Is.EqualTo(startingHealth - 20));
+        }
+
+        [UnityTest]
+        public IEnumerator EnemyCannotEnterPlayersDestination()
+        {
+            GameObject playerObject = CreatePlayer("M1.9 Moving Enemy Target", 0.1f);
+            playerObject.layer = 8;
+            playerObject.tag = "Player";
+            Component player = playerObject.GetComponent(playerType);
+            GameObject soundObject = Track(new GameObject("M1.9 Enemy Collision SoundManager"));
+            AudioClip actionSound = Track(AudioClip.Create("M1.9 Enemy Collision", 1, 1, 44100, false));
+            CreateSoundManager(soundObject);
+            SetField(player, "moveSound1", actionSound);
+            SetField(player, "moveSound2", actionSound);
+            Component enemy = CreateEnemy("M1.9 Blocking Enemy", new Vector2(2f, 0f), actionSound);
+
+            yield return null;
+
+            IList registeredEnemies = GetField<IList>(gameManager, "enemies");
+            registeredEnemies.Clear();
+            Invoke(gameManager, "AddEnemytoList", enemy);
+            SetField(enemy, "skipMove", false);
+            SetField(gameManager, "playerTurn", true);
+            Physics2D.SyncTransforms();
+            int startingHealth = session.ActiveRun.Health;
+
+            InvokeGenericAttemptMove(player, 1, 0);
+
+            float turnDeadline = Time.realtimeSinceStartup + 1f;
+            while (!GetProperty<bool>(gameManager, "IsGameplayInputEnabled")
+                && Time.realtimeSinceStartup < turnDeadline)
+                yield return null;
+
+            Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.True);
+            Assert.That(playerObject.transform.position.x, Is.EqualTo(1f).Within(0.001f));
+            Assert.That(enemy.transform.position.x, Is.EqualTo(2f).Within(0.001f));
+            Assert.That(session.ActiveRun.Health, Is.EqualTo(startingHealth - 10));
+            Assert.That(playerObject.transform.position, Is.Not.EqualTo(enemy.transform.position));
+
+            InvokeGenericAttemptMove(player, 0, 1);
+
+            turnDeadline = Time.realtimeSinceStartup + 1f;
+            while (!GetProperty<bool>(gameManager, "IsGameplayInputEnabled")
+                && Time.realtimeSinceStartup < turnDeadline)
+                yield return null;
+
+            Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.True);
+            Assert.That(playerObject.transform.position, Is.EqualTo(new Vector3(1f, 1f, 0f)));
+            Assert.That(enemy.transform.position, Is.EqualTo(new Vector3(2f, 0f, 0f)));
+            Assert.That(session.ActiveRun.Health, Is.EqualTo(startingHealth - 10));
+        }
+
+        [UnityTest]
+        public IEnumerator EnteringExitSnapsOnceAndStopsPlayerInput()
+        {
+            GameObject playerObject = CreatePlayer("M1.9 Exit Player", 0.01f);
+            Component player = playerObject.GetComponent(playerType);
+            SetField(player, "restartLevelDelay", 30f);
+            GameObject exitObject = Track(new GameObject("M1.9 Exit"));
+            exitObject.tag = "Exit";
+            exitObject.transform.position = Vector2.right;
+            exitObject.AddComponent<BoxCollider2D>().isTrigger = true;
+            Physics2D.SyncTransforms();
+
+            InvokeGenericAttemptMove(player, 1, 0);
+
+            float movementDeadline = Time.realtimeSinceStartup + 2f;
+            while ((((Vector2)playerObject.transform.position - Vector2.right).sqrMagnitude > float.Epsilon
+                    || ((Behaviour)player).enabled)
+                && Time.realtimeSinceStartup < movementDeadline)
+                yield return null;
+
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(9));
+            Assert.That(playerObject.transform.position.x, Is.EqualTo(1f).Within(0.001f));
+            Assert.That(playerObject.transform.position.y, Is.EqualTo(0f).Within(0.001f));
+            Assert.That(((Behaviour)player).enabled, Is.False);
+        }
+
         private GameObject CreatePlayer(string name, float moveTime)
         {
             GameObject playerObject = Track(new GameObject(name));
@@ -187,6 +340,25 @@ namespace HallowBlaze.Tests.PlayMode
             SetField(player, "blockingLayer", (LayerMask)(1 << 8));
             Invoke(player, "Start");
             return playerObject;
+        }
+
+        private Component CreateEnemy(string name, Vector2 position, AudioClip attackSound)
+        {
+            GameObject enemyObject = Track(new GameObject(name));
+            enemyObject.layer = 8;
+            enemyObject.transform.position = position;
+            enemyObject.AddComponent<BoxCollider2D>();
+            enemyObject.AddComponent<Rigidbody2D>().bodyType = RigidbodyType2D.Kinematic;
+            enemyObject.AddComponent<Animator>();
+            Component enemy = enemyObject.AddComponent(enemyType);
+            SetField(enemy, "moveTime", 0.01f);
+            SetField(enemy, "blockingLayer", (LayerMask)(1 << 8));
+            SetField(enemy, "playerDamage", 10);
+            SetField(enemy, "enemyAttack1", attackSound);
+            SetField(enemy, "enemyAttack2", attackSound);
+            SetField(enemy, "enemyAttack3", attackSound);
+            Invoke(enemy, "Start");
+            return enemy;
         }
 
         private AudioSource CreateSoundManager(GameObject soundObject)
