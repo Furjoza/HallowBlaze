@@ -9,6 +9,9 @@ using Newtonsoft.Json.Linq;
 
 namespace HallowBlaze.Core.Persistence
 {
+    /// <summary>
+    /// Serializes and validates current profile and run persistence documents.
+    /// </summary>
     public static class PersistenceJsonSerializer
     {
         private static readonly JsonSerializerSettings SerializerSettings =
@@ -20,11 +23,17 @@ namespace HallowBlaze.Core.Persistence
                 NullValueHandling = NullValueHandling.Include
             };
 
+        /// <summary>Serializes a profile as a complete schema v2 JSON document.</summary>
+        /// <param name="profile">The validated profile to serialize.</param>
+        /// <returns>The profile JSON document.</returns>
         public static string SerializeProfile(ProfileState profile)
         {
             return Serialize(ProfileStateMapper.ToDto(profile));
         }
 
+        /// <summary>Validates and materializes a complete schema v2 profile document.</summary>
+        /// <param name="json">The profile JSON document.</param>
+        /// <returns>The materialized profile.</returns>
         public static ProfileState DeserializeProfile(string json)
         {
             ProfileStateDto dto = Deserialize<ProfileStateDto>(

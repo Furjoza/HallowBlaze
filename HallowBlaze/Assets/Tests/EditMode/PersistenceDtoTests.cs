@@ -19,9 +19,11 @@ namespace HallowBlaze.Tests.EditMode
                 "profile-main",
                 "world.default",
                 int.MaxValue);
-            original.DiscoverNode("node.second");
-            original.DiscoverNode("node.first");
-            original.DiscoverEdge("edge.second-first");
+            original.AdvanceNodeDiscovery("node.rumored", NodeDiscoveryState.Rumored);
+            original.AdvanceNodeDiscovery("node.visited", NodeDiscoveryState.Visited);
+            original.AdvanceNodeDiscovery("node.sighted", NodeDiscoveryState.Sighted);
+            original.AdvanceEdgeDiscovery("edge.sighted", EdgeDiscoveryState.Sighted);
+            original.AdvanceEdgeDiscovery("edge.traversed", EdgeDiscoveryState.Traversed);
             original.DiscoverFact("fact.weather");
             original.AddPersistentNote("note.safe-route");
             original.RecordRunSummary(
@@ -35,8 +37,12 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(
                 restored.WorldDefinitionVersion,
                 Is.EqualTo(original.WorldDefinitionVersion));
-            Assert.That(restored.DiscoveredNodeIds, Is.EqualTo(original.DiscoveredNodeIds));
-            Assert.That(restored.DiscoveredEdgeIds, Is.EqualTo(original.DiscoveredEdgeIds));
+            Assert.That(
+                restored.NodeDiscoveries.Select(ToSnapshot),
+                Is.EqualTo(original.NodeDiscoveries.Select(ToSnapshot)));
+            Assert.That(
+                restored.EdgeDiscoveries.Select(ToSnapshot),
+                Is.EqualTo(original.EdgeDiscoveries.Select(ToSnapshot)));
             Assert.That(restored.DiscoveredFactIds, Is.EqualTo(original.DiscoveredFactIds));
             Assert.That(restored.PersistentNoteIds, Is.EqualTo(original.PersistentNoteIds));
             Assert.That(restored.RunSummaries, Has.Count.EqualTo(1));
@@ -58,8 +64,8 @@ namespace HallowBlaze.Tests.EditMode
                 PersistenceJsonSerializer.SerializeProfile(original));
 
             Assert.That(restored.ProfileId, Is.EqualTo("profile-min"));
-            Assert.That(restored.DiscoveredNodeIds, Is.Empty);
-            Assert.That(restored.DiscoveredEdgeIds, Is.Empty);
+            Assert.That(restored.NodeDiscoveries, Is.Empty);
+            Assert.That(restored.EdgeDiscoveries, Is.Empty);
             Assert.That(restored.DiscoveredFactIds, Is.Empty);
             Assert.That(restored.PersistentNoteIds, Is.Empty);
             Assert.That(restored.RunSummaries, Is.Empty);
@@ -124,11 +130,11 @@ namespace HallowBlaze.Tests.EditMode
         {
             const string privateValue = "private-fact-that-must-not-leak";
             string json =
-                "{\"schemaVersion\":1," +
+                "{\"schemaVersion\":2," +
                 "\"worldDefinitionId\":\"world.default\"," +
                 "\"worldDefinitionVersion\":1," +
-                "\"discoveredNodeIds\":[]," +
-                "\"discoveredEdgeIds\":[]," +
+                "\"nodeDiscoveries\":[]," +
+                "\"edgeDiscoveries\":[]," +
                 $"\"discoveredFactIds\":[\"{privateValue}\"]," +
                 "\"persistentNoteIds\":[],\"runSummaries\":[]}";
 
@@ -140,8 +146,6 @@ namespace HallowBlaze.Tests.EditMode
             LogAssert.NoUnexpectedReceived();
         }
 
-        [TestCase("discoveredNodeIds")]
-        [TestCase("discoveredEdgeIds")]
         [TestCase("discoveredFactIds")]
         [TestCase("persistentNoteIds")]
         public void DuplicateProfileCollectionIdReturnsControlledError(string fieldName)
@@ -156,6 +160,69 @@ namespace HallowBlaze.Tests.EditMode
 
             Assert.That(exception.Error, Is.EqualTo(PersistenceDataError.DuplicateId));
             Assert.That(exception.FieldPath, Does.StartWith(fieldName));
+        }
+
+        [Test]
+        public void DuplicateNodeDiscoveryIdReturnsControlledError()
+        {
+            ProfileStateDto dto = CreateProfileDto();
+            dto.NodeDiscoveries = new[]
+            {
+                new NodeDiscoveryDto { NodeId = "node.same", State = "rumored" },
+                new NodeDiscoveryDto { NodeId = "node.same", State = "visited" }
+            };
+
+            PersistenceDataException exception = Assert.Throws<PersistenceDataException>(
+                () => ProfileStateMapper.FromDto(dto));
+
+            Assert.That(exception.Error, Is.EqualTo(PersistenceDataError.DuplicateId));
+            Assert.That(exception.FieldPath, Is.EqualTo("nodeDiscoveries[1].nodeId"));
+        }
+
+        [Test]
+        public void DuplicateEdgeDiscoveryIdReturnsControlledError()
+        {
+            ProfileStateDto dto = CreateProfileDto();
+            dto.EdgeDiscoveries = new[]
+            {
+                new EdgeDiscoveryDto { EdgeId = "edge.same", State = "sighted" },
+                new EdgeDiscoveryDto { EdgeId = "edge.same", State = "traversed" }
+            };
+
+            PersistenceDataException exception = Assert.Throws<PersistenceDataException>(
+                () => ProfileStateMapper.FromDto(dto));
+
+            Assert.That(exception.Error, Is.EqualTo(PersistenceDataError.DuplicateId));
+            Assert.That(exception.FieldPath, Is.EqualTo("edgeDiscoveries[1].edgeId"));
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void UnknownDiscoveryStateReturnsControlledError(bool node)
+        {
+            ProfileStateDto dto = CreateProfileDto();
+            if (node)
+            {
+                dto.NodeDiscoveries = new[]
+                {
+                    new NodeDiscoveryDto { NodeId = "node.invalid", State = "unknown" }
+                };
+            }
+            else
+            {
+                dto.EdgeDiscoveries = new[]
+                {
+                    new EdgeDiscoveryDto { EdgeId = "edge.invalid", State = "unknown" }
+                };
+            }
+
+            PersistenceDataException exception = Assert.Throws<PersistenceDataException>(
+                () => ProfileStateMapper.FromDto(dto));
+
+            Assert.That(exception.Error, Is.EqualTo(PersistenceDataError.InvalidValue));
+            Assert.That(
+                exception.FieldPath,
+                Is.EqualTo(node ? "nodeDiscoveries[0].state" : "edgeDiscoveries[0].state"));
         }
 
         [Test]
@@ -200,7 +267,9 @@ namespace HallowBlaze.Tests.EditMode
         [TestCase(false)]
         public void FutureSchemaIsRejectedBeforeInterpretingVersionOneFields(bool profile)
         {
-            const string futureDocument = "{\"schemaVersion\":2}";
+            string futureDocument = profile
+                ? "{\"schemaVersion\":3}"
+                : "{\"schemaVersion\":2}";
 
             PersistenceDataException exception = Assert.Throws<PersistenceDataException>(() =>
             {
@@ -220,7 +289,7 @@ namespace HallowBlaze.Tests.EditMode
         public void MissingCollectionsAndInvalidToolSlotShapeReturnControlledErrors()
         {
             ProfileStateDto profileDto = CreateProfileDto();
-            profileDto.DiscoveredFactIds = null;
+            profileDto.NodeDiscoveries = null;
             RunStateDto runDto = CreateRunDto();
             runDto.ToolSlots = new[] { new ToolSlotDto() };
 
@@ -231,7 +300,7 @@ namespace HallowBlaze.Tests.EditMode
                 () => RunStateMapper.FromDto(runDto));
 
             Assert.That(profileException.Error, Is.EqualTo(PersistenceDataError.MissingField));
-            Assert.That(profileException.FieldPath, Is.EqualTo("discoveredFactIds"));
+            Assert.That(profileException.FieldPath, Is.EqualTo("nodeDiscoveries"));
             Assert.That(runException.Error, Is.EqualTo(PersistenceDataError.InvalidValue));
             Assert.That(runException.FieldPath, Is.EqualTo("toolSlots"));
         }
@@ -257,6 +326,8 @@ namespace HallowBlaze.Tests.EditMode
             Type[] dtoTypes =
             {
                 typeof(ProfileStateDto),
+                typeof(NodeDiscoveryDto),
+                typeof(EdgeDiscoveryDto),
                 typeof(ProfileRunSummaryDto),
                 typeof(RunStateDto),
                 typeof(ToolSlotDto)
@@ -299,14 +370,24 @@ namespace HallowBlaze.Tests.EditMode
                 ProfileId = "profile-main",
                 WorldDefinitionId = "world.default",
                 WorldDefinitionVersion = 1,
-                DiscoveredNodeIds = Array.Empty<string>(),
-                DiscoveredEdgeIds = Array.Empty<string>(),
+                NodeDiscoveries = Array.Empty<NodeDiscoveryDto>(),
+                EdgeDiscoveries = Array.Empty<EdgeDiscoveryDto>(),
                 DiscoveredFactIds = Array.Empty<string>(),
                 PersistentNoteIds = Array.Empty<string>(),
                 RunSummaries = Array.Empty<ProfileRunSummaryDto>()
             };
         }
 
+
+        private static string ToSnapshot(NodeDiscovery discovery)
+        {
+            return $"{discovery.NodeId}:{discovery.State}";
+        }
+
+        private static string ToSnapshot(EdgeDiscovery discovery)
+        {
+            return $"{discovery.EdgeId}:{discovery.State}";
+        }
         private static RunStateDto CreateRunDto()
         {
             return new RunStateDto
