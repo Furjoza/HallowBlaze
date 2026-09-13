@@ -1053,33 +1053,58 @@ Topologia nie może być drugi raz zahardkodowana w `GameManager`, scenie ani UI
 
 ---
 
-## `M2.2` — Walidator makrografu
+## `M2.2` - Macrograph validator
 
-**Status:** `Planned`  
-**Priorytet:** P0  
-**Powiązany kontrakt:** sekcje 5.3, 7.1 i 16.
+**Status:** `Done` - writer: `GitHub Copilot`; review 2026-09-13: `PASS`
+**Completed:** 2026-09-13 - focused EditMode `20/20 Passed`; integrity gate `PASS`.
+**Priority:** P0
+**Related contract:** sections 7.1, 7.2, 8, 16, 21.1, and 21.3.
 
-**Rationale:** Błędna krawędź może zablokować cały run albo pozostawić odkrycie bez celu. Walidator przenosi te problemy z playtestu do szybkiego testu danych.
+**Rationale:** A broken road can block an entire run or persist discovery for content that cannot be resolved. Validation moves these failures from playtesting and save handling to a fast, deterministic data check.
 
-**Obecne zachowanie:** Definicja z `M2.1` nie ma jeszcze kompletnego automatycznego sprawdzania.
+**Current behavior:** M2.1 materializes an immutable `WorldDefinition`, but its constructors reject malformed values and duplicate IDs immediately. That fail-fast boundary protects runtime lookup, yet it cannot provide an author with all independent problems in one report.
 
-**Oczekiwany rezultat:** Walidator raportuje duplikaty, brakujące referencje, brak startu/celu, nieosiągalne wymagane węzły, martwe końce bez oznaczenia i niewłaściwy dzień landmarku.
+**Expected result:** A pure validator inspects a snapshotted raw graph before `WorldDefinition` construction and returns every independent diagnostic it can establish safely. It may also offer a convenience entry point for an already valid `WorldDefinition`, but malformed authoring data must not require successful runtime-model construction first.
 
-**Zakres:** Czysty walidator z wieloma komunikatami w jednym przebiegu i testami uszkodzonych fixture'ów.
+**Validation semantics:**
 
-**Non-goals:** Bez oceny jakości narracji, balansu lokalnej planszy i automatycznego poprawiania grafu.
+- every declared node is required and must be reachable from one uniquely resolved start;
+- the explicit goal is the only node allowed to have no usable outgoing road; every other such node is an unexpected dead end;
+- one day is one directed-edge traversal; the computed day of a node is its shortest directed distance from the start;
+- every reachable node's `DistanceLayer` must equal that computed distance;
+- the expected goal day is a validation option, not a global constant; the prototype fixture is validated with day `5`;
+- duplicate or otherwise ambiguous IDs and roads with unresolved endpoints do not participate in graph traversal;
+- a dependent rule is skipped when its prerequisite cannot be resolved uniquely, preventing misleading cascades while preserving unrelated diagnostics.
 
-**Zależności:** `M2.1`.
+**Required diagnostic rules:** At minimum: duplicate node ID, duplicate edge ID, missing or unresolved start, missing or unresolved goal, missing edge source, missing edge destination, unreachable node, unexpected dead end, distance-layer mismatch, and goal-day mismatch.
 
-**Dozwolony obszar plików:** `/Assets/Scripts/Core/World/Validation/**`, testy i fixtures.
+**Diagnostic contract:** Each diagnostic exposes a stable error code, the relevant stable ID or field as its subject, and a readable reason. The result exposes an explicit `IsValid` and a read-only diagnostic collection. Diagnostic order is deterministic and independent of input collection order. Data errors are reported as diagnostics rather than thrown exceptions, and validation never mutates caller-owned collections or elements.
 
-**Kryteria akceptacji:** Poprawny graf przechodzi; każdy wymieniony klasa błędu ma osobny test; komunikat zawiera stabilne ID i przyczynę; walidator nie mutuje danych.
+**Scope:** Add Unity-independent raw validation input, result and diagnostic contracts, plus a multi-error graph validator under `/Assets/Scripts/Core/World/Validation/**`. Add focused EditMode fixtures and tests, and record evidence in `/Docs/Validation/M2.2.md`.
 
-**Plan testów:** EditMode parametryzowany dla poprawnego i celowo uszkodzonych grafów.
+**Non-goals:** No narrative-quality scoring, local-board balance checks, graph generation, automatic repair, runtime travel integration, discovery or profile mutation, save-schema changes, UI, or changes to the M2.1 authoring loader.
 
-**Wpływ na save i kompatybilność:** Brak zmiany formatu; zapobiega zapisaniu odkryć wskazujących nieistniejący content.
+**Dependencies:** `M2.1`.
 
-**Wymagany handoff:** Tabela reguła → fixture → oczekiwany komunikat.
+**Allowed file area:** `/Assets/Scripts/Core/World/Validation/**`, focused EditMode tests and their `.meta` files, and `/Docs/Validation/M2.2.md`.
+
+**Acceptance criteria:**
+
+1. The production validator accepts the M2.1 prototype with `expectedGoalDay = 5` and returns an empty, valid, read-only result.
+2. Every required diagnostic rule has a focused malformed fixture asserting its stable code, subject, and reason.
+3. One malformed fixture containing at least a duplicate ID and a broken endpoint returns both independent diagnostics in one call without throwing.
+4. Reordering nodes and roads produces an identical ordered diagnostic snapshot.
+5. Validation does not mutate source collections or elements, exposes no mutable result collection, and has no Unity dependency.
+6. Graph-dependent checks ignore invalid or ambiguous entries and skip only checks whose prerequisites are unresolved; tests prevent duplicate cascade diagnostics.
+7. Shortest directed distances drive both per-node layer checks and the optional goal-day check; no route-order or first-path behavior can change the result.
+
+**Test plan:** Focused EditMode coverage for the valid prototype, each rule listed above, simultaneous independent failures, prerequisite/cascade suppression, input reordering, shortest-path selection, omitted versus supplied expected goal day, result immutability, input non-mutation, and referenced-assembly independence. Malformed data must produce results without data-validation exceptions.
+
+**Save and compatibility impact:** No format change. The validator protects later discovery and run writes from referencing nonexistent content, but this card does not yet connect validation to persistence or runtime loading.
+
+**Required handoff:** A `rule -> fixture -> code -> subject -> reason` table, exact focused test results, and explicit evidence for deterministic ordering, cascade suppression, input non-mutation, result immutability, and Unity independence.
+
+**Validation result:** Unity `6000.3.21f1` focused EditMode `20/20 Passed`; failed, skipped, and inconclusive `0`. The validator accepts the M2.1 prototype at expected goal day `5`, reports all required stable diagnostics, preserves independent failures while suppressing only uncertain dependent conclusions, and remains deterministic, read-only, non-mutating, and Unity-independent. Independent confirmation review: `PASS`. Full handoff: [`Validation/M2.2.md`](Validation/M2.2.md).
 
 ---
 
