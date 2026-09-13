@@ -333,6 +333,7 @@ namespace HallowBlaze.Tests.PlayMode
         {
             GameObject managerObject = Track(new GameObject("M1.4 GameManager"));
             gameManager = managerObject.AddComponent(gameManagerType);
+            Invoke(gameManager, "EnsurePersistence");
             Invoke(gameManager, "StartNewRun");
             session = GetProperty<GameSession>(gameManager, "Session");
         }

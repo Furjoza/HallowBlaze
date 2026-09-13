@@ -408,6 +408,7 @@ Pozwala rozróżnić faktyczną migrację projektu i porządki indeksu od mechan
 ## `M0.8` — Regresja pojedynczej akcji ruchu
 
 **Status:** `Done`
+
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 9, 10, 21.2 i Appendix A.
 
@@ -832,7 +833,7 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 ## `M1.8` — Test kontraktu własności i trwałości
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priorytet:** P0
 **Powiązany kontrakt:** sekcje 6, 19 i 22.
 
@@ -858,9 +859,13 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Wymagany handoff:** Macierz scenariusz → test → wynik oraz wszystkie niepokryte zachowania.
 
+**Wynik wykonania 2026-09-10:** Rozszerzono macierz o strukturalne potwierdzenie schema v1, odrzucenie `Continue` przy uszkodzonym profilu bez mutowania poprawnych plików runu oraz PlayMode dla odtworzenia zatwierdzonej granicy przez świeży `GameManager`, `GameOver` i `WinGame`. Wszystkie testy używają izolowanych katalogów tymczasowych. Właściciel zaakceptował ręczny smoke: ruch kafelkowy i kontakt z zombie działały poprawnie, a `Continue` zachował właściwy dzień. Brak odtworzenia układu planszy pozostaje osobnym zakresem M1.10; powrót z ekranu porażki pozostaje osobnym M1.11.
+
+**Wynik walidacji:** Unity `6000.3.21f1`: Pass 1 EditMode → PlayMode `85/85` i `26/26`; Pass 2 PlayMode → EditMode `26/26` i `85/85`; failed/skipped/inconclusive `0`. Niezależny review nie wykazał materialnych błędów automatycznej macierzy. Pełny raport: [`Validation/M1.8.md`](Validation/M1.8.md).
+
 ## `M1.9` — Regresja ruchu kafelkowego i kontaktu z zombie
 
-**Status:** `Planned`
+**Status:** `Done` — poprawka, niezależny review i ponowny manualny smoke 2026-09-12: `Pass`
 **Priorytet:** P0
 **Powiązany kontrakt:** sekcje 6.4, 9.2, 9.3 i 22.
 
@@ -868,17 +873,17 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Obecne zachowanie:** `PlayerScript` i `MovingObject` nadal używają `Transform`/`Rigidbody2D`, `Physics2D.Linecast`, colliderów i coroutine jako bieżącego rozstrzygnięcia ruchu. W smoke postać poruszała się nieregularnie, a atak przy spotkaniu z zombie był trudny do wywołania. Wcześniejszy M0.8 potwierdził pojedynczą próbę wejścia, ale nie chroni obecnej geometrii ruchu i kontaktu po zmianach M1.
 
-**Oczekiwany rezultat:** Jedno zaakceptowane wejście przesuwa gracza z centrum jednego pola do centrum dokładnie jednego sąsiedniego pola, nalicza dokładnie jeden koszt i uruchamia jedną fazę przeciwników. Odrzucone wejście nie przesuwa i nie kosztuje. Kontakt gracza i zombie jest rozstrzygany niezawodnie dla właściwego pola, bez wymagania przypadkowego nakładania colliderów.
+**Oczekiwany rezultat:** Jedno zaakceptowane wejście przesuwa gracza z centrum jednego pola do centrum dokładnie jednego sąsiedniego pola i nalicza dokładnie jeden koszt. Przytrzymany kierunek wykonuje kolejne kroki, gdy sterowanie wraca do gracza. Zombie zachowują obecny rytm jednej faktycznej akcji na dwa ruchy gracza. Odrzucone wejście nie przesuwa i nie kosztuje. Kontakt gracza i zombie jest rozstrzygany niezawodnie dla właściwego pola, bez wymagania przypadkowego nakładania colliderów.
 
-**Zakres:** Odtworzyć regresję testem, ustalić jednoznaczny stan wejścia/ruchu podczas animacji, naprawić snap do siatki i blokadę kolejnego wejścia do końca rozstrzygnięcia oraz ustabilizować wykrywanie interakcji gracz–zombie. Zachować obecną prezentację i delegację kosztów do `RunState`.
+**Zakres:** Odtworzyć regresję testem, usunąć zależność tempa interpolacji od relacji klatek renderu do kroków fizyki oraz ustabilizować wykrywanie interakcji gracz–zombie. Zachować przytrzymane wejście, obecną turowość, rytm zombie i delegację kosztów do `RunState`; bez nowej synchronizacji ruchu.
 
 **Non-goals:** Bez pełnego resolvera M3, nowego Input Systemu, pathfindingu, nowych typów przeciwników, balansu obrażeń, przebudowy generatora i zmian save schema.
 
-**Zależności:** `M1.7`; blokuje domknięcie `M1.8` i bramkę M1.
+**Zależności:** `M1.7`; ewentualne ponowne otwarcie wymaga deterministycznej reprodukcji.
 
 **Dozwolony obszar plików:** `PlayerScript`, `MovingObject`, `Enemy`, niezbędne adaptery tury oraz skupione testy EditMode/PlayMode. Sceny i prefaby tylko wtedy, gdy test wykaże błędną konfigurację istniejących colliderów lub Rigidbody2D.
 
-**Kryteria akceptacji:** Test przed poprawką odtwarza nieregularny lub wielopolowy ruch albo zawodny kontakt; po poprawce seria wejść kończy się zawsze na całkowitych współrzędnych siatki; jedno wejście daje najwyżej jeden ruch, jeden koszt i jedną fazę zombie; wejście podczas animacji nie tworzy kolejnego rozstrzygnięcia; ściana i zwykła przeszkoda pozostają darmowe; kontakt z zombie wywołuje dokładnie jeden właściwy skutek; przejście przez wyjście nadal działa.
+**Kryteria akceptacji:** Test przed poprawką odtwarza nieregularny lub wielopolowy ruch albo zawodny kontakt; po poprawce seria wejść kończy się zawsze na całkowitych współrzędnych siatki; jedno rozstrzygnięcie daje najwyżej jeden ruch i jeden koszt; przytrzymany kierunek może wykonać kolejny ruch po odzyskaniu tury; zombie wykonuje jedną faktyczną akcję na dwa ruchy gracza; zwykła przeszkoda pozostaje darmowa, a ściana zużywa jedną turę; kontakt z zombie wywołuje dokładnie jeden właściwy skutek; przejście przez wyjście nadal działa.
 
 **Plan testów:** Skupione PlayMode bez stałego oczekiwania jako jedynej asercji: szybkie naprzemienne wejścia, przytrzymanie klawisza, ruch po czterech kierunkach, blokada, ściana, wyjście i kontakt z zombie z obu osi. Następnie pełne EditMode/PlayMode oraz ręczny smoke na co najmniej dwóch wygenerowanych planszach z kontrolą pozycji, food, numeru dnia i rytmu zombie.
 
@@ -886,9 +891,13 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Wymagany handoff:** Minimalna reprodukcja przed poprawką, opis przyczyny źródłowej, tabela wejście → ruch → koszt → faza zombie oraz wynik manualnego kontaktu z zombie.
 
+**Wynik wykonania 2026-09-12:** Po wycofaniu nieudanej blokady ruchu i latcha wejścia czerwony PlayMode potwierdził, że `Rigidbody2D.MovePosition` użyte w coroutine renderowej pozostawiało gracza na `x = 0.057` po sekundzie ruchu o skonfigurowanym czasie `0.2 s`. `MovingObject` aktualizuje teraz bezpośrednio pozycję kinematycznego body w istniejącej coroutine. Nie dodano stanu ruchu ani synchronizacji tur; `PlayerScript.Update()` i `Enemy.skipMove` pozostają zgodne z bazą M1.10. `LevelImage` jest przenoszony pod HUD Food/Health. Bez zmiany schematu save. Pełny raport: [`Validation/M1.9.md`](Validation/M1.9.md).
+
+**Wynik walidacji:** Unity `6000.3.21f1`: końcowe PlayMode `32/32`, EditMode `88/88`; failed/skipped/inconclusive `0`. Skupione testy potwierdziły czas ruchu, rozłączne pola gracza i zombie, rytm dwóch ruchów gracza na jedną akcję zombie oraz HUD realnej sceny. Niezależny review i ponowny ręczny smoke: `Pass`.
+
 ## `M1.10` — Stabilna plansza po `Continue`
 
-**Status:** `Planned`
+**Status:** `Done` — writer: `codex-lead` po dwóch błędach `502` lokalnego writera; review 2026-09-11: `Pass`
 **Priorytet:** P0
 **Powiązany kontrakt:** sekcje 6.5, 7, 16 i 19.
 
@@ -914,6 +923,10 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Wymagany handoff:** Definicja tożsamości planszy, reguła seeda, wynik hashy przed/po restartach oraz decyzja migracyjna dla istniejącego save v1.
 
+**Wynik wykonania 2026-09-11:** Tożsamość planszy jest wyprowadzana deterministycznie z wersjonowanej domeny `hallowblaze.board-layout.v1`, `RunId`, `RunSeed`, `CurrentDay` i `WorldNodeId`. Nowe `RunId` używa utrwalanego GUID zamiast zegara. Gameplayowy `System.Random` steruje pozycjami, liczbą i typem obiektów oraz dropem jedzenia; `UnityEngine.Random` pozostał wyłącznie w warstwie kosmetycznej. `Exit to Menu` zachowuje ostatni checkpoint i nie utrwala mutacji środka planszy. Schema v1 nie wymaga zmiany, ponieważ wszystkie składniki tożsamości były już zapisane.
+
+**Wynik walidacji:** Po korekcie review końcowa sekwencja w świeżych procesach Unity `6000.3.21f1`: PlayMode `26/26`, następnie EditMode `88/88`; failed/skipped/inconclusive `0`. Dwa kolejne `Continue` odtworzyły hash `7BFA4514C1D91EF0D9D3AD92A898CE523C0CF15AD424D45F9B07D72FF5CCFA2F` oraz pozycję startową `(0, 0, 0)`. Niezależny re-review zakończył się `Pass`; ręczny smoke pozostaje jawnie `Not run`. Pełny raport: [`Validation/M1.10.md`](Validation/M1.10.md).
+
 ## `M1.11` — Powrót do menu z ekranu porażki
 
 **Status:** `Done` — writer: `GitHub Copilot`; review 2026-09-12: `Pass`
@@ -931,7 +944,7 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Non-goals:** Bez nowego ekranu podsumowania, UI atlasu, leaderboardu sieciowego, zmiany warunków death/win i redesignu menu głównego.
 
-**Zależności:** `M1.7`; blokuje manualne domknięcie `M1.8`.
+**Zależności:** `M1.7`; pozostaje wymagane do domknięcia bramki całego M1.
 
 **Dozwolony obszar plików:** `GameManager`, istniejący ekran game over i jego skrypty/przyciski, konieczna scena/prefab oraz skupione testy PlayMode i `/Docs/Validation/M1.11.md`.
 
@@ -959,9 +972,9 @@ M1 jest zaliczony, gdy istnieje dokładnie jeden właściciel profilu i runu, pr
 
 ## `M2.1` — Katalog świata: stabilne ID i definicja pięciodniowego grafu
 
-**Status:** `Planned`  
-**Priorytet:** P0  
-**Powiązany kontrakt:** sekcje 4, 5, 6.1, 7.1, 7.2, 7.5, 8, 20 i 21.1.
+| Status | Priorytet | Powiązany kontrakt |
+| --- | --- | --- |
+| `Done` | P0 | sekcje 4, 5, 6.1, 7.1, 7.2, 7.5, 8, 20 i 21.1 |
 
 **Rationale:** Wiedza może być trwała tylko wtedy, gdy opisuje ten sam świat pomiędzy runami. Stały, mały graf pozwala sprawdzić obietnicę atlasu przed produkcją dziesięciu lub czterdziestu dni contentu.
 
@@ -1036,47 +1049,74 @@ Topologia nie może być drugi raz zahardkodowana w `GameManager`, scenie ani UI
 
 **Wymagany handoff:** Czytelny diagram grafu z warstwami dystansu, rejestr stabilnych ID i ich znaczeń, tabela wszystkich dróg `EdgeId → FromNodeId → ToNodeId → kierunek`, wyjaśnienie granicy danych authoringowych i czystego modelu oraz dokładne wyniki testów topologii.
 
+**Validation result:** Unity `6000.3.21f1` focused EditMode `6/6 Passed`; failed, skipped, and inconclusive `0`. The fixture contains 8 nodes, 9 directed edges, two decision points, two route rejoins, and four intended five-edge routes to the landmark. Independent review: `PASS`. Full handoff: [`Validation/M2.1.md`](Validation/M2.1.md).
+
 ---
 
-## `M2.2` — Walidator makrografu
+## `M2.2` - Macrograph validator
 
-**Status:** `Planned`  
-**Priorytet:** P0  
-**Powiązany kontrakt:** sekcje 5.3, 7.1 i 16.
+**Status:** `Done` - writer: `GitHub Copilot`; review 2026-09-13: `PASS`
+**Completed:** 2026-09-13 - focused EditMode `20/20 Passed`; integrity gate `PASS`.
+**Priority:** P0
+**Related contract:** sections 7.1, 7.2, 8, 16, 21.1, and 21.3.
 
-**Rationale:** Błędna krawędź może zablokować cały run albo pozostawić odkrycie bez celu. Walidator przenosi te problemy z playtestu do szybkiego testu danych.
+**Rationale:** A broken road can block an entire run or persist discovery for content that cannot be resolved. Validation moves these failures from playtesting and save handling to a fast, deterministic data check.
 
-**Obecne zachowanie:** Definicja z `M2.1` nie ma jeszcze kompletnego automatycznego sprawdzania.
+**Current behavior:** M2.1 materializes an immutable `WorldDefinition`, but its constructors reject malformed values and duplicate IDs immediately. That fail-fast boundary protects runtime lookup, yet it cannot provide an author with all independent problems in one report.
 
-**Oczekiwany rezultat:** Walidator raportuje duplikaty, brakujące referencje, brak startu/celu, nieosiągalne wymagane węzły, martwe końce bez oznaczenia i niewłaściwy dzień landmarku.
+**Expected result:** A pure validator inspects a snapshotted raw graph before `WorldDefinition` construction and returns every independent diagnostic it can establish safely. It may also offer a convenience entry point for an already valid `WorldDefinition`, but malformed authoring data must not require successful runtime-model construction first.
 
-**Zakres:** Czysty walidator z wieloma komunikatami w jednym przebiegu i testami uszkodzonych fixture'ów.
+**Validation semantics:**
 
-**Non-goals:** Bez oceny jakości narracji, balansu lokalnej planszy i automatycznego poprawiania grafu.
+- every declared node is required and must be reachable from one uniquely resolved start;
+- the explicit goal is the only node allowed to have no usable outgoing road; every other such node is an unexpected dead end;
+- one day is one directed-edge traversal; the computed day of a node is its shortest directed distance from the start;
+- every reachable node's `DistanceLayer` must equal that computed distance;
+- the expected goal day is a validation option, not a global constant; the prototype fixture is validated with day `5`;
+- duplicate or otherwise ambiguous IDs and roads with unresolved endpoints do not participate in graph traversal;
+- a dependent rule is skipped when its prerequisite cannot be resolved uniquely, preventing misleading cascades while preserving unrelated diagnostics.
 
-**Zależności:** `M2.1`.
+**Required diagnostic rules:** At minimum: duplicate node ID, duplicate edge ID, missing or unresolved start, missing or unresolved goal, missing edge source, missing edge destination, unreachable node, unexpected dead end, distance-layer mismatch, and goal-day mismatch.
 
-**Dozwolony obszar plików:** `/Assets/Scripts/Core/World/Validation/**`, testy i fixtures.
+**Diagnostic contract:** Each diagnostic exposes a stable error code, the relevant stable ID or field as its subject, and a readable reason. The result exposes an explicit `IsValid` and a read-only diagnostic collection. Diagnostic order is deterministic and independent of input collection order. Data errors are reported as diagnostics rather than thrown exceptions, and validation never mutates caller-owned collections or elements.
 
-**Kryteria akceptacji:** Poprawny graf przechodzi; każdy wymieniony klasa błędu ma osobny test; komunikat zawiera stabilne ID i przyczynę; walidator nie mutuje danych.
+**Scope:** Add Unity-independent raw validation input, result and diagnostic contracts, plus a multi-error graph validator under `/Assets/Scripts/Core/World/Validation/**`. Add focused EditMode fixtures and tests, and record evidence in `/Docs/Validation/M2.2.md`.
 
-**Plan testów:** EditMode parametryzowany dla poprawnego i celowo uszkodzonych grafów.
+**Non-goals:** No narrative-quality scoring, local-board balance checks, graph generation, automatic repair, runtime travel integration, discovery or profile mutation, save-schema changes, UI, or changes to the M2.1 authoring loader.
 
-**Wpływ na save i kompatybilność:** Brak zmiany formatu; zapobiega zapisaniu odkryć wskazujących nieistniejący content.
+**Dependencies:** `M2.1`.
 
-**Wymagany handoff:** Tabela reguła → fixture → oczekiwany komunikat.
+**Allowed file area:** `/Assets/Scripts/Core/World/Validation/**`, focused EditMode tests and their `.meta` files, and `/Docs/Validation/M2.2.md`.
+
+**Acceptance criteria:**
+
+1. The production validator accepts the M2.1 prototype with `expectedGoalDay = 5` and returns an empty, valid, read-only result.
+2. Every required diagnostic rule has a focused malformed fixture asserting its stable code, subject, and reason.
+3. One malformed fixture containing at least a duplicate ID and a broken endpoint returns both independent diagnostics in one call without throwing.
+4. Reordering nodes and roads produces an identical ordered diagnostic snapshot.
+5. Validation does not mutate source collections or elements, exposes no mutable result collection, and has no Unity dependency.
+6. Graph-dependent checks ignore invalid or ambiguous entries and skip only checks whose prerequisites are unresolved; tests prevent duplicate cascade diagnostics.
+7. Shortest directed distances drive both per-node layer checks and the optional goal-day check; no route-order or first-path behavior can change the result.
+
+**Test plan:** Focused EditMode coverage for the valid prototype, each rule listed above, simultaneous independent failures, prerequisite/cascade suppression, input reordering, shortest-path selection, omitted versus supplied expected goal day, result immutability, input non-mutation, and referenced-assembly independence. Malformed data must produce results without data-validation exceptions.
+
+**Save and compatibility impact:** No format change. The validator protects later discovery and run writes from referencing nonexistent content, but this card does not yet connect validation to persistence or runtime loading.
+
+**Required handoff:** A `rule -> fixture -> code -> subject -> reason` table, exact focused test results, and explicit evidence for deterministic ordering, cascade suppression, input non-mutation, result immutability, and Unity independence.
+
+**Validation result:** Unity `6000.3.21f1` focused EditMode `20/20 Passed`; failed, skipped, and inconclusive `0`. The validator accepts the M2.1 prototype at expected goal day `5`, reports all required stable diagnostics, preserves independent failures while suppressing only uncertain dependent conclusions, and remains deterministic, read-only, non-mutating, and Unity-independent. Independent confirmation review: `PASS`. Full handoff: [`Validation/M2.2.md`](Validation/M2.2.md).
 
 ---
 
 ## `M2.3` — Model odkryć atlasu
 
-**Status:** `Planned`  
+**Status:** `Done` — completed 2026-09-13; writer: `GitHub Copilot`
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 5.2, 5.4 i 6.1.
 
 **Rationale:** `Unknown`, `Rumored`, `Sighted` i `Visited` niosą różną ilość informacji. Jeden boolean „odkryte” ujawniłby za dużo albo nie potrafił pokazać postępu.
 
-**Obecne zachowanie:** `ProfileState` zna stabilne ID, ale nie ma jeszcze pełnych, monotonicznych przejść discovery dla węzłów i dróg.
+**Obecne zachowanie:** `ProfileState` utrzymuje typowane, monotoniczne stany discovery węzłów i dróg; persistence schema v2 zapisuje je tekstowo i migruje istniejące ID ze schema v1 do `Sighted`.
 
 **Oczekiwany rezultat:** Profil obsługuje stany węzła `Unknown → Rumored → Sighted → Visited` i drogi `Unknown → Sighted → Traversed`, bez cofania wiedzy.
 
@@ -1095,6 +1135,8 @@ Topologia nie może być drugi raz zahardkodowana w `GameManager`, scenie ani UI
 **Wpływ na save i kompatybilność:** Jeśli schema v1 nie przewidziała stanów, powstaje migracja v1→v2 z jednoznacznym mapowaniem istniejących ID.
 
 **Wymagany handoff:** Macierz przejść i przykład migracji; wskazać każde miejsce, które emituje discovery.
+
+**Validation result:** Unity `6000.3.21f1` post-review focused EditMode `79/79 Passed`; failed, skipped, and inconclusive `0`. Full solution build passed with `0` errors and `2` pre-existing out-of-scope warnings. Independent confirmation review: `PASS`. Full handoff: [`Validation/M2.3.md`](Validation/M2.3.md).
 
 ---
 
@@ -2438,19 +2480,31 @@ Vertical slice jest ukończony dopiero po `Accept` `M7.6`. Samo zaimplementowani
 
 ## `M8.1` — Snapshot i wznowienie środka planszy
 
-**Status:** `Deferred`  
-**Powiązany kontrakt:** sekcje 6.2, 10, 16 i 20.  
-**Rationale:** Wymaga stabilnego BoardState, versioned replay i wszystkich dynamicznych systemów; wcześniejszy snapshot podwoiłby koszt migracji.  
-**Obecne zachowanie:** Save działa na bezpiecznych granicach między planszami.  
-**Oczekiwany rezultat:** Atomowy snapshot pełnego board/turn/intent/noise state.  
-**Zakres:** DTO, migration, recovery i exact-turn resume.  
-**Non-goals:** Cloud sync.  
-**Zależności:** `M7.6`.
-**Dozwolony obszar plików:** Core Persistence/Board/Turns i testy.  
-**Kryteria akceptacji:** Wznowienie każdej wspieranej fazy daje ten sam stan/hash, a corruption wraca do bezpiecznego backupu.  
-**Plan testów:** Crash injection na granicach faz, round-trip każdego typu encji i porównanie replay/hash.  
-**Wpływ na save:** Nowa wersja schema z migracją.  
-**Wymagany handoff:** Tabela snapshot fields i wyniki crash injection.
+**Status:** `Deferred`
+
+**Powiązany kontrakt:** sekcje 6.2, 10, 16 i 20.
+
+**Rationale:** Wymaga stabilnego `BoardState`, resolvera, wersjonowanego replayu i wszystkich dynamicznych systemów; wcześniejszy snapshot podwoiłby koszt migracji. Bez niego gracz może celowo wyjść do menu lub zamknąć grę, a następnie użyć `Continue`, aby cofnąć niekorzystne akcje i odtworzyć początek tej samej planszy.
+
+**Obecne zachowanie:** M1.10 odtwarza deterministycznie ten sam początkowy układ planszy i ostatnią zatwierdzoną granicę runu. Nie zachowuje mutacji środka planszy: pozycji aktorów, zebranych przedmiotów, uszkodzonych lub zniszczonych przeszkód, stanu przeciwników, zasobów po turach, hałasu ani efektów pola. `Exit to Menu → Continue` działa więc jak reset bieżącej planszy.
+
+**Oczekiwany rezultat:** `Continue` po wyjściu do menu, kontrolowanym zamknięciu aplikacji lub awarii odtwarza ostatni atomowo zapisany, zakończony stan tury. Ponowne wczytywanie nie przywraca zużytych zasobów, zebranych łupów, pokonanych przeciwników ani zniszczonych przeszkód i nie pozwala rerollować wyniku RNG.
+
+**Zakres:** Wersjonowany DTO pełnego `BoardState` wraz z identyfikatorami encji i ich stanem, pozycją gracza i przeciwników, zasobami runu, numerem/fazą zakończonej tury, stanem narzędzi, przeszkód, przedmiotów, efektów, hałasu oraz deterministycznych strumieni RNG. Atomowy checkpoint na stabilnej granicy tury, obowiązkowy flush przed `Exit to Menu` i kontrolowanym zamknięciem, migracja, backup, recovery i exact-turn resume.
+
+**Non-goals:** Cloud sync, zapis w trakcie animacji lub nierozstrzygniętej komendy, serializacja `GameObject`, `Transform`, colliderów, prefabów albo Unity `InstanceID`.
+
+**Zależności:** `M3.2`, `M3.5`, `M3.10`, wszystkie dynamiczne systemy uwzględniane w snapshotach oraz `M7.6`.
+
+**Dozwolony obszar plików:** Core Persistence/Board/Turns i testy.
+
+**Kryteria akceptacji:** Po wykonaniu reprezentatywnej sekwencji tur `Exit to Menu → Continue` i zamknięcie aplikacji → ponowne uruchomienie dają ten sam kanoniczny hash planszy, runu i zakończonej tury. Wielokrotne `Continue` nie odnawia łupu, zdrowia, jedzenia, ładunków narzędzi, przeciwników ani przeszkód i nie zmienia kolejnych wyników gameplayowego RNG. Snapshot nigdy nie reprezentuje połowy komendy; corruption wraca do ostatniego poprawnego backupu bez łączenia stanów z różnych tur. Brak lub starsza wersja snapshotu ma jawną migrację albo zaakceptowany fallback do bezpiecznej granicy M1.10.
+
+**Plan testów:** Round-trip każdego typu encji i dynamicznego pola; hash przed wyjściem i po `Continue`; scenariusze po zebraniu łupu, zniszczeniu przeszkody, użyciu narzędzia, obrażeniach i ruchu/śmierci przeciwnika; wielokrotne `Exit to Menu → Continue`; restart procesu; crash injection przed zapisem, pomiędzy temp-write i replace oraz po replace; zgodność replay/hash i test migracji poprzedniej schemy.
+
+**Wpływ na save:** Nowa wersja schema z migracją. Dotychczasowy zapis granicy M1.10 pozostaje jednoznacznym fallbackiem dla save'ów bez snapshotu, jeśli migracja nie może odtworzyć stanu środka planszy.
+
+**Wymagany handoff:** Tabela wszystkich pól snapshotu i ich właścicieli, punkty checkpointu/flush, macierz exploitów resetu oraz wyniki round-trip, restart i crash injection.
 
 ---
 
