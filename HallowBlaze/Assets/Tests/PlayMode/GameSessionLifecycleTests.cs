@@ -3,6 +3,7 @@ using System.Collections;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
 using NUnit.Framework;
@@ -78,6 +79,44 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(session.ActiveRun.Health, Is.EqualTo(100));
             Assert.That(session.ActiveRun.CurrentDay, Is.Zero);
             Assert.That(session.ActiveRun.Status, Is.EqualTo(RunStatus.Active));
+        }
+
+        [UnityTest]
+        public IEnumerator CorruptRunKeepsContinueLabelStable()
+        {
+            Component manager = CreateManager("Continue Label Save Manager");
+            Invoke(manager, "EnsurePersistence");
+            Invoke(manager, "StartNewRun");
+
+            Directory.CreateDirectory(persistenceRoot);
+            string profilePath = Path.Combine(persistenceRoot, "profile.json");
+            string runPath = Path.Combine(persistenceRoot, "run.json");
+            Assert.That(File.Exists(profilePath), Is.True);
+            Assert.That(File.Exists(runPath), Is.True);
+            DestroyGameManagerSingleton();
+
+            File.WriteAllText(runPath, "{ invalid json");
+            SaveStoreResult<RunState> inspection = RunLifecycleService.InspectContinue(
+                new FileSystemSaveStore(persistenceRoot));
+            Assert.That(inspection.Type, Is.EqualTo(SaveStoreResultType.Corrupt));
+
+            AsyncOperation menuLoad = SceneManager.LoadSceneAsync("Menu", LoadSceneMode.Single);
+            while (!menuLoad.isDone)
+                yield return null;
+            yield return null;
+
+            AssertSceneHasNoMissingComponents("Menu");
+            GameObject continueButton = GameObject.Find("ContinueBttn");
+            Assert.That(continueButton, Is.Not.Null);
+            Assert.That(continueButton.GetComponent<Button>().interactable, Is.False);
+            Text continueLabel = continueButton.GetComponentInChildren<Text>(true);
+            Assert.That(continueLabel, Is.Not.Null);
+            Assert.That(continueLabel.text, Is.EqualTo("Continue"));
+
+            Scene cleanupScene = SceneManager.CreateScene(
+                "Continue Label Cleanup " + Guid.NewGuid().ToString("N"));
+            Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
+            yield return SceneManager.UnloadSceneAsync("Menu");
         }
 
         [UnityTest]
@@ -235,6 +274,9 @@ namespace HallowBlaze.Tests.PlayMode
             GameObject continueButton = GameObject.Find("ContinueBttn");
             Assert.That(continueButton, Is.Not.Null);
             Assert.That(continueButton.GetComponent<Button>().interactable, Is.False);
+            Text continueLabel = continueButton.GetComponentInChildren<Text>(true);
+            Assert.That(continueLabel, Is.Not.Null);
+            Assert.That(continueLabel.text, Is.EqualTo("Continue"));
             Assert.That(GetStaticField(gameManagerType, "instance"), Is.SameAs(manager));
             Assert.That(((Behaviour)manager).enabled, Is.True);
             Assert.That(Time.timeScale, Is.EqualTo(1f));
@@ -250,6 +292,29 @@ namespace HallowBlaze.Tests.PlayMode
             Scene cleanupScene = SceneManager.CreateScene("M1.11 Menu Cleanup " + Guid.NewGuid().ToString("N"));
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
             yield return SceneManager.UnloadSceneAsync("Menu");
+            }
+
+            [UnityTest]
+        public IEnumerator RealMainSceneRendersResourceHudAboveLevelIntro()
+        {
+            AsyncOperation load = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            while (!load.isDone)
+                yield return null;
+            yield return null;
+
+            GameObject levelImage = GameObject.Find("LevelImage");
+            GameObject foodText = GameObject.Find("FoodText");
+            GameObject healthText = GameObject.Find("HealthText");
+            Assert.That(levelImage, Is.Not.Null);
+            Assert.That(foodText, Is.Not.Null);
+            Assert.That(healthText, Is.Not.Null);
+            Canvas resourceCanvas = foodText.GetComponentInParent<Canvas>();
+            Assert.That(resourceCanvas, Is.Not.Null);
+            Assert.That(resourceCanvas.transform.localScale, Is.EqualTo(Vector3.one));
+            Assert.That(foodText.transform.parent, Is.SameAs(levelImage.transform.parent));
+            Assert.That(healthText.transform.parent, Is.SameAs(levelImage.transform.parent));
+            Assert.That(foodText.transform.GetSiblingIndex(), Is.GreaterThan(levelImage.transform.GetSiblingIndex()));
+            Assert.That(healthText.transform.GetSiblingIndex(), Is.GreaterThan(levelImage.transform.GetSiblingIndex()));
         }
 
         [UnityTest]
@@ -277,7 +342,7 @@ namespace HallowBlaze.Tests.PlayMode
             GameSession continuedSession = GetProperty<GameSession>(manager, "Session");
             Assert.That(continuedSession.ActiveRun.RunId, Is.EqualTo(firstRun.RunId));
             Assert.That(continuedSession.ActiveRun.CurrentDay, Is.EqualTo(1));
-            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(91));
+            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(100));
 
             Scene cleanupScene = SceneManager.CreateScene("M1.7 Continue Cleanup " + Guid.NewGuid().ToString("N"));
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);

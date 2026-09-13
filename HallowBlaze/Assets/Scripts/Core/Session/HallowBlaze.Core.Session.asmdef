@@ -3,7 +3,8 @@
     "rootNamespace": "HallowBlaze.Core.Session",
     "references": [
         "HallowBlaze.Core.State",
-        "HallowBlaze.Core.Persistence"
+        "HallowBlaze.Core.Persistence",
+        "HallowBlaze.Core.World"
     ],
     "noEngineReferences": true
 }
