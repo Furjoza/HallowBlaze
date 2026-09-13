@@ -138,7 +138,7 @@ namespace HallowBlaze.Tests.EditMode
             store.SaveProfile(CreateProfile("profile-current"));
             string currentPath = Path.Combine(testRootPath, "profile.json");
             string futureJson = File.ReadAllText(currentPath)
-                .Replace("\"schemaVersion\": 1", "\"schemaVersion\": 2");
+                .Replace("\"schemaVersion\": 2", "\"schemaVersion\": 3");
             File.WriteAllText(currentPath, futureJson);
 
             SaveStoreResult<ProfileState> result = store.LoadProfile();
@@ -152,20 +152,63 @@ namespace HallowBlaze.Tests.EditMode
         [Test]
         public void ProfileV0MigrationValidatesV1AndBacksUpSource()
         {
-            FileSystemSaveStore store = new FileSystemSaveStore(testRootPath);
-            store.SaveProfile(CreateProfile("profile-v0"));
             string currentPath = Path.Combine(testRootPath, "profile.json");
-            string v0Json = File.ReadAllText(currentPath)
-                .Replace("\"schemaVersion\": 1", "\"schemaVersion\": 0");
+            Directory.CreateDirectory(testRootPath);
+            string v0Json = CreateLegacyProfileJson(0);
             File.WriteAllText(currentPath, v0Json);
 
             SaveStoreResult result = SaveMigration.MigrateProfileV0ToV1(testRootPath);
 
             Assert.That(result.IsSuccess, Is.True);
-            Assert.That(store.LoadProfile().Data.ProfileId, Is.EqualTo("profile-v0"));
+            Assert.That(
+                File.ReadAllText(currentPath),
+                Does.Contain("\"schemaVersion\": 1"));
             Assert.That(
                 File.ReadAllText(Path.Combine(testRootPath, "profile.backup.json")),
                 Is.EqualTo(v0Json));
+        }
+
+        [Test]
+        public void ProfileV1MigrationMapsLegacyDiscoveriesToSightedAndBacksUpSource()
+        {
+            Directory.CreateDirectory(testRootPath);
+            string currentPath = Path.Combine(testRootPath, "profile.json");
+            string v1Json = CreateLegacyProfileJson(1);
+            File.WriteAllText(currentPath, v1Json);
+
+            SaveStoreResult migration = SaveMigration.MigrateProfileV1ToV2(testRootPath);
+            SaveStoreResult<ProfileState> load =
+                new FileSystemSaveStore(testRootPath).LoadProfile();
+
+            Assert.That(migration.IsSuccess, Is.True);
+            Assert.That(load.IsSuccess, Is.True);
+            Assert.That(load.Data.ProfileId, Is.EqualTo("profile-legacy"));
+            Assert.That(load.Data.WorldDefinitionId, Is.EqualTo("world.legacy"));
+            Assert.That(load.Data.WorldDefinitionVersion, Is.EqualTo(4));
+            Assert.That(
+                load.Data.NodeDiscoveries.Select(discovery => discovery.NodeId),
+                Is.EqualTo(new[] { "node.second", "node.first" }));
+            Assert.That(
+                load.Data.NodeDiscoveries.Select(discovery => discovery.State),
+                Is.All.EqualTo(NodeDiscoveryState.Sighted));
+            Assert.That(
+                load.Data.EdgeDiscoveries.Select(discovery => discovery.EdgeId),
+                Is.EqualTo(new[] { "edge.second-first", "edge.first-goal" }));
+            Assert.That(
+                load.Data.EdgeDiscoveries.Select(discovery => discovery.State),
+                Is.All.EqualTo(EdgeDiscoveryState.Sighted));
+            Assert.That(load.Data.DiscoveredFactIds, Is.EqualTo(new[] { "fact.legacy" }));
+            Assert.That(load.Data.PersistentNoteIds, Is.EqualTo(new[] { "note.legacy" }));
+            Assert.That(load.Data.RunSummaries, Has.Count.EqualTo(1));
+            Assert.That(load.Data.RunSummaries[0].RunId, Is.EqualTo("run-legacy"));
+            Assert.That(load.Data.RunSummaries[0].DaysSurvived, Is.EqualTo(3));
+            Assert.That(load.Data.RunSummaries[0].Status, Is.EqualTo(RunStatus.Dead));
+            Assert.That(
+                File.ReadAllText(Path.Combine(testRootPath, "profile.backup.json")),
+                Is.EqualTo(v1Json));
+            Assert.That(
+                Directory.GetFiles(testRootPath, ".profile.json.migration.*.tmp"),
+                Is.Empty);
         }
 
         [Test]
@@ -196,6 +239,22 @@ namespace HallowBlaze.Tests.EditMode
             ProfileState profile = new ProfileState(profileId, "world.default", 1);
             profile.DiscoverFact("fact.persistence");
             return profile;
+        }
+
+        private static string CreateLegacyProfileJson(int schemaVersion)
+        {
+            return
+                "{\n" +
+                $"  \"schemaVersion\": {schemaVersion},\n" +
+                "  \"profileId\": \"profile-legacy\",\n" +
+                "  \"worldDefinitionId\": \"world.legacy\",\n" +
+                "  \"worldDefinitionVersion\": 4,\n" +
+                "  \"discoveredNodeIds\": [\"node.second\", \"node.first\"],\n" +
+                "  \"discoveredEdgeIds\": [\"edge.second-first\", \"edge.first-goal\"],\n" +
+                "  \"discoveredFactIds\": [\"fact.legacy\"],\n" +
+                "  \"persistentNoteIds\": [\"note.legacy\"],\n" +
+                "  \"runSummaries\": [{\"runId\": \"run-legacy\", \"daysSurvived\": 3, \"status\": \"dead\"}]\n" +
+                "}";
         }
 
         private static RunState CreateRun(string runId)

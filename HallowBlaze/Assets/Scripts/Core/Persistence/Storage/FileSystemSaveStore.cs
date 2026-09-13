@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Security;
 using System.Text;
+using HallowBlaze.Core.Persistence.Dto;
 using HallowBlaze.Core.Persistence.Mapping;
 using HallowBlaze.Core.State;
 using Newtonsoft.Json.Linq;
@@ -45,6 +46,7 @@ namespace HallowBlaze.Core.Persistence.Storage
             return Load(
                 ProfileFileName,
                 ProfileBackupFileName,
+                ProfileStateDto.CurrentSchemaVersion,
                 PersistenceJsonSerializer.DeserializeProfile);
         }
 
@@ -64,6 +66,7 @@ namespace HallowBlaze.Core.Persistence.Storage
             return Load(
                 RunFileName,
                 RunBackupFileName,
+                RunStateDto.CurrentSchemaVersion,
                 PersistenceJsonSerializer.DeserializeRun);
         }
 
@@ -133,6 +136,7 @@ namespace HallowBlaze.Core.Persistence.Storage
         private SaveStoreResult<T> Load<T>(
             string fileName,
             string backupFileName,
+            int currentSchemaVersion,
             Func<string, T> deserialize)
         {
             string currentPath = Path.Combine(rootPath, fileName);
@@ -150,7 +154,7 @@ namespace HallowBlaze.Core.Persistence.Storage
                 }
                 catch (PersistenceDataException exception)
                 {
-                    if (IsFutureSchema(exception, currentJson))
+                    if (IsFutureSchema(exception, currentJson, currentSchemaVersion))
                         return SaveStoreResultExtensions.UnsupportedFutureSchema<T>();
                 }
 
@@ -164,7 +168,7 @@ namespace HallowBlaze.Core.Persistence.Storage
                 }
                 catch (PersistenceDataException exception)
                 {
-                    return IsFutureSchema(exception, backupJson)
+                    return IsFutureSchema(exception, backupJson, currentSchemaVersion)
                         ? SaveStoreResultExtensions.UnsupportedFutureSchema<T>()
                         : SaveStoreResultExtensions.Corrupt<T>();
                 }
@@ -178,7 +182,8 @@ namespace HallowBlaze.Core.Persistence.Storage
 
         private static bool IsFutureSchema(
             PersistenceDataException exception,
-            string json)
+            string json,
+            int currentSchemaVersion)
         {
             if (exception.Error != PersistenceDataError.UnsupportedSchemaVersion)
                 return false;
@@ -188,7 +193,7 @@ namespace HallowBlaze.Core.Persistence.Storage
                 JToken version = JObject.Parse(json)["schemaVersion"];
                 return version != null &&
                     version.Type == JTokenType.Integer &&
-                    version.Value<int>() > 1;
+                    version.Value<int>() > currentSchemaVersion;
             }
             catch
             {

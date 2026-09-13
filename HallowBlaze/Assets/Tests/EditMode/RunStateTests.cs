@@ -32,6 +32,52 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
+        public void BoardSeedIsStableForTheSamePersistedIdentity()
+        {
+            RunStateConfiguration configuration = CreateConfiguration(initialDay: 0);
+            RunState first = new RunState("run-001", 1729, configuration);
+            RunState second = new RunState("run-001", 1729, configuration);
+
+            Assert.That(second.GetBoardSeed(), Is.EqualTo(first.GetBoardSeed()));
+            Assert.That(first.GetBoardSeed(), Is.EqualTo(-1283061345));
+        }
+
+        [Test]
+        public void BoardSeedChangesWithRunOrCommittedStageIdentity()
+        {
+            RunState baseline = new RunState("run-001", 1729, CreateConfiguration());
+            RunState otherRun = new RunState("run-002", 1729, CreateConfiguration());
+            RunState otherSeed = new RunState("run-001", 1730, CreateConfiguration());
+            RunState otherDay = new RunState(
+                "run-001",
+                1729,
+                CreateConfiguration(initialDay: 2));
+            RunState otherNode = new RunState(
+                "run-001",
+                1729,
+                CreateConfiguration(initialWorldNodeId: "forest.clearing"));
+
+            int boardSeed = baseline.GetBoardSeed();
+            Assert.That(otherRun.GetBoardSeed(), Is.Not.EqualTo(boardSeed));
+            Assert.That(otherSeed.GetBoardSeed(), Is.Not.EqualTo(boardSeed));
+            Assert.That(otherDay.GetBoardSeed(), Is.Not.EqualTo(boardSeed));
+            Assert.That(otherNode.GetBoardSeed(), Is.Not.EqualTo(boardSeed));
+        }
+
+        [Test]
+        public void ResetRestoresBoardSeedForTheSameIdentity()
+        {
+            RunState run = new RunState("run-001", 1729, CreateConfiguration());
+            int originalSeed = run.GetBoardSeed();
+            run.AdvanceDay();
+            run.SetCurrentWorldNode("forest.clearing");
+
+            run.Reset("run-001", 1729, CreateConfiguration());
+
+            Assert.That(run.GetBoardSeed(), Is.EqualTo(originalSeed));
+        }
+
+        [Test]
         public void ConfigurationRejectsInvalidInitialValues()
         {
             Assert.Throws<ArgumentOutOfRangeException>(
@@ -139,6 +185,58 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(exposedRoute.IsReadOnly, Is.True);
             Assert.Throws<NotSupportedException>(() => exposedRoute.Add("injected.node"));
             Assert.That(run.Route, Is.EqualTo(new[] { "forest.start" }));
+        }
+
+        [Test]
+        public void AdvanceToWorldNodeAtomicallyMutatesDayNodeAndRoute()
+        {
+            RunState run = CreateRun();
+            run.RecordRouteNode("forest.start");
+
+            run.AdvanceToWorldNode("forest.clearing");
+
+            Assert.That(run.CurrentDay, Is.EqualTo(2));
+            Assert.That(run.WorldNodeId, Is.EqualTo("forest.clearing"));
+            Assert.That(run.Route, Is.EqualTo(new[] { "forest.start", "forest.clearing" }));
+        }
+
+        [Test]
+        public void AdvanceToWorldNodeRequiresValidStableNodeId()
+        {
+            RunState run = CreateRun();
+
+            Assert.Throws<ArgumentException>(() => run.AdvanceToWorldNode(" "));
+            Assert.Throws<ArgumentException>(() => run.AdvanceToWorldNode(" forest.end"));
+            Assert.Throws<ArgumentException>(() => run.AdvanceToWorldNode("forest.end "));
+
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.WorldNodeId, Is.EqualTo("forest.start"));
+            Assert.That(run.Route, Is.Empty);
+        }
+
+        [Test]
+        public void AdvanceToWorldNodeRequiresActiveRun()
+        {
+            RunState run = CreateRun();
+            run.MarkDead();
+
+            Assert.Throws<InvalidOperationException>(() => run.AdvanceToWorldNode("forest.end"));
+
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.WorldNodeId, Is.EqualTo("forest.start"));
+            Assert.That(run.Route, Is.Empty);
+        }
+
+        [Test]
+        public void AdvanceToWorldNodeUsesCheckedArithmetic()
+        {
+            RunState run = CreateRun(CreateConfiguration(initialDay: int.MaxValue));
+
+            Assert.Throws<OverflowException>(() => run.AdvanceToWorldNode("forest.end"));
+
+            Assert.That(run.CurrentDay, Is.EqualTo(int.MaxValue));
+            Assert.That(run.WorldNodeId, Is.EqualTo("forest.start"));
+            Assert.That(run.Route, Is.Empty);
         }
 
         [Test]

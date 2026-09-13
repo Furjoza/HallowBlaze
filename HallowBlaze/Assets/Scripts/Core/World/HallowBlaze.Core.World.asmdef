@@ -1,0 +1,8 @@
+{
+    "name": "HallowBlaze.Core.World",
+    "rootNamespace": "HallowBlaze.Core.World",
+    "references": [
+        "Unity.Newtonsoft.Json"
+    ],
+    "noEngineReferences": true
+}

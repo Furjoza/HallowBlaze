@@ -1,8 +1,10 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
 using NUnit.Framework;
@@ -81,6 +83,44 @@ namespace HallowBlaze.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator CorruptRunKeepsContinueLabelStable()
+        {
+            Component manager = CreateManager("Continue Label Save Manager");
+            Invoke(manager, "EnsurePersistence");
+            Invoke(manager, "StartNewRun");
+
+            Directory.CreateDirectory(persistenceRoot);
+            string profilePath = Path.Combine(persistenceRoot, "profile.json");
+            string runPath = Path.Combine(persistenceRoot, "run.json");
+            Assert.That(File.Exists(profilePath), Is.True);
+            Assert.That(File.Exists(runPath), Is.True);
+            DestroyGameManagerSingleton();
+
+            File.WriteAllText(runPath, "{ invalid json");
+            SaveStoreResult<RunState> inspection = RunLifecycleService.InspectContinue(
+                new FileSystemSaveStore(persistenceRoot));
+            Assert.That(inspection.Type, Is.EqualTo(SaveStoreResultType.Corrupt));
+
+            AsyncOperation menuLoad = SceneManager.LoadSceneAsync("Menu", LoadSceneMode.Single);
+            while (!menuLoad.isDone)
+                yield return null;
+            yield return null;
+
+            AssertSceneHasNoMissingComponents("Menu");
+            GameObject continueButton = GameObject.Find("ContinueBttn");
+            Assert.That(continueButton, Is.Not.Null);
+            Assert.That(continueButton.GetComponent<Button>().interactable, Is.False);
+            Text continueLabel = continueButton.GetComponentInChildren<Text>(true);
+            Assert.That(continueLabel, Is.Not.Null);
+            Assert.That(continueLabel.text, Is.EqualTo("Continue"));
+
+            Scene cleanupScene = SceneManager.CreateScene(
+                "Continue Label Cleanup " + Guid.NewGuid().ToString("N"));
+            Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
+            yield return SceneManager.UnloadSceneAsync("Menu");
+        }
+
+        [UnityTest]
         public IEnumerator ActiveSceneBoundaryPreservesSessionAndRun()
         {
             Component manager = CreateManager("M1.4 Scene Manager");
@@ -118,7 +158,7 @@ namespace HallowBlaze.Tests.PlayMode
             GameSession session = GetProperty<GameSession>(manager, "Session");
             RunState run = session.ActiveRun;
             Assert.That(run, Is.Not.Null);
-            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.CurrentDay, Is.Zero);
 
             session.ConsumeFood(14);
             session.TakeDamage(11);
@@ -138,14 +178,14 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(reloadedManager, Is.SameAs(manager));
             Assert.That(GetProperty<GameSession>(reloadedManager, "Session"), Is.SameAs(session));
             Assert.That(session.ActiveRun, Is.SameAs(run));
-            Assert.That(run.CurrentDay, Is.EqualTo(2));
+            Assert.That(run.CurrentDay, Is.Zero);
             Assert.That(run.Food, Is.EqualTo(86));
             Assert.That(run.Health, Is.EqualTo(89));
             Assert.That(replacementPlayer, Is.Not.Null);
             Assert.That(replacementPlayer.GetInstanceID(), Is.Not.EqualTo(firstPlayerInstanceId));
             Assert.That(GetField<Text>(replacementPlayer, "foodText").text, Is.EqualTo("Food: 86"));
             Assert.That(GetField<Text>(replacementPlayer, "healthText").text, Is.EqualTo("Health: 89"));
-            Assert.That(GameObject.Find("LevelText").GetComponent<Text>().text, Is.EqualTo("Day: 2"));
+            Assert.That(GameObject.Find("LevelText").GetComponent<Text>().text, Is.EqualTo("Day: 0"));
 
             ProfileState profile = session.Profile;
             GameObject restartButton = GetField<GameObject>(manager, "restartButton");
@@ -163,7 +203,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(((Behaviour)manager).enabled, Is.False);
             Assert.That(restartButton.activeSelf, Is.True);
             Assert.That(menuButton.activeSelf, Is.True);
-            Assert.That(PlayerPrefs.GetInt("HighScore"), Is.EqualTo(2));
+            Assert.That(PlayerPrefs.GetInt("HighScore"), Is.Zero);
 
             Component restartController = restartButton.GetComponent(restartButtonType);
             Assert.That(restartController, Is.Not.Null);
@@ -180,11 +220,11 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(session.Profile, Is.SameAs(profile));
             Assert.That(restartedRun, Is.Not.SameAs(run));
             Assert.That(restartedRun.Status, Is.EqualTo(RunStatus.Active));
-            Assert.That(restartedRun.CurrentDay, Is.EqualTo(1));
+            Assert.That(restartedRun.CurrentDay, Is.Zero);
             Assert.That(restartedRun.Food, Is.EqualTo(100));
             Assert.That(restartedRun.Health, Is.EqualTo(100));
             Assert.That(((Behaviour)manager).enabled, Is.True);
-            Assert.That(GameObject.Find("LevelText").GetComponent<Text>().text, Is.EqualTo("Day: 1"));
+            Assert.That(GameObject.Find("LevelText").GetComponent<Text>().text, Is.EqualTo("Day: 0"));
 
             Scene cleanupScene = SceneManager.CreateScene("M1.4 Smoke Cleanup " + Guid.NewGuid().ToString("N"));
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
@@ -235,6 +275,9 @@ namespace HallowBlaze.Tests.PlayMode
             GameObject continueButton = GameObject.Find("ContinueBttn");
             Assert.That(continueButton, Is.Not.Null);
             Assert.That(continueButton.GetComponent<Button>().interactable, Is.False);
+            Text continueLabel = continueButton.GetComponentInChildren<Text>(true);
+            Assert.That(continueLabel, Is.Not.Null);
+            Assert.That(continueLabel.text, Is.EqualTo("Continue"));
             Assert.That(GetStaticField(gameManagerType, "instance"), Is.SameAs(manager));
             Assert.That(((Behaviour)manager).enabled, Is.True);
             Assert.That(Time.timeScale, Is.EqualTo(1f));
@@ -250,6 +293,29 @@ namespace HallowBlaze.Tests.PlayMode
             Scene cleanupScene = SceneManager.CreateScene("M1.11 Menu Cleanup " + Guid.NewGuid().ToString("N"));
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
             yield return SceneManager.UnloadSceneAsync("Menu");
+            }
+
+            [UnityTest]
+        public IEnumerator RealMainSceneRendersResourceHudAboveLevelIntro()
+        {
+            AsyncOperation load = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            while (!load.isDone)
+                yield return null;
+            yield return null;
+
+            GameObject levelImage = GameObject.Find("LevelImage");
+            GameObject foodText = GameObject.Find("FoodText");
+            GameObject healthText = GameObject.Find("HealthText");
+            Assert.That(levelImage, Is.Not.Null);
+            Assert.That(foodText, Is.Not.Null);
+            Assert.That(healthText, Is.Not.Null);
+            Canvas resourceCanvas = foodText.GetComponentInParent<Canvas>();
+            Assert.That(resourceCanvas, Is.Not.Null);
+            Assert.That(resourceCanvas.transform.localScale, Is.EqualTo(Vector3.one));
+            Assert.That(foodText.transform.parent, Is.SameAs(levelImage.transform.parent));
+            Assert.That(healthText.transform.parent, Is.SameAs(levelImage.transform.parent));
+            Assert.That(foodText.transform.GetSiblingIndex(), Is.GreaterThan(levelImage.transform.GetSiblingIndex()));
+            Assert.That(healthText.transform.GetSiblingIndex(), Is.GreaterThan(levelImage.transform.GetSiblingIndex()));
         }
 
         [UnityTest]
@@ -263,7 +329,7 @@ namespace HallowBlaze.Tests.PlayMode
             Component manager = GetStaticField(gameManagerType, "instance") as Component;
             GameSession firstSession = GetProperty<GameSession>(manager, "Session");
             RunState firstRun = firstSession.ActiveRun;
-            Assert.That(firstRun.CurrentDay, Is.EqualTo(1));
+            Assert.That(firstRun.CurrentDay, Is.Zero);
             firstSession.ConsumeFood(9);
             Assert.That((bool)Invoke(manager, "ExitToMenu"), Is.True);
             Assert.That(firstSession.ActiveRun, Is.Null);
@@ -276,10 +342,117 @@ namespace HallowBlaze.Tests.PlayMode
 
             GameSession continuedSession = GetProperty<GameSession>(manager, "Session");
             Assert.That(continuedSession.ActiveRun.RunId, Is.EqualTo(firstRun.RunId));
-            Assert.That(continuedSession.ActiveRun.CurrentDay, Is.EqualTo(1));
-            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(91));
+            Assert.That(continuedSession.ActiveRun.CurrentDay, Is.Zero);
+            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(100));
 
             Scene cleanupScene = SceneManager.CreateScene("M1.7 Continue Cleanup " + Guid.NewGuid().ToString("N"));
+            Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
+        [UnityTest]
+        public IEnumerator ExplicitRouteChoicesAdvanceAcrossAContinuedSession()
+        {
+            AsyncOperation firstLoad = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            while (!firstLoad.isDone)
+                yield return null;
+            yield return null;
+
+            Component firstManager = GetStaticField(gameManagerType, "instance") as Component;
+            Assert.That(firstManager, Is.Not.Null);
+            Assert.That(GetField<TextAsset>(firstManager, "worldDefinitionJson"), Is.Not.Null);
+            GameSession firstSession = GetProperty<GameSession>(firstManager, "Session");
+            RunState firstRun = firstSession.ActiveRun;
+            Assert.That(firstSession.Profile.GetNodeDiscoveryState("forest.start"),
+                Is.EqualTo(NodeDiscoveryState.Visited));
+            Component firstPlayer = FindSceneComponent(playerType, "Main");
+            Assert.That(firstPlayer, Is.Not.Null);
+            Collider2D firstExit = CreateExit("First Route Exit");
+
+            Invoke(firstPlayer, "OnTriggerEnter2D", firstExit);
+
+            IReadOnlyList<WorldMapExitOption> firstChoices =
+                GetProperty<IReadOnlyList<WorldMapExitOption>>(firstManager, "RouteChoices");
+            Assert.That(GetProperty<bool>(firstManager, "IsRouteChoiceActive"), Is.True);
+            Assert.That(firstChoices.Select(choice => choice.EdgeId), Is.EqualTo(new[]
+            {
+                "road.start-east-creek",
+                "road.start-west-trail"
+            }));
+            Assert.That(firstRun.CurrentDay, Is.Zero);
+            Assert.That(firstRun.WorldNodeId, Is.EqualTo("forest.start"));
+            Assert.That(firstRun.Route, Is.Empty);
+            Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo("Main"));
+            Assert.That(((Behaviour)firstPlayer).enabled, Is.False);
+
+            Assert.That(
+                (bool)Invoke(firstManager, "ChooseRoute", "road.start-west-trail"),
+                Is.True);
+            yield return null;
+            yield return null;
+
+            Assert.That(firstRun.CurrentDay, Is.EqualTo(1));
+            Assert.That(firstRun.WorldNodeId, Is.EqualTo("forest.west-trail"));
+            Assert.That(firstRun.Route, Is.EqualTo(new[] { "forest.west-trail" }));
+            Assert.That(firstSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
+                Is.EqualTo(NodeDiscoveryState.Visited));
+            Assert.That(GetProperty<bool>(firstManager, "IsGameplayInputBlocked"), Is.False);
+            Assert.That(GetProperty<IReadOnlyList<WorldMapExitOption>>(
+                firstManager,
+                "RouteChoices"), Is.Empty);
+
+            Assert.That((bool)Invoke(firstManager, "ExitToMenu"), Is.True);
+            DestroyGameManagerSingleton();
+            InvokeStatic(gameManagerType, "RequestContinue");
+
+            AsyncOperation continuedLoad = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            while (!continuedLoad.isDone)
+                yield return null;
+            yield return null;
+
+            Component continuedManager = GetStaticField(gameManagerType, "instance") as Component;
+            GameSession continuedSession = GetProperty<GameSession>(continuedManager, "Session");
+            RunState continuedRun = continuedSession.ActiveRun;
+            Assert.That(continuedRun.RunId, Is.EqualTo(firstRun.RunId));
+            Assert.That(continuedRun.CurrentDay, Is.EqualTo(1));
+            Assert.That(continuedRun.WorldNodeId, Is.EqualTo("forest.west-trail"));
+            Assert.That(continuedRun.Route, Is.EqualTo(new[] { "forest.west-trail" }));
+            Assert.That(continuedSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
+                Is.EqualTo(NodeDiscoveryState.Visited));
+
+            Component continuedPlayer = FindSceneComponent(playerType, "Main");
+            Assert.That(continuedPlayer, Is.Not.Null);
+            Collider2D secondExit = CreateExit("Second Route Exit");
+            Invoke(continuedPlayer, "OnTriggerEnter2D", secondExit);
+
+            IReadOnlyList<WorldMapExitOption> secondChoices =
+                GetProperty<IReadOnlyList<WorldMapExitOption>>(continuedManager, "RouteChoices");
+            Assert.That(secondChoices.Select(choice => choice.EdgeId),
+                Is.EqualTo(new[] { "road.west-trail-old-road" }));
+            Assert.That(
+                (bool)Invoke(continuedManager, "ChooseRoute", "road.west-trail-old-road"),
+                Is.True);
+            yield return null;
+            yield return null;
+
+            Assert.That(continuedRun.CurrentDay, Is.EqualTo(2));
+            Assert.That(continuedRun.WorldNodeId, Is.EqualTo("forest.old-road"));
+            Assert.That(continuedRun.Route, Is.EqualTo(new[]
+            {
+                "forest.west-trail",
+                "forest.old-road"
+            }));
+            Assert.That(continuedSession.Profile.GetNodeDiscoveryState("forest.old-road"),
+                Is.EqualTo(NodeDiscoveryState.Visited));
+            SaveStoreResult<RunState> checkpoint =
+                new FileSystemSaveStore(persistenceRoot).LoadRun();
+            Assert.That(checkpoint.IsSuccess, Is.True);
+            Assert.That(checkpoint.Data.CurrentDay, Is.EqualTo(2));
+            Assert.That(checkpoint.Data.WorldNodeId, Is.EqualTo("forest.old-road"));
+            Assert.That(checkpoint.Data.Route, Is.EqualTo(continuedRun.Route));
+
+            Scene cleanupScene = SceneManager.CreateScene(
+                "M2.5 Route Cleanup " + Guid.NewGuid().ToString("N"));
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
             yield return SceneManager.UnloadSceneAsync("Main");
         }
@@ -441,6 +614,13 @@ namespace HallowBlaze.Tests.PlayMode
             SetField(player, "healthText", healthText);
             Invoke(player, "Start");
             return player;
+        }
+
+        private static Collider2D CreateExit(string name)
+        {
+            GameObject exitObject = new GameObject(name);
+            exitObject.tag = "Exit";
+            return exitObject.AddComponent<BoxCollider2D>();
         }
 
         private static Component FindSceneComponent(Type type, string sceneName)

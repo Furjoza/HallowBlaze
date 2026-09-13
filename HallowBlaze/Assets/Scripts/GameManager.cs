@@ -5,6 +5,7 @@ using HallowBlaze.Core.Persistence;
 using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
+using HallowBlaze.Core.World;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -15,6 +16,8 @@ public class GameManager : MonoBehaviour
     private const int InitialFood = 100;
     private const string InitialWorldNodeId = "forest.start";
     private const string MenuSceneName = "Menu";
+    private static readonly IReadOnlyList<WorldMapExitOption> NoRouteChoices =
+        Array.AsReadOnly(new WorldMapExitOption[0]);
 
     public enum RunLaunchMode
     {
@@ -29,6 +32,7 @@ public class GameManager : MonoBehaviour
     public float turnDelay = .1f;
     public static GameManager instance = null;
     public BoardManager boardScript;
+    [SerializeField] private TextAsset worldDefinitionJson;
 
     private Text levelText;
     private Text scoreText;
@@ -44,6 +48,9 @@ public class GameManager : MonoBehaviour
     private int nextRunSequence;
     private GameSession session;
     private RunLifecycleService lifecycle;
+    private ISaveStore saveStore;
+    private WorldMapService worldMap;
+    private IReadOnlyList<WorldMapExitOption> routeChoices = NoRouteChoices;
     private bool terminalActionRequested;
     private Action<string> sceneLoader = SceneManager.LoadScene;
 
@@ -51,6 +58,26 @@ public class GameManager : MonoBehaviour
     {
         get { return session; }
     }
+
+    /// <summary>Gets the legal options exposed by the current board exit.</summary>
+    public IReadOnlyList<WorldMapExitOption> RouteChoices
+    {
+        get { return routeChoices; }
+    }
+
+    /// <summary>Gets whether gameplay is waiting for an explicit route selection.</summary>
+    public bool IsRouteChoiceActive
+    {
+        get
+        {
+            return gameplayInputBlocked
+                && worldMap != null
+                && worldMap.ChoiceState == RouteChoiceState.AwaitingChoice;
+        }
+    }
+
+    /// <summary>Raised when the placeholder route-choice presentation should refresh.</summary>
+    public event Action<IReadOnlyList<WorldMapExitOption>> OnRouteChoicesChanged;
 
     public bool IsGameplayInputEnabled
     {
@@ -103,6 +130,79 @@ public class GameManager : MonoBehaviour
             gameplayInputResumeFrame = Time.frameCount;
     }
 
+    /// <summary>
+    /// Observes the active node's exits and blocks gameplay until one legal edge is chosen.
+    /// </summary>
+    /// <returns><c>true</c> when at least one legal route is ready for presentation.</returns>
+    public bool BeginRouteChoice()
+    {
+        if (gameplayInputBlocked ||
+            session == null ||
+            session.ActiveRun == null ||
+            session.ActiveRun.Status != RunStatus.Active ||
+            !TryEnsureWorldMap())
+        {
+            return false;
+        }
+
+        WorldMapCommandResult beginResult = worldMap.BeginRouteChoice();
+        if (!beginResult.IsSuccess)
+        {
+            Debug.LogError("Route choice could not begin: " + beginResult.ErrorMessage);
+            return false;
+        }
+
+        WorldMapExitQueryResult choicesResult = worldMap.GetRouteChoices();
+        if (!choicesResult.IsSuccess)
+        {
+            Debug.LogError("Route choices could not be queried: " + choicesResult.ErrorMessage);
+            return false;
+        }
+
+        if (choicesResult.Exits.Count == 0)
+        {
+            Debug.LogWarning("The current world node has no outgoing route choices.");
+            return false;
+        }
+
+        SetGameplayInputBlocked(true);
+        SetRouteChoices(choicesResult.Exits);
+        return true;
+    }
+
+    /// <summary>
+    /// Submits one displayed edge and loads the next board only after its run checkpoint is saved.
+    /// </summary>
+    /// <param name="edgeId">A stable edge ID from <see cref="RouteChoices"/>.</param>
+    /// <returns><c>true</c> only when this call commits a new route and requests the next board.</returns>
+    public bool ChooseRoute(string edgeId)
+    {
+        if (!gameplayInputBlocked || !TryEnsureWorldMap())
+            return false;
+
+        RouteChoiceCommandResult result = worldMap.ChooseRoute(edgeId);
+        if (result.Status == RouteChoiceCommandStatus.PersistenceFailed)
+        {
+            Debug.LogError(
+                "Route choice save failed for " + result.PersistenceTarget +
+                ": " + result.PersistenceResultType);
+            return false;
+        }
+
+        if (result.Status == RouteChoiceCommandStatus.Rejected)
+        {
+            Debug.LogWarning("Route choice rejected: " + result.ErrorMessage);
+            return false;
+        }
+
+        if (result.Status != RouteChoiceCommandStatus.Applied)
+            return false;
+
+        SetRouteChoices(NoRouteChoices);
+        sceneLoader(SceneManager.GetActiveScene().name);
+        return true;
+    }
+
     private void Awake()
     {
         if (instance != null && instance != this)
@@ -153,7 +253,6 @@ public class GameManager : MonoBehaviour
             return;
 
         EnsurePersistence();
-        bool continuedRun = false;
         if (!session.IsRunActive() || session.ActiveRun.Status != RunStatus.Active)
         {
             if (requestedLaunchMode == RunLaunchMode.Continue)
@@ -165,7 +264,6 @@ public class GameManager : MonoBehaviour
                     return;
                 }
 
-                continuedRun = true;
             }
             else
             {
@@ -174,16 +272,8 @@ public class GameManager : MonoBehaviour
         }
 
         requestedLaunchMode = RunLaunchMode.NewRun;
-        if (!continuedRun)
-        {
-            session.AdvanceDay();
-            SaveStoreResult boundaryResult = lifecycle.SaveBoardBoundary();
-            if (boundaryResult.IsFailure)
-            {
-                Debug.LogError("Board boundary save failed: " + boundaryResult.Type);
-                return;
-            }
-        }
+        if (!TryEnterCurrentWorldNode())
+            return;
 
         InitGame();
     }
@@ -192,10 +282,15 @@ public class GameManager : MonoBehaviour
     {
         doingSetup = true;
         terminalActionRequested = false;
+        SetRouteChoices(NoRouteChoices);
+        SetGameplayInputBlocked(false);
 
         levelImage = GameObject.Find("LevelImage");
         if (levelImage != null)
+        {
+            levelImage.transform.SetAsFirstSibling();
             levelImage.SetActive(true);
+        }
 
         GameObject levelTextObject = GameObject.Find("LevelText");
         if (levelTextObject != null)
@@ -222,7 +317,10 @@ public class GameManager : MonoBehaviour
         enemies.Clear();
 
         if (boardScript != null)
-            boardScript.SetupScene(session.GetCurrentRun().CurrentDay);
+        {
+            RunState run = session.GetCurrentRun();
+            boardScript.SetupScene(run.CurrentDay, run.GetBoardSeed());
+        }
     }
 
     private void HideLevelImage()
@@ -346,6 +444,7 @@ public class GameManager : MonoBehaviour
         doingSetup = false;
         gameplayInputBlocked = false;
         gameplayInputResumeFrame = Time.frameCount;
+        SetRouteChoices(NoRouteChoices);
     }
 
     private void OnRunAbandoned(RunState runState)
@@ -355,6 +454,7 @@ public class GameManager : MonoBehaviour
         enemiesMoving = false;
         doingSetup = false;
         gameplayInputBlocked = true;
+        SetRouteChoices(NoRouteChoices);
     }
 
     public void StartNewRun()
@@ -369,7 +469,7 @@ public class GameManager : MonoBehaviour
             0,
             InitialWorldNodeId);
         string runId = session.Profile.ProfileId + "-run-" +
-            System.DateTime.UtcNow.Ticks + "-" + nextRunSequence;
+            System.Guid.NewGuid().ToString("N");
 
         if (lifecycle == null)
         {
@@ -467,8 +567,8 @@ public class GameManager : MonoBehaviour
         if (lifecycle != null)
             return;
 
-        ISaveStore store = new FileSystemSaveStore(GetPersistenceRoot());
-        SaveStoreResult<ProfileState> profileResult = store.LoadProfile();
+        saveStore = new FileSystemSaveStore(GetPersistenceRoot());
+        SaveStoreResult<ProfileState> profileResult = saveStore.LoadProfile();
         ProfileState profile = profileResult.IsSuccess
             ? profileResult.Data
             : session.Profile;
@@ -485,7 +585,58 @@ public class GameManager : MonoBehaviour
             session.OnRunAbandoned += OnRunAbandoned;
         }
 
-        lifecycle = new RunLifecycleService(session, store);
+        lifecycle = new RunLifecycleService(session, saveStore);
+        worldMap = null;
+    }
+
+    private bool TryEnsureWorldMap()
+    {
+        EnsurePersistence();
+        if (worldMap != null)
+            return true;
+
+        if (worldDefinitionJson == null)
+        {
+            Debug.LogError("World definition JSON is not assigned on GameManager.");
+            return false;
+        }
+
+        try
+        {
+            worldMap = new WorldMapService(
+                WorldDefinitionJson.Deserialize(worldDefinitionJson.text),
+                session,
+                saveStore);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError("World definition could not be initialized: " + exception.Message);
+            return false;
+        }
+    }
+
+    private bool TryEnterCurrentWorldNode()
+    {
+        if (!TryEnsureWorldMap())
+            return false;
+
+        WorldMapCommandResult result = worldMap.EnterCurrentNode();
+        if (result.IsSuccess)
+            return true;
+
+        Debug.LogError(
+            "Current world node entry failed: " + result.Status +
+            (string.IsNullOrEmpty(result.ErrorMessage)
+                ? string.Empty
+                : " (" + result.ErrorMessage + ")"));
+        return false;
+    }
+
+    private void SetRouteChoices(IReadOnlyList<WorldMapExitOption> choices)
+    {
+        routeChoices = choices ?? NoRouteChoices;
+        OnRouteChoicesChanged?.Invoke(routeChoices);
     }
 
     internal static string GetPersistenceRoot()

@@ -33,6 +33,9 @@ public class StartBttnScript : MonoBehaviour
         SceneManager.LoadScene(sceneName);
     }
 
+    /// <summary>
+    /// Refreshes saved-run availability while keeping the menu label stable.
+    /// </summary>
     public void RefreshContinueAvailability()
     {
         Button button = GetComponent<Button>();
@@ -47,14 +50,7 @@ public class StartBttnScript : MonoBehaviour
         if (label == null)
             return;
 
-        if (result.Type == SaveStoreResultType.Corrupt)
-            label.text = "Continue (save damaged)";
-        else if (result.Type == SaveStoreResultType.UnsupportedFutureSchema)
-            label.text = "Continue (incompatible save)";
-        else if (result.Type == SaveStoreResultType.IoError)
-            label.text = "Continue (save unavailable)";
-        else
-            label.text = "Continue";
+        label.text = "Continue";
     }
 
     private static ISaveStore CreateSaveStore()
