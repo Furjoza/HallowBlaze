@@ -59,6 +59,6 @@ public class StartBttnScript : MonoBehaviour
 
     private static ISaveStore CreateSaveStore()
     {
-        return new FileSystemSaveStore(PersistencePathProvider.GetSaveRoot());
+        return new FileSystemSaveStore(GameManager.GetPersistenceRoot());
     }
 }

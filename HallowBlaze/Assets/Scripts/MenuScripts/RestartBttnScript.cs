@@ -7,4 +7,10 @@ public class RestartBttnScript : MonoBehaviour
         if (GameManager.instance != null)
             GameManager.instance.RestartGame();
     }
+
+    public void ReturnToMenu()
+    {
+        if (GameManager.instance != null)
+            GameManager.instance.ReturnToMenuAfterGameOver();
+    }
 }

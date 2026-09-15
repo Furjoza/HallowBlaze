@@ -49,6 +49,7 @@ namespace HallowBlaze.Tests.PlayMode
         {
             DestroyGameManagerSingleton();
             SetStaticField(gameManagerType, "PersistenceRootOverride", null);
+            Time.timeScale = 1f;
             if (Directory.Exists(persistenceRoot))
                 Directory.Delete(persistenceRoot, true);
 
@@ -148,8 +149,11 @@ namespace HallowBlaze.Tests.PlayMode
 
             ProfileState profile = session.Profile;
             GameObject restartButton = GetField<GameObject>(manager, "restartButton");
+            GameObject menuButton = GetField<GameObject>(manager, "menuButton");
             Assert.That(restartButton, Is.Not.Null);
+            Assert.That(menuButton, Is.Not.Null);
             Assert.That(restartButton.activeSelf, Is.False);
+            Assert.That(menuButton.activeSelf, Is.False);
             PlayerPrefs.SetInt("HighScore", 0);
 
             Invoke(replacementPlayer, "LoseHealth", run.Health);
@@ -158,11 +162,17 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(run.Status, Is.EqualTo(RunStatus.Dead));
             Assert.That(((Behaviour)manager).enabled, Is.False);
             Assert.That(restartButton.activeSelf, Is.True);
+            Assert.That(menuButton.activeSelf, Is.True);
             Assert.That(PlayerPrefs.GetInt("HighScore"), Is.EqualTo(2));
 
             Component restartController = restartButton.GetComponent(restartButtonType);
             Assert.That(restartController, Is.Not.Null);
-            Invoke(restartController, "Restart");
+            Button restartButtonControl = restartButton.GetComponent<Button>();
+            Assert.That(restartButtonControl, Is.Not.Null);
+            Assert.That(restartButtonControl.onClick.GetPersistentEventCount(), Is.EqualTo(1));
+            Assert.That(restartButtonControl.onClick.GetPersistentTarget(0), Is.SameAs(restartController));
+            Assert.That(restartButtonControl.onClick.GetPersistentMethodName(0), Is.EqualTo("Restart"));
+            restartButtonControl.onClick.Invoke();
             yield return null;
 
             RunState restartedRun = session.ActiveRun;
@@ -237,6 +247,100 @@ namespace HallowBlaze.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator DeadRunReturnsToMenuOnceWithoutStartingRun()
+        {
+            Component manager = CreateManager("M1.11 Game Over Manager");
+            Invoke(manager, "StartNewRun");
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            ProfileState profile = session.Profile;
+            string runId = session.ActiveRun.RunId;
+            int sceneLoadCount = 0;
+            string requestedScene = null;
+            SetField(manager, "sceneLoader", (Action<string>)(sceneName =>
+            {
+                sceneLoadCount++;
+                requestedScene = sceneName;
+            }));
+
+            Invoke(manager, "GameOver", false);
+            Time.timeScale = 0f;
+            Invoke(manager, "SetGameplayInputBlocked", true);
+
+            Invoke(manager, "ReturnToMenuAfterGameOver");
+            Invoke(manager, "ReturnToMenuAfterGameOver");
+
+            Assert.That(sceneLoadCount, Is.EqualTo(1));
+            Assert.That(requestedScene, Is.EqualTo("Menu"));
+            Assert.That(Time.timeScale, Is.EqualTo(1f));
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputBlocked"), Is.False);
+            Assert.That(session.Profile, Is.SameAs(profile));
+            Assert.That(session.ActiveRun, Is.Null);
+            Assert.That(profile.RunSummaries.Count, Is.EqualTo(1));
+            Assert.That(profile.RunSummaries[0].RunId, Is.EqualTo(runId));
+            Assert.That(profile.RunSummaries[0].Status, Is.EqualTo(RunStatus.Dead));
+            Assert.That(File.Exists(Path.Combine(persistenceRoot, "run.json")), Is.False);
+
+            yield return null;
+            Assert.That(GetStaticField(gameManagerType, "instance"), Is.SameAs(manager));
+            Assert.That(((Behaviour)manager).enabled, Is.True);
+        }
+
+        [Test]
+        public void GameOverMenuIsBlockedWhenTerminalizationFails()
+        {
+            Component manager = CreateManager("M1.11 Failed Game Over Manager");
+            Invoke(manager, "EnsurePersistence");
+            Invoke(manager, "StartNewRun");
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            int sceneLoadCount = 0;
+            SetField(manager, "sceneLoader", (Action<string>)(_ => sceneLoadCount++));
+            string profilePath = Path.Combine(persistenceRoot, "profile.json");
+            File.Delete(profilePath);
+            Directory.CreateDirectory(profilePath);
+
+            LogAssert.Expect(LogType.Error, "Run completion save failed: IoError");
+            Invoke(manager, "GameOver", false);
+            Invoke(manager, "ReturnToMenuAfterGameOver");
+
+            Assert.That(sceneLoadCount, Is.Zero);
+            Assert.That(session.ActiveRun, Is.Not.Null);
+            Assert.That(session.ActiveRun.Status, Is.EqualTo(RunStatus.Dead));
+            Assert.That(File.Exists(Path.Combine(persistenceRoot, "run.json")), Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator DeadRunRestartsOnceWithFreshRun()
+        {
+            Component manager = CreateManager("M1.11 Restart Manager");
+            Invoke(manager, "StartNewRun");
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            ProfileState profile = session.Profile;
+            RunState completedRun = session.ActiveRun;
+            int sceneLoadCount = 0;
+            SetField(manager, "sceneLoader", (Action<string>)(_ => sceneLoadCount++));
+
+            Invoke(manager, "GameOver", false);
+            Time.timeScale = 0f;
+            Invoke(manager, "SetGameplayInputBlocked", true);
+
+            Invoke(manager, "RestartGame");
+            Invoke(manager, "RestartGame");
+
+            Assert.That(sceneLoadCount, Is.EqualTo(1));
+            Assert.That(Time.timeScale, Is.EqualTo(1f));
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputBlocked"), Is.False);
+            Assert.That(session.Profile, Is.SameAs(profile));
+            Assert.That(profile.RunSummaries.Count, Is.EqualTo(1));
+            Assert.That(session.ActiveRun, Is.Not.SameAs(completedRun));
+            Assert.That(session.ActiveRun.Status, Is.EqualTo(RunStatus.Active));
+            Assert.That(session.ActiveRun.CurrentDay, Is.Zero);
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(session.ActiveRun.Health, Is.EqualTo(100));
+
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator DisabledAndRecreatedPlayerRendersSessionWithoutOwningResources()
         {
             Component manager = CreateManager("M1.4 Player Manager");
@@ -306,6 +410,23 @@ namespace HallowBlaze.Tests.PlayMode
             return UnityEngine.Object.FindObjectsOfType(type)
                 .Cast<Component>()
                 .FirstOrDefault(component => component.gameObject.scene.name == sceneName);
+        }
+
+        private static void AssertSceneHasNoMissingComponents(string sceneName)
+        {
+            Scene scene = SceneManager.GetSceneByName(sceneName);
+            Assert.That(scene.IsValid() && scene.isLoaded, Is.True, sceneName + " must be loaded.");
+
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                foreach (Transform child in root.GetComponentsInChildren<Transform>(true))
+                {
+                    Assert.That(
+                        child.GetComponents<Component>().All(component => component != null),
+                        Is.True,
+                        child.name + " in " + sceneName + " contains a missing script.");
+                }
+            }
         }
 
         private static T GetField<T>(Component target, string fieldName)
