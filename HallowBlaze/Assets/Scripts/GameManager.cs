@@ -51,12 +51,16 @@ public class GameManager : MonoBehaviour
     private bool enemiesMoving;
     private bool doingSetup;
     private bool gameplayInputBlocked;
+    private bool boardStartupInProgress;
     private int gameplayInputResumeFrame = -1;
     private int nextRunSequence;
     private GameSession session;
     private RunLifecycleService lifecycle;
     private ISaveStore saveStore;
+    private WorldDefinition worldDefinition;
     private WorldMapService worldMap;
+    private BoardRequest activeBoardRequest;
+    private bool boardOutcomeHandled;
     private IReadOnlyList<WorldMapExitOption> routeChoices = NoRouteChoices;
     private bool terminalActionRequested;
     private Action<string> sceneLoader = SceneManager.LoadScene;
@@ -64,6 +68,12 @@ public class GameManager : MonoBehaviour
     public GameSession Session
     {
         get { return session; }
+    }
+
+    /// <summary>Gets the immutable request that identifies the active local board.</summary>
+    public BoardRequest ActiveBoardRequest
+    {
+        get { return activeBoardRequest; }
     }
 
     /// <summary>Gets the legal options exposed by the current board exit.</summary>
@@ -267,6 +277,7 @@ public class GameManager : MonoBehaviour
         if (scene.buildIndex != 1)
             return;
 
+        BlockBoardStartup();
         EnsurePersistence();
         if (requestedLaunchMode == RunLaunchMode.NewGame)
         {
@@ -299,12 +310,24 @@ public class GameManager : MonoBehaviour
         InitGame();
     }
 
+    private void BlockBoardStartup()
+    {
+        boardStartupInProgress = true;
+        doingSetup = true;
+        activeBoardRequest = null;
+        boardOutcomeHandled = false;
+        SetRouteChoices(NoRouteChoices);
+        SetGameplayInputBlocked(true);
+        if (boardScript != null)
+            boardScript.ClearActiveRequest();
+    }
+
     private void InitGame()
     {
         doingSetup = true;
         terminalActionRequested = false;
         SetRouteChoices(NoRouteChoices);
-        SetGameplayInputBlocked(false);
+        SetGameplayInputBlocked(true);
 
         levelImage = GameObject.Find("LevelImage");
         if (levelImage != null)
@@ -333,15 +356,70 @@ public class GameManager : MonoBehaviour
         if (scoreText != null)
             scoreText.text = string.Empty;
 
-        CancelInvoke(nameof(HideLevelImage));
-        Invoke(nameof(HideLevelImage), levelStartDelay);
         enemies.Clear();
 
-        if (boardScript != null)
+        activeBoardRequest = null;
+        boardOutcomeHandled = false;
+        if (boardScript == null || worldDefinition == null)
         {
-            RunState run = session.GetCurrentRun();
-            boardScript.SetupScene(run.CurrentDay, run.GetBoardSeed());
+            SetGameplayInputBlocked(true);
+            Debug.LogError("Board startup failed because its adapter dependencies are unavailable.");
+            return;
         }
+
+        try
+        {
+            activeBoardRequest = BoardRequest.CreateFromRun(session.GetCurrentRun(), worldDefinition);
+            boardScript.SetupScene(activeBoardRequest);
+            boardStartupInProgress = false;
+            SetGameplayInputBlocked(false);
+            CancelInvoke(nameof(HideLevelImage));
+            Invoke(nameof(HideLevelImage), levelStartDelay);
+        }
+        catch (Exception exception)
+        {
+            activeBoardRequest = null;
+            boardScript.ClearActiveRequest();
+            CancelInvoke(nameof(HideLevelImage));
+            SetGameplayInputBlocked(true);
+            Debug.LogError("Board startup failed: " + exception.Message);
+        }
+    }
+
+    /// <summary>
+    /// Applies one result emitted by the currently active local board.
+    /// </summary>
+    /// <param name="outcome">The board outcome to handle.</param>
+    /// <returns><c>true</c> when the matching outcome was accepted; otherwise <c>false</c>.</returns>
+    public bool HandleBoardOutcome(BoardOutcome outcome)
+    {
+        if (outcome == null
+            || activeBoardRequest == null
+            || boardOutcomeHandled
+            || !activeBoardRequest.HasSameIdentity(outcome.Request))
+        {
+            return false;
+        }
+
+        switch (outcome.Type)
+        {
+            case BoardOutcomeType.ExitReached:
+                if (!BeginRouteChoice())
+                    return false;
+                break;
+
+            case BoardOutcomeType.PlayerDied:
+                if (!outcome.DeathReason.HasValue)
+                    return false;
+                GameOver(outcome.DeathReason.Value == DeathReason.Starvation);
+                break;
+
+            default:
+                return false;
+        }
+
+        boardOutcomeHandled = true;
+        return true;
     }
 
     private void HideLevelImage()
@@ -349,7 +427,11 @@ public class GameManager : MonoBehaviour
         if (levelImage != null)
             levelImage.SetActive(false);
 
+        if (boardStartupInProgress || activeBoardRequest == null)
+            return;
+
         doingSetup = false;
+        SetGameplayInputBlocked(false);
     }
 
     public void GameOver(bool isStarved)
@@ -462,9 +544,12 @@ public class GameManager : MonoBehaviour
         StopAllCoroutines();
         playerTurn = true;
         enemiesMoving = false;
-        doingSetup = false;
-        gameplayInputBlocked = false;
-        gameplayInputResumeFrame = Time.frameCount;
+        if (!boardStartupInProgress)
+        {
+            doingSetup = false;
+            gameplayInputBlocked = false;
+            gameplayInputResumeFrame = Time.frameCount;
+        }
         SetRouteChoices(NoRouteChoices);
     }
 
@@ -473,7 +558,8 @@ public class GameManager : MonoBehaviour
         StopAllCoroutines();
         playerTurn = false;
         enemiesMoving = false;
-        doingSetup = false;
+        if (!boardStartupInProgress)
+            doingSetup = false;
         gameplayInputBlocked = true;
         SetRouteChoices(NoRouteChoices);
     }
@@ -617,6 +703,7 @@ public class GameManager : MonoBehaviour
         }
 
         lifecycle = new RunLifecycleService(session, saveStore);
+        worldDefinition = null;
         worldMap = null;
     }
 
@@ -651,6 +738,7 @@ public class GameManager : MonoBehaviour
         session.OnRunStarted += OnRunStarted;
         session.OnRunAbandoned += OnRunAbandoned;
         lifecycle = new RunLifecycleService(session, saveStore);
+        worldDefinition = null;
         worldMap = null;
         session.ContinueRun(freshRun);
         return true;
@@ -670,8 +758,9 @@ public class GameManager : MonoBehaviour
 
         try
         {
+            worldDefinition = WorldDefinitionJson.Deserialize(worldDefinitionJson.text);
             worldMap = new WorldMapService(
-                WorldDefinitionJson.Deserialize(worldDefinitionJson.text),
+                worldDefinition,
                 session,
                 saveStore);
             return true;

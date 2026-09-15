@@ -531,6 +531,109 @@ namespace HallowBlaze.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator BoardRequestRejectsStaleAndDuplicateExitOutcomes()
+        {
+            AsyncOperation load = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            while (!load.isDone)
+                yield return null;
+            yield return null;
+
+            Component manager = GetStaticField(gameManagerType, "instance") as Component;
+            Assert.That(manager, Is.Not.Null);
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            RunState run = session.ActiveRun;
+            BoardRequest request = GetProperty<BoardRequest>(manager, "ActiveBoardRequest");
+            Assert.That(request, Is.Not.Null);
+            Assert.That(request.RunId, Is.EqualTo(run.RunId));
+            Assert.That(request.WorldNodeId, Is.EqualTo(run.WorldNodeId));
+            Assert.That(request.CurrentDay, Is.EqualTo(run.CurrentDay));
+            Assert.That(request.BoardSeed, Is.EqualTo(run.GetBoardSeed()));
+
+            BoardRequest staleRequest = new BoardRequest(
+                request.RunId,
+                request.RunSeed,
+                request.WorldNodeId,
+                request.CurrentDay,
+                unchecked(request.BoardSeed + 1),
+                request.PlaceKind,
+                request.BiomeFamily,
+                request.LegacyDifficultyLevel);
+            Assert.That(
+                (bool)Invoke(manager, "HandleBoardOutcome", BoardOutcome.ExitReached(staleRequest)),
+                Is.False);
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+            Assert.That(run.CurrentDay, Is.Zero);
+
+            BoardOutcome exit = BoardOutcome.ExitReached(request);
+            Assert.That((bool)Invoke(manager, "HandleBoardOutcome", exit), Is.True);
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+            Assert.That(run.CurrentDay, Is.Zero);
+            Assert.That((bool)Invoke(manager, "HandleBoardOutcome", exit), Is.False);
+            Assert.That(run.CurrentDay, Is.Zero);
+
+            Scene cleanupScene = SceneManager.CreateScene(
+                "M2.7 Exit Cleanup " + Guid.NewGuid().ToString("N"));
+            Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
+        [UnityTest]
+        public IEnumerator BoardStartupFailureKeepsGameplayBlockedAndClearsRequest()
+        {
+            AsyncOperation load = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            while (!load.isDone)
+                yield return null;
+            yield return null;
+
+            Component manager = GetStaticField(gameManagerType, "instance") as Component;
+            Assert.That(manager, Is.Not.Null);
+            Component boardManager = GetField<Component>(manager, "boardScript");
+            Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"), Is.Not.Null);
+            Assert.That(GetProperty<BoardRequest>(boardManager, "ActiveRequest"), Is.Not.Null);
+
+            SetField(manager, "worldMap", null);
+            SetField(manager, "worldDefinition", null);
+            SetField(manager, "worldDefinitionJson", null);
+            GetProperty<GameSession>(manager, "Session").AbandonRun();
+            InvokeStatic(gameManagerType, "RequestNewRun");
+
+            LogAssert.Expect(LogType.Error, "World definition JSON is not assigned on GameManager.");
+            AsyncOperation reload = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            while (!reload.isDone)
+                yield return null;
+            yield return null;
+
+            Assert.That(GetStaticField(gameManagerType, "instance"), Is.SameAs(manager));
+            Assert.That(GetProperty<GameSession>(manager, "Session").ActiveRun, Is.Not.Null);
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputBlocked"), Is.True);
+            Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"), Is.Null);
+            Assert.That(GetProperty<BoardRequest>(boardManager, "ActiveRequest"), Is.Null);
+
+            Scene cleanupScene = SceneManager.CreateScene(
+                "M2.7 Startup Failure Cleanup " + Guid.NewGuid().ToString("N"));
+            Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
+        [UnityTest]
+        public IEnumerator StarvationOutcomeClosesRunWithoutRouteChoice()
+        {
+            yield return AssertDeathOutcome(
+                DeathReason.Starvation,
+                "you've starved",
+                "M2.7 Starvation Cleanup");
+        }
+
+        [UnityTest]
+        public IEnumerator HealthOutcomeClosesRunWithoutRouteChoice()
+        {
+            yield return AssertDeathOutcome(
+                DeathReason.HealthDepleted,
+                "brain has been eaten",
+                "M2.7 Health Cleanup");
+        }
+
+        [UnityTest]
         public IEnumerator DeadRunReturnsToMenuOnceWithoutStartingRun()
         {
             Component manager = CreateManager("M1.11 Game Over Manager");
@@ -671,6 +774,37 @@ namespace HallowBlaze.Tests.PlayMode
         {
             GameObject managerObject = new GameObject(name);
             return managerObject.AddComponent(gameManagerType);
+        }
+
+        private IEnumerator AssertDeathOutcome(
+            DeathReason deathReason,
+            string expectedMessage,
+            string cleanupSceneName)
+        {
+            AsyncOperation load = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            while (!load.isDone)
+                yield return null;
+            yield return null;
+
+            Component manager = GetStaticField(gameManagerType, "instance") as Component;
+            Assert.That(manager, Is.Not.Null);
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            RunState completedRun = session.ActiveRun;
+            BoardRequest request = GetProperty<BoardRequest>(manager, "ActiveBoardRequest");
+            BoardOutcome outcome = BoardOutcome.PlayerDied(request, deathReason);
+
+            Assert.That((bool)Invoke(manager, "HandleBoardOutcome", outcome), Is.True);
+            Assert.That(completedRun.Status, Is.EqualTo(RunStatus.Dead));
+            Assert.That(session.ActiveRun, Is.Null);
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+            Assert.That(GetField<Text>(manager, "levelText").text, Does.Contain(expectedMessage));
+            Assert.That((bool)Invoke(manager, "HandleBoardOutcome", outcome), Is.False);
+            Assert.That(session.Profile.RunSummaries, Has.Count.EqualTo(1));
+
+            Scene cleanupScene = SceneManager.CreateScene(
+                cleanupSceneName + " " + Guid.NewGuid().ToString("N"));
+            Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
+            yield return SceneManager.UnloadSceneAsync("Main");
         }
 
         private Component CreatePlayer(string name, out Text foodText, out Text healthText)
