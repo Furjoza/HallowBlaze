@@ -28,9 +28,13 @@ Project Unity version is currently `6000.3.21f1`. When version-specific behavior
 
 ## 2. Communication
 
-User-facing communication and agent handoffs should be written in Polish.
+User-facing communication and agent handoffs outside repository files should be written in Polish.
 
-Preserve the existing language and conventions of source code, identifiers, comments, and project documentation unless the task explicitly requires changing them.
+Project-authored, version-controlled repository content should be written in English, including source code identifiers, comments, documentation, validation reports, and agent configuration. Preserve established technical names and conventions.
+
+Player-facing text follows the project's localization requirements and must not be translated solely to satisfy the repository-language rule. Third-party or vendored content should retain its upstream language unless the task explicitly requires otherwise.
+
+Existing Polish documentation may be migrated incrementally in dedicated documentation tasks. Translation must preserve normative meaning, identifiers, statuses, historical facts, and source-of-truth relationships, and must not be combined with behavior changes.
 
 ## 3. Sources of truth
 
@@ -79,6 +83,16 @@ Protected configuration:
 - `.github/agents/**`
 - `AGENTS.md`
 - `Docs/AgentTeam.md`
+
+### Code documentation
+
+New or materially changed public and protected C# APIs MUST use English XML documentation comments (`///`). This includes public types and members, interfaces, extension points, and domain operations whose contract is not obvious from the signature.
+
+- A `<summary>` describes the behavioral contract rather than restating the identifier.
+- Use `<param>`, `<typeparam>`, `<returns>`, and `<exception>` when they clarify constraints, ownership, units, nullability, side effects, or failure behavior.
+- Document non-obvious invariants, persistence or reset semantics, deterministic behavior, and accepted-versus-rejected command effects at the owning API.
+- Private or internal implementation details do not require XML documentation when their purpose and behavior are clear from naming and structure.
+- Keep documentation accurate in the same change as the code. Do not perform repository-wide documentation backfills unless the active task explicitly includes them.
 
 Exactly one agent may write project files during an implementation iteration.
 
