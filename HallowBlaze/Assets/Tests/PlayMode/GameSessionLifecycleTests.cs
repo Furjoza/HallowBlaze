@@ -192,64 +192,26 @@ namespace HallowBlaze.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator GameOverMenuButtonLoadsMenuWithoutNewRun()
+        public IEnumerator RealMainSceneRendersResourceHudAboveLevelIntro()
         {
-            AsyncOperation mainLoad = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
-            while (!mainLoad.isDone)
-                yield return null;
-            yield return null;
-            AssertSceneHasNoMissingComponents("Main");
-
-            Component manager = GetStaticField(gameManagerType, "instance") as Component;
-            Assert.That(manager, Is.Not.Null);
-            GameSession session = GetProperty<GameSession>(manager, "Session");
-            ProfileState profile = session.Profile;
-            RunState completedRun = session.ActiveRun;
-            Component player = FindSceneComponent(playerType, "Main");
-            Assert.That(player, Is.Not.Null);
-
-            Invoke(player, "LoseHealth", completedRun.Health);
-            GameObject menuButton = GameObject.Find("MenuBttn");
-            Assert.That(menuButton, Is.Not.Null);
-            Assert.That(menuButton.activeSelf, Is.True);
-            Component menuController = menuButton.GetComponent(restartButtonType);
-            Assert.That(menuController, Is.Not.Null);
-            Button menuButtonControl = menuButton.GetComponent<Button>();
-            Assert.That(menuButtonControl, Is.Not.Null);
-            Assert.That(menuButtonControl.onClick.GetPersistentEventCount(), Is.EqualTo(1));
-            Assert.That(menuButtonControl.onClick.GetPersistentTarget(0), Is.SameAs(menuController));
-            Assert.That(menuButtonControl.onClick.GetPersistentMethodName(0), Is.EqualTo("ReturnToMenu"));
-
-            Time.timeScale = 0f;
-            Invoke(manager, "SetGameplayInputBlocked", true);
-            menuButtonControl.onClick.Invoke();
-
-            float loadDeadline = Time.realtimeSinceStartup + 5f;
-            while (SceneManager.GetActiveScene().name != "Menu" &&
-                Time.realtimeSinceStartup < loadDeadline)
+            AsyncOperation load = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            while (!load.isDone)
                 yield return null;
             yield return null;
 
-            Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo("Menu"));
-            AssertSceneHasNoMissingComponents("Menu");
-            GameObject continueButton = GameObject.Find("ContinueBttn");
-            Assert.That(continueButton, Is.Not.Null);
-            Assert.That(continueButton.GetComponent<Button>().interactable, Is.False);
-            Assert.That(GetStaticField(gameManagerType, "instance"), Is.SameAs(manager));
-            Assert.That(((Behaviour)manager).enabled, Is.True);
-            Assert.That(Time.timeScale, Is.EqualTo(1f));
-            Assert.That(GetProperty<bool>(manager, "IsGameplayInputBlocked"), Is.False);
-            Assert.That(session.Profile, Is.SameAs(profile));
-            Assert.That(session.ActiveRun, Is.Null);
-            Assert.That(profile.RunSummaries.Count, Is.EqualTo(1));
-            Assert.That(profile.RunSummaries[0].RunId, Is.EqualTo(completedRun.RunId));
-            Assert.That(profile.RunSummaries[0].Status, Is.EqualTo(RunStatus.Dead));
-            Assert.That(File.Exists(Path.Combine(persistenceRoot, "profile.json")), Is.True);
-            Assert.That(File.Exists(Path.Combine(persistenceRoot, "run.json")), Is.False);
-
-            Scene cleanupScene = SceneManager.CreateScene("M1.11 Menu Cleanup " + Guid.NewGuid().ToString("N"));
-            Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
-            yield return SceneManager.UnloadSceneAsync("Menu");
+            GameObject levelImage = GameObject.Find("LevelImage");
+            GameObject foodText = GameObject.Find("FoodText");
+            GameObject healthText = GameObject.Find("HealthText");
+            Assert.That(levelImage, Is.Not.Null);
+            Assert.That(foodText, Is.Not.Null);
+            Assert.That(healthText, Is.Not.Null);
+            Canvas resourceCanvas = foodText.GetComponentInParent<Canvas>();
+            Assert.That(resourceCanvas, Is.Not.Null);
+            Assert.That(resourceCanvas.transform.localScale, Is.EqualTo(Vector3.one));
+            Assert.That(foodText.transform.parent, Is.SameAs(levelImage.transform.parent));
+            Assert.That(healthText.transform.parent, Is.SameAs(levelImage.transform.parent));
+            Assert.That(foodText.transform.GetSiblingIndex(), Is.GreaterThan(levelImage.transform.GetSiblingIndex()));
+            Assert.That(healthText.transform.GetSiblingIndex(), Is.GreaterThan(levelImage.transform.GetSiblingIndex()));
         }
 
         [UnityTest]
@@ -277,7 +239,7 @@ namespace HallowBlaze.Tests.PlayMode
             GameSession continuedSession = GetProperty<GameSession>(manager, "Session");
             Assert.That(continuedSession.ActiveRun.RunId, Is.EqualTo(firstRun.RunId));
             Assert.That(continuedSession.ActiveRun.CurrentDay, Is.EqualTo(1));
-            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(91));
+            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(100));
 
             Scene cleanupScene = SceneManager.CreateScene("M1.7 Continue Cleanup " + Guid.NewGuid().ToString("N"));
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);

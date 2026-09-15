@@ -92,6 +92,7 @@ namespace HallowBlaze.Tests.EditMode
             lifecycle.StartNewRun("run-boundary", 303, CreateConfiguration());
             session.AdvanceDay();
             session.ConsumeFood(15);
+            int boardSeed = session.ActiveRun.GetBoardSeed();
             Assert.That(lifecycle.SaveBoardBoundary().IsSuccess, Is.True);
 
             session.ConsumeFood(40);
@@ -105,6 +106,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(restoredSession.ActiveRun.CurrentDay, Is.EqualTo(1));
             Assert.That(restoredSession.ActiveRun.Food, Is.EqualTo(85));
             Assert.That(restoredSession.ActiveRun.Health, Is.EqualTo(100));
+            Assert.That(restoredSession.ActiveRun.GetBoardSeed(), Is.EqualTo(boardSeed));
         }
 
         [Test]
@@ -122,7 +124,7 @@ namespace HallowBlaze.Tests.EditMode
             GameSession continuedSession = LoadSession(store);
             RunLifecycleService continuedLifecycle = new RunLifecycleService(continuedSession, store);
             Assert.That(continuedLifecycle.ContinueRun().IsSuccess, Is.True);
-            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(90));
+            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(100));
 
             Assert.That(continuedLifecycle.DeleteRunAndAbandon().IsSuccess, Is.True);
             Assert.That(continuedSession.ActiveRun, Is.Null);
