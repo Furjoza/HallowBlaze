@@ -19,9 +19,16 @@ public class GameManager : MonoBehaviour
     private static readonly IReadOnlyList<WorldMapExitOption> NoRouteChoices =
         Array.AsReadOnly(new WorldMapExitOption[0]);
 
+    /// <summary>Identifies how entering the gameplay scene obtains its profile and run.</summary>
     public enum RunLaunchMode
     {
+        /// <summary>Starts another run while preserving the current profile.</summary>
         NewRun,
+
+        /// <summary>Replaces the current profile before starting its first run.</summary>
+        NewGame,
+
+        /// <summary>Restores the persisted profile and active run.</summary>
         Continue
     }
 
@@ -99,11 +106,19 @@ public class GameManager : MonoBehaviour
         get { return gameplayInputBlocked; }
     }
 
+    /// <summary>Requests another run in the current profile.</summary>
     public static void RequestNewRun()
     {
         requestedLaunchMode = RunLaunchMode.NewRun;
     }
 
+    /// <summary>Requests a new game that replaces the saved profile before its first run starts.</summary>
+    public static void RequestNewGame()
+    {
+        requestedLaunchMode = RunLaunchMode.NewGame;
+    }
+
+    /// <summary>Requests restoration of the persisted profile and active run.</summary>
     public static void RequestContinue()
     {
         requestedLaunchMode = RunLaunchMode.Continue;
@@ -253,7 +268,12 @@ public class GameManager : MonoBehaviour
             return;
 
         EnsurePersistence();
-        if (!session.IsRunActive() || session.ActiveRun.Status != RunStatus.Active)
+        if (requestedLaunchMode == RunLaunchMode.NewGame)
+        {
+            if (!TryStartNewGame())
+                return;
+        }
+        else if (!session.IsRunActive() || session.ActiveRun.Status != RunStatus.Active)
         {
             if (requestedLaunchMode == RunLaunchMode.Continue)
             {
@@ -267,7 +287,8 @@ public class GameManager : MonoBehaviour
             }
             else
             {
-                StartNewRun();
+                if (!TryStartNewRun())
+                    return;
             }
         }
 
@@ -459,6 +480,11 @@ public class GameManager : MonoBehaviour
 
     public void StartNewRun()
     {
+        TryStartNewRun();
+    }
+
+    private bool TryStartNewRun()
+    {
         if (!enabled)
             enabled = true;
 
@@ -474,7 +500,7 @@ public class GameManager : MonoBehaviour
         if (lifecycle == null)
         {
             session.StartNewRun(runId, 12345 + nextRunSequence, configuration);
-            return;
+            return true;
         }
 
         SaveStoreResult result = lifecycle.StartNewRun(
@@ -482,7 +508,12 @@ public class GameManager : MonoBehaviour
             12345 + nextRunSequence,
             configuration);
         if (result.IsFailure)
+        {
             Debug.LogError("New run save failed: " + result.Type);
+            return false;
+        }
+
+        return true;
     }
 
     public void AbandonRun()
@@ -587,6 +618,42 @@ public class GameManager : MonoBehaviour
 
         lifecycle = new RunLifecycleService(session, saveStore);
         worldMap = null;
+    }
+
+    private bool TryStartNewGame()
+    {
+        ProfileState currentProfile = session.Profile;
+        ProfileState freshProfile = new ProfileState(
+            currentProfile.ProfileId,
+            currentProfile.WorldDefinitionId,
+            currentProfile.WorldDefinitionVersion);
+        nextRunSequence = checked(nextRunSequence + 1);
+        RunStateConfiguration configuration = new RunStateConfiguration(
+            InitialHealth,
+            InitialFood,
+            0,
+            InitialWorldNodeId);
+        RunState freshRun = new RunState(
+            freshProfile.ProfileId + "-run-" + System.Guid.NewGuid().ToString("N"),
+            12345 + nextRunSequence,
+            configuration);
+
+        SaveStoreResult resetResult = saveStore.ResetGame(freshProfile, freshRun);
+        if (resetResult.IsFailure)
+        {
+            Debug.LogError("New game reset failed: " + resetResult.Type);
+            return false;
+        }
+
+        session.OnRunStarted -= OnRunStarted;
+        session.OnRunAbandoned -= OnRunAbandoned;
+        session = new GameSession(freshProfile);
+        session.OnRunStarted += OnRunStarted;
+        session.OnRunAbandoned += OnRunAbandoned;
+        lifecycle = new RunLifecycleService(session, saveStore);
+        worldMap = null;
+        session.ContinueRun(freshRun);
+        return true;
     }
 
     private bool TryEnsureWorldMap()

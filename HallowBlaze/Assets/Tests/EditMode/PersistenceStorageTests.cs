@@ -97,6 +97,150 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
+        public void ResetGameCannotRecoverDiscoveryOrRunFromPreviousGame()
+        {
+            FileSystemSaveStore store = new FileSystemSaveStore(testRootPath);
+            ProfileState discoveredProfile = new ProfileState(
+                "profile-main",
+                "world.default",
+                1);
+            discoveredProfile.AdvanceNodeDiscovery(
+                "forest.west-trail",
+                NodeDiscoveryState.Visited);
+            store.SaveProfile(discoveredProfile);
+            store.SaveProfile(discoveredProfile);
+            store.SaveRun(CreateRun("run-previous"));
+            store.SaveRun(CreateRun("run-previous"));
+
+            ProfileState freshProfile = new ProfileState(
+                "profile-main",
+                "world.default",
+                1);
+            SaveStoreResult resetResult = store.ResetGame(
+                freshProfile,
+                CreateRun("run-fresh"));
+
+            Assert.That(resetResult.IsSuccess, Is.True);
+            Assert.That(File.Exists(
+                Path.Combine(testRootPath, "profile.backup.json")), Is.False);
+            Assert.That(File.Exists(
+                Path.Combine(testRootPath, "run.backup.json")), Is.False);
+            Assert.That(store.LoadProfile().Data.NodeDiscoveries, Is.Empty);
+            Assert.That(store.LoadRun().Data.RunId, Is.EqualTo("run-fresh"));
+
+            File.WriteAllText(
+                Path.Combine(testRootPath, "profile.json"),
+                "not-json");
+            Assert.That(store.LoadProfile().Type, Is.EqualTo(SaveStoreResultType.Corrupt));
+        }
+
+        [TestCase(1)]
+        [TestCase(2)]
+        public void ResetGameWriteFailureRestoresEveryPreviousSave(int failingReplaceCall)
+        {
+            FileSystemSaveStore initialStore = new FileSystemSaveStore(testRootPath);
+            ProfileState previousProfile = new ProfileState(
+                "profile-main",
+                "world.default",
+                1);
+            previousProfile.AdvanceNodeDiscovery(
+                "forest.west-trail",
+                NodeDiscoveryState.Visited);
+            initialStore.SaveProfile(previousProfile);
+            initialStore.SaveProfile(previousProfile);
+            initialStore.SaveRun(CreateRun("run-previous"));
+            initialStore.SaveRun(CreateRun("run-previous"));
+            string[] saveFileNames =
+            {
+                "profile.json",
+                "profile.backup.json",
+                "run.json",
+                "run.backup.json"
+            };
+            string[] previousContents = saveFileNames
+                .Select(fileName => File.ReadAllText(Path.Combine(testRootPath, fileName)))
+                .ToArray();
+            int replaceCallCount = 0;
+            FileSystemSaveStore failingStore = new FileSystemSaveStore(
+                testRootPath,
+                (source, destination, backup) =>
+                {
+                    replaceCallCount++;
+                    if (replaceCallCount == failingReplaceCall)
+                        throw new IOException("Injected new-game replace failure.");
+
+                    File.Replace(source, destination, backup);
+                });
+
+            SaveStoreResult result = failingStore.ResetGame(
+                new ProfileState("profile-main", "world.default", 1),
+                CreateRun("run-fresh"));
+
+            Assert.That(result.Type, Is.EqualTo(SaveStoreResultType.IoError));
+            Assert.That(
+                saveFileNames.Select(fileName => File.ReadAllText(
+                    Path.Combine(testRootPath, fileName))),
+                Is.EqualTo(previousContents));
+            Assert.That(
+                Directory.GetFiles(testRootPath, ".*.tmp*"),
+                Is.Empty);
+        }
+
+        [Test]
+        public void ResetGameSnapshotFailureLeavesEveryPreviousSaveUntouched()
+        {
+            FileSystemSaveStore initialStore = new FileSystemSaveStore(testRootPath);
+            ProfileState previousProfile = new ProfileState(
+                "profile-main",
+                "world.default",
+                1);
+            previousProfile.AdvanceNodeDiscovery(
+                "forest.west-trail",
+                NodeDiscoveryState.Visited);
+            initialStore.SaveProfile(previousProfile);
+            initialStore.SaveProfile(previousProfile);
+            initialStore.SaveRun(CreateRun("run-previous"));
+            initialStore.SaveRun(CreateRun("run-previous"));
+            string[] saveFileNames =
+            {
+                "profile.json",
+                "profile.backup.json",
+                "run.json",
+                "run.backup.json"
+            };
+            byte[][] previousContents = saveFileNames
+                .Select(fileName => File.ReadAllBytes(Path.Combine(testRootPath, fileName)))
+                .ToArray();
+            int copyCallCount = 0;
+            FileSystemSaveStore failingStore = new FileSystemSaveStore(
+                testRootPath,
+                copyFile: (source, destination) =>
+                {
+                    copyCallCount++;
+                    if (copyCallCount == 2)
+                        throw new IOException("Injected new-game snapshot failure.");
+
+                    File.Copy(source, destination);
+                });
+
+            SaveStoreResult result = failingStore.ResetGame(
+                new ProfileState("profile-main", "world.default", 1),
+                CreateRun("run-fresh"));
+
+            Assert.That(result.Type, Is.EqualTo(SaveStoreResultType.IoError));
+            for (int index = 0; index < saveFileNames.Length; index++)
+            {
+                Assert.That(
+                    File.ReadAllBytes(Path.Combine(testRootPath, saveFileNames[index])),
+                    Is.EqualTo(previousContents[index]));
+            }
+
+            Assert.That(
+                Directory.GetFiles(testRootPath, ".*.tmp*"),
+                Is.Empty);
+        }
+
+        [Test]
         public void InterruptedReplacePreservesCurrentAndCleansTemporaryFile()
         {
             FileSystemSaveStore initialStore = new FileSystemSaveStore(testRootPath);

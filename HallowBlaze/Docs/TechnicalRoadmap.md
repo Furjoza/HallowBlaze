@@ -1206,7 +1206,7 @@ Topologia nie może być drugi raz zahardkodowana w `GameManager`, scenie ani UI
 
 ## `M2.6` — Pierwszy ekran atlasu
 
-**Status:** `Planned` — nie może przejść na `Ready` bez decyzji O-004  
+**Status:** `Done` — prototype accepted 2026-09-15; transactional New Game reset validated and independently reviewed; detailed `Visited` semantics and comprehension testing deferred to a later atlas-design task
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 5.2, 5.4, 7.3 i 18.
 
@@ -1222,7 +1222,7 @@ Topologia nie może być drugi raz zahardkodowana w `GameManager`, scenie ani UI
 
 **Zależności:** `M2.5` oraz zaakceptowana O-004 określająca platformę referencyjną i minimalny input/layout.
 
-**Dozwolony obszar plików:** `/Assets/Scripts/Presentation/Atlas/**`, dedykowana scena/prefab/UI assets, testy i `.meta`.
+**Dozwolony obszar plików:** `/Assets/Scripts/Presentation/Atlas/**`, dedykowana scena/prefab/UI assets, testy i `.meta`. The accepted closeout fix also covers the menu launch mode, profile-reset persistence boundary, and their focused tests.
 
 **Kryteria akceptacji:** Stan nie opiera się wyłącznie na kolorze; ukryty node nie zdradza nazwy/typu; wszystkie legalne wybory są dostępne z klawiatury/myszy; ponowne otwarcie mapy nie mutuje stanu; drugi run pokazuje odkrycia pierwszego.
 
@@ -1231,6 +1231,8 @@ Topologia nie może być drugi raz zahardkodowana w `GameManager`, scenie ani UI
 **Wpływ na save i kompatybilność:** UI nie zapisuje własnych danych; obserwuje profile/run DTO.
 
 **Wymagany handoff:** Screenshoty każdego stanu, lista zastosowanych sygnałów innych niż kolor i wyniki krótkiego testu rozumienia.
+
+**Current validation:** Focused atlas PlayMode `1/1 Passed`; New Game atlas-reset PlayMode `1/1 Passed`; transactional persistence EditMode `1/1 Passed`, pre-commit snapshot failure `1/1 Passed`, and replace-failure rollback `2/2 Passed`; full lifecycle PlayMode `13/13 Passed`; full EditMode `172/172 Passed`; final solution build passed with `0` errors and two pre-existing warnings. A `1920x1080` PC smoke verified five known nodes, three known edges, one keyboard-focused legal route, and animations disabled. The earlier broader PlayMode run reached `37/39 Passed`; its two failures are pre-existing infrastructure-test issues outside the `Main`-scene atlas bootstrap. The original atlas review and final transactional closeout re-review both passed with no findings. The user accepted the current map as a functional prototype; detailed legend comprehension is deferred until the exact `Visited` semantics are designed. Full evidence: [`Validation/M2.6.md`](Validation/M2.6.md).
 
 ---
 
