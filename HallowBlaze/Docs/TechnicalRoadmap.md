@@ -408,6 +408,7 @@ Pozwala rozróżnić faktyczną migrację projektu i porządki indeksu od mechan
 ## `M0.8` — Regresja pojedynczej akcji ruchu
 
 **Status:** `Done`
+
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 9, 10, 21.2 i Appendix A.
 
@@ -971,9 +972,9 @@ M1 jest zaliczony, gdy istnieje dokładnie jeden właściciel profilu i runu, pr
 
 ## `M2.1` — Katalog świata: stabilne ID i definicja pięciodniowego grafu
 
-**Status:** `Planned`  
-**Priorytet:** P0  
-**Powiązany kontrakt:** sekcje 4, 5, 6.1, 7.1, 7.2, 7.5, 8, 20 i 21.1.
+| Status | Priorytet | Powiązany kontrakt |
+| --- | --- | --- |
+| `Done` | P0 | sekcje 4, 5, 6.1, 7.1, 7.2, 7.5, 8, 20 i 21.1 |
 
 **Rationale:** Wiedza może być trwała tylko wtedy, gdy opisuje ten sam świat pomiędzy runami. Stały, mały graf pozwala sprawdzić obietnicę atlasu przed produkcją dziesięciu lub czterdziestu dni contentu.
 
@@ -1047,6 +1048,8 @@ Topologia nie może być drugi raz zahardkodowana w `GameManager`, scenie ani UI
 **Wpływ na save i kompatybilność:** Bez oczekiwanej zmiany schematu save: istniejące stany już przechowują `WorldDefinitionId`, wersję i tekstowe ID. Od przyjęcia fixture jego opublikowane ID stają się częścią kontraktu zapisu. Zmiana lub usunięcie ID wymaga migracji albo aliasu, a nie cichego przemianowania; niekompatybilna zmiana topologii wymaga podniesienia wersji definicji świata.
 
 **Wymagany handoff:** Czytelny diagram grafu z warstwami dystansu, rejestr stabilnych ID i ich znaczeń, tabela wszystkich dróg `EdgeId → FromNodeId → ToNodeId → kierunek`, wyjaśnienie granicy danych authoringowych i czystego modelu oraz dokładne wyniki testów topologii.
+
+**Validation result:** Unity `6000.3.21f1` focused EditMode `6/6 Passed`; failed, skipped, and inconclusive `0`. The fixture contains 8 nodes, 9 directed edges, two decision points, two route rejoins, and four intended five-edge routes to the landmark. Independent review: `PASS`. Full handoff: [`Validation/M2.1.md`](Validation/M2.1.md).
 
 ---
 
