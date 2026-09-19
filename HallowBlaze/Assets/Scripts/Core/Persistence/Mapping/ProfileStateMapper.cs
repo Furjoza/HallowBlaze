@@ -5,8 +5,16 @@ using HallowBlaze.Core.State;
 
 namespace HallowBlaze.Core.Persistence.Mapping
 {
+    /// <summary>
+    /// Converts profile state between the domain model and the current persistence schema.
+    /// </summary>
     public static class ProfileStateMapper
     {
+        /// <summary>
+        /// Creates a schema v2 DTO while preserving first-discovery and insertion order.
+        /// </summary>
+        /// <param name="profile">The validated profile to serialize.</param>
+        /// <returns>A detached persistence DTO.</returns>
         public static ProfileStateDto ToDto(ProfileState profile)
         {
             if (profile == null)
@@ -25,20 +33,49 @@ namespace HallowBlaze.Core.Persistence.Mapping
                 };
             }
 
+            NodeDiscoveryDto[] nodeDtos =
+                new NodeDiscoveryDto[profile.NodeDiscoveries.Count];
+            for (int index = 0; index < nodeDtos.Length; index++)
+            {
+                NodeDiscovery discovery = profile.NodeDiscoveries[index];
+                nodeDtos[index] = new NodeDiscoveryDto
+                {
+                    NodeId = discovery.NodeId,
+                    State = ToNodeStateId(discovery.State)
+                };
+            }
+
+            EdgeDiscoveryDto[] edgeDtos =
+                new EdgeDiscoveryDto[profile.EdgeDiscoveries.Count];
+            for (int index = 0; index < edgeDtos.Length; index++)
+            {
+                EdgeDiscovery discovery = profile.EdgeDiscoveries[index];
+                edgeDtos[index] = new EdgeDiscoveryDto
+                {
+                    EdgeId = discovery.EdgeId,
+                    State = ToEdgeStateId(discovery.State)
+                };
+            }
+
             return new ProfileStateDto
             {
                 SchemaVersion = ProfileStateDto.CurrentSchemaVersion,
                 ProfileId = profile.ProfileId,
                 WorldDefinitionId = profile.WorldDefinitionId,
                 WorldDefinitionVersion = profile.WorldDefinitionVersion,
-                DiscoveredNodeIds = Copy(profile.DiscoveredNodeIds),
-                DiscoveredEdgeIds = Copy(profile.DiscoveredEdgeIds),
+                NodeDiscoveries = nodeDtos,
+                EdgeDiscoveries = edgeDtos,
                 DiscoveredFactIds = Copy(profile.DiscoveredFactIds),
                 PersistentNoteIds = Copy(profile.PersistentNoteIds),
                 RunSummaries = summaryDtos
             };
         }
 
+        /// <summary>
+        /// Validates and materializes a profile from a complete schema v2 DTO.
+        /// </summary>
+        /// <param name="dto">The profile DTO to validate and materialize.</param>
+        /// <returns>A profile containing the persisted durable knowledge.</returns>
         public static ProfileState FromDto(ProfileStateDto dto)
         {
             if (dto == null)
@@ -53,12 +90,12 @@ namespace HallowBlaze.Core.Persistence.Mapping
                 dto.WorldDefinitionVersion,
                 "worldDefinitionVersion");
 
-            string[] nodeIds = DtoValidation.RequireArray(
-                dto.DiscoveredNodeIds,
-                "discoveredNodeIds");
-            string[] edgeIds = DtoValidation.RequireArray(
-                dto.DiscoveredEdgeIds,
-                "discoveredEdgeIds");
+            NodeDiscoveryDto[] nodeDtos = DtoValidation.RequireArray(
+                dto.NodeDiscoveries,
+                "nodeDiscoveries");
+            EdgeDiscoveryDto[] edgeDtos = DtoValidation.RequireArray(
+                dto.EdgeDiscoveries,
+                "edgeDiscoveries");
             string[] factIds = DtoValidation.RequireArray(
                 dto.DiscoveredFactIds,
                 "discoveredFactIds");
@@ -69,8 +106,6 @@ namespace HallowBlaze.Core.Persistence.Mapping
                 dto.RunSummaries,
                 "runSummaries");
 
-            DtoValidation.ValidateStableIds(nodeIds, "discoveredNodeIds", true);
-            DtoValidation.ValidateStableIds(edgeIds, "discoveredEdgeIds", true);
             DtoValidation.ValidateStableIds(factIds, "discoveredFactIds", true);
             DtoValidation.ValidateStableIds(noteIds, "persistentNoteIds", true);
 
@@ -80,14 +115,140 @@ namespace HallowBlaze.Core.Persistence.Mapping
                 dto.WorldDefinitionId,
                 dto.WorldDefinitionVersion);
 
-            AddIds(nodeIds, profile.DiscoverNode);
-            AddIds(edgeIds, profile.DiscoverEdge);
+            AddNodeDiscoveries(nodeDtos, profile);
+            AddEdgeDiscoveries(edgeDtos, profile);
             AddIds(factIds, profile.DiscoverFact);
             AddIds(noteIds, profile.AddPersistentNote);
             foreach (ProfileRunSummary summary in summaries)
                 profile.RecordRunSummary(summary);
 
             return profile;
+        }
+
+        private static void AddNodeDiscoveries(
+            NodeDiscoveryDto[] discoveryDtos,
+            ProfileState profile)
+        {
+            HashSet<string> nodeIds = new HashSet<string>(StringComparer.Ordinal);
+            for (int index = 0; index < discoveryDtos.Length; index++)
+            {
+                NodeDiscoveryDto discoveryDto = discoveryDtos[index];
+                string itemPath = $"nodeDiscoveries[{index}]";
+                if (discoveryDto == null)
+                    ThrowMissingItem(itemPath, "A required node discovery is missing.");
+
+                DtoValidation.RequireStableId(discoveryDto.NodeId, $"{itemPath}.nodeId");
+                if (!nodeIds.Add(discoveryDto.NodeId))
+                    ThrowDuplicateId($"{itemPath}.nodeId", "Node discovery IDs must be unique.");
+
+                profile.AdvanceNodeDiscovery(
+                    discoveryDto.NodeId,
+                    ParseNodeState(discoveryDto.State, $"{itemPath}.state"));
+            }
+        }
+
+        private static void AddEdgeDiscoveries(
+            EdgeDiscoveryDto[] discoveryDtos,
+            ProfileState profile)
+        {
+            HashSet<string> edgeIds = new HashSet<string>(StringComparer.Ordinal);
+            for (int index = 0; index < discoveryDtos.Length; index++)
+            {
+                EdgeDiscoveryDto discoveryDto = discoveryDtos[index];
+                string itemPath = $"edgeDiscoveries[{index}]";
+                if (discoveryDto == null)
+                    ThrowMissingItem(itemPath, "A required edge discovery is missing.");
+
+                DtoValidation.RequireStableId(discoveryDto.EdgeId, $"{itemPath}.edgeId");
+                if (!edgeIds.Add(discoveryDto.EdgeId))
+                    ThrowDuplicateId($"{itemPath}.edgeId", "Edge discovery IDs must be unique.");
+
+                profile.AdvanceEdgeDiscovery(
+                    discoveryDto.EdgeId,
+                    ParseEdgeState(discoveryDto.State, $"{itemPath}.state"));
+            }
+        }
+
+        private static NodeDiscoveryState ParseNodeState(
+            string stateId,
+            string fieldPath)
+        {
+            switch (stateId)
+            {
+                case "rumored":
+                    return NodeDiscoveryState.Rumored;
+                case "sighted":
+                    return NodeDiscoveryState.Sighted;
+                case "visited":
+                    return NodeDiscoveryState.Visited;
+                default:
+                    DtoValidation.ThrowInvalidValue(fieldPath);
+                    return default;
+            }
+        }
+
+        private static EdgeDiscoveryState ParseEdgeState(
+            string stateId,
+            string fieldPath)
+        {
+            switch (stateId)
+            {
+                case "sighted":
+                    return EdgeDiscoveryState.Sighted;
+                case "traversed":
+                    return EdgeDiscoveryState.Traversed;
+                default:
+                    DtoValidation.ThrowInvalidValue(fieldPath);
+                    return default;
+            }
+        }
+
+        private static string ToNodeStateId(NodeDiscoveryState state)
+        {
+            switch (state)
+            {
+                case NodeDiscoveryState.Rumored:
+                    return "rumored";
+                case NodeDiscoveryState.Sighted:
+                    return "sighted";
+                case NodeDiscoveryState.Visited:
+                    return "visited";
+                default:
+                    throw new ArgumentException(
+                        "Unknown nodes are not persisted.",
+                        nameof(state));
+            }
+        }
+
+        private static string ToEdgeStateId(EdgeDiscoveryState state)
+        {
+            switch (state)
+            {
+                case EdgeDiscoveryState.Sighted:
+                    return "sighted";
+                case EdgeDiscoveryState.Traversed:
+                    return "traversed";
+                default:
+                    throw new ArgumentException(
+                        "Unknown edges are not persisted.",
+                        nameof(state));
+            }
+        }
+
+        private static void ThrowMissingItem(string fieldPath, string message)
+        {
+            throw new PersistenceDataException(
+                PersistenceDataError.MissingField,
+                fieldPath,
+                message);
+        }
+
+        private static void ThrowDuplicateId(string fieldPath, string message)
+        {
+            throw new PersistenceDataException(
+                PersistenceDataError.DuplicateId,
+                fieldPath,
+                message);
         }
 
         private static ProfileRunSummary[] ValidateSummaries(

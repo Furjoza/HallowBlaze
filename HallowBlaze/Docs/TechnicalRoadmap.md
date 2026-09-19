@@ -1110,13 +1110,13 @@ Topologia nie może być drugi raz zahardkodowana w `GameManager`, scenie ani UI
 
 ## `M2.3` — Model odkryć atlasu
 
-**Status:** `Planned`  
+**Status:** `Done` — completed 2026-09-13; writer: `GitHub Copilot`
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 5.2, 5.4 i 6.1.
 
 **Rationale:** `Unknown`, `Rumored`, `Sighted` i `Visited` niosą różną ilość informacji. Jeden boolean „odkryte” ujawniłby za dużo albo nie potrafił pokazać postępu.
 
-**Obecne zachowanie:** `ProfileState` zna stabilne ID, ale nie ma jeszcze pełnych, monotonicznych przejść discovery dla węzłów i dróg.
+**Obecne zachowanie:** `ProfileState` utrzymuje typowane, monotoniczne stany discovery węzłów i dróg; persistence schema v2 zapisuje je tekstowo i migruje istniejące ID ze schema v1 do `Sighted`.
 
 **Oczekiwany rezultat:** Profil obsługuje stany węzła `Unknown → Rumored → Sighted → Visited` i drogi `Unknown → Sighted → Traversed`, bez cofania wiedzy.
 
@@ -1135,6 +1135,8 @@ Topologia nie może być drugi raz zahardkodowana w `GameManager`, scenie ani UI
 **Wpływ na save i kompatybilność:** Jeśli schema v1 nie przewidziała stanów, powstaje migracja v1→v2 z jednoznacznym mapowaniem istniejących ID.
 
 **Wymagany handoff:** Macierz przejść i przykład migracji; wskazać każde miejsce, które emituje discovery.
+
+**Validation result:** Unity `6000.3.21f1` post-review focused EditMode `79/79 Passed`; failed, skipped, and inconclusive `0`. Full solution build passed with `0` errors and `2` pre-existing out-of-scope warnings. Independent confirmation review: `PASS`. Full handoff: [`Validation/M2.3.md`](Validation/M2.3.md).
 
 ---
 

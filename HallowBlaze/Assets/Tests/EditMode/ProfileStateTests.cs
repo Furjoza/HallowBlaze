@@ -16,8 +16,8 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(profile.ProfileId, Is.EqualTo("profile-001"));
             Assert.That(profile.WorldDefinitionId, Is.EqualTo("world.default"));
             Assert.That(profile.WorldDefinitionVersion, Is.EqualTo(3));
-            Assert.That(profile.DiscoveredNodeIds, Is.Empty);
-            Assert.That(profile.DiscoveredEdgeIds, Is.Empty);
+            Assert.That(profile.NodeDiscoveries, Is.Empty);
+            Assert.That(profile.EdgeDiscoveries, Is.Empty);
             Assert.That(profile.DiscoveredFactIds, Is.Empty);
             Assert.That(profile.PersistentNoteIds, Is.Empty);
             Assert.That(profile.RunSummaries, Is.Empty);
@@ -54,16 +54,28 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
-        public void DiscoveryOperationsAreIdempotentAndKeepInsertionOrder()
+        public void DiscoveryOperationsKeepFirstDiscoveryOrderWhileStatesAdvance()
         {
             ProfileState profile = CreateProfile();
 
-            Assert.That(profile.DiscoverNode("node.b"), Is.True);
-            Assert.That(profile.DiscoverNode("node.a"), Is.True);
-            Assert.That(profile.DiscoverNode("node.b"), Is.False);
-            Assert.That(profile.DiscoverEdge("edge.b-a"), Is.True);
-            Assert.That(profile.DiscoverEdge("edge.a-b"), Is.True);
-            Assert.That(profile.DiscoverEdge("edge.b-a"), Is.False);
+            Assert.That(
+                profile.AdvanceNodeDiscovery("node.b", NodeDiscoveryState.Rumored),
+                Is.True);
+            Assert.That(
+                profile.AdvanceNodeDiscovery("node.a", NodeDiscoveryState.Sighted),
+                Is.True);
+            Assert.That(
+                profile.AdvanceNodeDiscovery("node.b", NodeDiscoveryState.Visited),
+                Is.True);
+            Assert.That(
+                profile.AdvanceEdgeDiscovery("edge.b-a", EdgeDiscoveryState.Sighted),
+                Is.True);
+            Assert.That(
+                profile.AdvanceEdgeDiscovery("edge.a-b", EdgeDiscoveryState.Traversed),
+                Is.True);
+            Assert.That(
+                profile.AdvanceEdgeDiscovery("edge.b-a", EdgeDiscoveryState.Traversed),
+                Is.True);
             Assert.That(profile.DiscoverFact("fact.weather"), Is.True);
             Assert.That(profile.DiscoverFact("fact.food"), Is.True);
             Assert.That(profile.DiscoverFact("fact.weather"), Is.False);
@@ -71,10 +83,87 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(profile.AddPersistentNote("note.shelter"), Is.True);
             Assert.That(profile.AddPersistentNote("note.route"), Is.False);
 
-            Assert.That(profile.DiscoveredNodeIds, Is.EqualTo(new[] { "node.b", "node.a" }));
-            Assert.That(profile.DiscoveredEdgeIds, Is.EqualTo(new[] { "edge.b-a", "edge.a-b" }));
+            Assert.That(
+                profile.NodeDiscoveries.Select(discovery => discovery.NodeId),
+                Is.EqualTo(new[] { "node.b", "node.a" }));
+            Assert.That(
+                profile.NodeDiscoveries.Select(discovery => discovery.State),
+                Is.EqualTo(new[] { NodeDiscoveryState.Visited, NodeDiscoveryState.Sighted }));
+            Assert.That(
+                profile.EdgeDiscoveries.Select(discovery => discovery.EdgeId),
+                Is.EqualTo(new[] { "edge.b-a", "edge.a-b" }));
+            Assert.That(
+                profile.EdgeDiscoveries.Select(discovery => discovery.State),
+                Is.EqualTo(new[] { EdgeDiscoveryState.Traversed, EdgeDiscoveryState.Traversed }));
             Assert.That(profile.DiscoveredFactIds, Is.EqualTo(new[] { "fact.weather", "fact.food" }));
             Assert.That(profile.PersistentNoteIds, Is.EqualTo(new[] { "note.route", "note.shelter" }));
+        }
+
+        [TestCase(NodeDiscoveryState.Unknown, NodeDiscoveryState.Unknown, NodeDiscoveryState.Unknown, false)]
+        [TestCase(NodeDiscoveryState.Unknown, NodeDiscoveryState.Rumored, NodeDiscoveryState.Rumored, true)]
+        [TestCase(NodeDiscoveryState.Unknown, NodeDiscoveryState.Sighted, NodeDiscoveryState.Sighted, true)]
+        [TestCase(NodeDiscoveryState.Unknown, NodeDiscoveryState.Visited, NodeDiscoveryState.Visited, true)]
+        [TestCase(NodeDiscoveryState.Rumored, NodeDiscoveryState.Unknown, NodeDiscoveryState.Rumored, false)]
+        [TestCase(NodeDiscoveryState.Rumored, NodeDiscoveryState.Rumored, NodeDiscoveryState.Rumored, false)]
+        [TestCase(NodeDiscoveryState.Rumored, NodeDiscoveryState.Sighted, NodeDiscoveryState.Sighted, true)]
+        [TestCase(NodeDiscoveryState.Rumored, NodeDiscoveryState.Visited, NodeDiscoveryState.Visited, true)]
+        [TestCase(NodeDiscoveryState.Sighted, NodeDiscoveryState.Unknown, NodeDiscoveryState.Sighted, false)]
+        [TestCase(NodeDiscoveryState.Sighted, NodeDiscoveryState.Rumored, NodeDiscoveryState.Sighted, false)]
+        [TestCase(NodeDiscoveryState.Sighted, NodeDiscoveryState.Sighted, NodeDiscoveryState.Sighted, false)]
+        [TestCase(NodeDiscoveryState.Sighted, NodeDiscoveryState.Visited, NodeDiscoveryState.Visited, true)]
+        [TestCase(NodeDiscoveryState.Visited, NodeDiscoveryState.Unknown, NodeDiscoveryState.Visited, false)]
+        [TestCase(NodeDiscoveryState.Visited, NodeDiscoveryState.Rumored, NodeDiscoveryState.Visited, false)]
+        [TestCase(NodeDiscoveryState.Visited, NodeDiscoveryState.Sighted, NodeDiscoveryState.Visited, false)]
+        [TestCase(NodeDiscoveryState.Visited, NodeDiscoveryState.Visited, NodeDiscoveryState.Visited, false)]
+        public void NodeDiscoveryTransitionTableIsMonotonic(
+            NodeDiscoveryState initialState,
+            NodeDiscoveryState requestedState,
+            NodeDiscoveryState expectedState,
+            bool expectedChange)
+        {
+            ProfileState profile = CreateProfile();
+            if (initialState != NodeDiscoveryState.Unknown)
+                profile.AdvanceNodeDiscovery("node.test", initialState);
+
+            bool changed = profile.AdvanceNodeDiscovery("node.test", requestedState);
+
+            Assert.That(changed, Is.EqualTo(expectedChange));
+            Assert.That(
+                profile.GetNodeDiscoveryState("node.test"),
+                Is.EqualTo(expectedState));
+            Assert.That(
+                profile.NodeDiscoveries.Count,
+                Is.EqualTo(expectedState == NodeDiscoveryState.Unknown ? 0 : 1));
+        }
+
+        [TestCase(EdgeDiscoveryState.Unknown, EdgeDiscoveryState.Unknown, EdgeDiscoveryState.Unknown, false)]
+        [TestCase(EdgeDiscoveryState.Unknown, EdgeDiscoveryState.Sighted, EdgeDiscoveryState.Sighted, true)]
+        [TestCase(EdgeDiscoveryState.Unknown, EdgeDiscoveryState.Traversed, EdgeDiscoveryState.Traversed, true)]
+        [TestCase(EdgeDiscoveryState.Sighted, EdgeDiscoveryState.Unknown, EdgeDiscoveryState.Sighted, false)]
+        [TestCase(EdgeDiscoveryState.Sighted, EdgeDiscoveryState.Sighted, EdgeDiscoveryState.Sighted, false)]
+        [TestCase(EdgeDiscoveryState.Sighted, EdgeDiscoveryState.Traversed, EdgeDiscoveryState.Traversed, true)]
+        [TestCase(EdgeDiscoveryState.Traversed, EdgeDiscoveryState.Unknown, EdgeDiscoveryState.Traversed, false)]
+        [TestCase(EdgeDiscoveryState.Traversed, EdgeDiscoveryState.Sighted, EdgeDiscoveryState.Traversed, false)]
+        [TestCase(EdgeDiscoveryState.Traversed, EdgeDiscoveryState.Traversed, EdgeDiscoveryState.Traversed, false)]
+        public void EdgeDiscoveryTransitionTableIsMonotonic(
+            EdgeDiscoveryState initialState,
+            EdgeDiscoveryState requestedState,
+            EdgeDiscoveryState expectedState,
+            bool expectedChange)
+        {
+            ProfileState profile = CreateProfile();
+            if (initialState != EdgeDiscoveryState.Unknown)
+                profile.AdvanceEdgeDiscovery("edge.test", initialState);
+
+            bool changed = profile.AdvanceEdgeDiscovery("edge.test", requestedState);
+
+            Assert.That(changed, Is.EqualTo(expectedChange));
+            Assert.That(
+                profile.GetEdgeDiscoveryState("edge.test"),
+                Is.EqualTo(expectedState));
+            Assert.That(
+                profile.EdgeDiscoveries.Count,
+                Is.EqualTo(expectedState == EdgeDiscoveryState.Unknown ? 0 : 1));
         }
 
         [Test]
@@ -82,41 +171,63 @@ namespace HallowBlaze.Tests.EditMode
         {
             ProfileState profile = CreateProfile();
 
-            AssertInvalidStableId(value => profile.DiscoverNode(value));
-            AssertInvalidStableId(value => profile.DiscoverEdge(value));
+            AssertInvalidStableId(value =>
+                profile.AdvanceNodeDiscovery(value, NodeDiscoveryState.Rumored));
+            AssertInvalidStableId(value => profile.GetNodeDiscoveryState(value));
+            AssertInvalidStableId(value =>
+                profile.AdvanceEdgeDiscovery(value, EdgeDiscoveryState.Sighted));
+            AssertInvalidStableId(value => profile.GetEdgeDiscoveryState(value));
             AssertInvalidStableId(value => profile.DiscoverFact(value));
             AssertInvalidStableId(value => profile.AddPersistentNote(value));
 
-            Assert.That(profile.DiscoveredNodeIds, Is.Empty);
-            Assert.That(profile.DiscoveredEdgeIds, Is.Empty);
+            Assert.That(profile.NodeDiscoveries, Is.Empty);
+            Assert.That(profile.EdgeDiscoveries, Is.Empty);
             Assert.That(profile.DiscoveredFactIds, Is.Empty);
             Assert.That(profile.PersistentNoteIds, Is.Empty);
+        }
+
+        [Test]
+        public void InvalidDiscoveryStatesThrowWithoutMutation()
+        {
+            ProfileState profile = CreateProfile();
+
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                profile.AdvanceNodeDiscovery("node.invalid", (NodeDiscoveryState)999));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                profile.AdvanceEdgeDiscovery("edge.invalid", (EdgeDiscoveryState)999));
+
+            Assert.That(profile.NodeDiscoveries, Is.Empty);
+            Assert.That(profile.EdgeDiscoveries, Is.Empty);
         }
 
         [Test]
         public void PublicViewsStayLiveAndCannotBeModifiedOutsideProfile()
         {
             ProfileState profile = CreateProfile();
-            IReadOnlyList<string> nodeIds = profile.DiscoveredNodeIds;
-            IReadOnlyList<string> edgeIds = profile.DiscoveredEdgeIds;
+            IReadOnlyList<NodeDiscovery> nodes = profile.NodeDiscoveries;
+            IReadOnlyList<EdgeDiscovery> edges = profile.EdgeDiscoveries;
             IReadOnlyList<string> factIds = profile.DiscoveredFactIds;
             IReadOnlyList<string> noteIds = profile.PersistentNoteIds;
             IReadOnlyList<ProfileRunSummary> summaries = profile.RunSummaries;
 
-            profile.DiscoverNode("node.start");
-            profile.DiscoverEdge("edge.start-end");
+            profile.AdvanceNodeDiscovery("node.start", NodeDiscoveryState.Visited);
+            profile.AdvanceEdgeDiscovery("edge.start-end", EdgeDiscoveryState.Traversed);
             profile.DiscoverFact("fact.shelter");
             profile.AddPersistentNote("note.safe-path");
             profile.RecordRunSummary(new ProfileRunSummary("run-001", 4, RunStatus.Won));
 
-            Assert.That(nodeIds, Is.EqualTo(new[] { "node.start" }));
-            Assert.That(edgeIds, Is.EqualTo(new[] { "edge.start-end" }));
+            Assert.That(nodes.Select(discovery => discovery.NodeId), Is.EqualTo(new[] { "node.start" }));
+            Assert.That(edges.Select(discovery => discovery.EdgeId), Is.EqualTo(new[] { "edge.start-end" }));
             Assert.That(factIds, Is.EqualTo(new[] { "fact.shelter" }));
             Assert.That(noteIds, Is.EqualTo(new[] { "note.safe-path" }));
             Assert.That(summaries, Has.Count.EqualTo(1));
 
-            AssertReadOnly((IList<string>)nodeIds, "injected.node");
-            AssertReadOnly((IList<string>)edgeIds, "injected.edge");
+            AssertReadOnly(
+                (IList<NodeDiscovery>)nodes,
+                nodes[0]);
+            AssertReadOnly(
+                (IList<EdgeDiscovery>)edges,
+                edges[0]);
             AssertReadOnly((IList<string>)factIds, "injected.fact");
             AssertReadOnly((IList<string>)noteIds, "injected.note");
             AssertReadOnly(
@@ -244,16 +355,16 @@ namespace HallowBlaze.Tests.EditMode
             ProfileState first = new ProfileState("profile-first", "world.default", 1);
             ProfileState second = new ProfileState("profile-second", "world.default", 1);
 
-            first.DiscoverNode("node.first");
-            first.DiscoverEdge("edge.first");
+            first.AdvanceNodeDiscovery("node.first", NodeDiscoveryState.Visited);
+            first.AdvanceEdgeDiscovery("edge.first", EdgeDiscoveryState.Traversed);
             first.DiscoverFact("fact.first");
             first.AddPersistentNote("note.first");
             first.RecordRunSummary(new ProfileRunSummary("run-first", 4, RunStatus.Won));
-            second.DiscoverNode("node.second");
+            second.AdvanceNodeDiscovery("node.second", NodeDiscoveryState.Rumored);
 
-            Assert.That(first.DiscoveredNodeIds, Is.EqualTo(new[] { "node.first" }));
-            Assert.That(second.DiscoveredNodeIds, Is.EqualTo(new[] { "node.second" }));
-            Assert.That(second.DiscoveredEdgeIds, Is.Empty);
+            Assert.That(first.GetNodeDiscoveryState("node.first"), Is.EqualTo(NodeDiscoveryState.Visited));
+            Assert.That(second.GetNodeDiscoveryState("node.second"), Is.EqualTo(NodeDiscoveryState.Rumored));
+            Assert.That(second.EdgeDiscoveries, Is.Empty);
             Assert.That(second.DiscoveredFactIds, Is.Empty);
             Assert.That(second.PersistentNoteIds, Is.Empty);
             Assert.That(second.RunSummaries, Is.Empty);
@@ -268,8 +379,8 @@ namespace HallowBlaze.Tests.EditMode
         {
             ProfileState profile = CreateProfile();
             ProfileRunSummary summary = new ProfileRunSummary("run-profile", 6, RunStatus.Won);
-            profile.DiscoverNode("node.known");
-            profile.DiscoverEdge("edge.known");
+            profile.AdvanceNodeDiscovery("node.known", NodeDiscoveryState.Sighted);
+            profile.AdvanceEdgeDiscovery("edge.known", EdgeDiscoveryState.Sighted);
             profile.DiscoverFact("fact.known");
             profile.AddPersistentNote("note.known");
             profile.RecordRunSummary(summary);
@@ -300,8 +411,14 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(profile.ProfileId, Is.EqualTo("profile-001"));
             Assert.That(profile.WorldDefinitionId, Is.EqualTo("world.default"));
             Assert.That(profile.WorldDefinitionVersion, Is.EqualTo(1));
-            Assert.That(profile.DiscoveredNodeIds, Is.EqualTo(new[] { "node.known" }));
-            Assert.That(profile.DiscoveredEdgeIds, Is.EqualTo(new[] { "edge.known" }));
+            Assert.That(
+                profile.GetNodeDiscoveryState("node.known"),
+                Is.EqualTo(NodeDiscoveryState.Sighted));
+            Assert.That(
+                profile.GetEdgeDiscoveryState("edge.known"),
+                Is.EqualTo(EdgeDiscoveryState.Sighted));
+            Assert.That(profile.GetNodeDiscoveryState("forest.start"), Is.EqualTo(NodeDiscoveryState.Unknown));
+            Assert.That(profile.GetNodeDiscoveryState("forest.clearing"), Is.EqualTo(NodeDiscoveryState.Unknown));
             Assert.That(profile.DiscoveredFactIds, Is.EqualTo(new[] { "fact.known" }));
             Assert.That(profile.PersistentNoteIds, Is.EqualTo(new[] { "note.known" }));
             Assert.That(profile.RunSummaries, Is.EqualTo(new[] { summary }));

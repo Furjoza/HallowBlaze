@@ -229,7 +229,7 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
-        public void PersistedFixturesDeclareSchemaVersionOne()
+        public void PersistedFixturesDeclareCurrentSchemaVersions()
         {
             FileSystemSaveStore store = new FileSystemSaveStore(testRoot);
             GameSession session = new GameSession(CreateProfile("profile-schema"));
@@ -245,7 +245,7 @@ namespace HallowBlaze.Tests.EditMode
             SchemaEnvelope runEnvelope = JsonUtility.FromJson<SchemaEnvelope>(
                 File.ReadAllText(Path.Combine(testRoot, "run.json")));
 
-            Assert.That(profileEnvelope.schemaVersion, Is.EqualTo(1));
+            Assert.That(profileEnvelope.schemaVersion, Is.EqualTo(2));
             Assert.That(runEnvelope.schemaVersion, Is.EqualTo(1));
         }
 
