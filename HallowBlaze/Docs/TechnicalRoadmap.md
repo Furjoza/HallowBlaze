@@ -1142,13 +1142,13 @@ Topologia nie może być drugi raz zahardkodowana w `GameManager`, scenie ani UI
 
 ## `M2.4` — `WorldMapService` i zdarzenia odkryć
 
-**Status:** `Planned`  
+**Status:** `Done` — completed 2026-09-13; writer: `GitHub Copilot` after two interrupted `qwen-developer` sessions
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 5, 7.1 i 18.
 
 **Rationale:** UI, save i przejście poziomu nie powinny niezależnie decydować, co gracz odkrył. Jedna usługa łączy definicję świata, profil i aktualną pozycję runu.
 
-**Obecne zachowanie:** Modele istnieją osobno; brak autorytatywnego API do wejścia w węzeł, zobaczenia drogi i pobrania legalnych następnych wyborów.
+**Obecne zachowanie:** `WorldMapService` łączy definicję świata, profil i pozycję aktywnego runu; zwraca filtrowany snapshot atlasu i legalne wyjścia oraz koordynuje discovery events i idempotentny autosave profilu bez przejmowania ruchu należącego do M2.5.
 
 **Oczekiwany rezultat:** Usługa zwraca widok mapy ograniczony wiedzą gracza, legalne wyjścia i domenowe zdarzenia discovery, które wyzwalają zapis profilu.
 
@@ -1167,6 +1167,8 @@ Topologia nie może być drugi raz zahardkodowana w `GameManager`, scenie ani UI
 **Wpływ na save i kompatybilność:** Korzysta z discovery schema `M2.3` i zapisuje profil po rzeczywistej zmianie.
 
 **Wymagany handoff:** Przykładowe odpowiedzi query dla kolejnych stanów wiedzy oraz lista momentów autosave.
+
+**Validation result:** Unity `6000.3.21f1` focused EditMode `10/10 Passed`; failed, skipped, and inconclusive `0`. `HallowBlaze.Core.Session` and `HallowBlaze.Tests.EditMode` builds passed with `0` warnings and errors after restoring generated NuGet assets. The final full solution build passed with `0` errors and `2` pre-existing out-of-scope warnings. Integrity gate and `git diff --check` passed; independent review: `PASS`. Full handoff: [`Validation/M2.4.md`](Validation/M2.4.md).
 
 ---
 
