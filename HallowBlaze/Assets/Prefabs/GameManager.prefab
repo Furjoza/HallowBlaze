@@ -109,6 +109,7 @@ MonoBehaviour:
   levelStartDelay: 2
   turnDelay: 0.1
   boardScript: {fileID: 0}
+  worldDefinitionJson: {fileID: 4900000, guid: e7209d088383380449cca2336a6f3b48, type: 3}
   playerFoodPoints: 100
   playerHealthPoints: 100
   playerTurn: 1

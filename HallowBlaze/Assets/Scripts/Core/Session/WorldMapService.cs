@@ -342,6 +342,164 @@ namespace HallowBlaze.Core.Session
     }
 
     /// <summary>
+    /// Identifies the current lifecycle phase of the route choice owned by the map service.
+    /// </summary>
+    public enum RouteChoiceState
+    {
+        /// <summary>No board exit is currently awaiting a route choice.</summary>
+        Inactive,
+
+        /// <summary>Legal exits were observed and one may be selected.</summary>
+        AwaitingChoice,
+
+        /// <summary>The run moved in memory and its checkpoint save must be retried.</summary>
+        RunSavePending,
+
+        /// <summary>The selected route was saved and published.</summary>
+        Committed
+    }
+
+    /// <summary>Describes the outcome of a route choice command.</summary>
+    public enum RouteChoiceCommandStatus
+    {
+        /// <summary>The route was committed and its run checkpoint was saved.</summary>
+        Applied,
+
+        /// <summary>The same committed route was submitted again.</summary>
+        NoChange,
+
+        /// <summary>The route was not legal in the current choice state.</summary>
+        Rejected,
+
+        /// <summary>A profile or run save must be retried.</summary>
+        PersistenceFailed
+    }
+
+    /// <summary>Identifies which durable owner failed during a route choice.</summary>
+    public enum RouteChoicePersistenceTarget
+    {
+        /// <summary>The persistent profile atlas.</summary>
+        Profile,
+
+        /// <summary>The active run checkpoint.</summary>
+        Run
+    }
+
+    /// <summary>Describes one route after its run checkpoint has been saved.</summary>
+    public sealed class RouteChosenEvent
+    {
+        internal RouteChosenEvent(
+            string runId,
+            string edgeId,
+            string fromNodeId,
+            string toNodeId,
+            int currentDay)
+        {
+            RunId = runId;
+            EdgeId = edgeId;
+            FromNodeId = fromNodeId;
+            ToNodeId = toNodeId;
+            CurrentDay = currentDay;
+        }
+
+        /// <summary>Gets the run whose checkpoint contains the route.</summary>
+        public string RunId { get; }
+
+        /// <summary>Gets the traversed directed edge ID.</summary>
+        public string EdgeId { get; }
+
+        /// <summary>Gets the node where the choice began.</summary>
+        public string FromNodeId { get; }
+
+        /// <summary>Gets the destination stored in the run checkpoint.</summary>
+        public string ToNodeId { get; }
+
+        /// <summary>Gets the day stored in the run checkpoint.</summary>
+        public int CurrentDay { get; }
+    }
+
+    /// <summary>Reports whether a route was committed, unchanged, rejected, or left pending.</summary>
+    public sealed class RouteChoiceCommandResult
+    {
+        private RouteChoiceCommandResult(
+            RouteChoiceCommandStatus status,
+            RouteChosenEvent routeEvent,
+            RouteChoicePersistenceTarget? persistenceTarget,
+            SaveStoreResultType? persistenceResultType,
+            string errorMessage)
+        {
+            Status = status;
+            RouteEvent = routeEvent;
+            PersistenceTarget = persistenceTarget;
+            PersistenceResultType = persistenceResultType;
+            ErrorMessage = errorMessage;
+        }
+
+        /// <summary>Gets the command outcome.</summary>
+        public RouteChoiceCommandStatus Status { get; }
+
+        /// <summary>Gets the committed route for an applied or repeated command.</summary>
+        public RouteChosenEvent RouteEvent { get; }
+
+        /// <summary>Gets the durable owner whose save failed, when applicable.</summary>
+        public RouteChoicePersistenceTarget? PersistenceTarget { get; }
+
+        /// <summary>Gets the failed persistence result type, when applicable.</summary>
+        public SaveStoreResultType? PersistenceResultType { get; }
+
+        /// <summary>Gets a stable diagnostic message for a rejected or failed command.</summary>
+        public string ErrorMessage { get; }
+
+        /// <summary>Gets whether the command completed without rejection or persistence failure.</summary>
+        public bool IsSuccess =>
+            Status == RouteChoiceCommandStatus.Applied ||
+            Status == RouteChoiceCommandStatus.NoChange;
+
+        internal static RouteChoiceCommandResult Applied(RouteChosenEvent routeEvent)
+        {
+            return new RouteChoiceCommandResult(
+                RouteChoiceCommandStatus.Applied,
+                routeEvent,
+                null,
+                null,
+                null);
+        }
+
+        internal static RouteChoiceCommandResult NoChange(RouteChosenEvent routeEvent)
+        {
+            return new RouteChoiceCommandResult(
+                RouteChoiceCommandStatus.NoChange,
+                routeEvent,
+                null,
+                null,
+                null);
+        }
+
+        internal static RouteChoiceCommandResult Rejected(string errorMessage)
+        {
+            return new RouteChoiceCommandResult(
+                RouteChoiceCommandStatus.Rejected,
+                null,
+                null,
+                null,
+                errorMessage);
+        }
+
+        internal static RouteChoiceCommandResult PersistenceFailed(
+            RouteChoicePersistenceTarget target,
+            SaveStoreResultType resultType,
+            string errorMessage)
+        {
+            return new RouteChoiceCommandResult(
+                RouteChoiceCommandStatus.PersistenceFailed,
+                null,
+                target,
+                resultType,
+                errorMessage);
+        }
+    }
+
+    /// <summary>
     /// Joins one immutable world catalogue to session position and durable profile knowledge.
     /// </summary>
     public sealed class WorldMapService
@@ -350,6 +508,12 @@ namespace HallowBlaze.Core.Session
         private readonly GameSession session;
         private readonly ISaveStore saveStore;
         private PendingDiscovery pendingDiscovery;
+        private string selectionRunId;
+        private string selectionNodeId;
+        private string pendingRouteEdgeId;
+        private string pendingRouteDestinationNodeId;
+        private int pendingRouteDay;
+        private RouteChosenEvent committedRoute;
 
         /// <summary>
         /// Creates an authoritative query and discovery boundary for one profile world.
@@ -377,6 +541,14 @@ namespace HallowBlaze.Core.Session
         /// Raised exactly once after one operation's durable profile changes are saved successfully.
         /// </summary>
         public event Action<WorldDiscoveryEvent> OnDiscovery;
+
+        /// <summary>
+        /// Raised exactly once after a chosen route's run checkpoint is saved successfully.
+        /// </summary>
+        public event Action<RouteChosenEvent> OnRouteChosen;
+
+        /// <summary>Gets the current route choice lifecycle phase.</summary>
+        public RouteChoiceState ChoiceState { get; private set; }
 
         /// <summary>
         /// Gets a read-only snapshot that omits every unknown node and edge.
@@ -443,6 +615,123 @@ namespace HallowBlaze.Core.Session
 
             return WorldMapExitQueryResult.Success(
                 new ReadOnlyCollection<WorldMapExitOption>(exits));
+        }
+
+        /// <summary>
+        /// Observes the current board exits and opens an explicit route choice after the profile save succeeds.
+        /// </summary>
+        /// <returns>The underlying discovery result for the observed legal exits.</returns>
+        public WorldMapCommandResult BeginRouteChoice()
+        {
+            ResetChoiceIfRunChanged();
+            if (ChoiceState == RouteChoiceState.RunSavePending)
+            {
+                return WorldMapCommandResult.Rejected(
+                    "The selected route is waiting for its run save retry.");
+            }
+
+            if (!TryGetCurrentNode(out WorldNodeDefinition currentNode, out string errorMessage))
+                return WorldMapCommandResult.Rejected(errorMessage);
+
+            RunState run = session.GetCurrentRun();
+            if (ChoiceState == RouteChoiceState.AwaitingChoice &&
+                string.Equals(selectionRunId, run.RunId, StringComparison.Ordinal) &&
+                string.Equals(selectionNodeId, currentNode.NodeId, StringComparison.Ordinal))
+            {
+                return WorldMapCommandResult.NoChange();
+            }
+
+            WorldMapCommandResult discoveryResult = ObserveCurrentExits();
+            if (!discoveryResult.IsSuccess)
+                return discoveryResult;
+
+            selectionRunId = run.RunId;
+            selectionNodeId = currentNode.NodeId;
+            pendingRouteEdgeId = null;
+            pendingRouteDestinationNodeId = null;
+            committedRoute = null;
+            ChoiceState = RouteChoiceState.AwaitingChoice;
+            return discoveryResult;
+        }
+
+        /// <summary>Gets the legal options for the currently open route choice.</summary>
+        /// <returns>A controlled result that rejects queries outside an active choice.</returns>
+        public WorldMapExitQueryResult GetRouteChoices()
+        {
+            ResetChoiceIfRunChanged();
+            if (ChoiceState != RouteChoiceState.AwaitingChoice)
+            {
+                return WorldMapExitQueryResult.Rejected(
+                    "No route choice is currently awaiting a selection.");
+            }
+
+            if (!TryGetCurrentNode(out WorldNodeDefinition currentNode, out string errorMessage))
+                return WorldMapExitQueryResult.Rejected(errorMessage);
+            if (!string.Equals(currentNode.NodeId, selectionNodeId, StringComparison.Ordinal))
+                return WorldMapExitQueryResult.Rejected("The route choice is stale.");
+
+            return GetLegalExits();
+        }
+
+        /// <summary>
+        /// Commits one legal directed edge, then checkpoints the destination, day, and route in the active run.
+        /// </summary>
+        /// <param name="edgeId">The stable ID returned by <see cref="GetRouteChoices"/>.</param>
+        /// <returns>A controlled result supporting identical retries after persistence failures.</returns>
+        public RouteChoiceCommandResult ChooseRoute(string edgeId)
+        {
+            if (string.IsNullOrWhiteSpace(edgeId))
+                return RouteChoiceCommandResult.Rejected("A route edge ID is required.");
+
+            ResetChoiceIfRunChanged();
+            if (ChoiceState == RouteChoiceState.Committed)
+            {
+                return committedRoute != null &&
+                    string.Equals(committedRoute.EdgeId, edgeId, StringComparison.Ordinal)
+                    ? RouteChoiceCommandResult.NoChange(committedRoute)
+                    : RouteChoiceCommandResult.Rejected("A route was already committed for this board exit.");
+            }
+
+            if (ChoiceState == RouteChoiceState.Inactive)
+                return RouteChoiceCommandResult.Rejected("No route choice is currently active.");
+
+            if (ChoiceState == RouteChoiceState.RunSavePending)
+            {
+                if (!string.Equals(pendingRouteEdgeId, edgeId, StringComparison.Ordinal))
+                {
+                    return RouteChoiceCommandResult.Rejected(
+                        "Another route is waiting for its run save retry.");
+                }
+
+                return PersistPendingRoute();
+            }
+
+            if (!TryGetCurrentNode(out WorldNodeDefinition currentNode, out string errorMessage))
+                return RouteChoiceCommandResult.Rejected(errorMessage);
+            if (!string.Equals(currentNode.NodeId, selectionNodeId, StringComparison.Ordinal))
+                return RouteChoiceCommandResult.Rejected("The route choice is stale.");
+            if (!world.TryGetEdge(edgeId, out WorldEdgeDefinition edge))
+                return RouteChoiceCommandResult.Rejected($"World edge '{edgeId}' does not exist.");
+            if (!string.Equals(edge.FromNodeId, selectionNodeId, StringComparison.Ordinal))
+            {
+                return RouteChoiceCommandResult.Rejected(
+                    $"World edge '{edgeId}' is not an exit from '{selectionNodeId}'.");
+            }
+
+            RunState run = session.GetCurrentRun();
+            if (run.CurrentDay == int.MaxValue)
+                return RouteChoiceCommandResult.Rejected("The current day cannot be advanced.");
+
+            WorldMapCommandResult traversalResult = CompleteTraversal(edge.EdgeId);
+            if (!traversalResult.IsSuccess)
+                return FromTraversalFailure(traversalResult);
+
+            session.AdvanceToWorldNode(edge.ToNodeId);
+            pendingRouteEdgeId = edge.EdgeId;
+            pendingRouteDestinationNodeId = edge.ToNodeId;
+            pendingRouteDay = run.CurrentDay;
+            ChoiceState = RouteChoiceState.RunSavePending;
+            return PersistPendingRoute();
         }
 
         /// <summary>
@@ -641,6 +930,65 @@ namespace HallowBlaze.Core.Session
             pendingDiscovery = null;
             OnDiscovery?.Invoke(discoveryEvent);
             return WorldMapCommandResult.Applied(discoveryEvent);
+        }
+
+        private RouteChoiceCommandResult PersistPendingRoute()
+        {
+            RunState run = session.GetCurrentRun();
+            SaveStoreResult saveResult = saveStore.SaveRun(run);
+            if (saveResult.IsFailure)
+            {
+                return RouteChoiceCommandResult.PersistenceFailed(
+                    RouteChoicePersistenceTarget.Run,
+                    saveResult.Type,
+                    saveResult.ErrorMessage);
+            }
+
+            RouteChosenEvent routeEvent = new RouteChosenEvent(
+                run.RunId,
+                pendingRouteEdgeId,
+                selectionNodeId,
+                pendingRouteDestinationNodeId,
+                pendingRouteDay);
+            committedRoute = routeEvent;
+            ChoiceState = RouteChoiceState.Committed;
+            OnRouteChosen?.Invoke(routeEvent);
+            return RouteChoiceCommandResult.Applied(routeEvent);
+        }
+
+        private static RouteChoiceCommandResult FromTraversalFailure(
+            WorldMapCommandResult traversalResult)
+        {
+            if (traversalResult.Status == WorldMapCommandStatus.PersistenceFailed)
+            {
+                return RouteChoiceCommandResult.PersistenceFailed(
+                    RouteChoicePersistenceTarget.Profile,
+                    traversalResult.PersistenceResultType.Value,
+                    traversalResult.ErrorMessage);
+            }
+
+            return RouteChoiceCommandResult.Rejected(traversalResult.ErrorMessage);
+        }
+
+        private void ResetChoiceIfRunChanged()
+        {
+            if (ChoiceState == RouteChoiceState.Inactive)
+                return;
+            if (session.IsRunActive() &&
+                string.Equals(
+                    session.GetCurrentRun().RunId,
+                    selectionRunId,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            selectionRunId = null;
+            selectionNodeId = null;
+            pendingRouteEdgeId = null;
+            pendingRouteDestinationNodeId = null;
+            committedRoute = null;
+            ChoiceState = RouteChoiceState.Inactive;
         }
 
         private void Apply(WorldDiscoveryChange change)

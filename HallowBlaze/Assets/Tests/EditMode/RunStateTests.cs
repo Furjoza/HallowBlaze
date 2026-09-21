@@ -188,6 +188,58 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
+        public void AdvanceToWorldNodeAtomicallyMutatesDayNodeAndRoute()
+        {
+            RunState run = CreateRun();
+            run.RecordRouteNode("forest.start");
+
+            run.AdvanceToWorldNode("forest.clearing");
+
+            Assert.That(run.CurrentDay, Is.EqualTo(2));
+            Assert.That(run.WorldNodeId, Is.EqualTo("forest.clearing"));
+            Assert.That(run.Route, Is.EqualTo(new[] { "forest.start", "forest.clearing" }));
+        }
+
+        [Test]
+        public void AdvanceToWorldNodeRequiresValidStableNodeId()
+        {
+            RunState run = CreateRun();
+
+            Assert.Throws<ArgumentException>(() => run.AdvanceToWorldNode(" "));
+            Assert.Throws<ArgumentException>(() => run.AdvanceToWorldNode(" forest.end"));
+            Assert.Throws<ArgumentException>(() => run.AdvanceToWorldNode("forest.end "));
+
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.WorldNodeId, Is.EqualTo("forest.start"));
+            Assert.That(run.Route, Is.Empty);
+        }
+
+        [Test]
+        public void AdvanceToWorldNodeRequiresActiveRun()
+        {
+            RunState run = CreateRun();
+            run.MarkDead();
+
+            Assert.Throws<InvalidOperationException>(() => run.AdvanceToWorldNode("forest.end"));
+
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.WorldNodeId, Is.EqualTo("forest.start"));
+            Assert.That(run.Route, Is.Empty);
+        }
+
+        [Test]
+        public void AdvanceToWorldNodeUsesCheckedArithmetic()
+        {
+            RunState run = CreateRun(CreateConfiguration(initialDay: int.MaxValue));
+
+            Assert.Throws<OverflowException>(() => run.AdvanceToWorldNode("forest.end"));
+
+            Assert.That(run.CurrentDay, Is.EqualTo(int.MaxValue));
+            Assert.That(run.WorldNodeId, Is.EqualTo("forest.start"));
+            Assert.That(run.Route, Is.Empty);
+        }
+
+        [Test]
         public void ToolSlotsAreExactlyTwoAndHoldImmutableInstanceState()
         {
             RunState run = CreateRun();

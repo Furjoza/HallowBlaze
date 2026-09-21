@@ -1,7 +1,6 @@
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 public class PlayerScript : MovingObject
@@ -157,8 +156,8 @@ public class PlayerScript : MovingObject
 
         if (other.tag == "Exit")
         {
-            Invoke(nameof(Restart), restartLevelDelay);
-            enabled = false;
+            if (GameManager.instance != null && GameManager.instance.BeginRouteChoice())
+                enabled = false;
         }
         else if (other.tag == "Food")
         {
@@ -221,11 +220,6 @@ public class PlayerScript : MovingObject
             hitWall.DamageWall(wallDamage);
         if (animator != null)
             animator.SetTrigger("playerChop");
-    }
-
-    private void Restart()
-    {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
     public void LoseHealth(int loss)
