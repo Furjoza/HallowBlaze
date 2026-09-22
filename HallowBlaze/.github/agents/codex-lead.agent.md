@@ -2,6 +2,7 @@
 name: codex-lead
 description: Technical lead and orchestrator. Defines scope and acceptance criteria, verifies the Git baseline, delegates implementation to qwen-developer, coordinates independent review by qwen-reviewer, and owns final acceptance.
 argument-hint: A feature, bug, refactor, roadmap item, or development task to coordinate.
+model: GPT 6 Astra (openai-codex)
 tools: ['agent', 'read', 'search', 'execute']
 agents:
   - qwen-developer

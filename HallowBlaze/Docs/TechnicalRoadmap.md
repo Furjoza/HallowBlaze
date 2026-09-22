@@ -1306,13 +1306,13 @@ RunState + WorldNodeDefinition
 
 **Implementation handoff:** `BoardRequest` is defined in `Core.Session` and carries `runId`, `runSeed`, `worldNodeId`, `currentDay`, `boardSeed`, `placeKind`, `biomeFamily`, and `legacyDifficultyLevel`. `BoardOutcome` carries the originating request identity and is guarded by `GameManager` against stale or duplicate handling. The macro/local boundary is `RunState + WorldNodeDefinition → BoardRequest → BoardManager.SetupScene → BoardOutcome → GameManager/session flow`; the adapter and `BoardManager` do not mutate route, day, or persistence. Temporary legacy dependencies retained for M3/M4 are the numeric difficulty mapping and direct prefab instantiation in `BoardManager`.
 
-**Validation result:** Focused `BoardFlowContractsTests` `7/7 Passed`; full EditMode `179/179 Passed`; focused `GameSessionLifecycleTests` `17/17 Passed`, including two-node route flow, restart boundary, stale/duplicate outcomes, both death reasons, and the real startup failure path after `OnRunStarted`. Final solution build passed with `0` errors and two pre-existing warnings. `git diff --check`, exact allowlist integrity, required `.meta` files, and no drift in `Packages`, scenes, prefabs, persistence, or `ProjectSettings` passed. Final Lead/Reviewer review found and fixed startup input-window regressions; post-fix validation passed. The independent reviewer agent was unavailable in the final configuration, so the final acceptance review was performed by the coordinating Lead.
+**Validation result:** Focused `BoardFlowContractsTests` `7/7 Passed`; full EditMode `179/179 Passed`; focused `GameSessionLifecycleTests` `17/17 Passed`, including two-node route flow, restart boundary, stale/duplicate outcomes, both death reasons, and the real startup failure path after `OnRunStarted`. Final solution build passed with `0` errors and two pre-existing warnings. `git diff --check`, exact allowlist integrity, required `.meta` files, and no drift in `Packages`, scenes, prefabs, persistence, or `ProjectSettings` pasna jakim branchu właśnie jesteśmy?sed. Final Lead/Reviewer review found and fixed startup input-window regressions; post-fix validation passed. The independent reviewer agent was unavailable in the final configuration, so the final acceptance review was performed by the coordinating Lead.
 
 ---
 
 ## `M2.8` — Dowód trwałości atlasu między runami
 
-**Status:** `Planned`  
+**Status:** `Done` — completed 2026-09-22; writer: `GitHub Copilot`  
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 4, 5, 6 i bramka atlasu z sekcji 22.
 
