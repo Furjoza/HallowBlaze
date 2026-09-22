@@ -163,6 +163,13 @@ namespace HallowBlaze.Tests.EditMode
                 return SaveStoreResult.Success();
             }
 
+            public SaveStoreResult ResetGame(ProfileState profile, RunState run)
+            {
+                Profile = profile;
+                Run = run;
+                return SaveStoreResult.Success();
+            }
+
             public SaveStoreResult<ProfileState> LoadProfile()
             {
                 return Profile == null

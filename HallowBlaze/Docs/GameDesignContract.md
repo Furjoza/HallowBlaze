@@ -94,6 +94,8 @@ Jeżeli przeczytanie notatki dopiero aktywuje interakcję, postęp staje się ty
 
 Śmierć resetuje zasoby i pozycję wyprawy, ale zachowuje atlas, przebyte drogi i poznane fakty.
 
+Wybranie `New Game` w menu głównym rozpoczyna natomiast nowy profil/kampanię i zastępuje zapisany atlas. Nie jest to ta sama operacja co rozpoczęcie kolejnego runu po śmierci.
+
 #### Rationale — dlaczego
 
 Pełny reset byłby sprzeczny z główną obietnicą. Zachowanie ekwipunku i statystyk osłabiłoby natomiast napięcie survivalowe. Rozdzielenie tych warstw pozwala jednocześnie odczuwać ryzyko i postęp.
@@ -102,7 +104,8 @@ Pełny reset byłby sprzeczny z główną obietnicą. Zachowanie ekwipunku i sta
 
 - Profil i run MUSZĄ być osobnymi stanami oraz osobnymi zapisami.
 - `StartNewRun()` nie może modyfikować profilu.
-- Pełne wymazanie atlasu wymaga oddzielnej, potwierdzanej operacji.
+- `New Game` jest jawną operacją pełnego resetu profilu; stary profil i jego recovery backup nie mogą później przywrócić odkryć.
+- Osobny dialog potwierdzający destrukcyjny reset MOŻE zostać dodany wraz z docelowym zarządzaniem profilami; w prototypie świadomy wybór `New Game` jest potwierdzeniem.
 
 ### 3.3. Przewidywalność przed refleksem
 
@@ -329,9 +332,10 @@ Collider mówi, co aktualnie znajduje się w scenie, ale nie jest dobrym modelem
 
 - Śmierć najpierw utrwala zmiany profilu, a potem zamyka run.
 - Nowa wyprawa resetuje `RunState` i pozostawia `ProfileState`.
+- `New Game` z menu głównego tworzy nowy `ProfileState`; `Continue` wczytuje istniejący profil i aktywny run.
 - MVP wznawia grę bezpiecznie pomiędzy planszami lub z ekranu mapy.
 - Zapis środka planszy jest rozszerzeniem po stabilizacji resolvera.
-- Pełny reset profilu jest osobną opcją z potwierdzeniem.
+- Pełny reset profilu jest jawną opcją `New Game`, odrębną od restartu wyprawy.
 
 #### Rationale — dlaczego
 

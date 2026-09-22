@@ -16,9 +16,11 @@ public class StartBttnScript : MonoBehaviour
             RefreshContinueAvailability();
     }
 
+    /// <summary>Starts a new game with a fresh profile and loads its gameplay scene.</summary>
+    /// <param name="sceneName">The gameplay scene to load.</param>
     public void LoadByName(string sceneName)
     {
-        GameManager.RequestNewRun();
+        GameManager.RequestNewGame();
         SceneManager.LoadScene(sceneName);
     }
 

@@ -22,6 +22,7 @@ namespace HallowBlaze.Tests.PlayMode
         private Type gameManagerType;
         private Type playerType;
         private Type restartButtonType;
+        private Type startButtonType;
         private Type soundManagerType;
         private bool hadHighScore;
         private int originalHighScore;
@@ -38,6 +39,7 @@ namespace HallowBlaze.Tests.PlayMode
             gameManagerType = RequireType(gameAssembly, "GameManager");
             playerType = RequireType(gameAssembly, "PlayerScript");
             restartButtonType = RequireType(gameAssembly, "RestartBttnScript");
+            startButtonType = RequireType(gameAssembly, "StartBttnScript");
             DestroyGameManagerSingleton();
             persistenceRoot = Path.Combine(
                 Path.GetTempPath(),
@@ -455,6 +457,77 @@ namespace HallowBlaze.Tests.PlayMode
                 "M2.5 Route Cleanup " + Guid.NewGuid().ToString("N"));
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
             yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
+        [UnityTest]
+        public IEnumerator NewGameButtonStartsWithFreshAtlasHistory()
+        {
+            AsyncOperation firstLoad = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            while (!firstLoad.isDone)
+                yield return null;
+            yield return null;
+
+            Component manager = GetStaticField(gameManagerType, "instance") as Component;
+            Assert.That(manager, Is.Not.Null);
+            GameSession firstSession = GetProperty<GameSession>(manager, "Session");
+            Assert.That(firstSession.Profile.GetNodeDiscoveryState("forest.start"),
+                Is.EqualTo(NodeDiscoveryState.Visited));
+
+            Component player = FindSceneComponent(playerType, "Main");
+            Collider2D exit = CreateExit("New Game Regression Exit");
+            Invoke(player, "OnTriggerEnter2D", exit);
+            Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
+            yield return null;
+            yield return null;
+
+            Assert.That(firstSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
+                Is.EqualTo(NodeDiscoveryState.Visited));
+            Assert.That(firstSession.Profile.GetEdgeDiscoveryState("road.start-west-trail"),
+                Is.EqualTo(EdgeDiscoveryState.Traversed));
+
+            Assert.That((bool)Invoke(manager, "ExitToMenu"), Is.True);
+            AsyncOperation menuLoad = SceneManager.LoadSceneAsync("Menu", LoadSceneMode.Single);
+            while (!menuLoad.isDone)
+                yield return null;
+            yield return null;
+
+                Component newGameHandler = UnityEngine.Object.FindObjectsByType(
+                    startButtonType,
+                    FindObjectsSortMode.None)
+                .Cast<Component>()
+                .Single(button => !GetField<bool>(button, "continueButton"));
+                Button newGameButton = newGameHandler.GetComponent<Button>();
+                Assert.That(newGameButton, Is.Not.Null);
+                newGameButton.onClick.Invoke();
+            while (SceneManager.GetActiveScene().name != "Main")
+                yield return null;
+            yield return null;
+
+            GameSession newGameSession = GetProperty<GameSession>(manager, "Session");
+            Assert.That(newGameSession.Profile, Is.Not.SameAs(firstSession.Profile));
+            Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.start"),
+                Is.EqualTo(NodeDiscoveryState.Visited));
+            Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
+                Is.EqualTo(NodeDiscoveryState.Unknown));
+            Assert.That(newGameSession.Profile.GetEdgeDiscoveryState("road.start-west-trail"),
+                Is.EqualTo(EdgeDiscoveryState.Unknown));
+            Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.old-road"),
+                Is.EqualTo(NodeDiscoveryState.Unknown));
+            Assert.That(newGameSession.Profile.GetEdgeDiscoveryState("road.west-trail-old-road"),
+                Is.EqualTo(EdgeDiscoveryState.Unknown));
+
+            Component newGamePlayer = FindSceneComponent(playerType, "Main");
+            Collider2D newGameExit = CreateExit("Fresh Atlas Exit");
+            Invoke(newGamePlayer, "OnTriggerEnter2D", newGameExit);
+
+            Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
+                Is.EqualTo(NodeDiscoveryState.Sighted));
+            Assert.That(newGameSession.Profile.GetEdgeDiscoveryState("road.start-west-trail"),
+                Is.EqualTo(EdgeDiscoveryState.Sighted));
+            Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.old-road"),
+                Is.EqualTo(NodeDiscoveryState.Unknown));
+            Assert.That(newGameSession.Profile.GetEdgeDiscoveryState("road.west-trail-old-road"),
+                Is.EqualTo(EdgeDiscoveryState.Unknown));
         }
 
         [UnityTest]
