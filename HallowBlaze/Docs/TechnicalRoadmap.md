@@ -1236,33 +1236,77 @@ Topologia nie może być drugi raz zahardkodowana w `GameManager`, scenie ani UI
 
 ---
 
-## `M2.7` — Adapter planszy do węzła świata
+## `M2.7` — World node-to-board adapter
 
-**Status:** `Planned`  
-**Priorytet:** P0  
-**Powiązany kontrakt:** sekcje 7.1, 7.2 i 21.5.
+**Status:** `Done` — implementation accepted 2026-09-16 after lifecycle startup-block review fix
+**Priority:** P0
+**Related contract:** sections 5, 7.1, 7.2, 9, and 21.5.
 
-**Rationale:** Makrograf i lokalna plansza mają różne cykle życia. Adapter musi przekazać node/seed do obecnego `BoardManager`, nie zmuszając go jeszcze do docelowej generacji model-first.
+**Rationale:** The world graph and a local board have different identities and lifetimes. A board must represent one specific world node in one specific run, while the legacy `BoardManager` currently understands only a numeric level and a seed. This ticket introduces an explicit compatibility boundary without pulling the model-first board rewrite from M3/M4 into M2.
 
-**Obecne zachowanie:** `BoardManager` otrzymuje głównie numer poziomu i sam interpretuje trudność.
+**Current behavior:** `GameManager` calls `BoardManager.SetupScene(currentDay, boardSeed)`. The stable node ID and its world definition never cross that boundary, the day is implicitly reused as enemy difficulty, and board completion is reported through separate direct calls for exit and death rather than one explicit result contract.
 
-**Oczekiwany rezultat:** Rozpoczęcie węzła przekazuje jawny `BoardRequest` z node ID, run seed, lokalnym seedem i tymczasową konfiguracją; ukończenie zwraca `BoardOutcome`.
+**Expected outcome:** Entering the active run's current node creates an immutable `BoardRequest`, resolves the matching `WorldNodeDefinition`, and passes the request through a thin adapter to the existing board setup. The board boundary reports exactly one `BoardOutcome`; the game flow translates that outcome into route choice or run death handling.
 
-**Zakres:** Cienki adapter kompatybilności wokół obecnej planszy oraz mapping istniejącego level flow.
+**Required flow:**
 
-**Non-goals:** Bez przebudowy generatora, zmiany 8×8, nowych zombie, narzędzi i landmark mechanics.
+```text
+RunState + WorldNodeDefinition
+→ BoardRequest factory/adapter
+→ legacy BoardManager setup
+→ active local board
+→ BoardOutcome
+→ GameManager/session flow
+	├─ ExitReached → begin route choice; do not advance the day or reload the scene
+	└─ PlayerDied  → persist profile changes and close the run; do not offer a route
+```
 
-**Zależności:** `M2.5`.
+**`BoardRequest` contract:**
 
-**Dozwolony obszar plików:** Session/World adapters, `BoardManager.cs`, `GameManager.cs`, testy i niezbędne serializowane referencje jawnie zatwierdzone.
+- stable `worldNodeId` resolved from the active `RunState` against the loaded world definition;
+- stable `runId`, `runSeed`, and the deterministic local `boardSeed` already derived by `RunState.GetBoardSeed()`;
+- `currentDay`, carried as run context rather than interpreted as the board's identity;
+- node `placeKind` and `biomeFamily`, even if the legacy generator cannot use them yet;
+- `legacyDifficultyLevel = max(1, currentDay)`, used only by the existing logarithmic enemy-count formula. This preserves zero enemies on the initial day and the current curve from day 1 onward while avoiding `log(0)`; the compatibility value must not enter the world or persistence models.
 
-**Kryteria akceptacji:** Każde wejście zna stabilny node i seed; powrót zawiera jawny outcome; nie ma inkrementacji dnia w dwóch miejscach; obecne zwykłe plansze pozostają grywalne.
+**`BoardOutcome` contract:**
 
-**Plan testów:** EditMode mappingu; PlayMode dwa różne węzły, restart granicy i outcome death/exit.
+- every outcome identifies its source with the immutable request tuple `runId + worldNodeId + currentDay + boardSeed`, allowing the active handler to reject results from a previous run or board;
+- `ExitReached` for the active request;
+- `PlayerDied` for the active request, with the current `Starvation` or `HealthDepleted` reason required by the existing presentation;
+- no route ID, next-node mutation, day increment, scene reload, or save operation performed by `BoardManager` itself.
 
-**Wpływ na save i kompatybilność:** Run DTO musi przechowywać node/seed; brak mid-board snapshotu.
+**Scope:** Add the request/outcome contracts, a request factory or equivalent pure mapping, and a thin Unity-facing adapter around the current `BoardManager`. Replace the direct `SetupScene(level, seed)` call with the request path. Route the existing exit and death signals through one guarded outcome handler while preserving the M2.5 route-choice and checkpoint sequence.
 
-**Wymagany handoff:** Diagram granicy makro/lokalna plansza i lista tymczasowych zależności do usunięcia w M3/M4.
+**Ownership boundaries:** `RunState` remains authoritative for run ID, run seed, day, current node, and deterministic board seed. `WorldDefinition` remains authoritative for place kind and biome family. The adapter only translates these values. `BoardManager` creates the current legacy board. `WorldMapService` remains the sole route/day mutation path and persists profile discoveries plus the committed route checkpoint. `RunLifecycleService` owns start, continue, exit-to-menu, death, and win persistence. The adapter and `BoardManager` perform no persistence.
+
+**Non-goals:** No `BoardState`/`BoardBlueprint` rewrite, generator validation, mid-board snapshot, board-size change, new zombie behavior, tools, landmarks, biome-specific content, or difficulty rebalance. Do not move route selection, day advancement, or persistence into `BoardManager`.
+
+**Dependencies:** `M2.5`; use the deterministic board seed and single route-commit path already provided by M1/M2 state and session work.
+
+**Allowed file area:** Session/World board-boundary contracts and adapters, `BoardManager.cs`, `GameManager.cs`, focused tests, and only the serialized references strictly required by that integration. Scene or prefab edits require explicit approval in the active ticket.
+
+**Acceptance criteria:**
+
+- board startup fails explicitly before generation when there is no active run or its `worldNodeId` cannot be resolved;
+- every successful startup can be identified by stable node ID and deterministic board seed;
+- re-entering the same saved board boundary produces the same request and seed without advancing the day;
+- choosing a route produces a request for the newly committed node and day, with a correspondingly derived seed;
+- `ExitReached` begins route choice but does not itself reload the scene, mutate the route, advance the day, or save;
+- `PlayerDied` closes the run without opening route choice;
+- a stale or duplicate outcome cannot trigger a second state transition or persistence call;
+- ordinary 8×8 boards remain playable and retain the current enemy-count behavior through the isolated legacy mapping;
+- `BoardManager` no longer receives a bare `level` value as the identity of a newly started board.
+
+**Test plan:** EditMode tests cover complete request mapping, unknown node rejection, stable seed reproduction, changed node/day/seed inputs, and legacy difficulty mapping. PlayMode tests cover startup for two different nodes, scene restart at the same saved boundary, one `ExitReached`, one `PlayerDied` for each existing death reason, and duplicate/stale outcome rejection. The focused lifecycle tests must also prove that route choice remains the only place that advances the day.
+
+**Save and compatibility impact:** No schema migration is expected. Run schema v1 already stores `runSeed`, `currentDay`, and `worldNodeId`, and `boardSeed` is derived rather than persisted. Continue resumes at the last saved between-board boundary and regenerates the same local board request. Mid-board state remains intentionally unsaved.
+
+**Required handoff:** Provide a macro/local boundary diagram, the final field lists for `BoardRequest` and `BoardOutcome`, evidence that each outcome is handled once, and a list of temporary legacy dependencies to remove in M3/M4, including numeric difficulty mapping and direct prefab instantiation.
+
+**Implementation handoff:** `BoardRequest` is defined in `Core.Session` and carries `runId`, `runSeed`, `worldNodeId`, `currentDay`, `boardSeed`, `placeKind`, `biomeFamily`, and `legacyDifficultyLevel`. `BoardOutcome` carries the originating request identity and is guarded by `GameManager` against stale or duplicate handling. The macro/local boundary is `RunState + WorldNodeDefinition → BoardRequest → BoardManager.SetupScene → BoardOutcome → GameManager/session flow`; the adapter and `BoardManager` do not mutate route, day, or persistence. Temporary legacy dependencies retained for M3/M4 are the numeric difficulty mapping and direct prefab instantiation in `BoardManager`.
+
+**Validation result:** Focused `BoardFlowContractsTests` `7/7 Passed`; full EditMode `179/179 Passed`; focused `GameSessionLifecycleTests` `17/17 Passed`, including two-node route flow, restart boundary, stale/duplicate outcomes, both death reasons, and the real startup failure path after `OnRunStarted`. Final solution build passed with `0` errors and two pre-existing warnings. `git diff --check`, exact allowlist integrity, required `.meta` files, and no drift in `Packages`, scenes, prefabs, persistence, or `ProjectSettings` passed. Final Lead/Reviewer review found and fixed startup input-window regressions; post-fix validation passed. The independent reviewer agent was unavailable in the final configuration, so the final acceptance review was performed by the coordinating Lead.
 
 ---
 

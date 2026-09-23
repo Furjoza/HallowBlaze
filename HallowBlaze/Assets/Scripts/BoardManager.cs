@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using HallowBlaze.Core.Session;
 using Random = UnityEngine.Random;
 using UnityEngine;
 
@@ -39,6 +40,7 @@ public class BoardManager : MonoBehaviour {
     private Transform boardHolder;                                  //A variable to store a reference to the transform of our Board object.
     private List<Vector3> gridPositions = new List<Vector3>();      //A list of possible locations to place tiles.
     private System.Random gameplayRandom;
+    private BoardRequest activeRequest;                             //The active board request for outcome identification.
 
 
     //Clears our list gridPositions and prepares it to generate a new board.
@@ -136,10 +138,15 @@ public class BoardManager : MonoBehaviour {
     }
 
 
-    //SetupScene initializes our level and calls the previous functions to lay out the game board
-    public void SetupScene(int level, int boardSeed)
+    /// <summary>Creates the legacy board represented by an explicit world-node request.</summary>
+    /// <param name="request">The immutable run, node, and generation inputs for this board.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is <c>null</c>.</exception>
+    public void SetupScene(BoardRequest request)
     {
-        gameplayRandom = new System.Random(boardSeed);
+        if (request == null)
+            throw new ArgumentNullException(nameof(request));
+
+        gameplayRandom = new System.Random(request.BoardSeed);
 
         //Creates the outer walls and floor.
         BoardSetup();
@@ -160,12 +167,21 @@ public class BoardManager : MonoBehaviour {
         LayoutObjectAtRandom(aidTiles, aidCount.minimum, aidCount.maximum);
 
         //Determine number of enemies based on current level number, based on a logarithmic progression
-        int enemyCount = (int)Mathf.Log(level, 2f);
+        int enemyCount = (int)Mathf.Log(request.LegacyDifficultyLevel, 2f);
 
         //Instantiate a random number of enemies based on minimum and maximum, at randomized positions.
         LayoutObjectAtRandom(enemyTiles, enemyCount, enemyCount);
 
         //Instantiate the exit tile in the upper right hand corner of our game board
         Instantiate(exit, new Vector3(columns - 1, rows - 1, 0f), Quaternion.identity);
+        activeRequest = request;
+    }
+
+    /// <summary>Gets the request that identifies the currently generated legacy board.</summary>
+    public BoardRequest ActiveRequest => activeRequest;
+
+    internal void ClearActiveRequest()
+    {
+        activeRequest = null;
     }
 }

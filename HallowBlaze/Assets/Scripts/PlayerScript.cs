@@ -156,7 +156,9 @@ public class PlayerScript : MovingObject
 
         if (other.tag == "Exit")
         {
-            if (GameManager.instance != null && GameManager.instance.BeginRouteChoice())
+            GameManager manager = GameManager.instance;
+            BoardRequest request = manager == null ? null : manager.ActiveBoardRequest;
+            if (request != null && manager.HandleBoardOutcome(BoardOutcome.ExitReached(request)))
                 enabled = false;
         }
         else if (other.tag == "Food")
@@ -251,7 +253,14 @@ public class PlayerScript : MovingObject
         if (SoundManager.instance != null)
             SoundManager.instance.RandomizeSfx(gameOverSound);
 
-        GameManager.instance.GameOver(run.Food <= 0);
+        BoardRequest request = GameManager.instance.ActiveBoardRequest;
+        if (request == null)
+            return;
+
+        DeathReason deathReason = run.Food <= 0
+            ? DeathReason.Starvation
+            : DeathReason.HealthDepleted;
+        GameManager.instance.HandleBoardOutcome(BoardOutcome.PlayerDied(request, deathReason));
     }
 
     private void BindSession()
