@@ -201,6 +201,10 @@ Unity CLI with the Unity Pipeline package is the primary automation interface to
 
 The legacy Unity AI Assistant MCP Server is not part of the primary workflow.
 
+For every Unity automation, inspection, diagnostics, or test task, start with Unity CLI. First run `unity pipeline list`, then use `unity command` to discover the commands exposed by the connected Editor before choosing any other Unity integration.
+
+Do not call the legacy Unity MCP as an automatic fallback when CLI/Pipeline is unavailable. Diagnose the CLI/Pipeline connection with Unity CLI, report the concrete blocker, and only use another integration when the user explicitly requests it.
+
 For this project environment, use:
 
 ```powershell

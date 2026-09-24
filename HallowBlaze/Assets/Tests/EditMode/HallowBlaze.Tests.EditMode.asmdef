@@ -12,6 +12,7 @@
         "HallowBlaze.Core.Session",
         "HallowBlaze.Core.Persistence",
         "HallowBlaze.Core.World",
-        "HallowBlaze.Core.Board.Primitives"
+        "HallowBlaze.Core.Board.Primitives",
+        "HallowBlaze.Core.Board.State"
     ]
 }

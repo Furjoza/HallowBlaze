@@ -156,12 +156,16 @@ For `BLOCKED`, determine whether the block is environmental or requires a projec
 
 Use Unity CLI and Pipeline according to `AGENTS.md`.
 
+For every Unity automation, inspection, diagnostics, or test task, the first Unity-facing commands MUST be:
+
 Useful discovery:
 
 ```powershell
 unity pipeline list
 unity command
 ```
+
+Use the commands discovered through `unity command` and the dedicated Unity CLI commands for the requested work. Do not call the legacy Unity MCP before this discovery, and do not use it as an automatic fallback when Pipeline is unreachable. Diagnose with Unity CLI and report the concrete blocker unless the user explicitly requests another integration.
 
 Use `unity command eval "<valid C# statements>;"` for focused live-Editor inspection when appropriate.
 

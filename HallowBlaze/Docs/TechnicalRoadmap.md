@@ -1387,7 +1387,7 @@ M2 jest zaliczony, gdy pięciodniowy graf przechodzi walidację, discovery pozos
 
 ## `M3.2` — Warstwowy `BoardState`
 
-**Status:** `Planned`  
+**Status:** `Done` - completed 2026-09-23; writer: `GitHub Copilot`
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 8, 9.1, 11.1 i 21.1.
 
@@ -1412,6 +1412,24 @@ M2 jest zaliczony, gdy pięciodniowy graf przechodzi walidację, discovery pozos
 **Wpływ na save i kompatybilność:** Brak mid-board save. Model ma być możliwy do snapshotu, ale DTO nie jest częścią ticketu.
 
 **Wymagany handoff:** Diagram warstw i lista stanów nadal tymczasowo pozostających w widokach.
+
+**Validation result:** Unity `6000.3.21f1`, focused EditMode filter `HallowBlaze.Tests.EditMode.BoardStateTests`: `6/6 Passed`, `0 failed`, `0 skipped`, `0 inconclusive`. Independent `qwen-reviewer` verdict: `PASS`.
+
+**Layer contract:**
+
+```text
+GridPosition
+|- Terrain  (maximum one entity)
+|- Obstacle (maximum one entity)
+|- Item     (maximum one entity)
+`- Actor    (maximum one entity)
+
+EntityId -> BoardEntityState (globally unique within the board)
+```
+
+Different layers may coexist at one position. `BoardState` owns both the global ID index and per-layer occupancy indexes; rejected add, move, and remove operations leave them unchanged. Query snapshots are detached and ordered deterministically, while `Clone()` creates independent mutable collections.
+
+**Legacy-state handoff:** `BoardManager` still owns transform-based grid allocation and prefab generation; `Wall` still owns obstacle HP and existence; `Enemy` still owns target selection, skip cadence, and transform position; `PlayerScript` still owns transform position and item-trigger state. Migrating those view-owned values belongs to later board integration tickets.
 
 ---
 
