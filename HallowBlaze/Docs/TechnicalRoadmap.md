@@ -1306,13 +1306,13 @@ RunState + WorldNodeDefinition
 
 **Implementation handoff:** `BoardRequest` is defined in `Core.Session` and carries `runId`, `runSeed`, `worldNodeId`, `currentDay`, `boardSeed`, `placeKind`, `biomeFamily`, and `legacyDifficultyLevel`. `BoardOutcome` carries the originating request identity and is guarded by `GameManager` against stale or duplicate handling. The macro/local boundary is `RunState + WorldNodeDefinition → BoardRequest → BoardManager.SetupScene → BoardOutcome → GameManager/session flow`; the adapter and `BoardManager` do not mutate route, day, or persistence. Temporary legacy dependencies retained for M3/M4 are the numeric difficulty mapping and direct prefab instantiation in `BoardManager`.
 
-**Validation result:** Focused `BoardFlowContractsTests` `7/7 Passed`; full EditMode `179/179 Passed`; focused `GameSessionLifecycleTests` `17/17 Passed`, including two-node route flow, restart boundary, stale/duplicate outcomes, both death reasons, and the real startup failure path after `OnRunStarted`. Final solution build passed with `0` errors and two pre-existing warnings. `git diff --check`, exact allowlist integrity, required `.meta` files, and no drift in `Packages`, scenes, prefabs, persistence, or `ProjectSettings` passed. Final Lead/Reviewer review found and fixed startup input-window regressions; post-fix validation passed. The independent reviewer agent was unavailable in the final configuration, so the final acceptance review was performed by the coordinating Lead.
+**Validation result:** Focused `BoardFlowContractsTests` `7/7 Passed`; full EditMode `179/179 Passed`; focused `GameSessionLifecycleTests` `17/17 Passed`, including two-node route flow, restart boundary, stale/duplicate outcomes, both death reasons, and the real startup failure path after `OnRunStarted`. Final solution build passed with `0` errors and two pre-existing warnings. `git diff --check`, exact allowlist integrity, required `.meta` files, and no drift in `Packages`, scenes, prefabs, persistence, or `ProjectSettings` pasna jakim branchu właśnie jesteśmy?sed. Final Lead/Reviewer review found and fixed startup input-window regressions; post-fix validation passed. The independent reviewer agent was unavailable in the final configuration, so the final acceptance review was performed by the coordinating Lead.
 
 ---
 
 ## `M2.8` — Dowód trwałości atlasu między runami
 
-**Status:** `Planned`  
+**Status:** `Done` — completed 2026-09-22; writer: `GitHub Copilot`  
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 4, 5, 6 i bramka atlasu z sekcji 22.
 
@@ -1350,7 +1350,8 @@ M2 jest zaliczony, gdy pięciodniowy graf przechodzi walidację, discovery pozos
 
 ## `M3.1` — Stabilne typy siatki i encji
 
-**Status:** `Planned`  
+**Status:** `Done` - completed 2026-09-23; accepted by Lead after independent review.
+
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 8, 9.1, 11.1 i 21.1–21.3.
 
@@ -1375,6 +1376,12 @@ M2 jest zaliczony, gdy pięciodniowy graf przechodzi walidację, discovery pozos
 **Wpływ na save i kompatybilność:** `EntityId` runtime nie musi przetrwać kolejnej planszy; ID contentu nadal są tekstowe. Ewentualny zapis pozycji pojawi się dopiero w Deferred `M8.1`.
 
 **Wymagany handoff:** Krótki kontrakt wartości i lista adapterów, które później zastąpią odczyt `Transform`.
+
+**Validation result:** Unity `6000.3.21f1`, focused EditMode filter `HallowBlaze.Tests.EditMode.BoardPrimitivesTests`: `15/15 Passed`, `0 failed`, exit code `0`. The primitives assembly also compiled successfully. Independent `qwen-reviewer` verdict: `PASS`.
+
+**Value contract:** Immutable primitives have deterministic equality, hashing, and ordering without Unity dependencies. Positive Y points north; cardinal neighbors use north/east/south/west order. Coordinate overflow throws instead of wrapping. Inclusive `GridBounds` accepts every cell of the default 8x8 board, including its perimeter, and `RequireContains` rejects positions outside it. `EntityId` is board-local; callers own unique, deterministic assignment independently of view creation order.
+
+**Adapter handoff:** Future work will replace position reads in `MovingObject` and `Enemy` with domain queries, keep grid-to-view conversion in the `BoardManager` presentation boundary, and route `PlayerScript` input through commands. These adapters and existing gameplay were not changed in M3.1.
 
 ---
 
