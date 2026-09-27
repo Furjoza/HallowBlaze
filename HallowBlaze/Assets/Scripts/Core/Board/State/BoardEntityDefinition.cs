@@ -17,6 +17,15 @@ namespace HallowBlaze.Core.Board.State
         /// <summary>Gets the stable textual content identifier.</summary>
         public string ContentId { get; }
 
+        /// <summary>Gets the immutable traits that classify this entity's behavior.</summary>
+        public BoardEntityTraits Traits { get; }
+
+        /// <summary>
+        /// Gets the amount of Food restored automatically when the player enters this item's cell.
+        /// Zero indicates that the entity is not automatic food.
+        /// </summary>
+        public int AutomaticFoodReward { get; }
+
         /// <summary>Creates immutable content data for a board entity.</summary>
         /// <param name="layer">The occupancy layer.</param>
         /// <param name="kind">The stable entity kind.</param>
@@ -24,6 +33,39 @@ namespace HallowBlaze.Core.Board.State
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="layer"/> is not a defined board layer.</exception>
         /// <exception cref="ArgumentException"><paramref name="kind"/> or <paramref name="contentId"/> is invalid.</exception>
         public BoardEntityDefinition(BoardLayer layer, EntityKind kind, string contentId)
+            : this(layer, kind, contentId, BoardEntityTraits.Default, 0)
+        {
+        }
+
+        /// <summary>Creates immutable content data for a board entity with explicit traits.</summary>
+        /// <param name="layer">The occupancy layer.</param>
+        /// <param name="kind">The stable entity kind.</param>
+        /// <param name="contentId">The stable textual content identifier.</param>
+        /// <param name="traits">The traits that classify this entity's behavior.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="layer"/> is not a defined board layer.</exception>
+        /// <exception cref="ArgumentException"><paramref name="kind"/> or <paramref name="contentId"/> is invalid.</exception>
+        public BoardEntityDefinition(BoardLayer layer, EntityKind kind, string contentId, BoardEntityTraits traits)
+            : this(layer, kind, contentId, traits, 0)
+        {
+        }
+
+        /// <summary>Creates immutable content data for a board entity with explicit traits and automatic food reward.</summary>
+        /// <param name="layer">The occupancy layer.</param>
+        /// <param name="kind">The stable entity kind.</param>
+        /// <param name="contentId">The stable textual content identifier.</param>
+        /// <param name="traits">The traits that classify this entity's behavior.</param>
+        /// <param name="automaticFoodReward">Food restored when entering this item's cell, or zero for no automatic reward.</param>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// <paramref name="layer"/> is not a defined board layer, <paramref name="automaticFoodReward"/> is negative,
+        /// or a positive reward is assigned outside the item layer.
+        /// </exception>
+        /// <exception cref="ArgumentException"><paramref name="kind"/> or <paramref name="contentId"/> is invalid.</exception>
+        public BoardEntityDefinition(
+            BoardLayer layer,
+            EntityKind kind,
+            string contentId,
+            BoardEntityTraits traits,
+            int automaticFoodReward)
         {
             if (layer < BoardLayer.Terrain || layer > BoardLayer.Actor)
                 throw new ArgumentOutOfRangeException(nameof(layer));
@@ -34,10 +76,17 @@ namespace HallowBlaze.Core.Board.State
             {
                 throw new ArgumentException("Content ID must be non-empty and have no surrounding whitespace.", nameof(contentId));
             }
+            if (automaticFoodReward < 0 ||
+                automaticFoodReward > 0 && layer != BoardLayer.Item)
+            {
+                throw new ArgumentOutOfRangeException(nameof(automaticFoodReward));
+            }
 
             Layer = layer;
             Kind = kind;
             ContentId = contentId;
+            Traits = traits;
+            AutomaticFoodReward = automaticFoodReward;
         }
 
         /// <summary>Determines whether this definition has the same immutable content as another definition.</summary>
@@ -48,7 +97,9 @@ namespace HallowBlaze.Core.Board.State
             return other != null &&
                 Layer == other.Layer &&
                 Kind.Equals(other.Kind) &&
-                string.Equals(ContentId, other.ContentId, StringComparison.Ordinal);
+                string.Equals(ContentId, other.ContentId, StringComparison.Ordinal) &&
+                Traits.Equals(other.Traits) &&
+                AutomaticFoodReward == other.AutomaticFoodReward;
         }
 
         /// <inheritdoc />
@@ -67,6 +118,8 @@ namespace HallowBlaze.Core.Board.State
                 hash = hash * 31 + Kind.GetHashCode();
                 for (int index = 0; index < ContentId.Length; index++)
                     hash = hash * 31 + ContentId[index];
+                hash = hash * 31 + Traits.GetHashCode();
+                hash = hash * 31 + AutomaticFoodReward;
                 return hash;
             }
         }

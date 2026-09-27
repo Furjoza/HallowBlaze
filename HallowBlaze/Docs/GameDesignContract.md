@@ -554,6 +554,7 @@ Walidator sprawdza co najmniej:
 - Każda zaakceptowana komenda planszowa kosztuje dokładnie jedną turę i bazowy koszt jedzenia.
 - Odrzucona komenda nie zużywa tury, jedzenia ani narzędzia.
 - `WaitCommand` jest zaakceptowaną akcją i kosztuje turę.
+- Jedzenie na polu docelowym jest podnoszone automatycznie przy wejściu; narzędzia wymagają świadomej `InteractCommand`.
 - Otwieranie mapy, wybór slotu, podgląd celu i anulowanie UI nie kosztują tury.
 - Zwykły ruch w nieinteraktywną przeszkodę jest odrzucony.
 - Próba wejścia w obiekt z jednoznaczną interakcją kontekstową może zostać znormalizowana do zaakceptowanej komendy interakcji, jeżeli UI wcześniej to sygnalizuje.
@@ -591,7 +592,17 @@ Jedna tura przebiega w tej kolejności:
 8. obliczenie i pokazanie intentów następnej tury;
 9. odblokowanie wejścia.
 
-Nagroda z poprawnej akcji zbierania jest rozliczana przed kosztem tej akcji, więc może uratować gracza przed głodem. Dotarcie do wyjścia kończy planszę przed fazą zombie. Śmierć z kosztu własnej akcji również zatrzymuje dalsze fazy. Priorytet jednoczesnego osiągnięcia wyjścia i progu śmierci pozostaje decyzją otwartą w sekcji 26.
+W obrębie faz 1-4 ruch gracza ma dokładną kolejność:
+
+1. `ValidateMove`;
+2. `MovePlayer`;
+3. `CollectAutomaticFood`;
+4. `ApplyFoodReward`;
+5. `ApplyActionCost`;
+6. `EmitStarvationIfFoodIsZero`;
+7. `EmitExitIfPresent`, wyłącznie jeżeli gracz przeżył.
+
+Nagroda z automatycznie zebranego jedzenia jest rozliczana przed kosztem tej akcji, więc może uratować gracza przed głodem. Po naliczeniu kosztu najpierw sprawdzana jest śmierć z głodu, a dopiero potem osiągnięcie wyjścia. Jeżeli Food spadnie do zera, akcja kończy się śmiercią i nie emituje ukończenia planszy, nawet gdy gracz wszedł na pole wyjścia. Dotarcie do wyjścia przez żywego gracza kończy planszę przed fazą zombie.
 
 #### Rationale — dlaczego
 
@@ -1093,13 +1104,13 @@ Poniższe pytania mają status **Open**. Agent nie może rozstrzygnąć ich sam,
 | ID | Pytanie | Rekomendacja robocza | Blokuje |
 | --- | --- | --- | --- |
 | O-001 | Czy atlas fabularnie należy do tej samej postaci, czy do schronienia i kolejnych zwiadowców? | wspólny atlas schronienia, ponieważ naturalnie tłumaczy śmierć i kolejne runy | narrację podsumowania i nowego runu |
-| O-002 | Co wygrywa, gdy ta sama akcja osiąga wyjście i próg śmierci z głodu? | wyjście, jeśli gracz faktycznie wszedł na pole celu | ostateczne testy kontraktu tury |
-| O-003 | Czy drobne przedmioty są podnoszone automatycznie przy wejściu, czy wymagają `Interact`? | jedzenie automatycznie; narzędzia przez świadomą interakcję | pickupy i UI zamiany |
 
 ### Decyzje rozstrzygnięte dla bieżącego zakresu
 
 | ID | Decyzja właściciela | Warunek ponownego otwarcia |
 | --- | --- | --- |
+| O-002 | 2026-09-27 — po nagrodzie i koszcie najpierw rozstrzygana jest śmierć z głodu; martwy gracz nie kończy planszy, nawet jeśli akcja weszła na wyjście. | Osobna decyzja produktowa zmieniająca priorytet terminalnych wyników tej samej akcji. |
+| O-003 | 2026-09-27 — jedzenie jest podnoszone automatycznie przy wejściu i rozliczane przed kosztem akcji; narzędzia wymagają świadomej interakcji. | Osobna decyzja produktowa zmieniająca sposób podnoszenia jedzenia lub narzędzi. |
 | O-004 | 2026-09-08 — PC jest platformą referencyjną dla vertical slice. Mobile ma zachować tę samą semantykę po ustabilizowaniu interakcji. | Osobna decyzja produktowa zmieniająca platformę referencyjną lub wymagająca równorzędnej walidacji filesystemu na mobile. |
 | O-005 | 2026-08-27 — leaderboard online nie jest częścią bieżącego projektu; najpierw powstaje prywatne podsumowanie wyprawy. Usuniętej integracji Dreamlo nie przywracamy, a rotację starej wartości właściciel świadomie odkłada. | Osobna decyzja produktowa o ponownym wprowadzeniu funkcji online; wtedy wymagane są nowy model bezpieczeństwa, nowa integracja i poświadczenia, bez ponownego użycia historycznej wartości. |
 | O-006 | 2026-09-09 — `Exit to Menu` zachowuje poprawny run save dla `Continue`; trwałe porzucenie jest osobną, jednoznaczną akcją. | Osobna decyzja produktowa zmieniająca oczekiwania gracza wobec wznowienia lub zamknięcia runu. |

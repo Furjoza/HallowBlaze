@@ -1,0 +1,14 @@
+{
+  "name": "HallowBlaze.Core.Turns.Resolution",
+  "references": [
+    "HallowBlaze.Core.Board.Primitives",
+    "HallowBlaze.Core.Board.State",
+    "HallowBlaze.Core.State",
+    "HallowBlaze.Core.Turns.Contracts"
+  ],
+  "allowUnsafeCode": false,
+  "overrideAllowUnsafeCode": false,
+  "useGitIgnore": false,
+  "version": "0.0.1",
+  "noEngineReferences": true
+}
