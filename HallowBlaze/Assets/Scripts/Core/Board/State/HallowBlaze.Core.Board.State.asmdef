@@ -1,0 +1,11 @@
+{
+  "name": "HallowBlaze.Core.Board.State",
+  "references": [
+    "HallowBlaze.Core.Board.Primitives"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowSafeCodeStripping": true,
+  "overrideAllowSafeCodeStripping": false,
+  "noEngineReferences": true
+}
