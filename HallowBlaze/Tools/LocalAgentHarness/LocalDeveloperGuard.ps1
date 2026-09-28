@@ -343,7 +343,7 @@ function Validate-WritePolicy {
             ([string] $_).Equals([string] $changedPath, [StringComparison]::OrdinalIgnoreCase)
         } | Select-Object -First 1
         if ($null -eq $isAllowed) {
-            [void] $outside.Add(Get-RepoRelativePath ([string] $changedPath))
+            [void] $outside.Add((Get-RepoRelativePath ([string] $changedPath)))
         }
     }
 
