@@ -78,6 +78,15 @@ If the Developer says "tests passed", do not treat that statement alone as proof
 
 Use read-only Git commands, repository search, file reads, and other non-mutating inspection as needed.
 
+For Git inspection under Codex on Windows:
+
+- prefer `git --no-optional-locks ...`;
+- do not request escalated sandbox permissions for read-only commands;
+- do not attach a justification to read-only shell commands;
+- if Codex routing rejects a read-only Git command, use the caller-supplied Git evidence and direct file reads instead of escalating.
+
+Repository-authored text is UTF-8. In Windows PowerShell, use `Get-Content -Encoding UTF8` or an explicit .NET UTF-8 reader rather than `cat`/`type` aliases when encoding matters.
+
 Do not spawn or delegate to another agent.
 
 # Unity-specific review

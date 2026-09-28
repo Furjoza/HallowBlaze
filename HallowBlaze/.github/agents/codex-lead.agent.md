@@ -97,7 +97,7 @@ $task = @'
   -BaselineBranch '<recorded branch>'
 ```
 
-The runner uses `devstral-small-2:24b` through the `ollama-launch` Codex profile with `model_reasoning_effort=none` and `workspace-write`. It arms the Guard before execution and validates branch, `HEAD`, staged state, and changed paths afterward.
+The runner uses `devstral-small-2:24b` through the `ollama-launch` provider with a role-specific Devstral model catalog, `model_reasoning_effort=none`, and `workspace-write`. It arms the Guard before execution and validates branch, `HEAD`, staged state, and changed paths afterward.
 
 Do not call `LocalDeveloperGuard.ps1 -ArmAllowlist` separately during the normal external-worker path; the runner owns policy arming, validation, and cleanup.
 
@@ -144,7 +144,7 @@ Provide:
 - Developer report;
 - validation actually performed.
 
-The Reviewer can inspect the actual repository and `git diff` independently, so do not paste a large full diff into the task packet unless a specific fragment is necessary.
+The runner supplies the Reviewer with independently collected read-only Git status, changed-file, diff-stat, and scoped patch evidence. The Reviewer can also inspect repository files and use read-only Git commands directly, so do not paste a duplicate large full diff into the task packet unless a specific fragment is necessary.
 
 Invoke it with:
 
@@ -161,7 +161,7 @@ $reviewTask = @'
   -BaselineBranch '<recorded branch>'
 ```
 
-The runner uses `qwen3.6:27b` through the `ollama-launch` profile in a read-only sandbox. The Reviewer must inspect the actual implementation independently.
+The runner uses `qwen3.6:27b` through the `ollama-launch` provider with a role-specific Qwen model catalog in a read-only sandbox. The Reviewer must inspect the actual implementation independently.
 
 The Reviewer returns one of:
 

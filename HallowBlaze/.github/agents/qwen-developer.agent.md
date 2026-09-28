@@ -62,6 +62,8 @@ The external runner validates the repository after you exit. Any changed path ou
 
 Use shell execution only for builds, tests, Unity CLI, compiler output, and read-only Git/repository inspection.
 
+For read-only Git inspection, prefer `git --no-optional-locks ...`. Repository-authored text is UTF-8; in Windows PowerShell, use `Get-Content -Encoding UTF8` or an explicit .NET UTF-8 reader rather than `cat`/`type` aliases when encoding matters.
+
 Do not run destructive or mutating Git commands. In particular, do not stage, commit, reset, restore, checkout/switch branches, stash, clean, rebase, merge, or force push.
 
 Do not spawn or delegate to another agent.
