@@ -1,5 +1,7 @@
 param(
-    [string[]] $ArmAllowlist
+    [string[]] $ArmAllowlist,
+    [switch] $ValidateAllowlist,
+    [switch] $ClearPolicy
 )
 
 $ErrorActionPreference = 'Stop'
@@ -267,6 +269,102 @@ function Get-PolicyForSession([string] $sessionId) {
     }
 }
 
+function Get-RepoRelativePath([string] $fullPath) {
+    $root = $repoRoot.TrimEnd('\', '/')
+    $prefix = $root + [IO.Path]::DirectorySeparatorChar
+    if ($fullPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+        return $fullPath.Substring($prefix.Length).Replace('\', '/')
+    }
+    return $fullPath
+}
+
+function Get-ChangedProjectPaths {
+    $paths = [Collections.Generic.List[string]]::new()
+    $commands = @(
+        @('diff', '--name-only', '--no-renames'),
+        @('diff', '--cached', '--name-only', '--no-renames'),
+        @('ls-files', '--others', '--exclude-standard')
+    )
+
+    foreach ($arguments in $commands) {
+        $output = @(& git -C $repoRoot @arguments)
+        if ($LASTEXITCODE -ne 0) {
+            throw "Git failed while inspecting repository changes: git $($arguments -join ' ')"
+        }
+        foreach ($relativePath in $output) {
+            if ([string]::IsNullOrWhiteSpace([string] $relativePath)) { continue }
+            $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot ([string] $relativePath))).TrimEnd('\', '/')
+            if (-not $paths.Contains($fullPath)) {
+                [void] $paths.Add($fullPath)
+            }
+        }
+    }
+    return @($paths)
+}
+
+function Validate-WritePolicy {
+    $policy = Read-JsonFile $policyPath
+    if ($null -eq $policy) {
+        throw 'No armed local developer write policy exists.'
+    }
+
+    $policyRoot = [IO.Path]::GetFullPath([string] $policy.gitRoot).TrimEnd('\', '/')
+    if (-not $policyRoot.Equals($repoRoot.TrimEnd('\', '/'), [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'The armed write policy belongs to another repository.'
+    }
+
+    $expiresUtc = [DateTimeOffset]::Parse([string] $policy.expiresUtc)
+    if ($expiresUtc -le [DateTimeOffset]::UtcNow) {
+        throw 'The armed write policy has expired.'
+    }
+
+    $currentHead = (& git -C $repoRoot rev-parse HEAD).Trim()
+    $currentBranch = (& git -C $repoRoot branch --show-current).Trim()
+    if ($currentHead -cne [string] $policy.baselineHead) {
+        throw "Repository HEAD changed during the local developer run. Expected $($policy.baselineHead), got $currentHead."
+    }
+    if ($currentBranch -cne [string] $policy.baselineBranch) {
+        throw "Repository branch changed during the local developer run. Expected '$($policy.baselineBranch)', got '$currentBranch'."
+    }
+
+    $staged = @(& git -C $repoRoot diff --cached --name-only --no-renames)
+    if ($LASTEXITCODE -ne 0) { throw 'Git failed while checking staged changes.' }
+    if ($staged.Count -gt 0) {
+        throw "Local developer staged project changes, which is not allowed: $($staged -join ', ')"
+    }
+
+    $allowedPaths = @($policy.allowlistFullPaths | ForEach-Object {
+        [IO.Path]::GetFullPath([string] $_).TrimEnd('\', '/')
+    })
+    $changedPaths = @(Get-ChangedProjectPaths)
+    $outside = [Collections.Generic.List[string]]::new()
+    foreach ($changedPath in $changedPaths) {
+        $isAllowed = $allowedPaths | Where-Object {
+            ([string] $_).Equals([string] $changedPath, [StringComparison]::OrdinalIgnoreCase)
+        } | Select-Object -First 1
+        if ($null -eq $isAllowed) {
+            [void] $outside.Add(Get-RepoRelativePath ([string] $changedPath))
+        }
+    }
+
+    if ($outside.Count -gt 0) {
+        throw "Local developer changed path(s) outside the armed allowlist: $($outside -join ', ')"
+    }
+
+    $relativeChanged = @($changedPaths | ForEach-Object { Get-RepoRelativePath ([string] $_) })
+    Write-Output 'ALLOWLIST_VALID'
+    Write-Output ("CHANGED_PATHS=" + ($relativeChanged -join ','))
+}
+
+function Clear-WritePolicy {
+    $activeState = Read-JsonFile $statePath
+    if ($null -ne $activeState -and $activeState.active -eq $true) {
+        throw 'Cannot clear the write policy while a local developer session is active.'
+    }
+    Remove-Item -LiteralPath $policyPath -Force -ErrorAction SilentlyContinue
+    Write-Output 'WRITE_POLICY_CLEARED'
+}
+
 function Arm-WritePolicy([string[]] $allowlist) {
     $allowlist = @($allowlist | ForEach-Object { [string] $_ })
     if ($allowlist.Count -eq 0) { throw 'Write allowlist is empty.' }
@@ -294,6 +392,44 @@ function Arm-WritePolicy([string[]] $allowlist) {
     }
     Write-JsonFile $policyPath $policy
     Write-Output "Write policy armed for $($allowlist.Count) path(s); expires in 10 minutes."
+}
+
+$requestedModes = 0
+if ($null -ne $ArmAllowlist -and $ArmAllowlist.Count -gt 0) { $requestedModes++ }
+if ($ValidateAllowlist) { $requestedModes++ }
+if ($ClearPolicy) { $requestedModes++ }
+if ($requestedModes -gt 1) {
+    throw 'Use only one guard command mode at a time.'
+}
+
+if ($ValidateAllowlist) {
+    $mutex = [Threading.Mutex]::new($false, $mutexName)
+    $lockTaken = $false
+    try {
+        $lockTaken = $mutex.WaitOne(5000)
+        if (-not $lockTaken) { throw 'Could not acquire the developer guard lock.' }
+        Validate-WritePolicy
+    }
+    finally {
+        if ($lockTaken) { $mutex.ReleaseMutex() }
+        $mutex.Dispose()
+    }
+    exit 0
+}
+
+if ($ClearPolicy) {
+    $mutex = [Threading.Mutex]::new($false, $mutexName)
+    $lockTaken = $false
+    try {
+        $lockTaken = $mutex.WaitOne(5000)
+        if (-not $lockTaken) { throw 'Could not acquire the developer guard lock.' }
+        Clear-WritePolicy
+    }
+    finally {
+        if ($lockTaken) { $mutex.ReleaseMutex() }
+        $mutex.Dispose()
+    }
+    exit 0
 }
 
 if ($ArmAllowlist) {
