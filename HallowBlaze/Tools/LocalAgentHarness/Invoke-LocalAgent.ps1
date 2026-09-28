@@ -132,6 +132,15 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($repoRoot)) {
     throw 'Invoke-LocalAgent.ps1 must be run from inside the HallowBlaze Git repository.'
 }
 
+# The Git repository root is one level above the Unity project in this checkout.
+# Resolve project-local files and allowlist entries from the Unity project root,
+# while keeping Git integrity checks anchored at the real Git root.
+$projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')).TrimEnd('\', '/')
+$repoPrefix = $repoRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+if (-not ($projectRoot + [IO.Path]::DirectorySeparatorChar).StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "LocalAgentHarness is not located inside the detected Git repository. Project root: $projectRoot; Git root: $repoRoot"
+}
+
 $codexCommand = Get-Command codex -ErrorAction Stop
 $codexPath = if ($codexCommand.Source) { $codexCommand.Source } else { $codexCommand.Path }
 if ([string]::IsNullOrWhiteSpace($codexPath)) {
@@ -139,9 +148,10 @@ if ([string]::IsNullOrWhiteSpace($codexPath)) {
 }
 
 $guardPath = Join-Path $PSScriptRoot 'LocalDeveloperGuard.ps1'
-$developerAgentPath = Join-Path $repoRoot '.github\agents\qwen-developer.agent.md'
-$reviewerAgentPath = Join-Path $repoRoot '.github\agents\qwen-reviewer.agent.md'
-$allowedFullPaths = @(Resolve-Allowlist $repoRoot $Allowlist)
+$developerAgentPath = Join-Path $projectRoot '.github\agents\qwen-developer.agent.md'
+$reviewerAgentPath = Join-Path $projectRoot '.github\agents\qwen-reviewer.agent.md'
+$allowedFullPaths = @(Resolve-Allowlist $projectRoot $Allowlist)
+$guardAllowlist = @($allowedFullPaths | ForEach-Object { Get-RepoRelativePath $repoRoot ([string] $_) })
 Assert-RepositoryState $repoRoot $BaselineHead $BaselineBranch $allowedFullPaths
 
 if ([string]::IsNullOrWhiteSpace($Model)) {
@@ -184,6 +194,7 @@ $roleInstructions
 $executionRules
 BASELINE:
 - Git root: $repoRoot
+- Project root: $projectRoot
 - branch: $BaselineBranch
 - HEAD: $BaselineHead
 
@@ -198,7 +209,7 @@ if ($Role -eq 'developer') {
     if (-not (Test-Path -LiteralPath $guardPath -PathType Leaf)) {
         throw "Developer Guard not found: $guardPath"
     }
-    & $guardPath -ArmAllowlist $Allowlist
+    & $guardPath -ArmAllowlist $guardAllowlist
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to arm LocalDeveloperGuard (exit code $LASTEXITCODE)."
     }
@@ -208,7 +219,7 @@ $outputPath = Join-Path $env:TEMP ("HallowBlaze-local-$Role-" + [Guid]::NewGuid(
 $codexExitCode = $null
 $finalMessage = ''
 
-Push-Location $repoRoot
+Push-Location $projectRoot
 try {
     $prompt | & $codexPath `
         --profile $Profile `
