@@ -1435,7 +1435,7 @@ Different layers may coexist at one position. `BoardState` owns both the global 
 
 ## `M3.3` — `PlayerCommand`, `TurnResult` i `GameEvent`
 
-**Status:** `Planned`  
+**Status:** `Done` - completed 2026-09-26; writer: `qwen-developer`, completion fixes: `GitHub Copilot`
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 9, 10 i 21.2.
 
@@ -1460,6 +1460,21 @@ Different layers may coexist at one position. `BoardState` owns both the global 
 **Wpływ na save i kompatybilność:** Komendy nie są jeszcze trwałym replay formatem; wszelkie ID w zdarzeniach muszą być stabilne w obrębie planszy.
 
 **Wymagany handoff:** Tabela command → możliwe result codes → events oraz lista celowo niezaimplementowanych komend.
+
+**Validation result:** Unity `6000.3.21f1`, focused EditMode filter `HallowBlaze.Tests.EditMode.TurnContractsTests`: `9/9 Passed`, `0 failed`, `0 skipped`, `0 inconclusive`. Independent `qwen-reviewer` verdict: `PASS` with no findings.
+
+**Contract handoff:**
+
+| Command | Generic rejection codes | Accepted events |
+| --- | --- | --- |
+| `MoveCommand` | `InvalidState`, `OutOfBounds`, `Blocked` | ordered `EntityMovedEvent` |
+| `WaitCommand` | `InvalidState` | ordered `EntityWaitedEvent` |
+| `InteractCommand` | `InvalidState`, `InvalidTarget`, `NoInteractionAvailable` | ordered `InteractionPerformedEvent` |
+| unsupported `PlayerCommand` | `InvalidCommand` | none |
+
+Every accepted result consumes exactly one turn. Every rejected result consumes no turn and carries no events. Event collections are defensively copied, read-only, null-free, and retain resolver order. Board references use board-local `EntityId` values and immutable grid primitives.
+
+Tool use, pickup semantics, zombie phases, additional commands, the resolver, presentation, animation, and an event bus remain intentionally unimplemented. Commands are not a durable replay or save format.
 
 ---
 

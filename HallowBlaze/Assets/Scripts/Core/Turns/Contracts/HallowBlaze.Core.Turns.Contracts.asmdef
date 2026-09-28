@@ -1,0 +1,10 @@
+{
+  "name": "HallowBlaze.Core.Turns.Contracts",
+  "references": [
+    "HallowBlaze.Core.Board.Primitives"
+  ],
+  "allowUnsafeCode": false,
+  "overrideAllowUnsafeCode": false,
+  "useGUIDs": false,
+  "noEngineReferences": true
+}

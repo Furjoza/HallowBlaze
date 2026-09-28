@@ -13,6 +13,7 @@
         "HallowBlaze.Core.Persistence",
         "HallowBlaze.Core.World",
         "HallowBlaze.Core.Board.Primitives",
-        "HallowBlaze.Core.Board.State"
+        "HallowBlaze.Core.Board.State",
+        "HallowBlaze.Core.Turns.Contracts"
     ]
 }
