@@ -24,10 +24,10 @@ $ErrorActionPreference = 'Stop'
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
 
 function Get-RepoRelativePath([string] $repoRoot, [string] $fullPath) {
-    $root = $repoRoot.TrimEnd('\', '/')
+    $root = $repoRoot.TrimEnd('\\', '/')
     $prefix = $root + [IO.Path]::DirectorySeparatorChar
     if ($fullPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
-        return $fullPath.Substring($prefix.Length).Replace('\', '/')
+        return $fullPath.Substring($prefix.Length).Replace('\\', '/')
     }
     return $fullPath
 }
@@ -37,7 +37,7 @@ function Resolve-Allowlist([string] $projectRoot, [string[]] $relativePaths) {
         throw 'The local worker requires a non-empty closed allowlist.'
     }
 
-    $projectPrefix = $projectRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    $projectPrefix = $projectRoot.TrimEnd('\\', '/') + [IO.Path]::DirectorySeparatorChar
     $resolved = [Collections.Generic.List[string]]::new()
     foreach ($relativePath in $relativePaths) {
         if ([string]::IsNullOrWhiteSpace($relativePath) `
@@ -46,9 +46,9 @@ function Resolve-Allowlist([string] $projectRoot, [string[]] $relativePaths) {
             throw "Invalid allowlist path: $relativePath"
         }
 
-        $fullPath = [IO.Path]::GetFullPath((Join-Path $projectRoot $relativePath)).TrimEnd('\', '/')
+        $fullPath = [IO.Path]::GetFullPath((Join-Path $projectRoot $relativePath)).TrimEnd('\\', '/')
         if (-not ($fullPath + [IO.Path]::DirectorySeparatorChar).StartsWith($projectPrefix, [StringComparison]::OrdinalIgnoreCase) `
-            -and -not $fullPath.Equals($projectRoot.TrimEnd('\', '/'), [StringComparison]::OrdinalIgnoreCase)) {
+            -and -not $fullPath.Equals($projectRoot.TrimEnd('\\', '/'), [StringComparison]::OrdinalIgnoreCase)) {
             throw "Allowlist path escapes the Unity project root: $relativePath"
         }
         [void] $resolved.Add($fullPath)
@@ -71,7 +71,7 @@ function Get-ChangedProjectPaths([string] $repoRoot) {
         }
         foreach ($relativePath in $output) {
             if ([string]::IsNullOrWhiteSpace([string] $relativePath)) { continue }
-            $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot ([string] $relativePath))).TrimEnd('\', '/')
+            $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot ([string] $relativePath))).TrimEnd('\\', '/')
             if (-not $paths.Contains($fullPath)) {
                 [void] $paths.Add($fullPath)
             }
@@ -180,6 +180,82 @@ $patch
 "@.Trim()
 }
 
+function Get-DeveloperPatch([string] $finalMessage) {
+    $match = [regex]::Match($finalMessage, '(?s)DEVELOPER_PATCH_BEGIN\r?\n(.*?)\r?\nDEVELOPER_PATCH_END')
+    if (-not $match.Success) { return $null }
+
+    $patch = $match.Groups[1].Value.Trim()
+    if ($patch.StartsWith('```')) {
+        $lines = @($patch -split '\r?\n')
+        if ($lines.Count -ge 2 -and $lines[0] -match '^```' -and $lines[-1] -match '^```\s*$') {
+            $patch = ($lines[1..($lines.Count - 2)] -join "`r`n").Trim()
+        }
+    }
+    return $patch
+}
+
+function Get-DeveloperSummary([string] $finalMessage) {
+    return ([regex]::Replace(
+        $finalMessage,
+        '(?s)DEVELOPER_PATCH_BEGIN\r?\n.*?\r?\nDEVELOPER_PATCH_END',
+        '[PATCH OMITTED BY RUNNER; VALIDATED AND APPLIED IF PRESENT]'
+    )).Trim()
+}
+
+function Get-PatchPaths([string] $repoRoot, [string] $patchPath) {
+    $output = @(& git -c core.quotePath=false -C $repoRoot apply --numstat --recount -- $patchPath)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Developer patch could not be parsed by git apply --numstat.'
+    }
+
+    $paths = [Collections.Generic.List[string]]::new()
+    foreach ($line in $output) {
+        if ([string]::IsNullOrWhiteSpace([string] $line)) { continue }
+        $parts = ([string] $line) -split "`t"
+        if ($parts.Count -lt 3) {
+            throw "Unexpected git apply --numstat output: $line"
+        }
+        $relativePath = [string] $parts[-1]
+        if ($relativePath -match '\{.*=>.*\}') {
+            throw 'Rename/move patches are not supported by the local-worker patch protocol. Delegate them as a separate explicitly authorized operation.'
+        }
+        $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $relativePath)).TrimEnd('\\', '/')
+        if (-not $paths.Contains($fullPath)) {
+            [void] $paths.Add($fullPath)
+        }
+    }
+    return @($paths)
+}
+
+function Assert-PatchScope([string] $repoRoot, [string] $patchPath, [string[]] $allowedFullPaths) {
+    $outside = [Collections.Generic.List[string]]::new()
+    $patchPaths = @(Get-PatchPaths $repoRoot $patchPath)
+    if ($patchPaths.Count -eq 0) {
+        throw 'Developer returned a non-empty patch that contains no file changes.'
+    }
+
+    foreach ($changedPath in $patchPaths) {
+        $isAllowed = $allowedFullPaths | Where-Object {
+            ([string] $_).Equals([string] $changedPath, [StringComparison]::OrdinalIgnoreCase)
+        } | Select-Object -First 1
+        if ($null -eq $isAllowed) {
+            [void] $outside.Add((Get-RepoRelativePath $repoRoot ([string] $changedPath)))
+        }
+    }
+    if ($outside.Count -gt 0) {
+        throw "Developer patch targets paths outside the delegated allowlist: $($outside -join ', ')"
+    }
+
+    return $patchPaths
+}
+
+function Get-TranscriptTail([string] $path, [int] $maxLines = 30) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return '' }
+    $lines = @(Get-Content -LiteralPath $path -Encoding UTF8)
+    if ($lines.Count -le $maxLines) { return ($lines -join "`r`n") }
+    return ($lines[($lines.Count - $maxLines)..($lines.Count - 1)] -join "`r`n")
+}
+
 $previousOutputEncoding = $OutputEncoding
 $previousConsoleInputEncoding = [Console]::InputEncoding
 $previousConsoleOutputEncoding = [Console]::OutputEncoding
@@ -192,6 +268,9 @@ $env:GIT_OPTIONAL_LOCKS = '0'
 
 $policyArmed = $false
 $outputPath = $null
+$workerLogPath = $null
+$patchPath = $null
+$keepWorkerLog = $false
 
 try {
     $repoRoot = [IO.Path]::GetFullPath((& git --no-optional-locks -C $PSScriptRoot rev-parse --show-toplevel).Trim())
@@ -199,11 +278,8 @@ try {
         throw 'Invoke-LocalAgent.ps1 must be run from inside the HallowBlaze Git repository.'
     }
 
-    # The Git repository root is one level above the Unity project in this checkout.
-    # Resolve project-local files and allowlist entries from the Unity project root,
-    # while keeping Git integrity checks anchored at the real Git root.
-    $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')).TrimEnd('\', '/')
-    $repoPrefix = $repoRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')).TrimEnd('\\', '/')
+    $repoPrefix = $repoRoot.TrimEnd('\\', '/') + [IO.Path]::DirectorySeparatorChar
     if (-not ($projectRoot + [IO.Path]::DirectorySeparatorChar).StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
         throw "LocalAgentHarness is not located inside the detected Git repository. Project root: $projectRoot; Git root: $repoRoot"
     }
@@ -240,7 +316,7 @@ try {
 
     $agentPath = if ($Role -eq 'developer') { $developerAgentPath } else { $reviewerAgentPath }
     $roleInstructions = Get-AgentBody $agentPath
-    $sandbox = if ($Role -eq 'developer') { 'workspace-write' } else { 'read-only' }
+    $sandbox = 'read-only'
     $allowlistText = ($Allowlist | ForEach-Object { "- $_" }) -join "`r`n"
 
     $commonExecutionRules = @"
@@ -251,13 +327,15 @@ try {
     $executionRules = if ($Role -eq 'developer') {
 @"
 EXECUTION ENFORCEMENT:
-- This is an external Codex CLI worker, not a VS Code native subagent.
-- Write only the repo-relative paths in the closed allowlist below.
-- Do not stage, commit, switch branches, reset, restore, stash, clean, or rewrite Git history.
+- This is an external Codex CLI Developer running in a READ-ONLY sandbox.
+- Do NOT attempt to edit, create, delete, move, rename, stage, or commit project files yourself.
+- Do NOT call native apply_patch/edit tools and do NOT create patch.diff or any other project file.
+- Inspect the repository and design the exact change, then return ONE git-compatible unified patch in your final response.
+- The runner, not you, is the only writer. It validates the patch against the closed allowlist and applies it with git apply after your process exits.
+- Patch paths MUST be Git-root-relative, for example `a/HallowBlaze/Docs/Foo.md` and `b/HallowBlaze/Docs/Foo.md`.
+- Do not emit rename/move patches. If the task requires a rename/move/delete that you cannot represent safely, return SCOPE_CHANGE_REQUIRED instead.
+- Do not run builds/tests after the proposed patch because your patch has not been applied yet. The Lead owns post-apply validation.
 - Do not spawn or delegate to another agent.
-- Use Codex native patch/edit operations for project-file mutations. Do not use shell redirection or shell file-writing commands for project files.
-- Shell commands are for inspection, builds, tests, Unity CLI, and other non-destructive validation only.
-- The caller validates HEAD, branch, staged state, and the closed allowlist after you exit.
 $commonExecutionRules
 "@.Trim()
     }
@@ -292,34 +370,31 @@ $commonExecutionRules
     [void] $promptSections.Add("DELEGATION PACKET:`r`n$Task")
     $prompt = $promptSections -join "`r`n`r`n"
 
-    if ($Role -eq 'developer') {
-        if (-not (Test-Path -LiteralPath $guardPath -PathType Leaf)) {
-            throw "Developer Guard not found: $guardPath"
-        }
-        & $guardPath -ArmAllowlist $guardAllowlist
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to arm LocalDeveloperGuard (exit code $LASTEXITCODE)."
-        }
-        $policyArmed = $true
-    }
-
-    $outputPath = Join-Path $env:TEMP ("HallowBlaze-local-$Role-" + [Guid]::NewGuid().ToString('N') + '.txt')
-    $catalogOverride = 'model_catalog_json="' + $CatalogPath.Replace('\', '/') + '"'
+    $outputPath = Join-Path $env:TEMP ("HallowBlaze-local-$Role-final-" + [Guid]::NewGuid().ToString('N') + '.txt')
+    $workerLogPath = Join-Path $env:TEMP ("HallowBlaze-local-$Role-log-" + [Guid]::NewGuid().ToString('N') + '.txt')
+    $catalogOverride = 'model_catalog_json="' + $CatalogPath.Replace('\\', '/') + '"'
     $codexExitCode = $null
     $finalMessage = ''
 
     Push-Location $projectRoot
     try {
-        $prompt | & $codexPath `
-            --profile $Profile `
-            -m $Model `
-            -c $catalogOverride `
-            --config 'model_reasoning_effort="none"' `
-            exec `
-            --sandbox $sandbox `
-            -o $outputPath `
-            -
+        $workerOutput = @(
+            $prompt | & $codexPath `
+                --profile $Profile `
+                -m $Model `
+                -c $catalogOverride `
+                --config 'model_reasoning_effort="none"' `
+                exec `
+                --sandbox $sandbox `
+                -o $outputPath `
+                - 2>&1
+        )
         $codexExitCode = $LASTEXITCODE
+        [IO.File]::WriteAllLines(
+            $workerLogPath,
+            @($workerOutput | ForEach-Object { [string] $_ }),
+            $utf8NoBom
+        )
     }
     finally {
         Pop-Location
@@ -329,39 +404,97 @@ $commonExecutionRules
         $finalMessage = [IO.File]::ReadAllText($outputPath, $utf8NoBom)
     }
 
+    if ($codexExitCode -ne 0) {
+        $keepWorkerLog = $true
+        $tail = Get-TranscriptTail $workerLogPath 30
+        Write-Output 'LOCAL_AGENT_FAILURE'
+        Write-Output "role=$Role"
+        Write-Output "model=$Model"
+        Write-Output "codex_exit_code=$codexExitCode"
+        Write-Output "worker_log=$workerLogPath"
+        if (-not [string]::IsNullOrWhiteSpace($tail)) {
+            Write-Output 'worker_log_tail:'
+            Write-Output $tail
+        }
+        throw "Codex local $Role exited with code $codexExitCode."
+    }
+
+    $patchApplied = $false
+    $appliedPaths = @()
+    if ($Role -eq 'developer') {
+        $patch = Get-DeveloperPatch $finalMessage
+        if (-not [string]::IsNullOrWhiteSpace($patch)) {
+            $patchPath = Join-Path $env:TEMP ("HallowBlaze-developer-patch-" + [Guid]::NewGuid().ToString('N') + '.diff')
+            [IO.File]::WriteAllText($patchPath, $patch + "`r`n", $utf8NoBom)
+
+            $appliedPaths = @(Assert-PatchScope $repoRoot $patchPath $allowedFullPaths)
+
+            & git --no-optional-locks -C $repoRoot apply --check --recount --whitespace=nowarn -- $patchPath
+            if ($LASTEXITCODE -ne 0) {
+                $keepWorkerLog = $true
+                throw "LOCAL_WORKER_PROTOCOL_ERROR: Developer returned a patch that git apply --check rejected. worker_log=$workerLogPath"
+            }
+
+            if (-not (Test-Path -LiteralPath $guardPath -PathType Leaf)) {
+                throw "Developer Guard not found: $guardPath"
+            }
+            & $guardPath -ArmAllowlist $guardAllowlist
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to arm LocalDeveloperGuard (exit code $LASTEXITCODE)."
+            }
+            $policyArmed = $true
+
+            & git --no-optional-locks -C $repoRoot apply --recount --whitespace=nowarn -- $patchPath
+            if ($LASTEXITCODE -ne 0) {
+                throw 'LOCAL_WORKER_PROTOCOL_ERROR: Validated developer patch failed during git apply.'
+            }
+            $patchApplied = $true
+
+            & $guardPath -ValidateAllowlist
+            if ($LASTEXITCODE -ne 0) {
+                throw "LocalDeveloperGuard integrity validation failed (exit code $LASTEXITCODE)."
+            }
+
+            & $guardPath -ClearPolicy
+            if ($LASTEXITCODE -ne 0) {
+                throw "LocalDeveloperGuard policy cleanup failed (exit code $LASTEXITCODE)."
+            }
+            $policyArmed = $false
+        }
+        elseif ($finalMessage -notmatch '(?m)^DEVELOPER_NO_PATCH\s*$' `
+            -and $finalMessage -notmatch '(?m)^(BASELINE_REQUIRED|SCOPE_CHANGE_REQUIRED|ARCHITECTURE_DECISION_REQUIRED|BLOCKED)\s*$') {
+            $keepWorkerLog = $true
+            throw "LOCAL_WORKER_PROTOCOL_ERROR: Developer returned neither a DEVELOPER_PATCH block nor DEVELOPER_NO_PATCH/blocker marker. worker_log=$workerLogPath"
+        }
+    }
+
+    Assert-RepositoryState $repoRoot $BaselineHead $BaselineBranch $allowedFullPaths
+
+    $finalForCaller = if ($Role -eq 'developer') { Get-DeveloperSummary $finalMessage } else { $finalMessage.Trim() }
+
     Write-Output 'LOCAL_AGENT_RESULT_BEGIN'
     Write-Output "role=$Role"
     Write-Output "model=$Model"
     Write-Output "catalog=$CatalogPath"
     Write-Output "codex_exit_code=$codexExitCode"
+    if ($Role -eq 'developer') {
+        Write-Output "patch_applied=$($patchApplied.ToString().ToLowerInvariant())"
+        if ($patchApplied) {
+            Write-Output ('applied_paths=' + (($appliedPaths | ForEach-Object { Get-RepoRelativePath $repoRoot ([string] $_) }) -join ','))
+        }
+    }
     Write-Output 'final_message:'
-    Write-Output $finalMessage
+    Write-Output $finalForCaller
     Write-Output 'LOCAL_AGENT_RESULT_END'
 
     if ($Role -eq 'developer') {
-        & $guardPath -ValidateAllowlist
-        if ($LASTEXITCODE -ne 0) {
-            throw "LocalDeveloperGuard integrity validation failed (exit code $LASTEXITCODE)."
-        }
+        Write-Output 'ALLOWLIST_VALID'
+        $changed = @(Get-ChangedProjectPaths $repoRoot | ForEach-Object { Get-RepoRelativePath $repoRoot ([string] $_) })
+        Write-Output ('CHANGED_PATHS=' + ($changed -join ','))
+        Write-Output 'WRITE_POLICY_CLEARED'
     }
-
-    if ($codexExitCode -ne 0) {
-        throw "Codex local $Role exited with code $codexExitCode."
-    }
-
-    # Defense in depth: verify that HEAD/branch are unchanged and that no path
-    # outside the delegated scope changed, even for the read-only reviewer.
-    Assert-RepositoryState $repoRoot $BaselineHead $BaselineBranch $allowedFullPaths
-    if ($Role -eq 'reviewer') {
+    else {
         Write-Output 'REVIEWER_REPOSITORY_STATE_VALID'
-    }
-
-    if ($Role -eq 'developer') {
-        & $guardPath -ClearPolicy
-        if ($LASTEXITCODE -ne 0) {
-            throw "LocalDeveloperGuard policy cleanup failed (exit code $LASTEXITCODE)."
-        }
-        $policyArmed = $false
     }
 }
 finally {
@@ -376,6 +509,12 @@ finally {
 
     if (-not [string]::IsNullOrWhiteSpace($outputPath)) {
         Remove-Item -LiteralPath $outputPath -Force -ErrorAction SilentlyContinue
+    }
+    if (-not [string]::IsNullOrWhiteSpace($patchPath)) {
+        Remove-Item -LiteralPath $patchPath -Force -ErrorAction SilentlyContinue
+    }
+    if (-not [string]::IsNullOrWhiteSpace($workerLogPath) -and -not $keepWorkerLog) {
+        Remove-Item -LiteralPath $workerLogPath -Force -ErrorAction SilentlyContinue
     }
 
     $env:GIT_OPTIONAL_LOCKS = $previousGitOptionalLocks

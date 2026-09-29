@@ -81,9 +81,9 @@ Use read-only Git commands, repository search, file reads, and other non-mutatin
 For Git inspection under Codex on Windows:
 
 - prefer `git --no-optional-locks ...`;
-- do not request escalated sandbox permissions for read-only commands;
-- do not attach a justification to read-only shell commands;
-- if Codex routing rejects a read-only Git command, use the caller-supplied Git evidence and direct file reads instead of escalating.
+- when invoking shell/exec tools for read-only commands, omit `sandbox_permissions` and omit `justification` entirely;
+- never use `require_escalated` in this reviewer session;
+- if a read-only Git command is rejected because of permissions, retry it once with default sandbox permissions and no permission/justification fields; if it still fails, use the caller-supplied Git evidence and direct file reads instead of escalating.
 
 Repository-authored text is UTF-8. In Windows PowerShell, use `Get-Content -Encoding UTF8` or an explicit .NET UTF-8 reader rather than `cat`/`type` aliases when encoding matters.
 

@@ -97,7 +97,7 @@ $task = @'
   -BaselineBranch '<recorded branch>'
 ```
 
-The runner uses `devstral-small-2:24b` through the `ollama-launch` provider with a role-specific Devstral model catalog, `model_reasoning_effort=none`, and `workspace-write`. It arms the Guard before execution and validates branch, `HEAD`, staged state, and changed paths afterward.
+The runner uses `devstral-small-2:24b` through the `ollama-launch` provider with a role-specific Devstral model catalog and `model_reasoning_effort=none`. The local Developer runs read-only and returns one git-compatible patch; the trusted runner validates its paths against the closed allowlist, runs `git apply --check`, applies it, and then verifies branch, `HEAD`, staged state, and changed paths. Do not ask the local model to edit files directly.
 
 Do not call `LocalDeveloperGuard.ps1 -ArmAllowlist` separately during the normal external-worker path; the runner owns policy arming, validation, and cleanup.
 
@@ -107,11 +107,25 @@ Routine coding belongs to the Developer.
 
 # Truncated Developer response
 
-If the local Developer output is truncated or Codex exits before a complete report, inspect the repository state and actual artifacts. Do not blindly increase the output budget. Split any remaining work into a smaller operation and delegate another normal Developer round.
+If the local Developer output is truncated or the runner reports `LOCAL_WORKER_PROTOCOL_ERROR`, inspect repository state but do not start an open-ended harness investigation. Allow at most one smaller targeted retry when no repository mutation occurred. If that retry also fails, stop and report `LOCAL_DEVELOPER_BLOCKED`.
+
+Do not inspect Codex source code, browse the web for Codex/Ollama internals, mutate model catalogs, probe tool schemas, or switch the Reviewer/Qwen into the Developer role during a normal ticket. Those are separate harness-diagnostics tasks and require an explicit user request.
 
 A transport retry with no repository mutation continues from the same ticket state. Reuse the recorded baseline and a closed allowlist that covers all currently dirty ticket paths.
 
 If the Developer reports `ARCHITECTURE_DECISION_REQUIRED`, `SCOPE_CHANGE_REQUIRED`, or `BASELINE_REQUIRED`, evaluate the issue before authorizing any write.
+
+# Delegation and token budget
+
+Keep premium Lead context small.
+
+- A normal implementation round gets one local Developer invocation.
+- One additional targeted Developer retry is allowed only for a transport/protocol failure with no unexpected repository mutation.
+- Never run repeated local-model probes, model swaps, Codex-source inspection, or web research as an automatic recovery loop.
+- Do not use `qwen-reviewer` as an ad-hoc writer.
+- Treat harness diagnosis as a separate task; only enter it when the user explicitly asks to diagnose the harness.
+- The runner intentionally suppresses the local Codex transcript on success. Consume only its compact final result and repository evidence.
+- On runner failure, use the concise error and optional temp log path. Do not dump the whole worker log into the Lead conversation unless a small targeted excerpt is necessary.
 
 # Completion gate
 
@@ -126,7 +140,7 @@ If validation fails:
 - do not resend the full ticket or authorize broad exploration;
 - rerun the same external validation gate after recovery.
 
-If the second validation fails, stop delegating to the local Developer and take over the implementation.
+If the second validation fails, stop delegating and report the failure. Do not automatically take over implementation with the premium Lead model unless the user explicitly authorizes that takeover.
 
 Invoke the local Reviewer only after the validation gate and integrity gate pass.
 
@@ -218,9 +232,9 @@ Unrelated discoveries should be reported separately.
 
 You are the authority that decides whether an implementation qualifies as accepted.
 
-Because you do not have routine edit permissions, do not directly edit roadmap files.
+By default, delegate roadmap/documentation writes to the local Developer. If the user explicitly instructs you to take over a specific failed write yourself, that explicit authorization permits the Lead to modify exactly the authorized path(s), including roadmap files, after verifying the baseline and current diff. Do not refuse solely because routine Lead writes are normally delegated.
 
-If an accepted task explicitly requires its persisted ticket status to change, delegate that exact documentation-only write to the Developer and verify it.
+If an accepted task requires its persisted ticket status to change and no explicit Lead-write authorization exists, delegate that exact documentation-only write to the Developer and verify it.
 
 # Final report
 
