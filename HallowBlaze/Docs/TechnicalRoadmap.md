@@ -1,7 +1,7 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.5 next; route-leg amendments accepted; M9 deferred**
-> Data ostatniej weryfikacji: 2026-09-27
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6 next; route-leg amendments accepted; M9 deferred**
+> Data ostatniej weryfikacji: 2026-09-29
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
 > Zasady pracy agentów: [`../AGENTS.md`](../AGENTS.md)
@@ -1552,7 +1552,7 @@ Food pickup follows resolved O-003: entering a food item's cell removes it and r
 
 ## `M3.5` — Centralny `TurnController`
 
-**Status:** `Ready`
+**Status:** `Done` - completed 2026-09-29; accepted by Lead after independent `qwen-reviewer` review (`PASS`).
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcja 10 oraz O-002.
 
@@ -1577,6 +1577,24 @@ Food pickup follows resolved O-003: entering a food item's cell removes it and r
 **Wpływ na save i kompatybilność:** Brak zmiany schema; outcome jest zapisywany przez istniejący lifecycle po zakończeniu planszy.
 
 **Wymagany handoff:** Chronologiczny log przykładowych tur oraz odniesienie do rozstrzygniętej O-002.
+
+### Implementation handoff (2026-09-29)
+
+[TurnController](../Assets/Scripts/Core/Turns/Resolution/TurnController.cs) owns one board's synchronous resolution boundary and returns one immutable `TurnResult`. [IPlayerPhaseResolver](../Assets/Scripts/Core/Turns/Resolution/IPlayerPhaseResolver.cs) validates the entire command before mutation and resolves phases 1-4: validation, direct effects/rewards, one action cost, and immediate terminal outcomes. The existing `TurnResolver` implements this contract. Orchestration does not enumerate concrete commands or impose a fixed cost; a custom command with cost 2 is covered by tests. This boundary does not provide exception rollback.
+
+After the first terminal check, [TurnPhaseHandlers](../Assets/Scripts/Core/Turns/Resolution/TurnPhaseHandlers.cs) supplies phase 5 (locked intents), phase 6 (environment), and phase 8 (next intents); defaults are no-ops. Phase 7 checks terminal outcomes after the environment. Phase 9 releases the resolution lock in `finally`, including rejection and exceptions. Concurrent and reentrant commands return `InvalidState` without effects. Terminal results stop later phases and latch the board closed. Health depletion or an explicit dead run state produces `PlayerDied`; starvation takes precedence over exit. Run lifecycle and persistence remain the caller's responsibility; presentation retains its own input gate while replaying results.
+
+The following chronological traces are verified by [TurnControllerTests](../Assets/Tests/EditMode/TurnControllerTests.cs); phase markers are test fixtures, not production events. They follow [GameDesignContract section 10.2](GameDesignContract.md#102-kolejność-faz) and resolved O-002 (2026-09-27): rewards precede cost, then starvation prevents completion of an exit reached by the same action.
+
+| Example | Chronological trace | Outcome |
+| --- | --- | --- |
+| Accepted move, Food 5 | validate -> `EntityMoved` -> `ActionCostApplied` (Food 4) -> terminal check -> locked intents -> environment -> terminal check -> next intents -> unlock | One accepted turn; one cost. |
+| Blocked move | validate -> rejected `Blocked` -> unlock | No events, turn, resource cost, or later phases; board and run unchanged. |
+| Exit and starvation, Food 1 | validate -> `EntityMoved` -> `ActionCostApplied` (Food 0) -> `PlayerStarved` -> unlock | Board terminal; no `ExitReached`, enemies, environment, or planning. |
+| Food reward 2 on exit, Food 1 | validate -> `EntityMoved` -> `ItemCollected` -> `FoodRestored` (Food 3) -> `ActionCostApplied` (Food 2) -> `ExitReached` -> unlock | Live exit; no later phases. |
+| Health death during locked intents or environment | validate -> `EntityWaited` -> `ActionCostApplied` -> first terminal check -> locked intents -> environment -> second terminal check -> `PlayerDied` -> unlock | Board terminal; next-intent planning skipped. |
+
+Validation observed on Unity 6000.3.21f1: **48/48 EditMode tests passed** (25 `TurnControllerTests`, 14 `MovementResolverTests`, 9 `TurnContractsTests`; no failures or skips). Command: `unity test . --mode EditMode --filter "HallowBlaze.Tests.EditMode.TurnControllerTests;HallowBlaze.Tests.EditMode.MovementResolverTests;HallowBlaze.Tests.EditMode.TurnContractsTests" --output "Temp/TestResults/M3.5-EditMode.xml" --timeout 240 -- -nographics`. Independent local review: **PASS**. Baseline: branch `M3/TurnController`, commit `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. Input/presentation integration remains M3.6; AI, weather, inventory, and save schema changes are outside this card.
 
 ---
 
@@ -3245,22 +3263,21 @@ O-002, O-003, O-004, O-005, O-006, O-007, O-008, and O-009 are resolved in `Game
 
 # Kolejka wykonawcza
 
-M0, M1, and M2 are complete; M3.1–M3.4 are `Done`, M3.5 is `Ready`, and no card is currently `Active`. The clean baseline recorded before this planning edit was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. The user must checkpoint these documentation changes before a new implementation writer begins.
+M0, M1, and M2 are complete; M3.1–M3.5 are `Done`, M3.6 is next, and no card is currently `Active`. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. The user must checkpoint the accepted M3.5 code and documentation before a new implementation writer begins.
 
 The next safe sequence is:
 
-1. checkpoint the accepted design/roadmap documentation and restore a clean worktree;
-2. execute `M3.5` without pulling in route-leg or inventory behavior;
-3. continue `M3.6`–`M3.10` through their normal reviews;
-4. execute `M3.11` and `M3.12` before M4 so generation, replay, atlas observations, and tool sources share stable route-segment identity;
-5. complete the no-backpack vertical slice through `M7.8`, then make the explicit M9 verdict;
-6. keep M9 deferred and last unless the owner explicitly changes that order.
+1. checkpoint the accepted M3.5 code and documentation to establish a clean worktree;
+2. continue `M3.6`–`M3.10` through their normal reviews;
+3. execute `M3.11` and `M3.12` before M4 so generation, replay, atlas observations, and tool sources share stable route-segment identity;
+4. complete the no-backpack vertical slice through `M7.8`, then make the explicit M9 verdict;
+5. keep M9 deferred and last unless the owner explicitly changes that order.
 
 `M0.9` remains deferred by owner decision. No implementation agent performs external history rewriting, exposes historical values, or runs BFG without a separate explicit request.
 
-### Rationale — why M3.5 remains next
+### Rationale — why M3.6 is next
 
-The accepted route and inventory design does not invalidate the central turn controller. Finishing the command-agnostic M3 pipeline first gives M3.11/M3.12 and M9 a tested atomic execution boundary, while inserting route identity before M4 prevents generator-era rework.
+The accepted M3.5 controller provides a tested, command-agnostic resolution boundary. M3.6 can now route input through that boundary and replay its results. M3.11/M3.12 and M9 can reuse the same boundary, while inserting route identity before M4 prevents generator-era rework.
 
 # Zasada aktualizacji roadmapy
 

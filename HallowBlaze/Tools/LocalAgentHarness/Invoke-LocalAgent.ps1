@@ -24,10 +24,10 @@ $ErrorActionPreference = 'Stop'
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
 
 function Get-RepoRelativePath([string] $repoRoot, [string] $fullPath) {
-    $root = $repoRoot.TrimEnd('\\', '/')
+    $root = $repoRoot.TrimEnd('\', '/')
     $prefix = $root + [IO.Path]::DirectorySeparatorChar
     if ($fullPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
-        return $fullPath.Substring($prefix.Length).Replace('\\', '/')
+        return $fullPath.Substring($prefix.Length).Replace('\', '/')
     }
     return $fullPath
 }
@@ -37,7 +37,7 @@ function Resolve-Allowlist([string] $projectRoot, [string[]] $relativePaths) {
         throw 'The local worker requires a non-empty closed allowlist.'
     }
 
-    $projectPrefix = $projectRoot.TrimEnd('\\', '/') + [IO.Path]::DirectorySeparatorChar
+    $projectPrefix = $projectRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
     $resolved = [Collections.Generic.List[string]]::new()
     foreach ($relativePath in $relativePaths) {
         if ([string]::IsNullOrWhiteSpace($relativePath) `
@@ -46,9 +46,9 @@ function Resolve-Allowlist([string] $projectRoot, [string[]] $relativePaths) {
             throw "Invalid allowlist path: $relativePath"
         }
 
-        $fullPath = [IO.Path]::GetFullPath((Join-Path $projectRoot $relativePath)).TrimEnd('\\', '/')
+        $fullPath = [IO.Path]::GetFullPath((Join-Path $projectRoot $relativePath)).TrimEnd('\', '/')
         if (-not ($fullPath + [IO.Path]::DirectorySeparatorChar).StartsWith($projectPrefix, [StringComparison]::OrdinalIgnoreCase) `
-            -and -not $fullPath.Equals($projectRoot.TrimEnd('\\', '/'), [StringComparison]::OrdinalIgnoreCase)) {
+            -and -not $fullPath.Equals($projectRoot.TrimEnd('\', '/'), [StringComparison]::OrdinalIgnoreCase)) {
             throw "Allowlist path escapes the Unity project root: $relativePath"
         }
         [void] $resolved.Add($fullPath)
@@ -71,7 +71,7 @@ function Get-ChangedProjectPaths([string] $repoRoot) {
         }
         foreach ($relativePath in $output) {
             if ([string]::IsNullOrWhiteSpace([string] $relativePath)) { continue }
-            $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot ([string] $relativePath))).TrimEnd('\\', '/')
+            $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot ([string] $relativePath))).TrimEnd('\', '/')
             if (-not $paths.Contains($fullPath)) {
                 [void] $paths.Add($fullPath)
             }
@@ -219,7 +219,7 @@ function Get-PatchPaths([string] $repoRoot, [string] $patchPath) {
         if ($relativePath -match '\{.*=>.*\}') {
             throw 'Rename/move patches are not supported by the local-worker patch protocol. Delegate them as a separate explicitly authorized operation.'
         }
-        $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $relativePath)).TrimEnd('\\', '/')
+        $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $relativePath)).TrimEnd('\', '/')
         if (-not $paths.Contains($fullPath)) {
             [void] $paths.Add($fullPath)
         }
@@ -278,8 +278,8 @@ try {
         throw 'Invoke-LocalAgent.ps1 must be run from inside the HallowBlaze Git repository.'
     }
 
-    $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')).TrimEnd('\\', '/')
-    $repoPrefix = $repoRoot.TrimEnd('\\', '/') + [IO.Path]::DirectorySeparatorChar
+    $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')).TrimEnd('\', '/')
+    $repoPrefix = $repoRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
     if (-not ($projectRoot + [IO.Path]::DirectorySeparatorChar).StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
         throw "LocalAgentHarness is not located inside the detected Git repository. Project root: $projectRoot; Git root: $repoRoot"
     }
@@ -372,24 +372,32 @@ $commonExecutionRules
 
     $outputPath = Join-Path $env:TEMP ("HallowBlaze-local-$Role-final-" + [Guid]::NewGuid().ToString('N') + '.txt')
     $workerLogPath = Join-Path $env:TEMP ("HallowBlaze-local-$Role-log-" + [Guid]::NewGuid().ToString('N') + '.txt')
-    $catalogOverride = 'model_catalog_json="' + $CatalogPath.Replace('\\', '/') + '"'
+    $catalogOverride = 'model_catalog_json="' + $CatalogPath.Replace('\', '/') + '"'
     $codexExitCode = $null
     $finalMessage = ''
 
     Push-Location $projectRoot
     try {
-        $workerOutput = @(
-            $prompt | & $codexPath `
-                --profile $Profile `
-                -m $Model `
-                -c $catalogOverride `
-                --config 'model_reasoning_effort="none"' `
-                exec `
-                --sandbox $sandbox `
-                -o $outputPath `
-                - 2>&1
-        )
-        $codexExitCode = $LASTEXITCODE
+        $previousNativeErrorActionPreference = $ErrorActionPreference
+        try {
+            # Windows PowerShell treats native stderr as errors, including normal Codex diagnostics.
+            $ErrorActionPreference = 'Continue'
+            $workerOutput = @(
+                $prompt | & $codexPath `
+                    --profile $Profile `
+                    -m $Model `
+                    -c $catalogOverride `
+                    --config 'model_reasoning_effort="none"' `
+                    exec `
+                    --sandbox $sandbox `
+                    -o $outputPath `
+                    - 2>&1
+            )
+            $codexExitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previousNativeErrorActionPreference
+        }
         [IO.File]::WriteAllLines(
             $workerLogPath,
             @($workerOutput | ForEach-Object { [string] $_ }),

@@ -11,7 +11,7 @@ namespace HallowBlaze.Core.Turns.Resolution
     /// Resolves one player command against authoritative board and run state.
     /// Rejected commands leave both states unchanged.
     /// </summary>
-    public sealed class TurnResolver
+    public sealed class TurnResolver : IPlayerPhaseResolver
     {
         private const int ActionFoodCost = 1;
         private const long MaxInteractionDistance = 1;
