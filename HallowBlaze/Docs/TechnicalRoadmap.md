@@ -1480,7 +1480,8 @@ Tool use, pickup semantics, zombie phases, additional commands, the resolver, pr
 
 ## `M3.4` — Resolver ruchu, `Wait` i podstawowej interakcji
 
-**Status:** `Planned`  
+**Status:** `Done` - completed 2026-09-27; writer: `GitHub Copilot`
+
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 9 i 10.
 
@@ -1506,21 +1507,36 @@ Tool use, pickup semantics, zombie phases, additional commands, the resolver, pr
 
 **Wymagany handoff:** Macierz komend i kosztów; wskazać roboczą semantykę O-003 albo potwierdzić, że jej nie implementowano.
 
+**Validation result:** Unity `6000.3.21f1`, focused EditMode filter `HallowBlaze.Tests.EditMode.MovementResolverTests`: `14/14 Passed`, `0 failed`, `0 skipped`, `0 inconclusive`; full EditMode: `223/223 Passed`, `0 failed`, `0 skipped`, `0 inconclusive`. The pure domain graph and focused test file also compiled independently through Roslyn against `netstandard2.1`. Independent `qwen-reviewer` verdict: `PASS` with no findings.
+
+**Resolver handoff:**
+
+| Command | Accepted cost | Rejection codes | Ordered accepted events |
+| --- | --- | --- | --- |
+| `MoveCommand` | exactly one turn and `1` Food | `InvalidState`, `OutOfBounds`, `Blocked` | `EntityMoved`, optional `ItemCollected` + `FoodRestored`, `ActionCostApplied`, then `PlayerStarved` or optional `ExitReached` |
+| `WaitCommand` | exactly one turn and `1` Food | `InvalidState` | `EntityWaited`, `ActionCostApplied`, optional `PlayerStarved` |
+| `InteractCommand` | exactly one turn and `1` Food | `InvalidState`, `InvalidTarget`, `NoInteractionAvailable` | `InteractionPerformed`, `ActionCostApplied`, optional `PlayerStarved` |
+| null or unsupported `PlayerCommand` | none | `InvalidCommand` | none |
+
+Movement requires explicit walkable terrain, rejects non-walkable obstacles and actor occupancy, and changes the player position by exactly one orthogonal cell. Interaction requires an existing explicitly interactable target on the player's cell or one orthogonal cell away. Every rejection occurs before board or run mutation.
+
+Food pickup follows resolved O-003: entering a food item's cell removes it and restores its explicit reward before the action cost; non-food items remain for explicit interaction. Terminal ordering follows resolved O-002: starvation after the cost stops resolution before `ExitReached`, while food collected during the same move may keep the player alive and allow the exit outcome. Zombie phases, tool effects, pushing, animation, presentation, and legacy `MonoBehaviour` integration remain intentionally outside M3.4.
+
 ---
 
 ## `M3.5` — Centralny `TurnController`
 
-**Status:** `Planned` — nie może przejść na `Ready` bez decyzji O-002  
+**Status:** `Ready`
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcja 10 oraz O-002.
 
 **Rationale:** Priorytet nagrody, kosztu, śmierci, wyjścia, intentów i środowiska jest regułą gry. Jawny kontroler umożliwia deterministyczne testy oraz zatrzymuje późniejsze fazy po końcu planszy.
 
-**Obecne zachowanie:** Kolejność zależy od callbacków, coroutine i flag w `GameManager`; O-002 pozostaje decyzją właściciela.
+**Obecne zachowanie:** Kolejność integracyjna nadal zależy od callbacków, coroutine i flag w `GameManager`; O-002 jest rozstrzygnięte w kontrakcie i zaimplementowane w resolverze M3.4.
 
 **Oczekiwany rezultat:** Kontroler realizuje dokładnie dziewięć faz z kontraktu, posiada blokadę wejścia i zwraca jeden `TurnResult` do prezentacji.
 
-**Zakres:** Faza gracza, early terminal checks, placeholder fazy zablokowanych intentów, środowisko i ponowne planowanie; jawne rozstrzygnięcie simultaneous exit/starvation po aktualizacji kontraktu.
+**Zakres:** Faza gracza, early terminal checks zgodne z rozstrzygniętym O-002, placeholder fazy zablokowanych intentów, środowisko i ponowne planowanie.
 
 **Non-goals:** Bez zaawansowanego AI, real-time input buffering, animacji, narzędzi i pogody.
 
