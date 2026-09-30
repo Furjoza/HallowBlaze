@@ -120,12 +120,12 @@ If the Developer reports `ARCHITECTURE_DECISION_REQUIRED`, `SCOPE_CHANGE_REQUIRE
 Keep premium Lead context small.
 
 - A normal implementation round gets one local Developer invocation.
-- One additional targeted Developer retry is allowed only for a transport/protocol failure with no unexpected repository mutation.
+- One additional targeted Developer retry is allowed only for a transport/protocol failure with no unexpected repository mutation. A launcher/bootstrap failure that occurs before the local model receives the task is an environment failure, not a consumed Developer attempt.
 - Never run repeated local-model probes, model swaps, Codex-source inspection, or web research as an automatic recovery loop.
 - Do not use `qwen-reviewer` as an ad-hoc writer.
 - Treat harness diagnosis as a separate task; only enter it when the user explicitly asks to diagnose the harness.
 - The runner intentionally suppresses the local Codex transcript on success. Consume only its compact final result and repository evidence.
-- On runner failure, use the concise error and optional temp log path. Do not dump the whole worker log into the Lead conversation unless a small targeted excerpt is necessary.
+- On runner failure, use the concise error and optional temp log path. Do not dump the whole worker log into the Lead conversation unless a small targeted excerpt is necessary. If the runner reports a HOME/CODEX_HOME bootstrap failure, do not investigate Codex internals or the web during the ticket; report the environment blocker or apply only the documented harness bootstrap fix.
 
 # Completion gate
 
