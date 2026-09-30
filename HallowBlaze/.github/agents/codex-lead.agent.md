@@ -82,13 +82,14 @@ Provide a compact task packet containing:
 - relevant files and context already discovered;
 - the exact required validation command when one is known.
 
-Invoke the worker through the runner. Use a PowerShell here-string so the task packet is not mangled by shell quoting:
+Invoke the worker through the runner. Each VS Code Agent Host shell may start with a restrictive execution policy, so set `ExecutionPolicy` to `Bypass` for that one PowerShell process immediately before invoking the project runner. This is process-scoped only and must not be written to CurrentUser/LocalMachine policy. Use a PowerShell here-string so the task packet is not mangled by shell quoting:
 
 ```powershell
 $task = @'
 <compact developer task packet>
 '@
 
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 & .\Tools\LocalAgentHarness\Invoke-LocalAgent.ps1 `
   -Role developer `
   -Task $task `
@@ -120,6 +121,7 @@ If the Developer reports `ARCHITECTURE_DECISION_REQUIRED`, `SCOPE_CHANGE_REQUIRE
 Keep premium Lead context small.
 
 - A normal implementation round gets one local Developer invocation.
+- Always set process-scoped `ExecutionPolicy Bypass` before the runner call so an unsigned project script is not attempted first and then retried.
 - One additional targeted Developer retry is allowed only for a transport/protocol failure with no unexpected repository mutation. A launcher/bootstrap failure that occurs before the local model receives the task is an environment failure, not a consumed Developer attempt.
 - Never run repeated local-model probes, model swaps, Codex-source inspection, or web research as an automatic recovery loop.
 - Do not use `qwen-reviewer` as an ad-hoc writer.
@@ -167,6 +169,7 @@ $reviewTask = @'
 <compact review packet>
 '@
 
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 & .\Tools\LocalAgentHarness\Invoke-LocalAgent.ps1 `
   -Role reviewer `
   -Task $reviewTask `

@@ -22,12 +22,31 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
+$pathTrimChars = [char[]] @([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+
+function Remove-TrailingDirectorySeparators([string] $path) {
+    if ([string]::IsNullOrWhiteSpace($path)) { return $path }
+
+    $root = [IO.Path]::GetPathRoot($path)
+    if (-not [string]::IsNullOrWhiteSpace($root) `
+        -and $path.Equals($root, [StringComparison]::OrdinalIgnoreCase)) {
+        return $path
+    }
+
+    # Pass one explicit Char[] argument. This avoids Windows PowerShell 5.1
+    # overload-binding failures from String.TrimEnd('\\', '/').
+    return $path.TrimEnd($script:pathTrimChars)
+}
+
+function Get-NormalizedFullPath([string] $path) {
+    return (Remove-TrailingDirectorySeparators ([IO.Path]::GetFullPath($path)))
+}
 
 function Get-RepoRelativePath([string] $repoRoot, [string] $fullPath) {
-    $root = $repoRoot.TrimEnd('\\', '/')
+    $root = Remove-TrailingDirectorySeparators $repoRoot
     $prefix = $root + [IO.Path]::DirectorySeparatorChar
     if ($fullPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
-        return $fullPath.Substring($prefix.Length).Replace('\\', '/')
+        return $fullPath.Substring($prefix.Length).Replace('\', '/')
     }
     return $fullPath
 }
@@ -37,7 +56,7 @@ function Resolve-Allowlist([string] $projectRoot, [string[]] $relativePaths) {
         throw 'The local worker requires a non-empty closed allowlist.'
     }
 
-    $projectPrefix = $projectRoot.TrimEnd('\\', '/') + [IO.Path]::DirectorySeparatorChar
+    $projectPrefix = (Remove-TrailingDirectorySeparators $projectRoot) + [IO.Path]::DirectorySeparatorChar
     $resolved = [Collections.Generic.List[string]]::new()
     foreach ($relativePath in $relativePaths) {
         if ([string]::IsNullOrWhiteSpace($relativePath) `
@@ -46,9 +65,9 @@ function Resolve-Allowlist([string] $projectRoot, [string[]] $relativePaths) {
             throw "Invalid allowlist path: $relativePath"
         }
 
-        $fullPath = [IO.Path]::GetFullPath((Join-Path $projectRoot $relativePath)).TrimEnd('\\', '/')
+        $fullPath = Get-NormalizedFullPath (Join-Path $projectRoot $relativePath)
         if (-not ($fullPath + [IO.Path]::DirectorySeparatorChar).StartsWith($projectPrefix, [StringComparison]::OrdinalIgnoreCase) `
-            -and -not $fullPath.Equals($projectRoot.TrimEnd('\\', '/'), [StringComparison]::OrdinalIgnoreCase)) {
+            -and -not $fullPath.Equals((Remove-TrailingDirectorySeparators $projectRoot), [StringComparison]::OrdinalIgnoreCase)) {
             throw "Allowlist path escapes the Unity project root: $relativePath"
         }
         [void] $resolved.Add($fullPath)
@@ -71,7 +90,7 @@ function Get-ChangedProjectPaths([string] $repoRoot) {
         }
         foreach ($relativePath in $output) {
             if ([string]::IsNullOrWhiteSpace([string] $relativePath)) { continue }
-            $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot ([string] $relativePath))).TrimEnd('\\', '/')
+            $fullPath = Get-NormalizedFullPath (Join-Path $repoRoot ([string] $relativePath))
             if (-not $paths.Contains($fullPath)) {
                 [void] $paths.Add($fullPath)
             }
@@ -219,7 +238,7 @@ function Get-PatchPaths([string] $repoRoot, [string] $patchPath) {
         if ($relativePath -match '\{.*=>.*\}') {
             throw 'Rename/move patches are not supported by the local-worker patch protocol. Delegate them as a separate explicitly authorized operation.'
         }
-        $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $relativePath)).TrimEnd('\\', '/')
+        $fullPath = Get-NormalizedFullPath (Join-Path $repoRoot $relativePath)
         if (-not $paths.Contains($fullPath)) {
             [void] $paths.Add($fullPath)
         }
@@ -280,8 +299,8 @@ try {
         throw 'Invoke-LocalAgent.ps1 must be run from inside the HallowBlaze Git repository.'
     }
 
-    $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')).TrimEnd('\\', '/')
-    $repoPrefix = $repoRoot.TrimEnd('\\', '/') + [IO.Path]::DirectorySeparatorChar
+    $projectRoot = Get-NormalizedFullPath (Join-Path $PSScriptRoot '..\..')
+    $repoPrefix = (Remove-TrailingDirectorySeparators $repoRoot) + [IO.Path]::DirectorySeparatorChar
     if (-not ($projectRoot + [IO.Path]::DirectorySeparatorChar).StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
         throw "LocalAgentHarness is not located inside the detected Git repository. Project root: $projectRoot; Git root: $repoRoot"
     }
@@ -318,13 +337,13 @@ try {
     if ([string]::IsNullOrWhiteSpace($userProfile)) {
         throw 'Unable to resolve the Windows user profile for Codex CLI. USERPROFILE and HOMEDRIVE/HOMEPATH are unavailable.'
     }
-    $userProfile = [IO.Path]::GetFullPath($userProfile).TrimEnd('\', '/')
+    $userProfile = Get-NormalizedFullPath $userProfile
 
     $codexHome = [Environment]::GetEnvironmentVariable('CODEX_HOME', 'Process')
     if ([string]::IsNullOrWhiteSpace($codexHome)) {
         $codexHome = Join-Path $userProfile '.codex'
     }
-    $codexHome = [IO.Path]::GetFullPath($codexHome).TrimEnd('\', '/')
+    $codexHome = Get-NormalizedFullPath $codexHome
     if (-not (Test-Path -LiteralPath $codexHome -PathType Container)) {
         throw "Codex home not found: $codexHome. Run Codex CLI once interactively or Initialize-LocalAgentCodexProfiles.ps1 from your normal terminal."
     }
@@ -403,7 +422,7 @@ $commonExecutionRules
 
     $outputPath = Join-Path $env:TEMP ("HallowBlaze-local-$Role-final-" + [Guid]::NewGuid().ToString('N') + '.txt')
     $workerLogPath = Join-Path $env:TEMP ("HallowBlaze-local-$Role-log-" + [Guid]::NewGuid().ToString('N') + '.txt')
-    $catalogOverride = 'model_catalog_json="' + $CatalogPath.Replace('\\', '/') + '"'
+    $catalogOverride = 'model_catalog_json="' + $CatalogPath.Replace('\', '/') + '"'
     $codexExitCode = $null
     $finalMessage = ''
 
