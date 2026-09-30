@@ -541,8 +541,16 @@ $commonExecutionRules
             $hasExplicitNoPatch = $true
         }
         elseif (-not $hasExplicitNoPatch -and -not $hasBlocker) {
-            $keepWorkerLog = $true
-            throw "LOCAL_WORKER_PROTOCOL_ERROR: Developer returned neither a DEVELOPER_PATCH block nor DEVELOPER_NO_PATCH/blocker marker. worker_log=$workerLogPath"
+            if ($RequirePatch) {
+                $keepWorkerLog = $true
+                throw "LOCAL_DEVELOPER_NO_PATCH: This invocation requires a repository mutation, but the Developer returned no usable patch. worker_log=$workerLogPath"
+            }
+
+            # For explicitly read-only/no-change invocations, Codex-compatible local models may
+            # finish with a plain-language completion instead of the optional DEVELOPER_NO_PATCH
+            # marker. Treat a successful process with no non-empty patch as an implicit no-change
+            # result. Repository integrity is still verified below before reporting success.
+            $hasExplicitNoPatch = $true
         }
 
         if ($RequirePatch -and -not $patchApplied -and -not $hasBlocker) {
