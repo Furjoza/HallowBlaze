@@ -24,10 +24,10 @@ $ErrorActionPreference = 'Stop'
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
 
 function Get-RepoRelativePath([string] $repoRoot, [string] $fullPath) {
-    $root = $repoRoot.TrimEnd('\', '/')
+    $root = $repoRoot.TrimEnd('\\', '/')
     $prefix = $root + [IO.Path]::DirectorySeparatorChar
     if ($fullPath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
-        return $fullPath.Substring($prefix.Length).Replace('\', '/')
+        return $fullPath.Substring($prefix.Length).Replace('\\', '/')
     }
     return $fullPath
 }
@@ -37,7 +37,7 @@ function Resolve-Allowlist([string] $projectRoot, [string[]] $relativePaths) {
         throw 'The local worker requires a non-empty closed allowlist.'
     }
 
-    $projectPrefix = $projectRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    $projectPrefix = $projectRoot.TrimEnd('\\', '/') + [IO.Path]::DirectorySeparatorChar
     $resolved = [Collections.Generic.List[string]]::new()
     foreach ($relativePath in $relativePaths) {
         if ([string]::IsNullOrWhiteSpace($relativePath) `
@@ -46,9 +46,9 @@ function Resolve-Allowlist([string] $projectRoot, [string[]] $relativePaths) {
             throw "Invalid allowlist path: $relativePath"
         }
 
-        $fullPath = [IO.Path]::GetFullPath((Join-Path $projectRoot $relativePath)).TrimEnd('\', '/')
+        $fullPath = [IO.Path]::GetFullPath((Join-Path $projectRoot $relativePath)).TrimEnd('\\', '/')
         if (-not ($fullPath + [IO.Path]::DirectorySeparatorChar).StartsWith($projectPrefix, [StringComparison]::OrdinalIgnoreCase) `
-            -and -not $fullPath.Equals($projectRoot.TrimEnd('\', '/'), [StringComparison]::OrdinalIgnoreCase)) {
+            -and -not $fullPath.Equals($projectRoot.TrimEnd('\\', '/'), [StringComparison]::OrdinalIgnoreCase)) {
             throw "Allowlist path escapes the Unity project root: $relativePath"
         }
         [void] $resolved.Add($fullPath)
@@ -71,7 +71,7 @@ function Get-ChangedProjectPaths([string] $repoRoot) {
         }
         foreach ($relativePath in $output) {
             if ([string]::IsNullOrWhiteSpace([string] $relativePath)) { continue }
-            $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot ([string] $relativePath))).TrimEnd('\', '/')
+            $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot ([string] $relativePath))).TrimEnd('\\', '/')
             if (-not $paths.Contains($fullPath)) {
                 [void] $paths.Add($fullPath)
             }
@@ -219,7 +219,7 @@ function Get-PatchPaths([string] $repoRoot, [string] $patchPath) {
         if ($relativePath -match '\{.*=>.*\}') {
             throw 'Rename/move patches are not supported by the local-worker patch protocol. Delegate them as a separate explicitly authorized operation.'
         }
-        $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $relativePath)).TrimEnd('\', '/')
+        $fullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $relativePath)).TrimEnd('\\', '/')
         if (-not $paths.Contains($fullPath)) {
             [void] $paths.Add($fullPath)
         }
@@ -260,6 +260,8 @@ $previousOutputEncoding = $OutputEncoding
 $previousConsoleInputEncoding = [Console]::InputEncoding
 $previousConsoleOutputEncoding = [Console]::OutputEncoding
 $previousGitOptionalLocks = $env:GIT_OPTIONAL_LOCKS
+$previousHome = $env:HOME
+$previousCodexHome = $env:CODEX_HOME
 
 $OutputEncoding = $utf8NoBom
 [Console]::InputEncoding = $utf8NoBom
@@ -278,8 +280,8 @@ try {
         throw 'Invoke-LocalAgent.ps1 must be run from inside the HallowBlaze Git repository.'
     }
 
-    $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')).TrimEnd('\', '/')
-    $repoPrefix = $repoRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')).TrimEnd('\\', '/')
+    $repoPrefix = $repoRoot.TrimEnd('\\', '/') + [IO.Path]::DirectorySeparatorChar
     if (-not ($projectRoot + [IO.Path]::DirectorySeparatorChar).StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
         throw "LocalAgentHarness is not located inside the detected Git repository. Project root: $projectRoot; Git root: $repoRoot"
     }
@@ -302,13 +304,42 @@ try {
         $Model = if ($Role -eq 'developer') { 'devstral-small-2:24b' } else { 'qwen3.6:27b' }
     }
 
+    # Agent Host / checkpoint-restored PowerShell processes can have HOME unset even
+    # when USERPROFILE is present. Codex CLI uses CODEX_HOME for its user-level
+    # config/profile/auth/state, so make that location explicit for the child process.
+    $userProfile = [Environment]::GetEnvironmentVariable('USERPROFILE', 'Process')
+    if ([string]::IsNullOrWhiteSpace($userProfile)) {
+        $homeDrive = [Environment]::GetEnvironmentVariable('HOMEDRIVE', 'Process')
+        $homePath = [Environment]::GetEnvironmentVariable('HOMEPATH', 'Process')
+        if (-not [string]::IsNullOrWhiteSpace($homeDrive) -and -not [string]::IsNullOrWhiteSpace($homePath)) {
+            $userProfile = $homeDrive + $homePath
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($userProfile)) {
+        throw 'Unable to resolve the Windows user profile for Codex CLI. USERPROFILE and HOMEDRIVE/HOMEPATH are unavailable.'
+    }
+    $userProfile = [IO.Path]::GetFullPath($userProfile).TrimEnd('\', '/')
+
+    $codexHome = [Environment]::GetEnvironmentVariable('CODEX_HOME', 'Process')
+    if ([string]::IsNullOrWhiteSpace($codexHome)) {
+        $codexHome = Join-Path $userProfile '.codex'
+    }
+    $codexHome = [IO.Path]::GetFullPath($codexHome).TrimEnd('\', '/')
+    if (-not (Test-Path -LiteralPath $codexHome -PathType Container)) {
+        throw "Codex home not found: $codexHome. Run Codex CLI once interactively or Initialize-LocalAgentCodexProfiles.ps1 from your normal terminal."
+    }
+
+    # Normalize the environment only for this runner process and its Codex child.
+    # We restore the previous values in finally.
+    $env:HOME = $userProfile
+    $env:CODEX_HOME = $codexHome
+
     if ([string]::IsNullOrWhiteSpace($CatalogPath)) {
-        $codexDir = Join-Path $HOME '.codex'
         $CatalogPath = if ($Role -eq 'developer') {
-            Join-Path $codexDir 'hallowblaze-devstral-model.json'
+            Join-Path $codexHome 'hallowblaze-devstral-model.json'
         }
         else {
-            Join-Path $codexDir 'hallowblaze-qwen-reviewer-model.json'
+            Join-Path $codexHome 'hallowblaze-qwen-reviewer-model.json'
         }
     }
     $CatalogPath = [IO.Path]::GetFullPath($CatalogPath)
@@ -372,32 +403,24 @@ $commonExecutionRules
 
     $outputPath = Join-Path $env:TEMP ("HallowBlaze-local-$Role-final-" + [Guid]::NewGuid().ToString('N') + '.txt')
     $workerLogPath = Join-Path $env:TEMP ("HallowBlaze-local-$Role-log-" + [Guid]::NewGuid().ToString('N') + '.txt')
-    $catalogOverride = 'model_catalog_json="' + $CatalogPath.Replace('\', '/') + '"'
+    $catalogOverride = 'model_catalog_json="' + $CatalogPath.Replace('\\', '/') + '"'
     $codexExitCode = $null
     $finalMessage = ''
 
     Push-Location $projectRoot
     try {
-        $previousNativeErrorActionPreference = $ErrorActionPreference
-        try {
-            # Windows PowerShell treats native stderr as errors, including normal Codex diagnostics.
-            $ErrorActionPreference = 'Continue'
-            $workerOutput = @(
-                $prompt | & $codexPath `
-                    --profile $Profile `
-                    -m $Model `
-                    -c $catalogOverride `
-                    --config 'model_reasoning_effort="none"' `
-                    exec `
-                    --sandbox $sandbox `
-                    -o $outputPath `
-                    - 2>&1
-            )
-            $codexExitCode = $LASTEXITCODE
-        }
-        finally {
-            $ErrorActionPreference = $previousNativeErrorActionPreference
-        }
+        $workerOutput = @(
+            $prompt | & $codexPath `
+                --profile $Profile `
+                -m $Model `
+                -c $catalogOverride `
+                --config 'model_reasoning_effort="none"' `
+                exec `
+                --sandbox $sandbox `
+                -o $outputPath `
+                - 2>&1
+        )
+        $codexExitCode = $LASTEXITCODE
         [IO.File]::WriteAllLines(
             $workerLogPath,
             @($workerOutput | ForEach-Object { [string] $_ }),
@@ -526,6 +549,8 @@ finally {
     }
 
     $env:GIT_OPTIONAL_LOCKS = $previousGitOptionalLocks
+$env:HOME = $previousHome
+$env:CODEX_HOME = $previousCodexHome
     $OutputEncoding = $previousOutputEncoding
     [Console]::InputEncoding = $previousConsoleInputEncoding
     [Console]::OutputEncoding = $previousConsoleOutputEncoding
