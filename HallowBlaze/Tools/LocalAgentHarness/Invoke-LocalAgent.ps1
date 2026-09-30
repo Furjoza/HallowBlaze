@@ -428,18 +428,29 @@ $commonExecutionRules
 
     Push-Location $projectRoot
     try {
-        $workerOutput = @(
-            $prompt | & $codexPath `
-                --profile $Profile `
-                -m $Model `
-                -c $catalogOverride `
-                --config 'model_reasoning_effort="none"' `
-                exec `
-                --sandbox $sandbox `
-                -o $outputPath `
-                - 2>&1
-        )
-        $codexExitCode = $LASTEXITCODE
+        # Windows PowerShell 5.1 turns native stderr records into PowerShell errors.
+        # Codex writes normal banner/progress output to stderr even when it succeeds,
+        # so the script-wide ErrorActionPreference='Stop' must not wrap this native call.
+        $previousErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $workerOutput = @(
+                $prompt | & $codexPath `
+                    --profile $Profile `
+                    -m $Model `
+                    -c $catalogOverride `
+                    --config 'model_reasoning_effort="none"' `
+                    exec `
+                    --sandbox $sandbox `
+                    -o $outputPath `
+                    - 2>&1
+            )
+            $codexExitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+
         [IO.File]::WriteAllLines(
             $workerLogPath,
             @($workerOutput | ForEach-Object { [string] $_ }),
