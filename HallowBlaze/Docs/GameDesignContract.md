@@ -3,9 +3,9 @@
 | Pole | Wartość |
 | --- | --- |
 | Status | Żywy kontrakt; obowiązuje do jawnej zmiany |
-| Wersja | 0.2 |
-| Ostatnia aktualizacja | 2026-08-29 |
-| Zakres | Pierwszy grywalny vertical slice i fundament dalszej produkcji |
+| Wersja | 0.3 |
+| Ostatnia aktualizacja | 2026-09-27 |
+| Zakres | First playable vertical slice, multi-board route foundation, and the accepted-but-deferred inventory contract |
 
 ## 1. Cel dokumentu
 
@@ -162,10 +162,11 @@ Trudność rośnie przez kombinacje reguł, topologię, teren, informacje i zaso
 | Profil / kampania | Trwały zapis jednego atlasu i wiedzy między wyprawami |
 | Atlas | Graficzna i danych reprezentacja odkrytego świata |
 | Wyprawa / run | Jedna próba od południowego startu do śmierci albo finału |
-| Dzień / etap | Jedno przesunięcie wyprawy na makromapie; nie pojedyncza akcja |
+| Dzień / etap | One committed journey along a world edge; it may contain multiple local boards and is numbered from 1 |
 | Węzeł / node | Stałe miejsce na makromapie |
-| Droga / edge | Połączenie dwóch węzłów i możliwy kierunek podróży |
-| Plansza / board | Lokalna, turowa przestrzeń kafelkowa dla jednego etapu |
+| Droga / edge | A directed connection between nodes that owns an ordered list of stable route segments |
+| Odcinek drogi / route segment | One stable, addressable local-board position within an edge |
+| Plansza / board | The local turn-based grid for one route segment; it is not itself a day |
 | Tura | Jedna zaakceptowana akcja planszowa oraz wynikające z niej fazy |
 | Landmark | Ręcznie zaprojektowany węzeł specjalny używający głównych zasad gry |
 | Fakt | Trwale odnotowana obserwacja dotycząca mechaniki lub świata |
@@ -180,7 +181,8 @@ Słowo „level” w obecnym kodzie oznacza jednocześnie dzień, numer sceny i 
 
 - Nowy kod powinien używać nazw domenowych z tabeli.
 - `level` może pozostać przejściowo w adapterze starego kodu, ale nie powinien wejść do nowych modeli.
-- Dzień zwiększa się raz w kontrolowanym przepływie podróży, a nie w `sceneLoaded`.
+- Day numbering starts at `1` and advances exactly once when a new route leg begins, never on scene load or between its local boards.
+- A local board is addressed by stable edge and segment identity rather than by day or destination node alone.
 
 ## 5. Główna pętla gry
 
@@ -197,6 +199,18 @@ wejście do miejsca
 → wybór drogi
 → trwała aktualizacja atlasu
 → kolejny dzień lub finał
+```
+
+After `M3.12`, the route-leg loop supersedes the legacy assumption that every local board opens the atlas:
+
+```text
+arrive at a node/checkpoint
+→ inspect the atlas and commit one outgoing edge
+→ show Day N once, with the gameplay HUD hidden
+→ resolve the edge's ordered local boards
+→ intermediate exit advances to the next segment without route choice or day increment
+→ final exit records the completed leg, reaches the destination node, and opens the atlas
+→ choose the next edge or enter the finale
 ```
 
 Pętla między wyprawami:
@@ -218,6 +232,8 @@ Plansza zapewnia krótkoterminową taktykę, wybór drogi zapewnia strategię wy
 - Ukończenie planszy nie może samodzielnie przeładowywać sceny.
 - `LevelFlowController` powinien koordynować zapis, mapę, wybór i następną planszę.
 - Wyjście generuje wynik domenowy `ExitReached`, na który reaguje przepływ gry.
+- The travel flow, not `BoardManager`, decides whether `ExitReached` advances to another segment or completes the edge.
+- `Traversed` and destination `Visited` are committed only after the last segment, not when the route is selected.
 
 ### Walidacja
 
@@ -236,9 +252,9 @@ Gracz powinien umieć odróżnić:
 
 | Warstwa | Przykładowa zawartość | Czas życia |
 | --- | --- | --- |
-| `ProfileState` | atlas, odkryte fakty, statystyki | wiele runów |
-| `RunState` | zdrowie, jedzenie, narzędzia, bieżący węzeł i trasa | do śmierci lub zwycięstwa |
-| `BoardState` | pozycje, przeszkody, łupy, zombie, efekty pola | jedna plansza lub jej snapshot |
+| `ProfileState` | atlas, discovered facts, historical route observations, known fixed tool sources, statistics | wiele runów |
+| `RunState` | health, satiety/legacy food, tools, carried items, reached checkpoint, active route leg, travel log | do śmierci lub zwycięstwa |
+| `BoardState` | positions, obstacles, ground item instances, zombies, field effects | jedna plansza lub jej snapshot |
 
 #### Rationale — dlaczego
 
@@ -263,6 +279,8 @@ Obecny stan jest rozproszony między `GameManager`, `PlayerScript`, komponentami
 - trasę bieżącej wyprawy;
 - status `Active`, `Dead` albo `Won`;
 - identyfikator lub snapshot aktywnej planszy, gdy wznowienie w jej środku zostanie wdrożone.
+
+`M3.11` extends this historical HB-010 baseline with an optional `ActiveRouteLegState`, a structured edge-based travel log, and stable board addressing. `M9` later extends it with `InventoryState` and replaces the runtime `Food` concept with `Satiety`. These are migrations of one source of truth, not parallel copies.
 
 #### Rationale — dlaczego
 
@@ -293,6 +311,8 @@ HB-010 nie jest „dodaniem kolejnej klasy z polami”. Jego celem jest uniezale
 - trwałe notatki;
 - `discoveredFactIds`;
 - podsumowania i statystyki wypraw.
+
+Structured route-resource samples and discovered fixed tool-source IDs belong here once `M7.4` and `M7.5` are implemented. They must not be encoded as free-form note strings or system-fact IDs.
 
 #### Rationale — dlaczego
 
@@ -325,6 +345,8 @@ Collider mówi, co aktualnie znajduje się w scenie, ale nie jest dobrym modelem
 - `Physics2D.Linecast` nie rozstrzyga przyszłych zasad.
 - `Transform` jest synchronizowany z modelem, a nie odwrotnie.
 - Dwa podmioty nie mogą zajmować jednego pola, chyba że konkretna warstwa jawnie na to pozwala.
+- A ground item remains owned by `BoardState` until an accepted atomic transfer or use removes that exact instance.
+- Discarding a carried item destroys it; it does not silently create a new ground entity.
 
 ### 6.5. Śmierć, restart i zapis
 
@@ -380,7 +402,7 @@ Menu otwierane podczas rozgrywki jest granicą sterowania, a nie kosmetyczną na
 
 #### Decyzja
 
-Makrograf świata jest stały między runami. Pierwszy vertical slice korzysta z ręcznie zaprojektowanego grafu. Lokalny układ planszy w danym węźle może być generowany ponownie.
+The world macrograph is stable between runs. The first vertical slice uses a hand-authored graph. A local layout belongs to a stable route segment and may be generated again for that segment in another run.
 
 W przyszłości nowy profil może otrzymywać świat wygenerowany raz z szablonów. W takim wariancie pełny wynik generowania grafu musi zostać zapisany; sam seed nie jest wystarczającą gwarancją po zmianach generatora.
 
@@ -392,7 +414,7 @@ Trwały atlas ma wartość tylko wtedy, gdy notatki odnoszą się do stabilnych 
 
 - Węzły i krawędzie mają stabilne tekstowe ID niezależne od kolejności w Inspectorze.
 - Zmiana lokalnego seeda nie zmienia położenia cmentarza, sadu ani landmarku.
-- Generator lokalnej planszy otrzymuje `worldNodeId` i rodzinę biomu jako dane wejściowe.
+- The local generator receives the full `BoardAddress`, segment generation configuration, and biome family. A node ID may be contextual metadata but never the board identity by itself.
 
 ### 7.2. Kierunek podróży
 
@@ -440,6 +462,8 @@ Jeden boolean `discovered` nie odróżnia plotki, obserwacji i osobistego doświ
 
 Trwale zapisywane są informacje stabilne, np. położenie, typ miejsca, landmark, charakterystyczny teren i stała relacja między drogami. Zwykłe łupy, dokładne rozmieszczenie zombie, pogoda oraz tymczasowe zdarzenia należą do runu lub planszy.
 
+Historical observations are also persistent knowledge without becoming promises about the next run. The atlas may retain what the player actually observed on a route, including a completed-sample range, while the next run's concrete item instances remain dynamic.
+
 #### Rationale — dlaczego
 
 Jeżeli atlas zapisuje losowe łupy tak, jakby zawsze tam były, zaczyna wprowadzać gracza w błąd. Jeżeli wszystko jest dynamiczne, mapa nie dostarcza użytecznej wiedzy. Jasny podział pozwala łączyć rozpoznawalność z niepewnością.
@@ -448,12 +472,13 @@ Jeżeli atlas zapisuje losowe łupy tak, jakby zawsze tam były, zaczyna wprowad
 
 - UI MUSI wizualnie odróżniać informacje trwałe od warunków aktualnej wyprawy.
 - Znana droga nie powinna zawsze być automatycznie najlepsza; jej wartość może zależeć od narzędzi, zasobów i pogody.
+- Atlas wording must distinguish an authored rumor, a past observation, and current-run availability.
 
 ### 7.5. Wybór drogi
 
 #### Decyzja
 
-Po planszy gracz wybiera spośród maksymalnie kilku kierunków opisanych obserwowalnymi, diegetycznymi wskazówkami. MVP nie pokazuje dokładnego łupu ani procentowego ryzyka.
+At a reached node, the player chooses among at most a few outgoing edges described by observable, diegetic clues. A rumor does not reveal exact loot or percentage risk. Exact numbers may appear only as clearly historical observations from completed travel, never as a guarantee for the next run.
 
 Przykłady:
 
@@ -472,6 +497,7 @@ Wybór „lewo albo prawo” bez informacji jest losowaniem, nie decyzją. Pełn
 - Każda krawędź posiada kierunek i dane wskazówki.
 - Ekran wyboru pokazuje wyłącznie wiedzę dostępną postaci.
 - Wybór jest zapisywany przed przejściem do następnej planszy.
+- The route view shows route length separately from aggregated resource knowledge so that a longer edge is not compared to a shorter edge by raw totals alone.
 
 ### 7.6. Język wizualny atlasu
 
@@ -521,7 +547,7 @@ Zwykła plansza vertical slice:
 - traktuje pola brzegowe jako normalną część przestrzeni;
 - oferuje więcej niż jedną sensowną linię ruchu, jeśli pozwala na to archetyp;
 - nie wymaga losowo zdobytego narzędzia do obowiązkowego wyjścia;
-- może być przelosowana przy kolejnej wyprawie do tego samego węzła;
+- may be regenerated on a later run for the same stable route segment;
 - jest walidowana przed pokazaniem graczowi.
 
 ### Rationale — dlaczego
@@ -531,6 +557,7 @@ Obecny generator losuje elementy tylko wewnątrz planszy, pozostawiając wolny o
 ### Konsekwencje implementacyjne
 
 - Generator najpierw tworzy `BoardBlueprint`, potem go waliduje, a dopiero na końcu tworzy widoki.
+- Every blueprint carries its full stable `BoardAddress`; node/day metadata alone cannot identify a local board.
 - Start, wyjścia i krytyczna droga są rezerwowane przed dekoracją.
 - Po ograniczonej liczbie nieudanych prób używany jest ręczny fallback.
 
@@ -576,6 +603,8 @@ Koszt musi zależeć od zaakceptowanej decyzji, nie od przypadkowego inputu, kla
 | podgląd mapy lub celu | nie | nie | nie |
 | wybór drogi między planszami | nie jest turą planszową | nie | nie |
 
+The automatic-food and fixed-cost rows above remain the active transitional contract through the no-backpack vertical slice. `M9` deliberately supersedes only those item/resource details with the accepted rules in section 27; completed cards such as `M3.4` remain historically correct.
+
 ### 10.2. Kolejność faz
 
 #### Decyzja
@@ -613,6 +642,7 @@ Jawna kolejność usuwa spory o to, czy zombie może uderzyć gracza już po uci
 - `TurnResolver` wylicza cały wynik przed animacją.
 - Prezentacja odtwarza `GameEvent[]`; nie liczy zasad ponownie.
 - Nie można rozpocząć dwóch resolverów jednocześnie.
+- Future composite commands must still produce one atomic `TurnResult`; a modal draft is never a partially resolved turn.
 
 ## 11. Zombie i intenty
 
@@ -700,12 +730,15 @@ Gracz ma dwa sloty narzędzi. Narzędzia są częścią `RunState`, mają ograni
 
 Dwa sloty wymuszają wybór bez tworzenia rozbudowanego inventory managementu. Ograniczone użycia tworzą koszt okazji. Alternatywa bez narzędzia chroni run przed softlockiem wynikającym z losowego dropu.
 
+The two slots remain a separate equipment bar after M9. They are not cells in the spatial bag, and side pockets are not tool slots.
+
 #### Konsekwencje implementacyjne
 
 - `ToolDefinition` zawiera niezmienne dane; stan konkretnej instancji znajduje się w runie.
 - Niepoprawny cel nie zużywa tury ani ładunku.
 - Zamiana narzędzia jest świadomą, modalną decyzją.
 - W vertical slice nie ma craftingu, drzewka ulepszeń ani rozbudowanych napraw.
+- A conscious tool pickup routes the tool instance to a free generic tool slot; with both slots occupied, the player chooses `Replace` or `Leave` and nothing is destroyed silently.
 
 ### 13.2. Siekiera
 
@@ -857,6 +890,10 @@ UI MUSI komunikować:
 
 Podstawowe informacje muszą być czytelne także przy wyłączonych animacjach.
 
+The full-screen transition shown once at the start of a route leg displays only `Day N`; gameplay health, satiety/food, pockets, and tool HUD are hidden behind it. Day numbering is player-facing from `1`, never `0`.
+
+After M9, the persistent bottom HUD order is `Left pocket | Tool slot 1 | Tool slot 2 | Right pocket`. Tool slots are generic even if the first content set contains only an axe and a shovel.
+
 ### Rationale — dlaczego
 
 Gra logiczna jest uczciwa tylko wtedy, gdy gracz ma dostęp do informacji potrzebnej do prognozy. Ukrywanie intentów lub kosztu akcji nie tworzy głębi; tworzy błędne założenia.
@@ -919,6 +956,7 @@ Poza zakresem pozostają:
 - procent ukończenia mapy;
 - obowiązek odwiedzenia każdego węzła;
 - pełny zapis środka planszy przed stabilizacją resolvera.
+- spatial backpack, side-pocket quick use, and the M9 satiety economy; these have an accepted deferred contract but are intentionally evaluated after the no-backpack vertical slice.
 
 ### Rationale — dlaczego
 
@@ -954,7 +992,7 @@ Jedna ścieżka wykonania zapobiega podwójnemu ruchowi, wielokrotnemu kosztowi 
 
 #### Decyzja
 
-Węzły, drogi, fakty, narzędzia, przeciwnicy i archetypy posiadają stabilne tekstowe ID. Definicje contentu są niemodyfikowalne podczas runu; bieżący stan istnieje osobno.
+Nodes, edges, route segments, resource families, item definitions, fixed tool sources, facts, tools, enemies, and archetypes have stable textual IDs. Content definitions are immutable during a run; mutable instance state is stored separately.
 
 #### Rationale — dlaczego
 
@@ -1002,6 +1040,8 @@ Test jednostkowy może potwierdzić poprawny ruch Listenera, ale nie sprawdzi, c
 - Używa wcześniejszej wiedzy przy wyborze trasy.
 - Nie interpretuje atlasu wyłącznie jako listy poziomów.
 - Część testerów dobrowolnie zaczyna drugą wyprawę.
+- A tester can distinguish `rumored` supply from a historical observed range and uses route length when comparing totals.
+- Reloading or revisiting a depleted board never creates a false additional observation.
 
 ### Bramka intentów
 
@@ -1020,6 +1060,14 @@ Test jednostkowy może potwierdzić poprawny ruch Listenera, ale nie sprawdzi, c
 - Wszystkie wspierane warianty mają rozwiązanie.
 - Istnieją co najmniej dwa sensowne rezultaty.
 - Gracz potrafi wyjaśnić konsekwencję wybranego rozwiązania.
+
+### Inventory and resource-pressure gate
+
+- No accepted or rejected path duplicates or silently loses an item.
+- Players understand that one bag session allows at most two `Use`/`Discard` actions but costs one complete turn total.
+- A rejected primary command consumes neither a quick-pocket item nor turn resources.
+- Players use current health, satiety, free space, pockets, tools, route length, and atlas knowledge to choose between routes.
+- Observed sessions show less compulsion to collect every resource and at least some deliberate food-versus-healing choices.
 
 ### Rationale wskaźników
 
@@ -1092,6 +1140,11 @@ Poniższe wartości mają zostać ustalone przez konfigurację i playtest, a nie
 - czas działania dołu;
 - budżety trudności poszczególnych dni;
 - dokładna liczba węzłów i gałęzi po prototypie pięciodniowym.
+- target and supported distribution of route-segment counts per edge;
+- resource-family thresholds for truthful `low` / `medium` / `high` rumors;
+- individual consumable values and route supply variance after M9.
+
+The M9 starting geometry and resource model are accepted implementation baselines, not choices for an implementer to improvise: a `3×3` main bag, two one-item side pockets, health capped at `100`, satiety capped at `200`, a normal threshold of `100`, and action costs of `1`/`2`. They remain data-driven so a later playtest decision can revise their numbers without changing ownership or atomicity.
 
 ### Rationale — dlaczego
 
@@ -1110,12 +1163,221 @@ Poniższe pytania mają status **Open**. Agent nie może rozstrzygnąć ich sam,
 | ID | Decyzja właściciela | Warunek ponownego otwarcia |
 | --- | --- | --- |
 | O-002 | 2026-09-27 — po nagrodzie i koszcie najpierw rozstrzygana jest śmierć z głodu; martwy gracz nie kończy planszy, nawet jeśli akcja weszła na wyjście. | Osobna decyzja produktowa zmieniająca priorytet terminalnych wyników tej samej akcji. |
-| O-003 | 2026-09-27 — jedzenie jest podnoszone automatycznie przy wejściu i rozliczane przed kosztem akcji; narzędzia wymagają świadomej interakcji. | Osobna decyzja produktowa zmieniająca sposób podnoszenia jedzenia lub narzędzi. |
+| O-003 | 2026-09-27 — until M9, food is collected automatically on entry and resolved before the action cost; tools require conscious interaction. M9 replaces only the food/consumable pickup rule with section 27.6. | A separate product decision changing conscious tool pickup or the accepted M9 transfer semantics. |
 | O-004 | 2026-09-08 — PC jest platformą referencyjną dla vertical slice. Mobile ma zachować tę samą semantykę po ustabilizowaniu interakcji. | Osobna decyzja produktowa zmieniająca platformę referencyjną lub wymagająca równorzędnej walidacji filesystemu na mobile. |
 | O-005 | 2026-08-27 — leaderboard online nie jest częścią bieżącego projektu; najpierw powstaje prywatne podsumowanie wyprawy. Usuniętej integracji Dreamlo nie przywracamy, a rotację starej wartości właściciel świadomie odkłada. | Osobna decyzja produktowa o ponownym wprowadzeniu funkcji online; wtedy wymagane są nowy model bezpieczeństwa, nowa integracja i poświadczenia, bez ponownego użycia historycznej wartości. |
 | O-006 | 2026-09-09 — `Exit to Menu` zachowuje poprawny run save dla `Continue`; trwałe porzucenie jest osobną, jednoznaczną akcją. | Osobna decyzja produktowa zmieniająca oczekiwania gracza wobec wznowienia lub zamknięcia runu. |
+| O-007 | 2026-09-27 — one selected edge is one numbered day and may contain a variable authored sequence of local boards; route choice and atlas return happen at reached nodes. | A product decision returning to one-board-per-day travel or changing when a day advances. |
+| O-008 | 2026-09-27 — the atlas stores truthful qualitative rumors, historical completed-route resource ranges, separate partial lower bounds, and persistent icons for stable repeatable tool sources. | A product decision making ordinary loot fixed/currently guaranteed or allowing deliberately false route information. |
+| O-009 | 2026-09-27 — section 27 defines the accepted spatial bag, satiety, pickup, bag-session, and quick-pocket behavior; implementation remains deferred until its roadmap gate. | A product decision changing inventory topology, action budgets, ownership, or atomic turn semantics. |
 
 Wskazówki tras w MVP nie są decyzją otwartą: MUSZĄ być prawdziwe w odniesieniu do obserwowalnych, stabilnych cech. Mogą być niepełne, a dynamiczne warunki mogą zmienić wartość drogi, lecz gra nie wprowadza celowo fałszywego opisu.
+
+## 27. Accepted future contract: route legs, atlas observations, and inventory
+
+### 27.1. Status and migration boundary
+
+#### Decision
+
+The rules in this section are **Accepted design with Deferred implementation** where explicitly assigned to M9. The route-leg foundation is implemented earlier by `M3.11`–`M3.12` because board identity, generation, save, and replay depend on it.
+
+Until the named migration card is accepted, existing implemented behavior remains authoritative. In particular, `M3.4` automatic food pickup and its fixed cost are not retroactively incorrect. When M9 begins, its cards deliberately replace that transitional food path rather than maintaining two runtime rule sets.
+
+#### Rationale
+
+The game must remain playable while the no-backpack vertical slice is tested. At the same time, future work must not cement node-as-board, automatic food, or unbounded resource assumptions so deeply that the later inventory becomes a rewrite.
+
+#### Implementation consequences
+
+- Historical `Done` cards keep their recorded scope and validation.
+- New work uses follow-up migrations and explicit schema versions.
+- M9 remains after the no-backpack playtest gate and does not depend on optional M8 features.
+
+### 27.2. Route legs, local boards, and days
+
+#### Decision
+
+- Committing an outgoing edge starts one route leg and one player-facing day.
+- The first leg is `Day 1`; no player-facing `Day 0` exists.
+- An edge owns an ordered, non-empty list of stable route-segment IDs. Different edges may have different lengths; five boards is an initial content target, not a hard-coded invariant.
+- Starting a leg creates one persisted run-local `routeLegId`/traversal ID. Reusing the same directed edge later in the same run creates a different leg ID.
+- Each segment creates one local board with an address containing at least run ID, route-leg ID, edge ID, stable segment ID, day number, generation version/configuration, and deterministic board seed.
+- An intermediate `ExitReached` advances to the next segment without incrementing the day, marking the edge `Traversed`, marking the destination `Visited`, or opening route choice.
+- Only the final segment completes the leg, commits `Traversed`, reaches the destination checkpoint, records the complete observation sample, and opens the atlas.
+- In normal flow the full-screen `Day N` transition appears once before the first segment and hides the gameplay HUD. Across a crash it has explicit **at-most-once** semantics: the run checkpoints `Consumed` before rendering, so recovery may skip an interrupted intro but never repeats it.
+- A landmark may be the final authored segment of an inbound leg; it does not require an additional day merely because it uses a special board template.
+
+#### Rationale
+
+Several short tactical situations can make one strategic route choice meaningful without enlarging the 8×8 board. Stable segment IDs also let saves, replay, fixed tool sources, and diagnostics identify the exact situation even when content order changes.
+
+#### Implementation consequences
+
+- `RunState` separates the last reached node/checkpoint, optional active leg with `routeLegId`, completed-day count, current day number, durable `Pending`/`Consumed` Day-transition state, and structured travel history.
+- Route selection begins and persists a leg; it does not teleport the run to the destination.
+- Board seeds never derive from node/day alone.
+- `Continue` restores the same route segment and never repeats a consumed day transition or accepts an outcome from another leg/segment.
+- Published segment IDs are migration-sensitive content IDs; reordering a list must not silently change identity.
+
+### 27.3. Route-resource knowledge and fixed tool sources
+
+#### Decision
+
+- Atlas resource knowledge is keyed by directed edge and stable resource-family ID, not by a destination node or UI label.
+- `Rumored` supply uses truthful authored qualitative bands such as `low`, `medium`, and `high`. Thresholds are defined per resource family, and generation must stay inside the advertised band.
+- `Sighted` may reveal the resource family or icon, but it does not fabricate an exact total.
+- One completed traversal contributes at most one sample containing the total initially observable supply across all of that leg's segments. The atlas displays the completed-sample minimum, maximum, and sample count, for example `Observed so far: 9–10 · 2 visits`.
+- A death or abandoned run partway through a leg may persist only a separate lower bound such as `At least 6 · observed 3/5 boards`. Partial data never changes the completed minimum/maximum.
+- Only actually revealed or observable items count. Hidden content is not leaked. Collection, leaving an item, revisiting a depleted board, or reloading does not create a new sample or change the recorded initial observation.
+- The observation identity is the persisted run ID plus route-leg/traversal ID. This makes reload idempotent while allowing a later legal traversal of the same directed edge in the same run to contribute a distinct sample.
+- Route length is shown separately from aggregate supply.
+- A fixed tool source has a stable source ID, tool-definition ID, and physical edge-segment binding. Its atlas icon may be visually anchored to that segment or its destination node only when the owning inbound edge remains unambiguous; it must never imply availability from another route. Execution always resolves through a concrete `BoardAddress`. Multiple axe or shovel sources are allowed.
+- Seeing/recognizing a fixed source permanently reveals its atlas icon; pickup is not required. The source is guaranteed once per new run after it is authored as fixed. Taking it marks only current-run availability as `taken`; the profile icon remains.
+- No fixed or random tool source may be required for a mandatory exit.
+
+#### Rationale
+
+The atlas becomes tangible metaprogression when repeated travel improves a useful record, but it must remain honest about variation. Historical ranges create informed choices without converting dynamic loot into a promise. Stable tool icons reward discovery more strongly because their authored repeatability is explicit.
+
+#### Implementation consequences
+
+- `ProfileState` owns typed observation aggregates and discovered source IDs.
+- The active leg owns its observation accumulator and current-run taken-source state.
+- `BoardState` owns concrete item/tool entities.
+- Facts about tool mechanics remain separate from knowledge of tool-source locations.
+- Atlas queries choose among rumor, partial lower bound, completed historical range, and current-run taken state; UI does not infer these from prose.
+
+### 27.4. Item definitions, instances, and inventory topology
+
+#### Decision
+
+- Every run starts with a spatial backpack whose main area is a fixed `3×3` grid. The initial M9 configuration starts it empty; future starting contents remain explicit run configuration rather than hidden UI state.
+- Carried consumable items are rectangular and have immutable definition IDs plus run-local instance IDs.
+- Initial M9 supports fixed orientation only: no rotation, irregular shapes, or stacks. A berry bundle is one `1×1` item rather than a stack system.
+- Two side pockets each hold exactly one eligible item. A pocket item must be `QuickPocketEligible`, one cell wide, and one to three cells tall; a `1×1` item still occupies the whole pocket.
+- The two generic tool slots remain separate from the bag and pockets.
+- Initial M9 has no bag expansion, weight, crafting, spoilage, rarity affixes, or drop-to-ground command.
+
+#### Rationale
+
+The small grid makes packing a readable resource decision without turning the game into warehouse management. Separate quick pockets create preparation choices, while separate tools preserve their existing charge/equipment semantics.
+
+#### Implementation consequences
+
+- `ItemDefinition` contains stable ID, footprint, resource family/category, pocket eligibility, and use-effect ID.
+- `ItemInstanceState` contains instance identity and only mutable per-instance data.
+- `InventoryState` contains placements and the left/right pocket references; it contains no Unity objects.
+- Placement validation rejects overlap, out-of-bounds anchors, duplicate instances, and incompatible pockets.
+- Inventory contents reset with `RunState` and never become profile power.
+
+### 27.5. Health, satiety, and consumable effects
+
+#### Decision
+
+- M9 replaces the player-facing `Food` concept with `Satiety` as the single runtime resource.
+- Health is clamped to `0..100` and can never be healed above `100`.
+- Satiety is clamped to `0..200` and starts at `100` in the initial M9 balance configuration.
+- Every accepted board command, including `Move`, `Wait`, interaction, tool use, and inventory management, pays the resource cost. Rejected commands remain free.
+- The cost tier is sampled from satiety at the start of the command: `1` at `0..100`, `2` above `100`. Consumable effects resolve before that already-selected cost. Therefore eating from `100` to `150` still costs `1` for that turn; the next accepted command costs `2` while satiety remains above `100`.
+- Reaching zero satiety follows the existing starvation priority. Excess healing or satiety beyond its cap is wasted rather than stored elsewhere.
+- Item effects are data-driven domain operations; an item may intentionally be weak as long as its effect is legible.
+
+#### Rationale
+
+Health cannot be banked for an unknown future injury, while food can be carried or deliberately converted into inefficient short-term buffer. This makes food-versus-healing routes depend on the player's current condition and bag layout without adding combat statistics.
+
+#### Implementation consequences
+
+- The migration renames the one authoritative runtime field; it does not keep synchronized `Food` and `Satiety` copies.
+- Cost policy and caps live in configuration/domain code, not UI.
+- Events expose the chosen cost tier and capped/wasted effect for clear presentation and replay.
+
+### 27.6. Ground-item pickup
+
+#### Decision
+
+- Entering a tile with a consumable offers `Use now`, `Store`, or `Leave` as the decision that completes the same movement turn.
+- An accepted interaction that reveals a consumable, such as opening a shovel cache, creates one concrete ground item instance and uses the same `Use now` / `Store` / `Leave` transfer contract within that interaction turn; it never calls a raw resource restore that bypasses item ownership.
+- `Use now` remains available when the bag is full if the effect itself is legal. `Store` is unavailable when no valid placement exists.
+- The item is removed from `BoardState` only after a successful use or transfer.
+- `Leave`, an invalid choice, or lack of capacity leaves the same item instance on the ground.
+- The prompt is triggered by entry, not by standing on the tile. To try again, the player must step off and re-enter, paying the normal turns and enemy phases.
+- A consciously accepted tool pickup follows the separate equipment flow: free slot, or `Replace`/`Leave` when full.
+- Discarding a carried item destroys it permanently and never places it on the current tile.
+
+#### Rationale
+
+Pickup should create an immediate resource decision without silently deleting rewards or pausing the resolver halfway through a committed move. Re-entry gives the player a recoverable choice, but its tactical cost prevents free repeated prompts.
+
+#### Implementation consequences
+
+- The submitted command contains the movement and pickup choice as one atomic intent; a presentation modal does not mutate domain state.
+- Board-to-run transfer is all-or-nothing and cannot duplicate an item after stale input, reload, or rapid submit.
+
+### 27.7. Backpack session
+
+#### Decision
+
+- Pressing `B` opens a modal inventory draft. Leaving it through `Finish`, including a no-op finish, submits one `ManageInventoryCommand` and costs exactly one complete turn.
+- Within that one session the player may perform at most two ordered item actions. Each action is either `Use` or permanent `Discard`; any mix of zero, one, or two is legal.
+- Reorganizing any number of remaining items between the main grid and side pockets is included in the same turn and does not consume the two-action budget.
+- The command carries the expected inventory revision, its ordered actions, and the final layout. The resolver validates the entire proposal before the first mutation and commits it atomically.
+- Every accepted `ManageInventoryCommand`, including a no-op finish, increments the inventory revision exactly once so duplicate submission becomes stale.
+- Invalid or stale proposals apply nothing and consume no turn or resources.
+- One accepted bag session produces one resource cost and one enemy/environment phase, never one phase per used item.
+- Quick-pocket use cannot be combined with `ManageInventoryCommand`. Items placed into pockets become quick-usable only after the bag turn fully resolves.
+
+#### Rationale
+
+One opening must be meaningful enough to justify a valuable turn. Two item actions allow combinations such as food plus medicine after danger without permitting an unlimited heal/eat pause before enemies react. Atomic final-layout submission keeps save, replay, and rollback behavior comprehensible.
+
+#### Implementation consequences
+
+- UI maintains only a draft; authoritative inventory changes on accepted command completion.
+- After a successful open there is no normal free close path: `Finish`, including a no-op finish, pays the one-turn cost. The UI communicates that consequence before confirmation.
+- A third use/discard is disabled and rejected by domain validation if submitted anyway.
+
+### 27.8. Quick-pocket composite turns
+
+#### Decision
+
+- At most one item from either side pocket may be attached to an otherwise ordinary accepted non-inventory command.
+- Supported primary actions include `Move`, `Wait`, legal interactions, and legal tool use where their command contract allows the modifier.
+- The item effect and primary action form one atomic turn with one resource cost and one enemy/environment phase.
+- A rejected or stale primary command consumes neither the pocket item, turn, satiety, nor tool charge.
+- Quick use is never combined with a bag session. Using both pockets requires two accepted ordinary turns; the player may attach a pocket item to `Wait` when no movement or interaction is desired.
+
+#### Rationale
+
+Pockets reward preparation by avoiding an extra bag-opening turn, but the one-item limit preserves enemy response and prevents front-loading both pockets plus two bag actions before a single hostile phase.
+
+#### Implementation consequences
+
+- Quick use is a command modifier/envelope, not an independently resolved zero-time command.
+- Validation covers item eligibility, pocket ownership, primary command validity, and all-or-nothing consumption.
+
+### 27.9. Persistence, replay, UI, and validation
+
+#### Decision
+
+- Route-leg, atlas-observation, and inventory changes use separate versioned DTO migrations with stable textual IDs.
+- The run save includes active route address/accumulator, durable Day-transition status, item instances, bag placements, pockets, tool instances, health, and satiety once their owning cards ship.
+- The profile save includes typed observation aggregates and discovered fixed-source IDs.
+- Mid-board snapshot, when implemented, captures only a completed turn; modal pickup and bag drafts are never persisted.
+- Replay is a versioned tagged-command format. Its canonical hash expands whenever authoritative route, resource, tool, or inventory state is added; unknown command types fail explicitly.
+- The route-choice view shows current health, satiety, predicted cost tier, free bag capacity, pocket/tool status, route length, rumor or historical resource range, and fixed-source knowledge without calculating a single “best route” score.
+
+#### Rationale
+
+These features cross `ProfileState`, `RunState`, and `BoardState`; save and replay are therefore part of the mechanic, not cleanup after UI. Showing both current need and historical route knowledge is what turns inventory pressure into a strategic choice.
+
+#### Validation
+
+- Round-trip and migration tests cover empty, full, partially filled, and invalid inventories plus active and completed route legs.
+- Deterministic replay covers pickup, two-action bag sessions, quick use, route-segment advance, complete/partial atlas samples, and fixed-source collection.
+- Property tests prove no overlap, duplicate placement, false rumor band, duplicated observation sample, or mandatory tool softlock.
+- PlayMode tests cover modal input locks, one enemy phase per accepted composite command, Day transition HUD hiding, and `Continue` at route boundaries.
+- Playtests compare the no-backpack baseline with M9 using the inventory gate in section 22.
 
 ## Appendix A — obserwowane ograniczenia obecnej implementacji
 
