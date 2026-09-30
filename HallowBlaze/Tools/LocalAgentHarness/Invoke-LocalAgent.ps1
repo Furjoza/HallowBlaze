@@ -17,7 +17,8 @@ param(
 
     [string] $Model,
     [string] $Profile = 'ollama-launch',
-    [string] $CatalogPath
+    [string] $CatalogPath,
+    [switch] $RequirePatch
 )
 
 $ErrorActionPreference = 'Stop'
@@ -199,9 +200,11 @@ $patch
 "@.Trim()
 }
 
-function Get-DeveloperPatch([string] $finalMessage) {
+function Get-DeveloperPatchBlock([string] $finalMessage) {
     $match = [regex]::Match($finalMessage, '(?s)DEVELOPER_PATCH_BEGIN\r?\n(.*?)\r?\nDEVELOPER_PATCH_END')
-    if (-not $match.Success) { return $null }
+    if (-not $match.Success) {
+        return [pscustomobject]@{ Present = $false; Patch = $null }
+    }
 
     $patch = $match.Groups[1].Value.Trim()
     if ($patch.StartsWith('```')) {
@@ -210,7 +213,7 @@ function Get-DeveloperPatch([string] $finalMessage) {
             $patch = ($lines[1..($lines.Count - 2)] -join "`r`n").Trim()
         }
     }
-    return $patch
+    return [pscustomobject]@{ Present = $true; Patch = $patch }
 }
 
 function Get-DeveloperSummary([string] $finalMessage) {
@@ -380,7 +383,8 @@ EXECUTION ENFORCEMENT:
 - This is an external Codex CLI Developer running in a READ-ONLY sandbox.
 - Do NOT attempt to edit, create, delete, move, rename, stage, or commit project files yourself.
 - Do NOT call native apply_patch/edit tools and do NOT create patch.diff or any other project file.
-- Inspect the repository and design the exact change, then return ONE git-compatible unified patch in your final response.
+- Inspect the repository and design the exact change. If a file change is required, return ONE NON-EMPTY git-compatible unified patch in your final response.
+- If no file change is required, DO NOT emit an empty DEVELOPER_PATCH block. Emit a line containing exactly DEVELOPER_NO_PATCH instead.
 - The runner, not you, is the only writer. It validates the patch against the closed allowlist and applies it with git apply after your process exits.
 - Patch paths MUST be Git-root-relative, for example `a/HallowBlaze/Docs/Foo.md` and `b/HallowBlaze/Docs/Foo.md`.
 - Do not emit rename/move patches. If the task requires a rename/move/delete that you cannot represent safely, return SCOPE_CHANGE_REQUIRED instead.
@@ -483,8 +487,12 @@ $commonExecutionRules
     $patchApplied = $false
     $appliedPaths = @()
     if ($Role -eq 'developer') {
-        $patch = Get-DeveloperPatch $finalMessage
-        if (-not [string]::IsNullOrWhiteSpace($patch)) {
+        $patchBlock = Get-DeveloperPatchBlock $finalMessage
+        $patch = $patchBlock.Patch
+        $hasExplicitNoPatch = $finalMessage -match '(?m)^DEVELOPER_NO_PATCH\s*$'
+        $hasBlocker = $finalMessage -match '(?m)^(BASELINE_REQUIRED|SCOPE_CHANGE_REQUIRED|ARCHITECTURE_DECISION_REQUIRED|BLOCKED)\s*$'
+
+        if ($patchBlock.Present -and -not [string]::IsNullOrWhiteSpace($patch)) {
             $patchPath = Join-Path $env:TEMP ("HallowBlaze-developer-patch-" + [Guid]::NewGuid().ToString('N') + '.diff')
             [IO.File]::WriteAllText($patchPath, $patch + "`r`n", $utf8NoBom)
 
@@ -522,10 +530,24 @@ $commonExecutionRules
             }
             $policyArmed = $false
         }
-        elseif ($finalMessage -notmatch '(?m)^DEVELOPER_NO_PATCH\s*$' `
-            -and $finalMessage -notmatch '(?m)^(BASELINE_REQUIRED|SCOPE_CHANGE_REQUIRED|ARCHITECTURE_DECISION_REQUIRED|BLOCKED)\s*$') {
+        elseif ($patchBlock.Present -and [string]::IsNullOrWhiteSpace($patch)) {
+            # Some local models express "no change" as an empty patch block even when the
+            # role protocol asks for DEVELOPER_NO_PATCH. Normalize that benign variant for
+            # read-only/smoke tasks, but never accept it when the caller requires a mutation.
+            if ($RequirePatch) {
+                $keepWorkerLog = $true
+                throw "LOCAL_DEVELOPER_NO_PATCH: Developer returned an empty patch block but this invocation requires a non-empty patch. worker_log=$workerLogPath"
+            }
+            $hasExplicitNoPatch = $true
+        }
+        elseif (-not $hasExplicitNoPatch -and -not $hasBlocker) {
             $keepWorkerLog = $true
             throw "LOCAL_WORKER_PROTOCOL_ERROR: Developer returned neither a DEVELOPER_PATCH block nor DEVELOPER_NO_PATCH/blocker marker. worker_log=$workerLogPath"
+        }
+
+        if ($RequirePatch -and -not $patchApplied -and -not $hasBlocker) {
+            $keepWorkerLog = $true
+            throw "LOCAL_DEVELOPER_NO_PATCH: This invocation requires a repository mutation, but the Developer produced no non-empty patch. worker_log=$workerLogPath"
         }
     }
 
@@ -540,6 +562,7 @@ $commonExecutionRules
     Write-Output "codex_exit_code=$codexExitCode"
     if ($Role -eq 'developer') {
         Write-Output "patch_applied=$($patchApplied.ToString().ToLowerInvariant())"
+        Write-Output "require_patch=$($RequirePatch.IsPresent.ToString().ToLowerInvariant())"
         if ($patchApplied) {
             Write-Output ('applied_paths=' + (($appliedPaths | ForEach-Object { Get-RepoRelativePath $repoRoot ([string] $_) }) -join ','))
         }

@@ -95,8 +95,11 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
   -Task $task `
   -Allowlist @('<repo-relative-path-1>', '<repo-relative-path-2>') `
   -BaselineHead '<recorded HEAD>' `
-  -BaselineBranch '<recorded branch>'
+  -BaselineBranch '<recorded branch>' `
+  -RequirePatch
 ```
+
+Use `-RequirePatch` for every normal implementation/documentation write where the task is expected to mutate the repository. Omit it only for an explicitly read-only/no-change smoke test. An empty patch block or `DEVELOPER_NO_PATCH` under `-RequirePatch` is a failed Developer round, not task completion.
 
 The runner uses `devstral-small-2:24b` through the `ollama-launch` provider with a role-specific Devstral model catalog and `model_reasoning_effort=none`. The local Developer runs read-only and returns one git-compatible patch; the trusted runner validates its paths against the closed allowlist, runs `git apply --check`, applies it, and then verifies branch, `HEAD`, staged state, and changed paths. Do not ask the local model to edit files directly.
 

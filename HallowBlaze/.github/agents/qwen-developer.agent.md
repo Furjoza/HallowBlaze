@@ -64,11 +64,11 @@ Patch requirements:
 - make the patch apply to the repository state you actually inspected;
 - prefer enough context lines for `git apply --recount` to validate safely.
 
-If the delegated task genuinely requires no file change, output a line containing exactly:
+If the delegated task genuinely requires no file change, DO NOT emit `DEVELOPER_PATCH_BEGIN` / `DEVELOPER_PATCH_END` at all. Output a line containing exactly:
 
 DEVELOPER_NO_PATCH
 
-Do not claim that a patch was applied. The runner applies it only after your process exits.
+An empty patch block is invalid for mutation-required tasks. Do not claim that a patch was applied. The runner applies it only after your process exits.
 
 # Terminal usage
 
