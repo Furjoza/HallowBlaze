@@ -1,7 +1,7 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6 next; route-leg amendments accepted; M9 deferred**
-> Data ostatniej weryfikacji: 2026-09-29
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6.1 next; route-leg amendments accepted; M9 deferred**
+> Data ostatniej weryfikacji: 2026-10-01
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
 > Zasady pracy agentów: [`../AGENTS.md`](../AGENTS.md)
@@ -36,9 +36,11 @@ W danej chwili może istnieć najwyżej jedna karta `Active`. Równolegle można
 
 ### 2.1. Numeracja i granice kart
 
-- Bieżące karty używają formatu `M<kamień milowy>.<numer>`, na przykład `M0.7` albo `M3.2`.
-- Każda karta zaczyna się poziomą linią i nagłówkiem z wyróżnionym numerem, aby jej początek i koniec były widoczne zarówno w edytorze, jak i w podglądzie Markdown.
-- Cały dokument używa wyłącznie bieżących identyfikatorów `M*.*`, także w zależnościach, historycznych handoffach, kolejkach i nazwach planowanych raportów walidacyjnych.
+- Normal cards use `M<milestone>.<number>`, for example `M0.7` or `M3.2`.
+- A card that is too large for one safe writer/review iteration may become a tracking umbrella with executable child cards named `M<milestone>.<card>.<child>`, for example `M3.6.1`. Every child is an independently scoped implementation and review unit and carries the complete card fields, acceptance evidence, and handoff.
+- An umbrella is `Done` only after every child is accepted. A dependency on the umbrella ID means that all of its children are accepted; callers do not depend on a partially completed umbrella unless they name a specific child explicitly.
+- Each card or child starts after a horizontal rule with its numbered heading. The one-writer rule still permits at most one `Active` executable card or child at a time; an umbrella tracking an active child is not a second writer lease.
+- Current identifiers, including child identifiers where used, remain authoritative in dependencies, historical handoffs, execution queues, and planned validation-report names.
 
 ### Rationale — dlaczego tylko jeden aktywny writer
 
@@ -1598,33 +1600,164 @@ Validation observed on Unity 6000.3.21f1: **48/48 EditMode tests passed** (25 `T
 
 ---
 
-## `M3.6` — Adapter inputu i prezentacji zdarzeń
+## `M3.6` — Runtime input-to-presentation integration (tracking umbrella)
+
+**Status:** `Planned` — tracking umbrella; it becomes `Done` only after `M3.6.1`–`M3.6.3` are independently accepted.
+**Priority:** P0
+**Related contract:** sections 10.2, 18, and 21.1/21.2/21.5; resolved O-004.
+
+**Rationale:** The view must reproduce a resolved result rather than decide rules again. This migration closes the paths to duplicate movement, duplicate resource cost, trigger-owned outcomes, and competing coroutines, while leaving one reusable seam for later enemy, interaction, route-leg, and inventory commands.
+
+**Current behavior:** `BoardManager` instantiates a legacy board made of Unity objects but does not publish the authoritative `BoardState`, player `EntityId`, `TurnController`, and entity-to-view registry required by the accepted turn core. `PlayerScript`, `MovingObject`, `GameManager`, triggers, physics queries, UI, and coroutines still share input, rule mutation, turn scheduling, and presentation responsibilities.
+
+**Expected outcome:** The production path is:
+
+```text
+PC input
+→ complete PlayerCommand
+→ TurnController.Resolve exactly once
+→ TurnResult + ordered GameEvent[]
+→ sequential Presentation replay from authoritative state
+→ input unlock
+```
+
+The migration is deliberately split because command submission cannot safely precede an authoritative runtime, while production cutover cannot be reviewed safely in the same iteration that invents the reusable presenter. `M3.6.1`, `M3.6.2`, and `M3.6.3` run in order with a separate writer and independent review for each child.
+
+| Child | Delivers | Proves | Explicitly leaves for the next child |
+| --- | --- | --- | --- |
+| `M3.6.1` | one authoritative runtime and entity-to-view map | the generated board and domain start synchronized | input submission and event replay |
+| `M3.6.2` | reusable command/gate/presenter pipeline | single resolution, ordered replay, and safe failure recovery in isolation | replacement of legacy production callbacks |
+| `M3.6.3` | production cutover | one live gameplay authority under rapid input, lifecycle gates, reload, and terminal outcomes | enemy AI and later interaction/tool/inventory rules |
+
+**Umbrella scope:** Establish the board runtime boundary, implement reusable command submission/event replay, then replace the legacy production path and prove the complete PC loop.
+
+**Umbrella non-goals:** No enemy AI, target-selection rules, tool or inventory flow, model-first generator, final HUD, multi-platform input, new gameplay rules, or save schema. Those remain with `M3.7+`, `M4`, `M5`, and deferred `M9`.
+
+**Dependencies:** `M3.5`, the accepted M2 board-request/outcome boundary, and resolved O-004 selecting PC as the reference platform.
+
+**Completion evidence:** All three children are `Done`; their handoffs compose one ownership diagram and leave no second gameplay-mutation path. Later dependencies on `M3.6` mean this complete umbrella, not an individual child.
+
+**Save and compatibility impact:** No schema change. Gameplay state remains in domain/session owners; input focus, animation progress, presenter queues, and view registries are never persisted.
+
+---
+
+## `M3.6.1` — Legacy board-to-domain runtime composition
+
+**Status:** `Ready`
+**Priority:** P0
+**Related contract:** sections 9, 10.2, and 21.1/21.2/21.5.
+
+**Rationale:** `TurnController` cannot own a live turn until the generated scene and the domain describe the same board. Making this boundary explicit first prevents the input adapter from reconstructing legality from colliders or creating a second partial model.
+
+**Current behavior:** `BoardManager.SetupScene` instantiates floor, exit, obstacles, resources, enemies, and other legacy views directly. The active board request is stable, but there is no published runtime containing `BoardState`, a player ID, one controller, and a read-only view lookup. Unsupported trigger content can still mutate `RunState` outside the resolver.
+
+**Expected outcome:** Every successful board startup atomically publishes exactly one runtime containing the authoritative `BoardState`, the board-local player `EntityId`, one `TurnController`, and a read-only `EntityId → Unity view` registry. The legacy generator may choose the initial layout, but after bootstrap `BoardState` alone answers gameplay queries.
+
+**Scope:** Add a Unity-facing composition/import boundary for the current generated layout; allocate stable board-local IDs for the lifetime of that board; create the controller and view registry; classify every current prefab/content category as `mapped gameplay entity`, `presentation-only`, or `intentionally disabled`; expose lifecycle/disposal and startup diagnostics. Composition itself performs no gameplay mutation. The handoff identifies every unsupported pickup/trigger path that `M3.6.3` must detach during production cutover.
+
+**Non-goals:** No player input submission, event replay, movement animation, enemy planning/execution, target-interaction semantics, model-first generation, content rebalance, or persistence. No scene or prefab change is authorized by default; any later serialized change requires its own exact allowlist.
+
+**Dependencies:** `M3.5` and `M2.7`.
+
+**Allowed file area:** Board runtime/composition adapters under Presentation or Session, the minimum `BoardManager`/`GameManager` composition seam, and focused EditMode/PlayMode tests. Core Board/Turns changes are limited to read-only access required by composition and may not change rules. Scenes, prefabs, packages, and `ProjectSettings` are excluded unless a later child allowlist names an exact asset.
+
+**Acceptance criteria:**
+
+- one successful `BoardRequest` produces one complete runtime and never publishes a partial runtime;
+- the runtime references the active run, one authoritative board, one player ID, and one controller;
+- every collision-relevant or event-addressable current view is mapped or explicitly disabled, and every remaining visual is documented as presentation-only;
+- the registry is read-only, IDs remain stable for the board lifetime, and domain objects contain no Unity references;
+- model positions and initial view positions agree for every mapped entity;
+- a reload disposes the old runtime and creates a new registry/controller without leaking IDs or views;
+- unknown/duplicate/out-of-bounds content fails startup with a reproducible diagnostic and keeps gameplay input blocked;
+- composing and publishing the runtime does not mutate `RunState`, and every legacy pickup/trigger mutation path still awaiting `M3.6.3` is enumerated rather than hidden.
+
+**Test plan:** EditMode mapping fixtures for every classification, duplicate IDs/positions, bounds, missing player/terrain/exit, and unsupported content; PlayMode startup for representative generated boards, model/view parity, failed-start input blocking, reload isolation, and runtime disposal. No gameplay command is submitted in this child.
+
+**Save and compatibility impact:** None. The runtime is reconstructed from the between-board checkpoint and deterministic board inputs; entity-view bindings and partially presented state are not saved.
+
+**Required handoff:** Runtime ownership/lifetime diagram, complete current-content classification table, `BoardRequest → runtime` field map, failure matrix, and proof that no Unity object entered the domain graph.
+
+---
+
+## `M3.6.2` — Command submission and ordered event presentation
 
 **Status:** `Planned`  
-**Priorytet:** P0  
-**Powiązany kontrakt:** sekcje 9.2, 18 i 21.2/21.5.
+**Priority:** P0
+**Related contract:** sections 10.1/10.2, 18, and 21.2.
 
-**Rationale:** Widok ma odtwarzać wynik, a nie ponownie rozstrzygać zasady. Migracja adaptera zamyka drogę do podwójnego ruchu, podwójnego kosztu i kolizji pomiędzy coroutine.
+**Rationale:** Input locking and ordered replay are reusable presentation concerns. Proving them against the runtime in isolation makes rapid-submit, zero-duration animation, failure recovery, and future command extension testable before legacy production callbacks are removed.
 
-**Obecne zachowanie:** `PlayerScript`, `MovingObject`, `GameManager` i UI współdzielają logikę ruchu, tur i prezentacji.
+**Current behavior:** No Unity adapter submits a complete `PlayerCommand` to the active `TurnController`, and no presenter owns the ordered `GameEvent` queue. Existing movement/resource/outcome feedback is coupled to the methods that mutate state.
 
-**Oczekiwany rezultat:** Input tworzy jedną komendę; `TurnController` ją rozstrzyga; prezentacja sekwencyjnie odtwarza events i dopiero potem odblokowuje wejście. A reusable modal input gate may build a draft, but it never begins or mutates a partial turn before final command submission.
+**Expected outcome:** An extensible command-source seam translates the current PC controls into complete commands without enumerating every future concrete command in one closed switch. The reference binding provides cardinal `MoveCommand` and an explicit `WaitCommand`; target interaction remains unbound until `M5.1` can expose an unambiguous target query. Every admitted submission invokes `Resolve` exactly once, then one presenter replays the returned result while its own input gate remains closed.
 
-**Zakres:** Adapter obecnego inputu PC, presenter ruchu/zasobów/block/exit, synchronizacja widoków z domeną oraz tymczasowe zachowanie istniejącego artu. Command creation remains extensible rather than a closed key-to-`Move`/`Wait`/`Interact` switch.
+**Scope:** Implement the reusable command-submission coordinator, presentation gate, ordered dispatcher/handler registry, zero-duration animation mode, authoritative HUD refresh, rejection feedback, terminal-outcome sink abstraction, explicit unknown-event policy, and isolated test views/sinks. A future modal may build or cancel a draft for free, but it may submit only one complete command and never create a partial turn.
 
-**Non-goals:** Bez nowego systemu input dla wielu platform, finalnego HUD, nowych animacji i zmiany reguł domenowych. No bag, pickup-choice, or quick-pocket UI in this card.
+**Non-goals:** No production `PlayerScript`/`GameManager` cutover, enemy AI, target picker, wall-damage rule, final input remapping UI, final HUD/art, mobile controls, scene/prefab edit, or new command/event type.
 
-**Zależności:** `M3.5`; O-004 przed finalnym layoutem, ale ten adapter może zachować obecny input referencyjny.
+**Dependencies:** `M3.6.1`.
 
-**Dozwolony obszar plików:** Presentation/adapters, `PlayerScript`, `MovingObject`, `GameManager`, UI scripts, jawnie wymagane sceny/prefaby i testy.
+**Allowed file area:** Presentation Input/Turns/HUD adapters and focused EditMode/PlayMode tests. Existing production input and lifecycle scripts remain unchanged until `M3.6.3`; scenes and prefabs are excluded.
 
-**Kryteria akceptacji:** Widok nie wykonuje mutacji domenowej; w trakcie odtwarzania kolejna komenda jest blokowana; przy wyłączonej animacji stan końcowy jest ten sam; po każdym evencie Transform zgadza się z modelem.
+**Acceptance criteria:**
 
-**Plan testów:** PlayMode szybkiego wielokrotnego inputu, blokady, wyłączenia animacji, reload sceny; pełna regresja `M0.8`.
+- each admitted command calls the active controller once; submissions while setup, modal, resolution, or presentation is blocked call it zero times;
+- a rejected result presents its stable reason, changes no view/domain resource, and releases the presentation gate;
+- accepted events are awaited in resolver order, with no parallel handler or second resolver;
+- `EntityMoved` animates or immediately snaps the registered view and verifies the authoritative position;
+- `EntityWaited` and `InteractionPerformed` produce feedback only; `ItemCollected` removes/hides the registered item view; `FoodRestored` and `ActionCostApplied` refresh the HUD from `RunState` rather than applying their amounts again;
+- `ExitReached`, `PlayerStarved`, and `PlayerDied` notify an injected guarded outcome sink only at their ordered replay position; production binding remains for `M3.6.3`;
+- animations enabled and disabled use the same handlers and produce identical final transforms, visibility, HUD, outcome, and input-gate state;
+- an unknown event is never ignored: it produces a testable diagnostic, aborts the remaining visual replay, resynchronizes registered views/HUD from authoritative state, and releases the gate without resolving again;
+- completion, rejection, cancellation before submit, and controlled presentation failure cannot leave input permanently locked.
 
-**Wpływ na save i kompatybilność:** Brak zmiany schema; nie zapisuje stanu UI/animacji.
+**Test plan:** EditMode coordinator/dispatcher tests for single dispatch, result order, rejection, all current event types, unknown event, and exception-safe gate release; isolated PlayMode fake-view tests for rapid repeated input, animation on/off parity, item removal, HUD refresh, terminal sink ordering, and disabled-input states.
 
-**Wymagany handoff:** Diagram Input → Command → Result → Events → View oraz lista usuniętych źródeł prawdy.
+**Save and compatibility impact:** None. Only the already-resolved domain state crosses existing save boundaries; input focus, queues, animation progress, and modal drafts remain transient.
+
+**Required handoff:** Command-source extension diagram, event-to-handler responsibility table, gate state machine, enabled/disabled animation trace, unknown-event recovery trace, and exact single-submit evidence.
+
+---
+
+## `M3.6.3` — Production cutover and PlayMode acceptance gate
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10, 18, and 21.1/21.2/21.5; `M0.8` regression contract.
+
+**Rationale:** The reusable path is valuable only when the scene has exactly one gameplay authority. A separate cutover makes removal of legacy linecast, trigger, direct-resource, and coroutine paths reviewable and prevents a temporary dual system from becoming permanent.
+
+**Current behavior:** `PlayerScript` reads input and mutates resources/outcomes, `MovingObject` uses `Physics2D.Linecast` to decide movement, trigger callbacks collect resources and reach exits, and `GameManager` schedules turns with `playerTurn`, `EndPlayerTurn`, and `MoveEnemies` coroutines.
+
+**Expected outcome:** Production PC gameplay routes every supported board action through the `M3.6.2` coordinator and the one controller created by `M3.6.1`. `PlayerScript` becomes an input/view adapter, `MovingObject` is animation-only or removed, and `GameManager` composes the runtime plus guarded board outcomes without deciding turn legality. The existing art and supported feedback remain, but physics, transforms, triggers, and coroutines no longer mutate or adjudicate gameplay.
+
+**Scope:** Bind PC movement/Wait to the command source; connect registered production views, HUD, sounds, and guarded `BoardOutcome`; remove or disable legacy player movement, pickup, cost, death/exit, and turn-scheduling paths; update the relevant M0.8 reflection tests to the new public behavior; document the intentionally deferred legacy content behavior.
+
+**Non-goals:** No domain enemy AI or enemy damage, target-selection UI, bare-hand wall rule, tool behavior, aid/unsupported-pickup rule, generator rewrite, final HUD/art, mobile input, save migration, or future M5/M9 interaction. Legacy enemy views remain logically inert until `M3.7`/`M3.8`; they must not continue through a hidden coroutine path.
+
+**Dependencies:** `M3.6.2` and the accepted guarded `BoardOutcome` lifecycle from M2.
+
+**Allowed file area:** `PlayerScript.cs`, `MovingObject.cs`, `GameManager.cs`, the M3.6 Presentation/runtime adapters, strictly required legacy input/UI helpers, and focused EditMode/PlayMode tests. `BoardManager.cs` may change only if the accepted `M3.6.1` composition seam requires final wiring. `Enemy.cs` may only be detached from legacy scheduling, not given new AI. Any scene/prefab change requires a separately declared exact allowlist and reference validation.
+
+**Acceptance criteria:**
+
+- one admitted PC input produces one command, one controller call, one accepted turn result, at most one player move, one action cost, and one matching presentation/audio sequence;
+- blocked/out-of-bounds/invalid input is cost-free, does not move the view, and does not damage a legacy wall or start an enemy/environment phase;
+- `Physics2D.Linecast`, collider/trigger order, and `Transform` never decide movement, pickup, resource cost, death, or exit legality;
+- legacy trigger pickup/exit and direct `RunState` cost/reward paths cannot fire alongside event replay;
+- `EndPlayerTurn`, `playerTurn`, and legacy `MoveEnemies` no longer schedule consequences of player commands; legacy enemies are visibly classified as inert until their domain cards;
+- the presentation gate composes correctly with setup, pause, route-choice, terminal, and reload blocking and rejects rapid duplicate input;
+- each terminal result reaches the guarded active `BoardOutcome` path exactly once after preceding events are presented; stale/duplicate outcomes remain rejected;
+- animation enabled/disabled and scene reload produce the same authoritative board/run result and synchronized view/HUD;
+- the rebaselined `M0.8` regression proves input → one `Resolve`, one accepted move/cost/sound, a free blocked attempt with no wall damage, and one exit outcome;
+- no production gameplay mutation source remains outside the documented domain/controller path.
+
+**Test plan:** Focused EditMode tests for production command mapping and retired-method/source assertions where practical; PlayMode rapid input, free rejection, accepted movement/Wait, automatic supported pickup, resource/HUD order, pause/setup/route gates, animations on/off, death/exit/stale outcome, reload isolation, and rebaselined M0.8 regression; then the full relevant PlayMode regression and manual PC smoke across free tile, obstacle, supported resource, Wait, exit, pause, route choice, death, and reload.
+
+**Save and compatibility impact:** No schema change. Existing between-board lifecycle persists only completed domain outcomes. Mid-animation, queued input, presentation failure, view registry, and intentionally disabled legacy content state are not saved.
+
+**Required handoff:** Final Input → Command → Result → Events → View diagram, removed/disabled source-of-truth inventory with code-search evidence, current-content/deferred-behavior table, input/gate map, exact automated and manual results, and proof that terminal outcomes and resource costs occur once.
 
 ---
 
@@ -3263,21 +3396,22 @@ O-002, O-003, O-004, O-005, O-006, O-007, O-008, and O-009 are resolved in `Game
 
 # Kolejka wykonawcza
 
-M0, M1, and M2 are complete; M3.1–M3.5 are `Done`, M3.6 is next, and no card is currently `Active`. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. The user must checkpoint the accepted M3.5 code and documentation before a new implementation writer begins.
+M0, M1, and M2 are complete; M3.1–M3.5 are `Done`; the M3.6 umbrella is split into three executable children; `M3.6.1` is next; and no card is currently `Active`. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a` and is already present in the current clean checkpoint. Every new child still begins with its normal clean-worktree preflight.
 
 The next safe sequence is:
 
-1. checkpoint the accepted M3.5 code and documentation to establish a clean worktree;
-2. continue `M3.6`–`M3.10` through their normal reviews;
-3. execute `M3.11` and `M3.12` before M4 so generation, replay, atlas observations, and tool sources share stable route-segment identity;
-4. complete the no-backpack vertical slice through `M7.8`, then make the explicit M9 verdict;
-5. keep M9 deferred and last unless the owner explicitly changes that order.
+1. execute and independently review `M3.6.1`;
+2. execute and independently review `M3.6.2`, then `M3.6.3`;
+3. continue `M3.7`–`M3.10` through their normal reviews;
+4. execute `M3.11` and `M3.12` before M4 so generation, replay, atlas observations, and tool sources share stable route-segment identity;
+5. complete the no-backpack vertical slice through `M7.8`, then make the explicit M9 verdict;
+6. keep M9 deferred and last unless the owner explicitly changes that order.
 
 `M0.9` remains deferred by owner decision. No implementation agent performs external history rewriting, exposes historical values, or runs BFG without a separate explicit request.
 
-### Rationale — why M3.6 is next
+### Rationale — why M3.6.1 is next
 
-The accepted M3.5 controller provides a tested, command-agnostic resolution boundary. M3.6 can now route input through that boundary and replay its results. M3.11/M3.12 and M9 can reuse the same boundary, while inserting route identity before M4 prevents generator-era rework.
+The accepted M3.5 controller provides a tested, command-agnostic resolution boundary, but the legacy scene still has no authoritative runtime that binds its generated views to `BoardState`, a player ID, and that controller. `M3.6.1` closes this prerequisite without touching input or presentation. `M3.6.2` can then prove reusable submission/replay before `M3.6.3` removes the production legacy paths. M3.11/M3.12 and M9 can reuse the completed M3.6 boundary, while inserting route identity before M4 prevents generator-era rework.
 
 # Zasada aktualizacji roadmapy
 
