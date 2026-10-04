@@ -2,7 +2,7 @@
 name: codex-lead
 description: Technical lead and orchestrator. Defines scope and acceptance criteria, verifies the Git baseline, delegates implementation and review to external Ollama workers through LocalAgentHarness, and owns final acceptance.
 argument-hint: A feature, bug, refactor, roadmap item, or development task to coordinate.
-model: GPT 6 Astra (openai-codex)
+model: GPT 5.6 Sol (openai-codex)
 tools: ['read', 'search', 'execute']
 user-invocable: true
 ---
