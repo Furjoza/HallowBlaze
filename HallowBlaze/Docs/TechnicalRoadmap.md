@@ -1,7 +1,7 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6.1 next; route-leg amendments accepted; M9 deferred**
-> Data ostatniej weryfikacji: 2026-10-01
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6.2 next; route-leg amendments accepted; M9 deferred**
+> Data ostatniej weryfikacji: 2026-10-04
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
 > Zasady pracy agentów: [`../AGENTS.md`](../AGENTS.md)
@@ -1643,7 +1643,7 @@ The migration is deliberately split because command submission cannot safely pre
 
 ## `M3.6.1` — Legacy board-to-domain runtime composition
 
-**Status:** `Ready`
+**Status:** `Done` — accepted 2026-10-04 after independent Reviewer `PASS`.
 **Priority:** P0
 **Related contract:** sections 9, 10.2, and 21.1/21.2/21.5.
 
@@ -1677,6 +1677,89 @@ The migration is deliberately split because command submission cannot safely pre
 **Save and compatibility impact:** None. The runtime is reconstructed from the between-board checkpoint and deterministic board inputs; entity-view bindings and partially presented state are not saved.
 
 **Required handoff:** Runtime ownership/lifetime diagram, complete current-content classification table, `BoardRequest → runtime` field map, failure matrix, and proof that no Unity object entered the domain graph.
+
+**Implementation handoff (accepted 2026-10-04):**
+
+Runtime ownership and lifetime:
+
+```text
+GameManager
+├─ borrows the active RunState owned by the session
+├─ publishes ActiveBoardRequest and ActiveBoardRuntime together after SetupScene succeeds
+└─ disposes the runtime on failure, non-gameplay scene load, run restart/abandon, or destruction
+   └─ BoardRuntime
+      ├─ references the same active RunState without mutating it
+      ├─ owns the authoritative BoardState and one TurnController
+      ├─ owns the board-local PlayerId
+      └─ owns a read-only EntityId -> GameObject presentation registry
+
+BoardManager
+├─ generates all views under one inactive staging root
+├─ composes and validates the complete runtime before publication
+├─ activates and publishes the staging root only after composition succeeds
+└─ on failure/reload, disposes the runtime and destroys the generated root
+```
+
+The player view remains scene-owned; generated board views are owned by the active `BoardManager` root. Disposal clears the registry and releases runtime references. A reload creates a fresh root, registry, ID set, and controller; IDs are stable only for the lifetime of that board and never derive from Unity `InstanceID` or descriptor enumeration order.
+
+Current-content classification:
+
+| Legacy category | Classification | Domain mapping / note |
+| --- | --- | --- |
+| `Player` | mapped gameplay entity | `Actor`, `Player`, `legacy.player` |
+| `Floor` | mapped gameplay entity | walkable `Terrain`, `legacy.floor`; every in-bounds cell is required |
+| `OuterWall` | presentation-only | decorative boundary outside authoritative board bounds |
+| `Wall` | mapped gameplay entity | `Obstacle`, `legacy.wall` |
+| `Exit` | mapped gameplay entity | `Item`, `legacy.exit`, `IsExit` |
+| `Food` | mapped gameplay entity | `Item`, `legacy.food`, automatic Food reward `10` |
+| `Soda` | mapped gameplay entity | `Item`, `legacy.soda`, automatic Food reward `20` |
+| `BushFood` | mapped gameplay entity | `Item`, `legacy.bush-food`, automatic Food reward `10` |
+| `BuriedFood` | mapped gameplay entity | interactable `Item`, `legacy.buried-food` |
+| `Aid` | mapped gameplay entity | interactable `Item`, `legacy.aid`; final effect remains deferred |
+| `Enemy` | mapped gameplay entity | `Actor`, `Enemy`, `legacy.enemy`; execution remains deferred |
+
+No currently generated known category is intentionally disabled. The classification exists as an explicit safe state for future known content; an unknown category is a startup error rather than an implicit fallback.
+
+`BoardRequest → runtime` field map:
+
+| Request field | Composition/runtime use |
+| --- | --- |
+| `RunId` | must equal the active `RunState.RunId`; retained through `BoardRuntime.Request` |
+| `RunSeed` | must equal `RunState.RunSeed`; retained for deterministic board identity |
+| `WorldNodeId` | must equal `RunState.WorldNodeId`; retained as board boundary identity |
+| `CurrentDay` | must equal `RunState.CurrentDay`; retained as board boundary identity |
+| `BoardSeed` | must equal `RunState.GetBoardSeed()`; drives the legacy generator before composition |
+| `PlaceKind` | retained in the request for the generation/content boundary |
+| `BiomeFamily` | retained in the request for the generation/content boundary |
+| `LegacyDifficultyLevel` | supplied to legacy board generation; it does not mutate the run during composition |
+
+Generated grid width/height become `GridBounds`; the complete descriptor set becomes `BoardState` plus the presentation registry. Mapped descriptors are sorted by layer, grid position, content ID, and kind before sequential board-local IDs are assigned.
+
+Failure matrix:
+
+| Invalid condition | Stable diagnostic | Publication/lifecycle result |
+| --- | --- | --- |
+| null request, run, layout, descriptor, or view; inactive/mismatched run identity | `InvalidInput` | no runtime/request publication; staging root destroyed; gameplay input remains blocked |
+| category absent from the explicit catalog | `UnknownContent` | same atomic failure behavior |
+| repeated Unity view or repeated gameplay layer/cell | `DuplicateEntity` | same atomic failure behavior |
+| mapped content outside declared bounds | `OutOfBounds` | same atomic failure behavior |
+| descriptor grid position differs from the Unity view position | `ViewPositionMismatch` | same atomic failure behavior |
+| player count is not exactly one | `MissingPlayer` | same atomic failure behavior |
+| no mapped exit exists | `MissingExit` | same atomic failure behavior |
+| any in-bounds cell lacks mapped terrain | `MissingTerrain` | same atomic failure behavior |
+
+Domain-isolation evidence: the Unity references exist only in `LegacyBoardView` and the presentation-owned runtime registry. `BoardState`, `BoardEntityState`, and `BoardEntityDefinition` receive only domain primitives, stable textual content IDs, traits, and integer rewards. `BoardRuntimeCompositionTests.Compose_DoesNotMutateRunStateAndKeepsUnityOutOfDomainTypes` verifies that composition leaves the supplied `RunState` snapshot unchanged and reflects over the owning domain types to reject direct `UnityEngine.Object` fields. The runtime registry is exposed through `IReadOnlyDictionary<EntityId, GameObject>` and is emptied on disposal.
+
+Legacy mutation paths intentionally deferred to the `M3.6.3` production cutover:
+
+- `PlayerScript.AttemptMove`: movement and Food cost;
+- `PlayerScript.OnTriggerEnter2D`: Exit/Food/Soda/Aid pickup and outcome mutations;
+- `PlayerScript.AttemptGathering`: Carrot pickup and Food cost;
+- `PlayerScript.OnCantMove`: wall damage;
+- `GameManager.Update` / `MoveEnemies`: enemy scheduling;
+- `Enemy.MoveEnemy` / `OnCantMove`: enemy movement, attack, and player health loss.
+
+Validation evidence: Unity 6000.3.21f1 compiled the changed assemblies; focused EditMode coverage (`BoardRuntimeCompositionTests` plus `TurnControllerTests`) passed `36/36`; focused PlayMode coverage (`BoardRuntimeStartupTests` plus `GameSessionLifecycleTests`) passed `21/21`; editor Problems reported no errors; `git diff --check` passed. The accepted implementation baseline was branch `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. Independent `qwen-reviewer` verdict: `PASS`. `M3.6.2` is the next executable child; the M3.6 umbrella remains `Planned` until all three children are accepted.
 
 ---
 
@@ -3396,12 +3479,12 @@ O-002, O-003, O-004, O-005, O-006, O-007, O-008, and O-009 are resolved in `Game
 
 # Kolejka wykonawcza
 
-M0, M1, and M2 are complete; M3.1–M3.5 are `Done`; the M3.6 umbrella is split into three executable children; `M3.6.1` is next; and no card is currently `Active`. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a` and is already present in the current clean checkpoint. Every new child still begins with its normal clean-worktree preflight.
+M0, M1, and M2 are complete; M3.1–M3.6.1 are `Done`; the M3.6 umbrella is split into three executable children; `M3.6.2` is next; and no card is currently `Active`. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. M3.6.1 was implemented from the clean baseline `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. Every new child still begins with its normal clean-worktree preflight.
 
 The next safe sequence is:
 
-1. execute and independently review `M3.6.1`;
-2. execute and independently review `M3.6.2`, then `M3.6.3`;
+1. execute and independently review `M3.6.2`;
+2. execute and independently review `M3.6.3`;
 3. continue `M3.7`–`M3.10` through their normal reviews;
 4. execute `M3.11` and `M3.12` before M4 so generation, replay, atlas observations, and tool sources share stable route-segment identity;
 5. complete the no-backpack vertical slice through `M7.8`, then make the explicit M9 verdict;
@@ -3409,9 +3492,9 @@ The next safe sequence is:
 
 `M0.9` remains deferred by owner decision. No implementation agent performs external history rewriting, exposes historical values, or runs BFG without a separate explicit request.
 
-### Rationale — why M3.6.1 is next
+### Rationale — why M3.6.2 is next
 
-The accepted M3.5 controller provides a tested, command-agnostic resolution boundary, but the legacy scene still has no authoritative runtime that binds its generated views to `BoardState`, a player ID, and that controller. `M3.6.1` closes this prerequisite without touching input or presentation. `M3.6.2` can then prove reusable submission/replay before `M3.6.3` removes the production legacy paths. M3.11/M3.12 and M9 can reuse the completed M3.6 boundary, while inserting route identity before M4 prevents generator-era rework.
+The accepted M3.6.1 runtime now binds each generated board to authoritative `BoardState`, a stable board-local player ID, one controller, and a read-only view registry. `M3.6.2` can therefore prove reusable command submission, gating, and ordered event replay against that boundary before `M3.6.3` removes the production legacy mutation paths. M3.11/M3.12 and M9 can reuse the completed M3.6 boundary, while inserting route identity before M4 prevents generator-era rework.
 
 # Zasada aktualizacji roadmapy
 

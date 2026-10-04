@@ -1,0 +1,11 @@
+{
+    "name": "HallowBlaze.Presentation.Runtime",
+    "rootNamespace": "HallowBlaze.Presentation.Runtime",
+    "references": [
+        "HallowBlaze.Core.Board.Primitives",
+        "HallowBlaze.Core.Board.State",
+        "HallowBlaze.Core.Session",
+        "HallowBlaze.Core.State",
+        "HallowBlaze.Core.Turns.Resolution"
+    ]
+}
