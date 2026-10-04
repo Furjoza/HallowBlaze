@@ -6,6 +6,7 @@ using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
 using HallowBlaze.Core.World;
+using HallowBlaze.Presentation.Runtime;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -60,6 +61,7 @@ public class GameManager : MonoBehaviour
     private WorldDefinition worldDefinition;
     private WorldMapService worldMap;
     private BoardRequest activeBoardRequest;
+    private BoardRuntime activeBoardRuntime;
     private bool boardOutcomeHandled;
     private IReadOnlyList<WorldMapExitOption> routeChoices = NoRouteChoices;
     private bool terminalActionRequested;
@@ -74,6 +76,12 @@ public class GameManager : MonoBehaviour
     public BoardRequest ActiveBoardRequest
     {
         get { return activeBoardRequest; }
+    }
+
+    /// <summary>Gets the complete authoritative runtime for the active local board.</summary>
+    public BoardRuntime ActiveBoardRuntime
+    {
+        get { return activeBoardRuntime; }
     }
 
     /// <summary>Gets the legal options exposed by the current board exit.</summary>
@@ -268,6 +276,7 @@ public class GameManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        DisposeActiveBoardRuntime();
         if (instance == this)
             instance = null;
     }
@@ -275,7 +284,10 @@ public class GameManager : MonoBehaviour
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         if (scene.buildIndex != 1)
+        {
+            DisposeActiveBoardRuntime();
             return;
+        }
 
         BlockBoardStartup();
         EnsurePersistence();
@@ -314,12 +326,10 @@ public class GameManager : MonoBehaviour
     {
         boardStartupInProgress = true;
         doingSetup = true;
-        activeBoardRequest = null;
+        DisposeActiveBoardRuntime();
         boardOutcomeHandled = false;
         SetRouteChoices(NoRouteChoices);
         SetGameplayInputBlocked(true);
-        if (boardScript != null)
-            boardScript.ClearActiveRequest();
     }
 
     private void InitGame()
@@ -359,6 +369,7 @@ public class GameManager : MonoBehaviour
         enemies.Clear();
 
         activeBoardRequest = null;
+        activeBoardRuntime = null;
         boardOutcomeHandled = false;
         if (boardScript == null || worldDefinition == null)
         {
@@ -369,8 +380,13 @@ public class GameManager : MonoBehaviour
 
         try
         {
-            activeBoardRequest = BoardRequest.CreateFromRun(session.GetCurrentRun(), worldDefinition);
-            boardScript.SetupScene(activeBoardRequest);
+            RunState run = session.GetCurrentRun();
+            BoardRequest request = BoardRequest.CreateFromRun(run, worldDefinition);
+            GameObject playerView = GameObject.FindGameObjectWithTag("Player");
+            BoardRuntime runtime = boardScript.SetupScene(request, run, playerView);
+
+            activeBoardRequest = request;
+            activeBoardRuntime = runtime;
             boardStartupInProgress = false;
             SetGameplayInputBlocked(false);
             CancelInvoke(nameof(HideLevelImage));
@@ -378,8 +394,7 @@ public class GameManager : MonoBehaviour
         }
         catch (Exception exception)
         {
-            activeBoardRequest = null;
-            boardScript.ClearActiveRequest();
+            DisposeActiveBoardRuntime();
             CancelInvoke(nameof(HideLevelImage));
             SetGameplayInputBlocked(true);
             Debug.LogError("Board startup failed: " + exception.Message);
@@ -541,6 +556,7 @@ public class GameManager : MonoBehaviour
 
     private void OnRunStarted(RunState runState)
     {
+        DisposeActiveBoardRuntime();
         StopAllCoroutines();
         playerTurn = true;
         enemiesMoving = false;
@@ -555,6 +571,7 @@ public class GameManager : MonoBehaviour
 
     private void OnRunAbandoned(RunState runState)
     {
+        DisposeActiveBoardRuntime();
         StopAllCoroutines();
         playerTurn = false;
         enemiesMoving = false;
@@ -667,6 +684,17 @@ public class GameManager : MonoBehaviour
     {
         Time.timeScale = 1f;
         SetGameplayInputBlocked(false);
+    }
+
+    private void DisposeActiveBoardRuntime()
+    {
+        if (activeBoardRuntime != null)
+            activeBoardRuntime.Dispose();
+
+        activeBoardRuntime = null;
+        activeBoardRequest = null;
+        if (boardScript != null)
+            boardScript.ClearActiveRequest();
     }
 
     private static void SetButtonInteractable(GameObject target, bool interactable)
