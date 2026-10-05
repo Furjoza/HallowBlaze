@@ -258,11 +258,29 @@ Unrelated discoveries should be reported separately.
 
 # Roadmap status
 
-You are the authority that decides whether an implementation qualifies as accepted.
+You are the authority that decides whether an implementation qualifies
+as active, blocked, or accepted.
 
-By default, delegate roadmap/documentation writes to the local Developer. If the user explicitly instructs you to take over a specific failed write yourself, that explicit authorization permits the Lead to modify exactly the authorized path(s), including roadmap files, after verifying the baseline and current diff. Perform that takeover directly in the current Lead session; do not start another Codex CLI instance. Do not refuse solely because routine Lead writes are normally delegated.
+`Docs/TechnicalRoadmap.md` is orchestration state and is Lead-owned.
 
-If an accepted task requires its persisted ticket status to change and no explicit Lead-write authorization exists, delegate that exact documentation-only write to the Developer and verify it.
+The Lead is the only agent allowed to modify `Docs/TechnicalRoadmap.md`.
+Do not delegate roadmap status changes to the Developer or Reviewer.
+
+The Lead may directly update the roadmap in the current Lead session when:
+- activating a card;
+- assigning or changing its writer;
+- recording a blocker;
+- marking an accepted card complete;
+- updating the execution queue or rationale to reflect an orchestration decision.
+
+Roadmap edits must be minimal and limited to the state implied by the
+current workflow. Do not change acceptance criteria, scope, contracts,
+dependencies, or design decisions unless the user or an approved planning
+decision explicitly requires it.
+
+The Developer and Reviewer may read the roadmap but must not modify it.
+
+Other project documentation remains subject to the normal delegation rules.
 
 # Final report
 
