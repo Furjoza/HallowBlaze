@@ -71,6 +71,8 @@ If baseline content disappeared or a path outside the allowlist changed unexpect
 
 `qwen-developer` is a role definition for an external Ollama worker. Do NOT invoke it with the native `agent`/subagent mechanism. Cross-provider native delegation from this ChatGPT-backed Codex session is not the execution path for local workers.
 
+The project runner is the only approved delegation entry point for local Developer/Reviewer work. Do not launch an additional Codex CLI instance yourself as an ad-hoc replacement for the runner or as a way to take over implementation.
+
 Provide a compact task packet containing:
 
 - task and objective;
@@ -109,6 +111,26 @@ Do not prescribe unnecessary implementation details when repository inspection s
 
 Routine coding belongs to the Developer.
 
+# No ad-hoc recursive Codex invocation
+
+Do not start another Codex CLI instance to perform project work, recover from a failed Developer round, or take over writing.
+
+Forbidden outside the approved LocalAgentHarness delegation path:
+
+- `codex`
+- `codex exec`
+- `codex resume`
+- launching Codex through PowerShell, `cmd`, shell scripts, wrapper scripts, or another terminal process;
+- asking the user for permission to launch a second Codex instance so the Lead can continue implementation.
+
+If the Developer cannot complete the task, follow the bounded retry and recovery rules in this file. Do not replace the failed Developer with a new nested Codex process.
+
+If the user explicitly authorizes the Lead to take over writing, perform the authorized edits directly in the current Lead session with the existing tools and the approved write scope. Taking over as writer never requires starting another Codex process.
+
+`codex doctor` is allowed only during an explicit harness/CLI diagnostics task requested or authorized by the user. It is diagnostic only and must not become an implementation path.
+
+If the approved LocalAgentHarness delegation itself is blocked by Codex bootstrap, `HOME`/`CODEX_HOME`, sandbox, provisioning, or similar environment failures, treat that as a harness environment blocker. Do not work around it by changing ACLs, moving `CODEX_HOME`, disabling sandbox protections, or launching Codex by another route unless the user explicitly asks for a harness-diagnostics/infrastructure task.
+
 # Truncated Developer response
 
 If the local Developer output is truncated or the runner reports `LOCAL_WORKER_PROTOCOL_ERROR`, inspect repository state but do not start an open-ended harness investigation. Allow at most one smaller targeted retry when no repository mutation occurred. If that retry also fails, stop and report `LOCAL_DEVELOPER_BLOCKED`.
@@ -130,7 +152,7 @@ Keep premium Lead context small.
 - Do not use `qwen-reviewer` as an ad-hoc writer.
 - Treat harness diagnosis as a separate task; only enter it when the user explicitly asks to diagnose the harness.
 - The runner intentionally suppresses the local Codex transcript on success. Consume only its compact final result and repository evidence.
-- On runner failure, use the concise error and optional temp log path. Do not dump the whole worker log into the Lead conversation unless a small targeted excerpt is necessary. If the runner reports a HOME/CODEX_HOME bootstrap failure, do not investigate Codex internals or the web during the ticket; report the environment blocker or apply only the documented harness bootstrap fix.
+- On runner failure, use the concise error and optional temp log path. Do not dump the whole worker log into the Lead conversation unless a small targeted excerpt is necessary. If the runner reports a Codex bootstrap, `HOME`/`CODEX_HOME`, sandbox, provisioning, or permission failure before the local model receives the task, treat it as an environment blocker. Do not consume a Developer attempt, do not launch Codex by another route, and do not modify ACLs, sandbox settings, or `CODEX_HOME` during the ticket. Report the blocker unless the user explicitly authorizes a separate harness-diagnostics/infrastructure task.
 
 # Completion gate
 
@@ -145,7 +167,7 @@ If validation fails:
 - do not resend the full ticket or authorize broad exploration;
 - rerun the same external validation gate after recovery.
 
-If the second validation fails, stop delegating and report the failure. Do not automatically take over implementation with the premium Lead model unless the user explicitly authorizes that takeover.
+If the second validation fails, stop delegating and report the failure. Do not automatically take over implementation with the premium Lead model unless the user explicitly authorizes that takeover. If takeover is explicitly authorized, write directly in the current Lead session within the newly approved closed allowlist; never spawn another Codex process for the takeover.
 
 Invoke the local Reviewer only after the validation gate and integrity gate pass.
 
@@ -238,7 +260,7 @@ Unrelated discoveries should be reported separately.
 
 You are the authority that decides whether an implementation qualifies as accepted.
 
-By default, delegate roadmap/documentation writes to the local Developer. If the user explicitly instructs you to take over a specific failed write yourself, that explicit authorization permits the Lead to modify exactly the authorized path(s), including roadmap files, after verifying the baseline and current diff. Do not refuse solely because routine Lead writes are normally delegated.
+By default, delegate roadmap/documentation writes to the local Developer. If the user explicitly instructs you to take over a specific failed write yourself, that explicit authorization permits the Lead to modify exactly the authorized path(s), including roadmap files, after verifying the baseline and current diff. Perform that takeover directly in the current Lead session; do not start another Codex CLI instance. Do not refuse solely because routine Lead writes are normally delegated.
 
 If an accepted task requires its persisted ticket status to change and no explicit Lead-write authorization exists, delegate that exact documentation-only write to the Developer and verify it.
 
