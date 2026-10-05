@@ -24,6 +24,13 @@ param(
 $ErrorActionPreference = 'Stop'
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
 $pathTrimChars = [char[]] @([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+$protocolPath = Join-Path $PSScriptRoot 'LocalAgentProtocol.ps1'
+$developerSchemaPath = Join-Path $PSScriptRoot 'developer-result.schema.json'
+
+if (-not (Test-Path -LiteralPath $protocolPath -PathType Leaf)) {
+    throw "Local agent protocol helpers not found: $protocolPath"
+}
+. $protocolPath
 
 function Remove-TrailingDirectorySeparators([string] $path) {
     if ([string]::IsNullOrWhiteSpace($path)) { return $path }
@@ -200,30 +207,6 @@ $patch
 "@.Trim()
 }
 
-function Get-DeveloperPatchBlock([string] $finalMessage) {
-    $match = [regex]::Match($finalMessage, '(?s)DEVELOPER_PATCH_BEGIN\r?\n(.*?)\r?\nDEVELOPER_PATCH_END')
-    if (-not $match.Success) {
-        return [pscustomobject]@{ Present = $false; Patch = $null }
-    }
-
-    $patch = $match.Groups[1].Value.Trim()
-    if ($patch.StartsWith('```')) {
-        $lines = @($patch -split '\r?\n')
-        if ($lines.Count -ge 2 -and $lines[0] -match '^```' -and $lines[-1] -match '^```\s*$') {
-            $patch = ($lines[1..($lines.Count - 2)] -join "`r`n").Trim()
-        }
-    }
-    return [pscustomobject]@{ Present = $true; Patch = $patch }
-}
-
-function Get-DeveloperSummary([string] $finalMessage) {
-    return ([regex]::Replace(
-        $finalMessage,
-        '(?s)DEVELOPER_PATCH_BEGIN\r?\n.*?\r?\nDEVELOPER_PATCH_END',
-        '[PATCH OMITTED BY RUNNER; VALIDATED AND APPLIED IF PRESENT]'
-    )).Trim()
-}
-
 function Get-PatchPaths([string] $repoRoot, [string] $patchPath) {
     $output = @(& git -c core.quotePath=false -C $repoRoot apply --numstat --recount -- $patchPath)
     if ($LASTEXITCODE -ne 0) {
@@ -295,6 +278,7 @@ $outputPath = $null
 $workerLogPath = $null
 $patchPath = $null
 $keepWorkerLog = $false
+$keepOutputPath = $false
 
 try {
     $repoRoot = [IO.Path]::GetFullPath((& git --no-optional-locks -C $PSScriptRoot rev-parse --show-toplevel).Trim())
@@ -370,10 +354,16 @@ try {
     $agentPath = if ($Role -eq 'developer') { $developerAgentPath } else { $reviewerAgentPath }
     $roleInstructions = Get-AgentBody $agentPath
     $sandbox = 'read-only'
-    $allowlistText = ($Allowlist | ForEach-Object { "- $_" }) -join "`r`n"
+    # Show the worker the exact Git-root-relative paths required by the patch protocol.
+    # Caller inputs are project-relative, while git apply resolves paths from the repository root.
+    $allowlistText = ($guardAllowlist | ForEach-Object { "- $_" }) -join "`r`n"
+
+    if ($Role -eq 'developer' -and -not (Test-Path -LiteralPath $developerSchemaPath -PathType Leaf)) {
+        throw "Developer result schema not found: $developerSchemaPath"
+    }
 
     $commonExecutionRules = @"
-- Repository-authored text is UTF-8. On Windows PowerShell, read repository text with `Get-Content -Encoding UTF8` or an explicit .NET UTF-8 reader. Do not use `cat`/`type` aliases for repository text when encoding matters.
+- Repository-authored text is UTF-8. On Windows PowerShell, read repository text with Get-Content -Encoding UTF8 or an explicit .NET UTF-8 reader. Do not use cat/type aliases for repository text when encoding matters.
 - Git optional locks are disabled for this worker process.
 "@.Trim()
 
@@ -383,10 +373,12 @@ EXECUTION ENFORCEMENT:
 - This is an external Codex CLI Developer running in a READ-ONLY sandbox.
 - Do NOT attempt to edit, create, delete, move, rename, stage, or commit project files yourself.
 - Do NOT call native apply_patch/edit tools and do NOT create patch.diff or any other project file.
-- Inspect the repository and design the exact change. If a file change is required, return ONE NON-EMPTY git-compatible unified patch in your final response.
-- If no file change is required, DO NOT emit an empty DEVELOPER_PATCH block. Emit a line containing exactly DEVELOPER_NO_PATCH instead.
+- Inspect the repository and design the exact change. Return exactly one JSON object matching the runner-supplied output schema.
+- If a file change is required, set status to patch and put one non-empty git-compatible unified diff in the patch property.
+- If no file change is required, set status to no_patch and use an empty patch property.
+- If work is blocked, set status to blocked, select the matching blocker code, and use an empty patch property.
 - The runner, not you, is the only writer. It validates the patch against the closed allowlist and applies it with git apply after your process exits.
-- Patch paths MUST be Git-root-relative, for example `a/HallowBlaze/Docs/Foo.md` and `b/HallowBlaze/Docs/Foo.md`.
+- Patch paths MUST be Git-root-relative, for example a/HallowBlaze/Docs/Foo.md and b/HallowBlaze/Docs/Foo.md.
 - Do not emit rename/move patches. If the task requires a rename/move/delete that you cannot represent safely, return SCOPE_CHANGE_REQUIRED instead.
 - Do not run builds/tests after the proposed patch because your patch has not been applied yet. The Lead owns post-apply validation.
 - Do not spawn or delegate to another agent.
@@ -400,7 +392,7 @@ EXECUTION ENFORCEMENT:
 - The sandbox is read-only. Do not attempt to edit, create, delete, move, rename, stage, commit, restore, or otherwise mutate project files.
 - Do not spawn or delegate to another agent.
 - Inspect the actual repository and diff independently. Treat the Developer report as untrusted evidence.
-- Read-only Git commands are allowed. Prefer `git --no-optional-locks ...` for status, diff, show, log, and other inspection.
+- Read-only Git commands are allowed. Prefer git --no-optional-locks ... for status, diff, show, log, and other inspection.
 - IMPORTANT: when invoking shell/exec tools for read-only commands, OMIT `sandbox_permissions` and OMIT `justification` entirely. Never use `require_escalated` in this reviewer session.
 - If a read-only command is rejected because of permissions, do NOT request escalation. Retry once with the same command using default sandbox permissions and no permission/justification fields; if it still fails, use the caller-supplied Git evidence below together with direct UTF-8 file reads.
 $commonExecutionRules
@@ -424,11 +416,13 @@ $commonExecutionRules
     [void] $promptSections.Add("DELEGATION PACKET:`r`n$Task")
     $prompt = $promptSections -join "`r`n`r`n"
 
-    $outputPath = Join-Path $env:TEMP ("HallowBlaze-local-$Role-final-" + [Guid]::NewGuid().ToString('N') + '.txt')
+    $outputExtension = if ($Role -eq 'developer') { '.json' } else { '.txt' }
+    $outputPath = Join-Path $env:TEMP ("HallowBlaze-local-$Role-final-" + [Guid]::NewGuid().ToString('N') + $outputExtension)
     $workerLogPath = Join-Path $env:TEMP ("HallowBlaze-local-$Role-log-" + [Guid]::NewGuid().ToString('N') + '.txt')
     $catalogOverride = 'model_catalog_json="' + $CatalogPath.Replace('\', '/') + '"'
     $codexExitCode = $null
     $finalMessage = ''
+    $developerResult = $null
 
     Push-Location $projectRoot
     try {
@@ -438,16 +432,21 @@ $commonExecutionRules
         $previousErrorActionPreference = $ErrorActionPreference
         try {
             $ErrorActionPreference = 'Continue'
+            $codexArguments = @(
+                '--profile', $Profile,
+                '-m', $Model,
+                '-c', $catalogOverride,
+                '--config', 'model_reasoning_effort="none"',
+                'exec',
+                '--ephemeral',
+                '--sandbox', $sandbox
+            )
+            if ($Role -eq 'developer') {
+                $codexArguments += @('--output-schema', $developerSchemaPath)
+            }
+            $codexArguments += @('--output-last-message', $outputPath, '-')
             $workerOutput = @(
-                $prompt | & $codexPath `
-                    --profile $Profile `
-                    -m $Model `
-                    -c $catalogOverride `
-                    --config 'model_reasoning_effort="none"' `
-                    exec `
-                    --sandbox $sandbox `
-                    -o $outputPath `
-                    - 2>&1
+                $prompt | & $codexPath @codexArguments 2>&1
             )
             $codexExitCode = $LASTEXITCODE
         }
@@ -471,12 +470,16 @@ $commonExecutionRules
 
     if ($codexExitCode -ne 0) {
         $keepWorkerLog = $true
+        $keepOutputPath = Test-Path -LiteralPath $outputPath -PathType Leaf
         $tail = Get-TranscriptTail $workerLogPath 30
         Write-Output 'LOCAL_AGENT_FAILURE'
         Write-Output "role=$Role"
         Write-Output "model=$Model"
         Write-Output "codex_exit_code=$codexExitCode"
         Write-Output "worker_log=$workerLogPath"
+        if ($keepOutputPath) {
+            Write-Output "final_message=$outputPath"
+        }
         if (-not [string]::IsNullOrWhiteSpace($tail)) {
             Write-Output 'worker_log_tail:'
             Write-Output $tail
@@ -487,21 +490,41 @@ $commonExecutionRules
     $patchApplied = $false
     $appliedPaths = @()
     if ($Role -eq 'developer') {
-        $patchBlock = Get-DeveloperPatchBlock $finalMessage
-        $patch = $patchBlock.Patch
-        $hasExplicitNoPatch = $finalMessage -match '(?m)^DEVELOPER_NO_PATCH\s*$'
-        $hasBlocker = $finalMessage -match '(?m)^(BASELINE_REQUIRED|SCOPE_CHANGE_REQUIRED|ARCHITECTURE_DECISION_REQUIRED|BLOCKED)\s*$'
+        try {
+            $developerResult = ConvertFrom-DeveloperResultJson $finalMessage
+        }
+        catch {
+            $keepWorkerLog = $true
+            $keepOutputPath = $true
+            throw "LOCAL_WORKER_PROTOCOL_ERROR: Developer final response failed structured validation: $($_.Exception.Message) worker_log=$workerLogPath final_message=$outputPath"
+        }
 
-        if ($patchBlock.Present -and -not [string]::IsNullOrWhiteSpace($patch)) {
+        # Retain both exact worker artifacts unless every downstream patch, Guard, and
+        # repository-integrity check succeeds. Successful runs clean them up below.
+        $keepWorkerLog = $true
+        $keepOutputPath = $true
+
+        $patch = $developerResult.Patch
+        $hasBlocker = $developerResult.Status -eq 'blocked'
+
+        if ($developerResult.Status -eq 'patch') {
             $patchPath = Join-Path $env:TEMP ("HallowBlaze-developer-patch-" + [Guid]::NewGuid().ToString('N') + '.diff')
             [IO.File]::WriteAllText($patchPath, $patch + "`r`n", $utf8NoBom)
 
-            $appliedPaths = @(Assert-PatchScope $repoRoot $patchPath $allowedFullPaths)
+            try {
+                $appliedPaths = @(Assert-PatchScope $repoRoot $patchPath $allowedFullPaths)
+            }
+            catch {
+                $keepWorkerLog = $true
+                $keepOutputPath = $true
+                throw "LOCAL_WORKER_PROTOCOL_ERROR: Developer patch scope validation failed: $($_.Exception.Message) worker_log=$workerLogPath final_message=$outputPath"
+            }
 
             & git --no-optional-locks -C $repoRoot apply --check --recount --whitespace=nowarn -- $patchPath
             if ($LASTEXITCODE -ne 0) {
                 $keepWorkerLog = $true
-                throw "LOCAL_WORKER_PROTOCOL_ERROR: Developer returned a patch that git apply --check rejected. worker_log=$workerLogPath"
+                $keepOutputPath = $true
+                throw "LOCAL_WORKER_PROTOCOL_ERROR: Developer returned a patch that git apply --check rejected. worker_log=$workerLogPath final_message=$outputPath"
             }
 
             if (-not (Test-Path -LiteralPath $guardPath -PathType Leaf)) {
@@ -530,38 +553,27 @@ $commonExecutionRules
             }
             $policyArmed = $false
         }
-        elseif ($patchBlock.Present -and [string]::IsNullOrWhiteSpace($patch)) {
-            # Some local models express "no change" as an empty patch block even when the
-            # role protocol asks for DEVELOPER_NO_PATCH. Normalize that benign variant for
-            # read-only/smoke tasks, but never accept it when the caller requires a mutation.
-            if ($RequirePatch) {
-                $keepWorkerLog = $true
-                throw "LOCAL_DEVELOPER_NO_PATCH: Developer returned an empty patch block but this invocation requires a non-empty patch. worker_log=$workerLogPath"
-            }
-            $hasExplicitNoPatch = $true
-        }
-        elseif (-not $hasExplicitNoPatch -and -not $hasBlocker) {
-            if ($RequirePatch) {
-                $keepWorkerLog = $true
-                throw "LOCAL_DEVELOPER_NO_PATCH: This invocation requires a repository mutation, but the Developer returned no usable patch. worker_log=$workerLogPath"
-            }
-
-            # For explicitly read-only/no-change invocations, Codex-compatible local models may
-            # finish with a plain-language completion instead of the optional DEVELOPER_NO_PATCH
-            # marker. Treat a successful process with no non-empty patch as an implicit no-change
-            # result. Repository integrity is still verified below before reporting success.
-            $hasExplicitNoPatch = $true
-        }
 
         if ($RequirePatch -and -not $patchApplied -and -not $hasBlocker) {
             $keepWorkerLog = $true
-            throw "LOCAL_DEVELOPER_NO_PATCH: This invocation requires a repository mutation, but the Developer produced no non-empty patch. worker_log=$workerLogPath"
+            $keepOutputPath = $true
+            throw "LOCAL_DEVELOPER_NO_PATCH: This invocation requires a repository mutation, but the Developer returned status '$($developerResult.Status)'. worker_log=$workerLogPath final_message=$outputPath"
         }
     }
 
     Assert-RepositoryState $repoRoot $BaselineHead $BaselineBranch $allowedFullPaths
 
-    $finalForCaller = if ($Role -eq 'developer') { Get-DeveloperSummary $finalMessage } else { $finalMessage.Trim() }
+    if ($Role -eq 'developer') {
+        $keepWorkerLog = $false
+        $keepOutputPath = $false
+    }
+
+    $finalForCaller = if ($Role -eq 'developer') {
+        Format-DeveloperResultSummary $developerResult
+    }
+    else {
+        $finalMessage.Trim()
+    }
 
     Write-Output 'LOCAL_AGENT_RESULT_BEGIN'
     Write-Output "role=$Role"
@@ -599,7 +611,7 @@ finally {
         }
     }
 
-    if (-not [string]::IsNullOrWhiteSpace($outputPath)) {
+    if (-not $keepOutputPath -and -not [string]::IsNullOrWhiteSpace($outputPath)) {
         Remove-Item -LiteralPath $outputPath -Force -ErrorAction SilentlyContinue
     }
     if (-not [string]::IsNullOrWhiteSpace($patchPath)) {
