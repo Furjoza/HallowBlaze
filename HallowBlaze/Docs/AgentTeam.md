@@ -4,159 +4,72 @@
 
 | Role | Agent | Model | Writes project files |
 |---|---|---|---|
-| Tech Lead | `codex-lead` | Selected in VS Code Chat | No |
-| Developer | `qwen-developer` | `devstral-small-2:24b` via gateway and Ollama | Yes |
-| Reviewer | `qwen-reviewer` | Auto (Copilot) | No |
+| Tech Lead | `codex-lead` | `GPT 5.6 Sol (openai-codex)` | Authorized configuration and roadmap; not routine implementation |
+| Developer | `qwen-developer` | `qwen3-coder:30b (ollama-models)` | Direct native filesystem edits |
+| Reviewer | `qwen-reviewer` | `qwen3.6:27b (ollama-models)` | No |
 
-`codex-lead` is the user-facing coordinator.
+`codex-lead` is the user-facing coordinator. The two local Qwen agents are internal native subagents and run sequentially.
 
-The local Developer and Reviewer are internal subagents and run sequentially.
+The Developer uses `read`, `search`, `edit`, and `execute`. The Reviewer uses only `read` and `search`. Each local model is pinned in its agent configuration; switching to a frontier model requires explicit user approval.
 
 ## Workflow
 
 ```text
-User
-  │
-  ▼
-codex-lead
-  │
-  ├─ inspect context
-  ├─ verify clean Git baseline
-  ├─ establish write allowlist
-  ├─ define acceptance criteria
-  └─ plan
-  │
-  ▼
-qwen-developer
-  │
-  ├─ implement
-  ├─ self-validate
-  └─ handoff
-  │
-  ▼
-Lead validation + integrity gate
-  │
-  ├─ incomplete/invalid ───────► qwen-developer retry
-  │
-  ▼
-qwen-reviewer
-  │
-  ├─ CHANGES_REQUIRED ────────► Lead arbitration
-  │                              │
-  │                              ▼
-  │                         qwen-developer
-  │                              │
-  │                              └────────► review again
-  │
-  ├─ BLOCKED ─────────────────► Lead/user decision
-  │
-  └─ PASS ────────────────────► Lead accepts and reports
+Codex Lead
+  -> native runSubagent (qwen-developer)
+  -> direct filesystem edits
+  -> local compile/test/fix iterations
+  -> Lead completion and integrity gates
+  -> native runSubagent (qwen-reviewer)
+  -> Lead arbitration and acceptance
 ```
 
-## Responsibility boundaries
+Exactly one writer runs at a time. Independent review begins only after the writer and required validation finish. All operations target the active workspace or a worktree explicitly assigned to the task, not another project copy.
 
-### Tech Lead
+## Responsibility Boundaries
 
-Owns:
+The Lead owns task interpretation, scope, acceptance criteria, architectural/product decisions, baseline and worktree preparation, delegation, integrity gates, review arbitration, and final acceptance. `Docs/TechnicalRoadmap.md` remains Lead-owned.
 
-- task interpretation;
-- scope;
-- acceptance criteria;
-- architectural decisions;
-- clean Git baseline and integrity checks;
-- delegation;
-- review arbitration;
-- final acceptance.
+The Developer owns implementation within a closed write scope, focused validation, and an accurate handoff. It follows the existing code and tests and iterates on its own failures until PASS or a concrete technical blocker. It does not administer the Git baseline or perform independent review.
 
-Does not routinely implement production changes.
+The Reviewer independently checks actual files, the task-scoped diff, acceptance criteria, and supplied validation evidence. It returns `PASS`, `CHANGES_REQUIRED`, or `BLOCKED`, never edits files, and does not claim terminal checks it cannot execute.
 
-### Developer
+## Git Baseline
 
-Owns:
+Before a normal ticket, the Lead records the real Git root, branch, and `HEAD` and verifies the clean worktree required by [AGENTS.md](../AGENTS.md). Unexpected pre-existing changes stop the workflow for a user decision; they are never automatically stashed, cleaned, or reverted.
 
-- implementation;
-- writes within the approved allowlist;
-- implementation-level validation;
-- accurate handoff.
+The Lead defines a closed repo-relative write scope before delegation. After each writer iteration it checks actual disk changes, Git status/diff, preserved baseline content, required checks, and acceptance criteria. Normal corrections continue from the current ticket state.
 
-It is the only writer during an implementation iteration.
+Tool-completion metadata, generated tool-call text, chat previews, and agent reports alone do not prove that a file changed. Verify the intended content at the exact project path. Unexpected scope changes require a user decision, not automatic recovery.
 
-### Reviewer
+## Task Packets
 
-Owns:
+Send compact handoffs in Polish. The Developer receives the absolute project/worktree path, typically 1-3 scoped files, a concrete behavioral goal and invariants, implementation/test references, acceptance criteria, and the focused validation command or filter. Prefer references over long procedural prompts.
 
-- independent verification;
-- adversarial review;
-- acceptance-criteria checks;
-- safe read-only tests and diagnostics.
+The Reviewer receives the task, acceptance criteria, changed-file scope, baseline `HEAD`, Git status and diff, the Developer report, and actual validation evidence with report paths. The Lead supplies Git and test evidence because the Reviewer has no terminal tool.
 
-It never repairs the implementation.
+## Validation And Review
 
-## Git baseline and write allowlist
+Use [unity-validate](../.github/skills/unity-validate/SKILL.md) for C# and Unity changes. Discover the live Pipeline/Editor commands first; use existing CLI batchmode compilation and focused tests when appropriate. PowerShell 5.1 does not support `&&`; pass the absolute assigned project path to `unity run` and `unity test`.
 
-Before a normal ticket, `codex-lead` records the Git root, branch, and `HEAD`, then requires a clean worktree. The user commits and pushes manual changes before agent work. An unexpected dirty worktree stops the workflow for a user decision; it is not automatically stashed, cleaned, or snapshotted.
+Unity test evidence requires a fresh XML report with the expected fixture, nonzero executed tests, and actual passing results. Keep reports outside project `Temp`, which Unity clears. CLI success text alone is not PASS.
 
-The Lead defines a closed repo-relative allowlist and arms it in the Guard before delegating. The Developer must return `BASELINE_REQUIRED` without editing when the Git baseline or allowlist is missing.
+For normal tickets, the Lead sends concrete validation failures or material review findings back to the Developer in a bounded correction task. It reruns the relevant gates after corrections and does not automatically take over implementation. A missing required check or `BLOCKED` review prevents acceptance.
 
-Validation and review corrections continue from the current ticket state without creating a new baseline. After the writer returns, the Lead compares repository changes with the original Git baseline and allowlist before starting review. Unexpected changes stop the workflow; restoration is never automatic.
+## Controlled Experiments
 
-## Unity integration
+Benchmarks run only when explicitly requested. Use disposable Git worktrees, record intentional fixture preparation separately from worker changes, and follow the agreed trial count and gates.
 
-The primary Editor automation path is:
+A returned compile failure, test failure, scope violation, or materially incomplete implementation is FAIL. The Lead records evidence and rejects the result without repairing it or running rescue handoffs. Worker self-repair before returning is allowed. The Lead performs the experiment's brief final acceptance review.
 
-```text
-VS Code agent
-    │
-    ▼
-terminal / execute
-    │
-    ▼
-Unity CLI
-    │
-    ▼
-Unity Pipeline
-    │
-    ▼
-Unity Editor
-```
+Worktrees isolate repository content, not arbitrary terminal effects. An invocation that never reaches the local model is an environment failure, not a competency result.
 
-Useful discovery commands:
+## Configuration Sources
 
-```powershell
-unity pipeline list
-unity command
-```
-
-Focused Editor inspection uses:
-
-```powershell
-unity command eval "<valid C# statements>;"
-```
-
-The legacy Unity AI Assistant MCP Server is not part of the primary workflow.
-
-## Configuration sources
-
-Project-wide rules:
-
-`AGENTS.md`
-
-Role-specific behavior:
-
-`.github/agents/*.agent.md`
-
-Versioned local Developer harness:
-
-`Tools/LocalAgentHarness/`
-
-Game-design contract:
-
-`Docs/GameDesignContract.md`
-
-Technical roadmap:
-
-`Docs/TechnicalRoadmap.md`
-
-Architecture decisions:
-
-`Docs/Decisions/`
+- [Project rules](../AGENTS.md)
+- [Lead](../.github/agents/codex-lead.agent.md)
+- [Developer](../.github/agents/qwen-developer.agent.md)
+- [Reviewer](../.github/agents/qwen-reviewer.agent.md)
+- [Unity validation](../.github/skills/unity-validate/SKILL.md)
+- [Game-design contract](GameDesignContract.md)
+- [Technical roadmap](TechnicalRoadmap.md)

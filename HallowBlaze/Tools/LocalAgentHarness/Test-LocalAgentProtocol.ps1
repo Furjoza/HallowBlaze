@@ -1,8 +1,6 @@
 param(
     [string] $ProtocolPath = "$PSScriptRoot\LocalAgentProtocol.ps1",
-    [string] $SchemaPath = "$PSScriptRoot\developer-result.schema.json",
-    [string] $RunnerPath = "$PSScriptRoot\Invoke-LocalAgent.ps1",
-    [string] $DeveloperAgentPath = "$PSScriptRoot\..\..\.github\agents\qwen-developer.agent.md"
+    [string] $SchemaPath = "$PSScriptRoot\developer-result.schema.json"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -124,18 +122,6 @@ $summary = Format-DeveloperResultSummary $patchResult
 Assert-True ($summary -like '*status: patch*') 'Summary does not include status.'
 Assert-True ($summary -like '*Docs/Sample.md*') 'Summary does not include changed files.'
 Assert-True ($summary -notlike '*diff --git*') 'Summary must not echo the patch.'
-
-$runnerSource = Get-Content -LiteralPath $RunnerPath -Raw -Encoding UTF8
-Assert-True ($runnerSource -like '*--ephemeral*') 'Runner does not use --ephemeral.'
-Assert-True ($runnerSource -like '*--output-schema*') 'Runner does not use --output-schema.'
-Assert-True ($runnerSource -like '*--output-last-message*') 'Runner does not use --output-last-message.'
-Assert-True ($runnerSource -like '*$allowlistText = ($guardAllowlist*') 'Runner does not expose Git-root-relative patch paths to the worker.'
-Assert-True ($runnerSource -notmatch "(?m)^\s*'--json'\s*,?\s*$") 'Runner must not use --json as its primary channel.'
-Assert-True ($runnerSource -notlike '*DEVELOPER_PATCH_BEGIN*') 'Runner still depends on free-form patch markers.'
-
-$developerSource = Get-Content -LiteralPath $DeveloperAgentPath -Raw -Encoding UTF8
-Assert-True ($developerSource -like '*exactly one JSON object*') 'Developer role does not require structured output.'
-Assert-True ($developerSource -notlike '*DEVELOPER_PATCH_BEGIN*') 'Developer role still instructs free-form patch markers.'
 
 Write-Host 'PASS: LocalAgent structured Developer protocol' -ForegroundColor Green
 exit 0

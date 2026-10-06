@@ -100,7 +100,9 @@ Read-only analysis may run separately, but review begins only after the implemen
 
 Before a normal ticket begins, the coordinator must verify that the worktree is clean and record the Git root, branch, and `HEAD`. The user commits and pushes any manual changes before starting agent work. If unexpected pre-existing changes are present, stop and ask the user how to proceed.
 
-A writer must not begin without a closed write allowlist enforced by the Guard.
+Before native delegation, the Lead defines a closed write scope and prepares the worktree. The Lead mechanically checks the actual filesystem changes, Git diff, compilation, tests, and acceptance criteria after the writer returns. Do not burden the Developer with baseline administration or a change-transfer protocol.
+
+For controlled local-worker experiments, use disposable Git worktrees. Record intentional historical fixture preparation separately from worker changes. A returned compile failure, test failure, scope violation, or materially incomplete implementation is FAIL; the Lead does not repair or retry the failed implementation within that experiment.
 
 ## 5. Architecture invariants
 
@@ -128,9 +130,9 @@ Treat pre-existing tracked and untracked changes as user-owned baseline.
 
 For a new ticket, record the real Git root, branch, and `HEAD`, then require `git status --short --branch --untracked-files=normal` to show no staged, unstaged, or untracked project changes. The clean commit is the recovery baseline; do not create a separate snapshot.
 
-Define a closed repo-relative write allowlist and arm it through the Guard before delegating. After the writer returns, compare the repository changes with the recorded baseline and allowlist before review.
+Define a closed repo-relative write scope before delegating through native `runSubagent`. After the writer returns, compare the repository changes with the recorded baseline, prepared input, and scope before review. Worktree preparation and integrity checks belong to the Lead, not the local Developer.
 
-Validation or review corrections continue from the current ticket state without creating a new baseline or snapshot. If the second validation fails, the Lead takes over implementation as defined by the completion gate.
+Normal ticket corrections continue from the current ticket state without creating a new baseline or snapshot. Never automatically take over failed local work. In controlled benchmarks, record FAIL and discard the disposable worktree rather than repairing or delegating a rescue iteration. The Developer may iterate on its own implementation and validation before returning.
 
 If a path outside the allowlist changes or baseline content disappears, stop the normal workflow. Preserve the evidence and do not restore automatically; recovery requires an explicit user decision.
 
@@ -149,6 +151,8 @@ Do not create commits, branches, tags, or pull requests unless explicitly reques
 Do not modify global Git configuration without explicit approval.
 
 Before operating on the parent repository directory, confirm the real Git root and exact intended scope.
+
+Work only in the active workspace or a worktree explicitly assigned to the task. Do not inspect or modify another project copy without explicit user authorization.
 
 Do not recursively inspect, stage, or manipulate generated Unity/IDE directories such as:
 
@@ -214,6 +218,8 @@ unity command
 
 Use `unity command` to discover commands exposed by the connected Editor.
 
+For isolated worktrees or an unreachable live Pipeline server, the existing CLI also supports batchmode `unity run` for import/compilation and `unity test` for focused EditMode/PlayMode tests. Follow `.github/skills/unity-validate/SKILL.md` for verified project commands and report checks. This does not require a legacy integration or package/version changes.
+
 For focused C# inspection or small controlled Editor operations:
 
 ```powershell
@@ -278,7 +284,7 @@ A task is complete only when:
 - scope did not silently expand;
 - save changes include compatible versioning/migration or an explicitly approved reset;
 - documentation/configuration was updated when the task changed a public contract;
-- implementation received the required independent review.
+- implementation received the required independent review; controlled worker benchmarks use the Lead's brief final acceptance review without implementation repairs.
 
 Partial implementation, token limits, or plausible-looking code are not evidence of completion.
 
