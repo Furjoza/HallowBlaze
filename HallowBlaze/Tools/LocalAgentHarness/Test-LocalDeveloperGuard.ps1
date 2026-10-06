@@ -1,5 +1,5 @@
 # Test script for LocalDeveloperGuard.ps1
-# This script tests the lifecycle scenarios A-F as specified in the requirements
+# This script tests the lifecycle scenarios A-G as specified in the requirements
 
 param(
     [string] $GuardPath = "$PSScriptRoot\LocalDeveloperGuard.ps1",
@@ -236,6 +236,42 @@ $testF = {
     }
 }
 
+# Test G: Lead-owned roadmap cannot be included in a Developer write policy
+$testG = {
+    $statePath = Join-Path $TestStateDir "active-session.json"
+    $policyPath = Join-Path $TestStateDir "write-policy.json"
+    $protectedPathVariants = @(
+        "Docs/TechnicalRoadmap.md",
+        "HallowBlaze/Docs/TechnicalRoadmap.md"
+    )
+
+    foreach ($protectedPath in $protectedPathVariants) {
+        Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $policyPath -Force -ErrorAction SilentlyContinue
+
+        $previousErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $output = @(& "$PSHOME\powershell.exe" -NoProfile -File $GuardPath -ArmAllowlist $protectedPath 2>&1)
+            $exitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+
+        $outputText = $output -join [Environment]::NewLine
+        if ($exitCode -eq 0) {
+            throw "Lead-owned path was accepted: $protectedPath"
+        }
+        if ($outputText -notlike "*Developer cannot own Lead-controlled path:*") {
+            throw "Lead-owned path rejection did not report the expected reason: $protectedPath"
+        }
+        if (Test-Path -LiteralPath $policyPath -PathType Leaf) {
+            throw "Write policy was armed for Lead-owned path: $protectedPath"
+        }
+    }
+}
+
 # Run all tests
 $results = @()
 
@@ -245,14 +281,15 @@ $results += Test-Scenario "C pending failed start does not block codex-lead" $te
 $results += Test-Scenario "D stale started state and policy cleaned on unrelated use" $testD
 $results += Test-Scenario "E second active pending/started writer blocked" $testE
 $results += Test-Scenario "F mismatched qwen session denied" $testF
+$results += Test-Scenario "G Lead-owned roadmap cannot arm Developer policy" $testG
 
 # Summary
 $passed = $results | Where-Object { $_ }
 $failed = $results | Where-Object { -not $_ }
 
 Write-Host "`n=== Test Summary ===" -ForegroundColor White
-Write-Host "Passed: $($passed.Count)/6" -ForegroundColor Green
-Write-Host "Failed: $($failed.Count)/6" -ForegroundColor Red
+Write-Host "Passed: $($passed.Count)/7" -ForegroundColor Green
+Write-Host "Failed: $($failed.Count)/7" -ForegroundColor Red
 
 if ($failed.Count -gt 0) {
     Restore-TestEnvironment

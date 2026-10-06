@@ -21,6 +21,13 @@ $repoRoot = if ($env:HALLOWBLAZE_GUARD_REPO_ROOT) {
 else {
     [IO.Path]::GetFullPath((& git -C $PSScriptRoot rev-parse --show-toplevel).Trim())
 }
+$projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+$leadOwnedPaths = @(
+    'Docs/TechnicalRoadmap.md'
+)
+$leadOwnedFullPaths = @($leadOwnedPaths | ForEach-Object {
+    [IO.Path]::GetFullPath((Join-Path $projectRoot $_)).TrimEnd('\', '/')
+})
 $targetAgent = 'qwen-developer'
 $maxToolCalls = 30
 $maxNoProgressOutcomes = 3
@@ -82,6 +89,21 @@ function Get-AllowlistFingerprint([object[]] $paths) {
         }
     }
     return Get-TextHash ([string]::Join("`n", $parts))
+}
+
+function Get-ProjectRelativeAllowlistPath([string] $path) {
+    $normalizedPath = $path.Replace('\', '/').Trim()
+    while ($normalizedPath.StartsWith('./', [StringComparison]::Ordinal)) {
+        $normalizedPath = $normalizedPath.Substring(2)
+    }
+    $normalizedPath = $normalizedPath.TrimStart([char] '/')
+
+    $projectPrefix = (Split-Path $projectRoot -Leaf) + '/'
+    if ($normalizedPath.StartsWith($projectPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        $normalizedPath = $normalizedPath.Substring($projectPrefix.Length)
+    }
+
+    return $normalizedPath
 }
 
 function Resolve-ToolPath([string] $candidatePath) {
@@ -368,6 +390,14 @@ function Clear-WritePolicy {
 function Arm-WritePolicy([string[]] $allowlist) {
     $allowlist = @($allowlist | ForEach-Object { [string] $_ })
     if ($allowlist.Count -eq 0) { throw 'Write allowlist is empty.' }
+
+    $forbidden = @($allowlist | Where-Object {
+        $leadOwnedPaths -icontains (Get-ProjectRelativeAllowlistPath ([string] $_))
+    })
+    if ($forbidden.Count -gt 0) {
+        throw "Developer cannot own Lead-controlled path: $($forbidden -join ', ')"
+    }
+
     $fullPaths = [Collections.Generic.List[string]]::new()
     $repoPrefix = $repoRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
     foreach ($relativePath in $allowlist) {
@@ -378,7 +408,14 @@ function Arm-WritePolicy([string[]] $allowlist) {
         if (-not $fullPath.StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
             throw "Allowlist path escapes the repository: $relativePath"
         }
-        [void] $fullPaths.Add($fullPath.TrimEnd('\', '/'))
+        $normalizedFullPath = $fullPath.TrimEnd('\', '/')
+        $isLeadOwned = $leadOwnedFullPaths | Where-Object {
+            ([string] $_).Equals($normalizedFullPath, [StringComparison]::OrdinalIgnoreCase)
+        } | Select-Object -First 1
+        if ($null -ne $isLeadOwned) {
+            throw "Developer cannot own Lead-controlled path: $relativePath"
+        }
+        [void] $fullPaths.Add($normalizedFullPath)
     }
 
     $policy = [PSCustomObject]@{
