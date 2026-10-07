@@ -6,6 +6,7 @@
         "HallowBlaze.Core.Board.State",
         "HallowBlaze.Core.Session",
         "HallowBlaze.Core.State",
+        "HallowBlaze.Core.Turns.Contracts",
         "HallowBlaze.Core.Turns.Resolution"
     ]
 }

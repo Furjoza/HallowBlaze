@@ -27,7 +27,11 @@ Always pass the exact absolute Unity project directory to `unity test` or `unity
 
 `dotnet test` on Unity-generated projects is not a substitute for the Unity Test Framework.
 
-Do not probe `unity pipeline list` or `unity command` during normal validation. Use those only when the Lead explicitly asks to diagnose or use a currently open Unity Editor connection.
+Do not probe `unity pipeline list` or `unity command` during normal validation.
+Use those only when the Lead explicitly asks to diagnose or use a currently open Unity Editor connection.
+
+Do not use Pipeline availability as a preflight or environment-discovery step.
+For normal automated work, go directly to `unity test` or `unity run` as appropriate.
 
 If an edit seems invisible, inspect the source on disk at the exact project path being tested. A chat preview or tool-completion message is not evidence of what Unity compiled.
 

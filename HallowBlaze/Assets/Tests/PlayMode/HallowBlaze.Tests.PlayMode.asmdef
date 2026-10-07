@@ -7,6 +7,7 @@
         "HallowBlaze.Core.Persistence",
         "HallowBlaze.Core.Board.Primitives",
         "HallowBlaze.Core.Board.State",
+        "HallowBlaze.Core.Turns.Contracts",
         "HallowBlaze.Core.Turns.Resolution",
         "HallowBlaze.Presentation.Runtime"
     ],
