@@ -100,6 +100,11 @@ namespace HallowBlaze.Presentation.Runtime
                 throw Diagnostic(BoardRuntimeDiagnosticCode.MissingExit, "count:0");
             ValidateTerrainCoverage(bounds, occupied);
 
+            var exitPositions = new HashSet<GridPosition>();
+            foreach (MappedView mappedView in mapped)
+                if (mappedView.Descriptor.Kind == LegacyBoardContentKind.Exit)
+                    exitPositions.Add(mappedView.Descriptor.Position);
+
             mapped.Sort(MappedView.Compare);
             var boardState = new BoardState(bounds);
             var registry = new Dictionary<EntityId, GameObject>(mapped.Count);
@@ -108,9 +113,16 @@ namespace HallowBlaze.Presentation.Runtime
             {
                 MappedView mappedView = mapped[index];
                 var id = new EntityId(index + 1L);
+                BoardEntityDefinition definition = mappedView.Content.CreateBoardDefinition();
+                if (mappedView.Descriptor.Kind == LegacyBoardContentKind.Floor &&
+                    exitPositions.Contains(mappedView.Descriptor.Position))
+                {
+                    definition = new BoardEntityDefinition(BoardLayer.Terrain, mappedView.Content.EntityKind,
+                        mappedView.Content.ContentId, new BoardEntityTraits(true, true, false));
+                }
                 var entity = new BoardEntityState(
                     id,
-                    mappedView.Content.CreateBoardDefinition(),
+                    definition,
                     mappedView.Descriptor.Position);
                 if (!boardState.TryAdd(entity))
                 {

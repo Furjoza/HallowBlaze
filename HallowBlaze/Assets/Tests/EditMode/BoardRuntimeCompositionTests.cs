@@ -6,6 +6,7 @@ using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
+using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Presentation.Runtime;
 using NUnit.Framework;
 using UnityEngine;
@@ -61,7 +62,27 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(FoodReward(LegacyBoardContentKind.Food), Is.EqualTo(10));
             Assert.That(FoodReward(LegacyBoardContentKind.Soda), Is.EqualTo(20));
             Assert.That(FoodReward(LegacyBoardContentKind.BushFood), Is.EqualTo(10));
-            Assert.That(LegacyBoardContentCatalog.DeferredLegacyMutationPaths, Has.Count.EqualTo(6));
+            Assert.That(LegacyBoardContentCatalog.DeferredLegacyMutationPaths, Is.Empty);
+        }
+
+        [Test]
+        public void Compose_ExitDescriptorMarksWalkableTerrainAndResolvesOneExitAfterCost()
+        {
+            RunState run = CreateRun();
+            using (BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(CreateRequest(run), run,
+                new GridBounds(0, 0, 1, 1), CreateValidLayout()))
+            {
+                Assert.That(runtime.Controller.Resolve(new MoveCommand(Direction.North)).Accepted, Is.True);
+                TurnResult result = runtime.Controller.Resolve(new MoveCommand(Direction.East));
+                Assert.That(result.Accepted, Is.True);
+                Assert.That(result.Events.Last(), Is.TypeOf<ExitReachedEvent>());
+                Assert.That(result.Events.OfType<ExitReachedEvent>().Count(), Is.EqualTo(1));
+                Assert.That(result.Events.OfType<ActionCostAppliedEvent>().Count(), Is.EqualTo(1));
+                Assert.That(run.Food, Is.EqualTo(98));
+                Assert.That(runtime.Controller.IsTerminal, Is.True);
+                Assert.That(runtime.BoardState.GetEntities().Single(entity => entity.Definition.Layer == BoardLayer.Terrain &&
+                    entity.Position.Equals(new GridPosition(1, 1))).Definition.Traits.IsExit, Is.True);
+            }
         }
 
         [Test]

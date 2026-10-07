@@ -1,13 +1,19 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
+using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
+using HallowBlaze.Core.Turns.Contracts;
+using HallowBlaze.Presentation.Runtime;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 
 namespace HallowBlaze.Tests.PlayMode
 {
@@ -23,6 +29,9 @@ namespace HallowBlaze.Tests.PlayMode
         private Type wallType;
         private Component gameManager;
         private GameSession session;
+        private string persistenceRoot;
+        private bool hadHighScore;
+        private int originalHighScore;
 
         [SetUp]
         public void SetUp()
@@ -37,12 +46,19 @@ namespace HallowBlaze.Tests.PlayMode
             wallType = RequireType(gameAssembly, "Wall");
             DestroySingleton(gameManagerType);
             DestroySingleton(soundManagerType);
+            hadHighScore = PlayerPrefs.HasKey("HighScore");
+            originalHighScore = PlayerPrefs.GetInt("HighScore");
+            persistenceRoot = Path.Combine(Path.GetTempPath(), "HB-M363-" + Guid.NewGuid().ToString("N"));
+            gameManagerType.GetField("PersistenceRootOverride", BindingFlags.Static | BindingFlags.NonPublic)
+                .SetValue(null, persistenceRoot);
 
             GameObject managerObject = Track(new GameObject("M1.4 Movement GameManager"));
             gameManager = managerObject.AddComponent(gameManagerType);
             Invoke(gameManager, "StartNewRun");
             session = GetProperty<GameSession>(gameManager, "Session");
             session.ConsumeFood(90);
+            SetField(gameManager, "worldDefinitionJson", Track(new TextAsset(File.ReadAllText(
+                Path.Combine(Application.dataPath, "GameData/World/prototype-world.json")))));
         }
 
         [TearDown]
@@ -57,6 +73,13 @@ namespace HallowBlaze.Tests.PlayMode
             createdObjects.Clear();
             DestroySingleton(gameManagerType);
             DestroySingleton(soundManagerType);
+            gameManagerType.GetField("PersistenceRootOverride", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, null);
+            if (Directory.Exists(persistenceRoot))
+                Directory.Delete(persistenceRoot, true);
+            if (hadHighScore)
+                PlayerPrefs.SetInt("HighScore", originalHighScore);
+            else
+                PlayerPrefs.DeleteKey("HighScore");
             Time.timeScale = 1f;
         }
 
@@ -72,88 +95,110 @@ namespace HallowBlaze.Tests.PlayMode
         [UnityTest]
         public IEnumerator PlayerMoveResolvesOnce()
         {
-            GameObject playerObject = CreatePlayer("M1.4 Player", 0.01f);
-            GameObject wallObject = Track(new GameObject("M1.4 One-hit Wall"));
-            GameObject soundObject = Track(new GameObject("M1.4 Wall SoundManager"));
-            AudioClip wallSound = Track(AudioClip.Create("M1.4 Wall Sound", 1, 1, 44100, false));
-
-            wallObject.layer = 8;
-            wallObject.transform.position = Vector3.right;
-            wallObject.AddComponent<BoxCollider2D>();
-            wallObject.AddComponent<SpriteRenderer>();
-            Component wall = wallObject.AddComponent(wallType);
-            SetField(wall, "hp", 1);
-            SetField(wall, "chopSound1", wallSound);
-            SetField(wall, "chopSound2", wallSound);
-            CreateSoundManager(soundObject);
-            Physics2D.SyncTransforms();
-
-            InvokeGenericAttemptMove(playerObject.GetComponent(playerType), 1, 0);
-
-            yield return new WaitForFixedUpdate();
+            GameObject playerObject = CreatePlayer("M3.6.3 Player", 0.1f);
+            Component player = playerObject.GetComponent(playerType);
+            AudioClip moveSound = Track(AudioClip.Create("Move", 4410, 1, 44100, false));
+            SetField(player, "moveSound1", moveSound);
+            SetField(player, "moveSound2", moveSound);
+            AudioSource audio = CreateSoundManager(Track(new GameObject("Movement audio")));
+            BoardRuntime runtime = ComposeRuntime(playerObject);
             yield return null;
-
-            Assert.That(wallObject.activeSelf, Is.False, "The accepted wall interaction should resolve once.");
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(9), "The accepted action should spend one food.");
-            Assert.That(playerObject.transform.position.x, Is.EqualTo(0f).Within(0.01f),
-                "One input must not enter a tile freed by the same wall interaction.");
-            Assert.That(playerType.GetField("food", InstanceFlags), Is.Null);
+            var source = new PcCommandSource(key => key == KeyCode.RightArrow);
+            object[] input = { source, null };
+            Assert.That((bool)Invoke(player, "TrySubmitInput", input), Is.True);
+            var pending = (Task<CommandSubmission>)input[1];
+            Assert.That(pending.IsCompleted, Is.False);
+            for (int attempt = 0; attempt < 20; attempt++)
+                Assert.That(TrySubmit(player, new WaitCommand(), out _), Is.False);
+            while (!pending.IsCompleted)
+                yield return null;
+            Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(9));
+            Assert.That(playerObject.transform.position, Is.EqualTo(Vector3.right));
+            Assert.That(GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.EqualTo(1));
+            Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(1));
+            Assert.That(audio.clip, Is.SameAs(moveSound));
+            Assert.That(runtime.Controller.IsTerminal, Is.False);
         }
 
         [UnityTest]
         public IEnumerator RejectedPlayerMoveDoesNotSpendFood()
         {
-            GameObject playerObject = CreatePlayer("M1.4 Blocked Player", 0.01f);
-            GameObject obstacleObject = Track(new GameObject("M1.4 Obstacle"));
+            GameObject playerObject = CreatePlayer("Blocked Player", 0.01f);
+            Component player = playerObject.GetComponent(playerType);
+            GameObject obstacleObject = Track(new GameObject("Wall"));
             obstacleObject.layer = 8;
             obstacleObject.transform.position = Vector3.right;
             obstacleObject.AddComponent<BoxCollider2D>();
+            obstacleObject.AddComponent<SpriteRenderer>();
+            Component wall = obstacleObject.AddComponent(wallType);
+            SetField(wall, "hp", 3);
+            BoardRuntime runtime = ComposeRuntime(playerObject,
+                new LegacyBoardView(obstacleObject, LegacyBoardContentKind.Wall, new GridPosition(1, 0)));
             Physics2D.SyncTransforms();
-
-            InvokeGenericAttemptMove(playerObject.GetComponent(playerType), 1, 0);
             yield return null;
-
+            Assert.That(TrySubmit(player, new MoveCommand(Direction.East), out Task<CommandSubmission> blocked), Is.True);
+            Assert.That(blocked.Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+            Assert.That(TrySubmit(player, new MoveCommand(Direction.West), out Task<CommandSubmission> outside), Is.True);
+            Assert.That(outside.Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+            int resolutions = GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter").Coordinator.ResolutionCount;
+            Assert.Throws<ArgumentException>(() => new MoveCommand(default(Direction)));
+            Assert.That(GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter").Coordinator.ResolutionCount,
+                Is.EqualTo(resolutions));
             Assert.That(session.ActiveRun.Food, Is.EqualTo(10));
-            Assert.That(playerObject.transform.position.x, Is.EqualTo(0f).Within(0.01f));
+            Assert.That(session.ActiveRun.Health, Is.EqualTo(100));
+            Assert.That(playerObject.transform.position, Is.EqualTo(Vector3.zero));
+            Assert.That(GetField<int>(wall, "hp"), Is.EqualTo(3));
+            Assert.That(obstacleObject.activeSelf, Is.True);
+            Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.Zero);
+            Assert.That(runtime.Controller.IsTerminal, Is.False);
         }
 
         [UnityTest]
-        public IEnumerator RejectedGatheringDoesNotSpendFoodOrTurn()
+        public IEnumerator WaitCostsExactlyOnceWithoutMovement()
         {
-            GameObject playerObject = CreatePlayer("M1.4 Rejected Gathering Player", 0.01f);
+            GameObject playerObject = CreatePlayer("Wait Player", 0.01f);
             Component player = playerObject.GetComponent(playerType);
+            ComposeRuntime(playerObject);
             yield return null;
-
-            Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.True);
-
-            Invoke(player, "AttemptGathering");
-
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(10));
-            Assert.That(session.ActiveRun.Status, Is.EqualTo(RunStatus.Active));
+            var source = new PcCommandSource(key => key == KeyCode.Space);
+            object[] arguments = { source, null };
+            Assert.That((bool)Invoke(player, "TrySubmitInput", arguments), Is.True);
+            var submission = (Task<CommandSubmission>)arguments[1];
+            Assert.That(submission.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(9));
+            Assert.That(playerObject.transform.position, Is.EqualTo(Vector3.zero));
+            Assert.That(GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.EqualTo(1));
             Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.True);
         }
 
         [UnityTest]
-        public IEnumerator GatheringAtLastFoodRewardsBeforeCostAndEndsTurn()
+        public IEnumerator SupportedFoodRewardsBeforeCostAndSynchronizesHud()
         {
             session.ConsumeFood(9);
-            GameObject playerObject = CreatePlayer("M1.4 Gathering Player", 0.01f);
+            GameObject playerObject = CreatePlayer("Food Player", 0.01f);
             Component player = playerObject.GetComponent(playerType);
-            GameObject carrotObject = Track(new GameObject("M1.4 Gathering Carrot"));
-            SetField(player, "onCarrot", true);
-            SetField(player, "tmpCarrot", carrotObject);
+            Text foodText = Track(new GameObject("Food HUD")).AddComponent<Text>();
+            SetField(player, "foodText", foodText);
+            GameObject food = Track(new GameObject("Food"));
+            food.tag = "Food";
+            food.transform.position = Vector3.right;
+            food.AddComponent<BoxCollider2D>().isTrigger = true;
+            BoardRuntime runtime = ComposeRuntime(playerObject,
+                new LegacyBoardView(food, LegacyBoardContentKind.Food, new GridPosition(1, 0)));
             yield return null;
-
-            Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.True);
-
-            Invoke(player, "AttemptGathering");
-
+            Assert.That(TrySubmit(player, new MoveCommand(Direction.East), out Task<CommandSubmission> pending), Is.True);
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(10));
+            Assert.That(food.activeSelf, Is.True);
+            Assert.That(foodText.text, Is.EqualTo("Food: 1"));
+            while (!pending.IsCompleted)
+                yield return null;
+            Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             Assert.That(session.ActiveRun.Food, Is.EqualTo(10));
             Assert.That(session.ActiveRun.Status, Is.EqualTo(RunStatus.Active));
-            Assert.That(carrotObject.activeSelf, Is.False);
-            Assert.That(GetField<bool>(player, "onCarrot"), Is.False);
-            Assert.That(GetField<GameObject>(player, "tmpCarrot"), Is.Null);
-            Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.False);
+            Assert.That(food.activeSelf, Is.False);
+            Assert.That(foodText.text, Is.EqualTo("Food: 10"));
+            Assert.That(runtime.BoardState.Count, Is.EqualTo(runtime.Views.Count - 1));
         }
 
         [UnityTest]
@@ -167,16 +212,20 @@ namespace HallowBlaze.Tests.PlayMode
             SetField(player, "moveSound2", moveSound);
             AudioSource audioSource = CreateSoundManager(soundObject);
 
-            InvokeGenericAttemptMove(player, 1, 0);
+            ComposeRuntime(playerObject);
+            yield return null;
+            Assert.That(TrySubmit(player, new MoveCommand(Direction.East), out Task<CommandSubmission> pending), Is.True);
 
             float movementDeadline = Time.realtimeSinceStartup + 2f;
-            while (Mathf.Abs(playerObject.transform.position.x - 1f) > 0.01f
+            while (!pending.IsCompleted
                 && Time.realtimeSinceStartup < movementDeadline)
                 yield return null;
 
+            Assert.That(pending.IsCompleted, Is.True);
             Assert.That(session.ActiveRun.Food, Is.EqualTo(9));
             Assert.That(playerObject.transform.position.x, Is.EqualTo(1f).Within(0.01f));
             Assert.That(audioSource.clip, Is.SameAs(moveSound));
+            Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
         }
 
         [UnityTest]
@@ -185,9 +234,10 @@ namespace HallowBlaze.Tests.PlayMode
             const float configuredMoveTime = 0.2f;
             GameObject playerObject = CreatePlayer("M1.9 Timed Move Player", configuredMoveTime);
             Component player = playerObject.GetComponent(playerType);
+            ComposeRuntime(playerObject);
+            yield return null;
             float movementStartedAt = Time.realtimeSinceStartup;
-
-            InvokeGenericAttemptMove(player, 1, 0);
+            Assert.That(TrySubmit(player, new MoveCommand(Direction.East), out Task<CommandSubmission> pending), Is.True);
 
             Assert.That(session.ActiveRun.Food, Is.EqualTo(9));
 
@@ -199,6 +249,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(playerObject.transform.position.x, Is.EqualTo(1f).Within(0.001f));
             Assert.That(playerObject.transform.position.y, Is.EqualTo(0f).Within(0.001f));
             Assert.That(Time.realtimeSinceStartup, Is.LessThanOrEqualTo(movementDeadline));
+            Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
         }
 
         [UnityTest]
@@ -206,56 +257,43 @@ namespace HallowBlaze.Tests.PlayMode
         {
             GameObject playerObject = CreatePlayer("M1.9 Four Direction Player", 0.01f);
             Component player = playerObject.GetComponent(playerType);
-            Vector2 expectedPosition = Vector2.zero;
-            Vector2Int[] directions =
+            Vector3 expectedPosition = Vector3.zero;
+            ComposeRuntime(playerObject);
+            yield return null;
+            Direction[] directions =
             {
-                Vector2Int.right,
-                Vector2Int.up,
-                Vector2Int.left,
-                Vector2Int.down
+                Direction.East, Direction.North, Direction.West, Direction.South
             };
 
-            foreach (Vector2Int direction in directions)
+            foreach (Direction direction in directions)
             {
-                SetField(gameManager, "playerTurn", true);
-                InvokeGenericAttemptMove(player, direction.x, direction.y);
-                expectedPosition += new Vector2(direction.x, direction.y);
-
-                float movementDeadline = Time.realtimeSinceStartup + 2f;
-                while (((Vector2)playerObject.transform.position - expectedPosition).sqrMagnitude > float.Epsilon
-                    && Time.realtimeSinceStartup < movementDeadline)
+                Assert.That(TrySubmit(player, new MoveCommand(direction), out Task<CommandSubmission> pending), Is.True);
+                while (!pending.IsCompleted)
                     yield return null;
-
-                Assert.That(playerObject.transform.position.x, Is.EqualTo(expectedPosition.x).Within(0.001f));
-                Assert.That(playerObject.transform.position.y, Is.EqualTo(expectedPosition.y).Within(0.001f));
+                Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                GridPosition authoritative = GetProperty<BoardRuntime>(gameManager, "ActiveBoardRuntime").BoardState
+                    .GetEntities().Single(entity => entity.Id.Equals(GetProperty<BoardRuntime>(gameManager, "ActiveBoardRuntime").PlayerId)).Position;
+                expectedPosition = new Vector3(authoritative.X, authoritative.Y, 0);
+                Assert.That(playerObject.transform.position, Is.EqualTo(expectedPosition));
             }
 
             Assert.That(session.ActiveRun.Food, Is.EqualTo(6));
         }
 
         [Test]
-        public void EnemyContactDamagesPlayerFromBothAxes()
+        public void RetiredMutationAndEnemySchedulingMethodsAreAbsent()
         {
-            GameObject playerObject = CreatePlayer("M1.9 Enemy Target", 0.01f);
-            playerObject.layer = 8;
-            playerObject.tag = "Player";
-            GameObject soundObject = Track(new GameObject("M1.9 Enemy SoundManager"));
-            AudioClip attackSound = Track(AudioClip.Create("M1.9 Enemy Attack", 1, 1, 44100, false));
-            CreateSoundManager(soundObject);
-            Component horizontalEnemy = CreateEnemy("M1.9 Horizontal Enemy", Vector2.right, attackSound);
-            Component verticalEnemy = CreateEnemy("M1.9 Vertical Enemy", Vector2.up, attackSound);
-            Physics2D.SyncTransforms();
-            int startingHealth = session.ActiveRun.Health;
-
-            Invoke(horizontalEnemy, "MoveEnemy");
-            Assert.That(session.ActiveRun.Health, Is.EqualTo(startingHealth - 10));
-
-            Invoke(verticalEnemy, "MoveEnemy");
-            Assert.That(session.ActiveRun.Health, Is.EqualTo(startingHealth - 20));
+            foreach (string method in new[] { "AttemptMove", "AttemptGathering", "OnCantMove", "LoseHealth", "OnTriggerEnter2D", "OnTriggerExit2D" })
+                Assert.That(playerType.GetMethod(method, InstanceFlags), Is.Null, method);
+            foreach (string method in new[] { "EndPlayerTurn", "MoveEnemies", "AddEnemytoList" })
+                Assert.That(gameManagerType.GetMethod(method, InstanceFlags), Is.Null, method);
+            Assert.That(gameManagerType.GetField("playerTurn", InstanceFlags), Is.Null);
+            Assert.That(enemyType.GetMethod("MoveEnemy", InstanceFlags), Is.Null);
+            Assert.That(playerType.BaseType.GetMethod("Move", InstanceFlags), Is.Null);
         }
 
         [UnityTest]
-        public IEnumerator EnemyCannotEnterPlayersDestination()
+        public IEnumerator EnemyViewsRemainInertAndBlockTheirDomainCells()
         {
             GameObject playerObject = CreatePlayer("M1.9 Moving Enemy Target", 0.1f);
             playerObject.layer = 8;
@@ -268,66 +306,100 @@ namespace HallowBlaze.Tests.PlayMode
             SetField(player, "moveSound2", actionSound);
             Component enemy = CreateEnemy("M1.9 Blocking Enemy", new Vector2(2f, 0f), actionSound);
 
-            yield return null;
-
-            IList registeredEnemies = GetField<IList>(gameManager, "enemies");
-            registeredEnemies.Clear();
-            Invoke(gameManager, "AddEnemytoList", enemy);
-            SetField(enemy, "skipMove", false);
-            SetField(gameManager, "playerTurn", true);
+            ComposeRuntime(playerObject,
+                new LegacyBoardView(enemy.gameObject, LegacyBoardContentKind.Enemy, new GridPosition(2, 0)));
             Physics2D.SyncTransforms();
+            yield return null;
             int startingHealth = session.ActiveRun.Health;
-
-            InvokeGenericAttemptMove(player, 1, 0);
-
-            float turnDeadline = Time.realtimeSinceStartup + 1f;
-            while (!GetProperty<bool>(gameManager, "IsGameplayInputEnabled")
-                && Time.realtimeSinceStartup < turnDeadline)
+            Assert.That(TrySubmit(player, new MoveCommand(Direction.East), out Task<CommandSubmission> first), Is.True);
+            while (!first.IsCompleted)
                 yield return null;
 
             Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.True);
             Assert.That(playerObject.transform.position.x, Is.EqualTo(1f).Within(0.001f));
             Assert.That(enemy.transform.position.x, Is.EqualTo(2f).Within(0.001f));
-            Assert.That(session.ActiveRun.Health, Is.EqualTo(startingHealth - 10));
+            Assert.That(session.ActiveRun.Health, Is.EqualTo(startingHealth));
             Assert.That(playerObject.transform.position, Is.Not.EqualTo(enemy.transform.position));
 
-            InvokeGenericAttemptMove(player, 0, 1);
-
-            turnDeadline = Time.realtimeSinceStartup + 1f;
-            while (!GetProperty<bool>(gameManager, "IsGameplayInputEnabled")
-                && Time.realtimeSinceStartup < turnDeadline)
+            Assert.That(TrySubmit(player, new MoveCommand(Direction.East), out Task<CommandSubmission> blocked), Is.True);
+            Assert.That(blocked.Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(9));
+            Assert.That(TrySubmit(player, new MoveCommand(Direction.North), out Task<CommandSubmission> second), Is.True);
+            while (!second.IsCompleted)
                 yield return null;
 
             Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.True);
             Assert.That(playerObject.transform.position, Is.EqualTo(new Vector3(1f, 1f, 0f)));
             Assert.That(enemy.transform.position, Is.EqualTo(new Vector3(2f, 0f, 0f)));
-            Assert.That(session.ActiveRun.Health, Is.EqualTo(startingHealth - 10));
+            Assert.That(session.ActiveRun.Health, Is.EqualTo(startingHealth));
         }
 
         [UnityTest]
-        public IEnumerator EnteringExitSnapsOnceAndStopsPlayerInput()
+        public IEnumerator EnteringExitSnapsOnceCostsOnceAndGuardsOneOutcome()
         {
             GameObject playerObject = CreatePlayer("M1.9 Exit Player", 0.01f);
             Component player = playerObject.GetComponent(playerType);
-            SetField(player, "restartLevelDelay", 30f);
-            GameObject exitObject = Track(new GameObject("M1.9 Exit"));
-            exitObject.tag = "Exit";
-            exitObject.transform.position = Vector2.right;
-            exitObject.AddComponent<BoxCollider2D>().isTrigger = true;
-            Physics2D.SyncTransforms();
+            BoardRuntime runtime = ComposeRuntime(playerObject);
+            int outcomeCalls = 0;
+            gameManagerType.GetEvent("OnRouteChoicesChanged").AddEventHandler(gameManager,
+                (Action<IReadOnlyList<WorldMapExitOption>>)(choices =>
+                {
+                    if (choices.Count == 0)
+                        return;
+                    outcomeCalls++;
+                    Assert.That(playerObject.transform.position, Is.EqualTo(new Vector3(2, 1, 0)));
+                    Assert.That(session.ActiveRun.Food, Is.EqualTo(7));
+                }));
+            yield return null;
+            foreach (Direction direction in new[] { Direction.East, Direction.East, Direction.North })
+            {
+                Assert.That(TrySubmit(player, new MoveCommand(direction), out Task<CommandSubmission> pending), Is.True);
+                while (!pending.IsCompleted)
+                    yield return null;
+                Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            }
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(7));
+            Assert.That(GetProperty<bool>(gameManager, "IsRouteChoiceActive"), Is.True);
+            Assert.That(outcomeCalls, Is.EqualTo(1));
+            Assert.That(TrySubmit(player, new WaitCommand(), out _), Is.False);
+            Assert.That(((IBoardOutcomeSink)gameManager).TryNotify(runtime.Request,
+                new ExitReachedEvent(runtime.PlayerId, runtime.BoardState.GetEntities()
+                    .Single(entity => entity.Definition.ContentId == "legacy.exit").Id)), Is.False);
+            Assert.That(outcomeCalls, Is.EqualTo(1));
+        }
 
-            InvokeGenericAttemptMove(player, 1, 0);
-
-            float movementDeadline = Time.realtimeSinceStartup + 2f;
-            while ((((Vector2)playerObject.transform.position - Vector2.right).sqrMagnitude > float.Epsilon
-                    || ((Behaviour)player).enabled)
-                && Time.realtimeSinceStartup < movementDeadline)
+        [UnityTest]
+        public IEnumerator AnimationModesHaveSameSodaPickupHudAndAudio()
+        {
+            foreach (bool animated in new[] { true, false })
+            {
+                GameObject playerObject = CreatePlayer("Soda Player", 0.05f);
+                Component player = playerObject.GetComponent(playerType);
+                SetField(player, "animationsEnabled", animated);
+                Text foodText = Track(new GameObject("Soda HUD")).AddComponent<Text>();
+                SetField(player, "foodText", foodText);
+                GameObject soda = Track(new GameObject("Soda"));
+                soda.tag = "Soda";
+                soda.transform.position = Vector3.right;
+                AudioClip cue = Track(AudioClip.Create("Soda cue", 4410, 1, 44100, false));
+                SetField(player, "drinkSound1", cue);
+                SetField(player, "moveSound1", cue);
+                DestroySingleton(soundManagerType);
+                CreateSoundManager(Track(new GameObject("Soda audio")));
+                Invoke(gameManager, "DisposeActiveBoardRuntime");
+                ComposeRuntime(playerObject, new LegacyBoardView(soda, LegacyBoardContentKind.Soda, new GridPosition(1, 0)));
                 yield return null;
-
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(9));
-            Assert.That(playerObject.transform.position.x, Is.EqualTo(1f).Within(0.001f));
-            Assert.That(playerObject.transform.position.y, Is.EqualTo(0f).Within(0.001f));
-            Assert.That(((Behaviour)player).enabled, Is.False);
+                int initialFood = session.ActiveRun.Food;
+                Assert.That(TrySubmit(player, new MoveCommand(Direction.East), out Task<CommandSubmission> pending), Is.True);
+                while (!pending.IsCompleted)
+                    yield return null;
+                Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                Assert.That(session.ActiveRun.Food, Is.EqualTo(initialFood + 19));
+                Assert.That(foodText.text, Is.EqualTo("Food: " + (initialFood + 19)));
+                Assert.That(playerObject.transform.position, Is.EqualTo(Vector3.right));
+                Assert.That(soda.activeSelf, Is.False);
+                Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(2));
+            }
         }
 
         private GameObject CreatePlayer(string name, float moveTime)
@@ -338,8 +410,38 @@ namespace HallowBlaze.Tests.PlayMode
             Component player = playerObject.AddComponent(playerType);
             SetField(player, "moveTime", moveTime);
             SetField(player, "blockingLayer", (LayerMask)(1 << 8));
-            Invoke(player, "Start");
             return playerObject;
+        }
+
+        private BoardRuntime ComposeRuntime(GameObject playerObject, params LegacyBoardView[] additional)
+        {
+            RunState run = session.ActiveRun;
+            var request = new BoardRequest(run.RunId, run.RunSeed, run.WorldNodeId, run.CurrentDay,
+                run.GetBoardSeed(), "forest", "temperate", 1);
+            var layout = new List<LegacyBoardView>();
+            for (int horizontal = 0; horizontal < 3; horizontal++)
+                for (int vertical = 0; vertical < 2; vertical++)
+                {
+                    GameObject floor = Track(new GameObject("Floor"));
+                    floor.transform.position = new Vector3(horizontal, vertical, 0);
+                    layout.Add(new LegacyBoardView(floor, LegacyBoardContentKind.Floor, new GridPosition(horizontal, vertical)));
+                }
+            layout.Add(new LegacyBoardView(playerObject, LegacyBoardContentKind.Player, new GridPosition(0, 0)));
+            GameObject exit = Track(new GameObject("Exit"));
+            exit.transform.position = new Vector3(2, 1, 0);
+            layout.Add(new LegacyBoardView(exit, LegacyBoardContentKind.Exit, new GridPosition(2, 1)));
+            layout.AddRange(additional);
+            BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(request, run, new GridBounds(0, 0, 2, 1), layout);
+            Invoke(gameManager, "PublishBoardRuntime", runtime);
+            return runtime;
+        }
+
+        private static bool TrySubmit(Component player, PlayerCommand command, out Task<CommandSubmission> submission)
+        {
+            object[] arguments = { command, null };
+            bool admitted = (bool)Invoke(player, "TrySubmitCommand", arguments);
+            submission = (Task<CommandSubmission>)arguments[1];
+            return admitted;
         }
 
         private Component CreateEnemy(string name, Vector2 position, AudioClip attackSound)
@@ -357,7 +459,6 @@ namespace HallowBlaze.Tests.PlayMode
             SetField(enemy, "enemyAttack1", attackSound);
             SetField(enemy, "enemyAttack2", attackSound);
             SetField(enemy, "enemyAttack3", attackSound);
-            Invoke(enemy, "Start");
             return enemy;
         }
 
@@ -368,13 +469,6 @@ namespace HallowBlaze.Tests.PlayMode
             SetField(soundManager, "efxSource", audioSource);
             ((Behaviour)soundManager).enabled = false;
             return audioSource;
-        }
-
-        private void InvokeGenericAttemptMove(Component player, int xDirection, int yDirection)
-        {
-            MethodInfo method = playerType.GetMethod("AttemptMove", InstanceFlags);
-            Assert.That(method, Is.Not.Null);
-            method.MakeGenericMethod(wallType).Invoke(player, new object[] { xDirection, yDirection });
         }
 
         private GameObject Track(GameObject gameObject)

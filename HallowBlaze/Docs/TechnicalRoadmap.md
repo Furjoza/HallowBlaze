@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6.3 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6.3 active, manual PC smoke pending; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-07
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -1883,13 +1883,13 @@ Validation: baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e
 
 ## `M3.6.3` — Production cutover and PlayMode acceptance gate
 
-**Status:** `Planned`
+**Status:** `Active` — implementation and automated gates complete; independent review is `BLOCKED` solely by the missing manual PC smoke acceptance gate.
 **Priority:** P0
 **Related contract:** sections 10, 18, and 21.1/21.2/21.5; `M0.8` regression contract.
 
 **Rationale:** The reusable path is valuable only when the scene has exactly one gameplay authority. A separate cutover makes removal of legacy linecast, trigger, direct-resource, and coroutine paths reviewable and prevents a temporary dual system from becoming permanent.
 
-**Current behavior:** `PlayerScript` reads input and mutates resources/outcomes, `MovingObject` uses `Physics2D.Linecast` to decide movement, trigger callbacks collect resources and reach exits, and `GameManager` schedules turns with `playerTurn`, `EndPlayerTurn`, and `MoveEnemies` coroutines.
+**Behavior at ticket entry:** `PlayerScript` read input and mutated resources/outcomes, `MovingObject` used `Physics2D.Linecast` to decide movement, trigger callbacks collected resources and reached exits, and `GameManager` scheduled turns with `playerTurn`, `EndPlayerTurn`, and `MoveEnemies` coroutines. The implementation described below removes these paths.
 
 **Expected outcome:** Production PC gameplay routes every supported board action through the `M3.6.2` coordinator and the one controller created by `M3.6.1`. `PlayerScript` becomes an input/view adapter, `MovingObject` is animation-only or removed, and `GameManager` composes the runtime plus guarded board outcomes without deciding turn legality. The existing art and supported feedback remain, but physics, transforms, triggers, and coroutines no longer mutate or adjudicate gameplay.
 
@@ -1919,6 +1919,105 @@ Validation: baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e
 **Save and compatibility impact:** No schema change. Existing between-board lifecycle persists only completed domain outcomes. Mid-animation, queued input, presentation failure, view registry, and intentionally disabled legacy content state are not saved.
 
 **Required handoff:** Final Input → Command → Result → Events → View diagram, removed/disabled source-of-truth inventory with code-search evidence, current-content/deferred-behavior table, input/gate map, exact automated and manual results, and proof that terminal outcomes and resource costs occur once.
+
+### M3.6.3 implementation handoff (2026-10-07)
+
+The Lead implemented this candidate directly after the owner explicitly authorized discarding the failed local-worker attempt. The recovery baseline is branch `M3/ProductionCutover`, commit `af030818d5de705968e26907139c435bc26ecd86`, Git root `D:/Repos/HallowBlaze`, Unity project `D:/Repos/HallowBlaze/HallowBlaze`. No commit or branch was created by the agent.
+
+```mermaid
+flowchart LR
+   PC[PC key-down] --> Source[PcCommandSource: Move or Wait]
+   Source --> View[Active PlayerScript adapter]
+   View --> Admission[GameManager lifecycle admission]
+   Admission --> Coordinator[One CommandPresentationCoordinator]
+   Coordinator --> Controller[One BoardRuntime TurnController]
+   Controller --> Result[TurnResult: state already resolved]
+   Result --> Events[Ordered GameEvents]
+   Events --> Presenter[BoardEventPresenter]
+   Presenter --> Output[Registered views, authoritative HUD, audio]
+   Presenter --> Outcome[Guarded active BoardOutcome]
+   Outcome --> Lifecycle[Route choice or run completion]
+```
+
+`BoardState` and `RunState` decide legality, supported rewards, action cost, and terminal results. Presentation does not apply amounts again. The composer marks the terrain under a legacy Exit descriptor as walkable exit terrain, retaining stable IDs, content IDs, and its registered Exit item/view. This repairs the import boundary to the existing resolver's terrain-based exit rule without changing Core rules.
+
+The active player view is checked against the runtime registry before it can submit. The manager owns one presenter per board and disposes it before disposing the runtime. Replaced-board replay is canceled; the ordered outcome sink requires the exact current request instance, not merely the same logical board identity. Terminal run abandonment does not dispose the presenter from inside its own death callback.
+
+#### Retired mutation sources
+
+| Previous source | Cutover state |
+| --- | --- |
+| `PlayerScript.AttemptMove`, axis/touch polling and direct Food cost | Removed; PC key-down produces complete commands only |
+| `MovingObject.Move`, `SmoothMovement`, `AttemptMove`, `OnCantMove`, `Physics2D.Linecast` | Removed; the base component retains serialized animation/layer compatibility fields only |
+| Player pickup/exit trigger callbacks, `AttemptGathering`, `OnCantMove`, wall damage | Removed; no parallel pickup, exit, wall-attack, or unsupported interaction path |
+| `PlayerScript.LoseHealth`, `CheckIfGameOver`, resource-delta subscriptions | Removed; HUD/feedback read authoritative state and terminal events |
+| `GameManager.Update`, `playerTurn`, `EndPlayerTurn`, `MoveEnemies`, enemy coroutine state | Removed; no legacy consequence scheduling |
+| `Enemy` registration, movement, cadence and attack callbacks | Removed; serialized art/audio tuning remains, with no AI or damage authority |
+| `LegacyBoardContentCatalog.DeferredLegacyMutationPaths` | Preserved public API, now an empty inventory of connected legacy mutation paths |
+
+Code-search evidence: `Assets/Scripts/{GameManager,PlayerScript,MovingObject,Enemy}.cs` has no matches for `Physics2D\.Linecast|OnTriggerEnter2D|OnTriggerExit2D|AttemptMove|AttemptGathering|OnCantMove|EndPlayerTurn|MoveEnemies|MoveEnemy|playerTurn|enemiesMoving|ConsumeFood|RestoreFood|TakeDamage|TryMove|TryRemove|Input\.GetAxis`. The rebaselined M0.8 test additionally asserts absence of retired methods. Transforms are outputs of composition/presentation, not runtime legality checks.
+
+#### Current content and deferred behavior
+
+| Content | Production behavior after cutover | Deferred behavior |
+| --- | --- | --- |
+| Player | Cardinal Move and Wait through the single controller | Mobile input and future interaction bindings |
+| Floor | Authoritative walkable terrain | None in this card |
+| OuterWall | Presentation-only perimeter art | No separate gameplay mutation |
+| Wall | Domain obstacle; blocked movement is free and does not damage it | Bare-hand/tool interaction rules |
+| Exit | Existing terrain exit rule; one ordered guarded route-choice outcome | Future route-segment identity work |
+| Food / Soda / BushFood | Existing automatic rewards 10 / 20 / 10, then one action cost; item view hidden by replay | No trigger-based alternative |
+| BuriedFood / Aid | Mapped content without a supported PC interaction; no trigger reward/healing | Later accepted interaction/tool/aid rules |
+| Enemy | Inert registered actor occupying and blocking its domain cell | Domain AI and damage in M3.7/M3.8 |
+
+Food/Soda feedback uses the registered collected view only to choose an audio cue; tags do not decide rewards. Missing audio clips/managers are skipped without introducing gameplay effects. Existing prefabs, scenes and serialized tuning references are unchanged.
+
+#### Input and gate map
+
+| Owner or input | Behavior |
+| --- | --- |
+| Arrow keys / WASD | One cardinal `MoveCommand` per unambiguous key-down frame |
+| Space | One `WaitCommand` |
+| No key / ambiguous chord | No command; no Resolve or cost; no buffering |
+| Setup / board startup | Setup block; source is not sampled and controller is not called |
+| Resolving / presenting | Coordinator rejects duplicate submissions until ordered replay completes |
+| Pause / settings | Pause's Modal block remains even if unscaled replay completes or intro ends |
+| Route choice | Independent Modal ownership; releasing pause or a late intro callback cannot reopen input |
+| Resume | Input remains blocked in the release frame; eligible on the next frame |
+| Terminal / disabled manager / requested reload | Disabled ownership prevents further admission |
+| Stale, disabled or inactive player view | Adapter rejects before manager/controller submission |
+| Replaced runtime | Presenter/coordinator disposal cancels old replay and rejects old outcomes |
+
+Starting another run discards the previous `WorldMapService` choice-state cache. Reload creates a fresh runtime/controller and resynchronizes player view and HUD from the active run. No presentation queue or mid-animation state is persisted.
+
+#### Validation and once-only evidence
+
+Unity version: `6000.3.21f1`; Unity Test Framework: `1.6.0`. Tests use isolated temporary persistence roots. Reports/logs are outside the project; the Lead checked fresh XML identities, nonzero execution counts, `Passed`, zero failures and zero skipped tests.
+
+```powershell
+unity test "D:\Repos\HallowBlaze\HallowBlaze" --mode PlayMode --output "$env:TEMP\HB-M363-lead-full-playmode-20261007.xml" -- -nographics -logFile "$env:TEMP\HB-M363-lead-full-playmode-20261007.log"
+unity test "D:\Repos\HallowBlaze\HallowBlaze" --mode EditMode --filter "HallowBlaze.Tests.EditMode.BoardRuntimeCompositionTests;HallowBlaze.Tests.EditMode.CommandPresentationPipelineTests" --output "$env:TEMP\HB-M363-lead-focused-editmode-20261007.xml" -- -nographics -logFile "$env:TEMP\HB-M363-lead-focused-editmode-20261007.log"
+```
+
+| Final automated gate | Passed / total | Failed / skipped |
+| --- | --- | --- |
+| Full `HallowBlaze.Tests.PlayMode` assembly | 66 / 66 | 0 / 0 |
+| `BoardRuntimeCompositionTests` | 12 / 12 | 0 / 0 |
+| `CommandPresentationPipelineTests` | 30 / 30 | 0 / 0 |
+| Changed-file editor diagnostics | No errors | Not a substitute for Unity compilation |
+| `git diff --check` | Passed | Only existing LF/CRLF normalization warnings |
+
+Full PlayMode includes infrastructure/M0.8 (12), ordered presentation (14), pause (11), lifecycle (18), startup (4), atlas (1), ownership/persistence (3), atlas persistence (1), persistence path (1), and offline records (1).
+
+`PlayerMoveResolvesOnce` admits injected PC input, blocks twenty rapid duplicate submissions during animation, and observes exactly one Resolve, one move, one Food cost and one movement sound. Rejected wall/out-of-bounds attempts preserve Food, wall health and view/audio state; invalid Direction is rejected before submission. Space costs once without movement. Supported Food rewards occur before cost, with HUD and item view changes only at their ordered replay positions. Soda pickup has the same authoritative result, final HUD and two audio cues with animation on or off.
+
+`EnteringExitSnapsOnceCostsOnceAndGuardsOneOutcome` uses legal commands, checks the final view before route notification, costs once per move and rejects duplicate outcomes. Main-scene route lifecycle tests now traverse a legal path using injected PC key bindings rather than synthesizing Exit events. Starvation is produced by a real Wait at Food 1; health death remains an explicit existing-event fixture and does not invent an enemy-damage rule.
+
+Reload-mid-animation proves old replay cancellation/disposal, zero resolutions in the replacement controller, preserved already-resolved resources, and rejection of an old request even when both boards have the same logical identity. Setup completion, pause/resume, route ownership, terminal admission and replacement-view isolation are covered by PlayMode and coordinator tests.
+
+Manual PC smoke: **Not run**. `unity pipeline list` found the package installed but zero reachable servers; `unity command` returned `No Unity Editor instances found with reachable Pipeline servers`. Automated Main-scene/PC-input tests are not a manual smoke result. The owner was unavailable to accept this limitation; free tile, obstacle, supported resource, Wait, exit, pause, route choice, death and reload still require the explicit manual acceptance gate. No legacy Unity integration, package upgrade or second Editor instance was used.
+
+Independent read-only `qwen-reviewer` verdict: **BLOCKED**. The reviewer reported no material semantic code defect after inspecting terminal handling, stale requests, runtime replacement, presentation, gates and stale input. The blocker is the required manual PC smoke, not an automated-test failure; this is not a `PASS` or final acceptance. The card and M3.6 umbrella must not be marked `Done` until the outstanding manual gate and final independent acceptance are complete. Scope is thirteen code/test files plus this Lead-owned handoff; Core, BoardManager, scenes, prefabs, `.meta` files, packages, settings, save schemas and protected agent configuration remain unchanged.
 
 ---
 
@@ -3557,11 +3656,11 @@ O-002, O-003, O-004, O-005, O-006, O-007, O-008, and O-009 are resolved in `Game
 
 # Kolejka wykonawcza
 
-M0, M1, and M2 are complete; M3.1–M3.6.2 are `Done`; the M3.6 umbrella is split into three executable children; `M3.6.3` is next; and no card is currently `Active`. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. M3.6.1 was implemented from the clean baseline `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. M3.6.2 was implemented from the clean baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e64f7ebaea81e015`. Every new child still begins with its normal clean-worktree preflight.
+M0, M1, and M2 are complete; M3.1–M3.6.2 are `Done`; the M3.6 umbrella is split into three executable children; `M3.6.3` is `Active`, with its production implementation and automated gates complete, no material code defects reported by independent review, and final acceptance `BLOCKED` by the missing manual PC smoke. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. M3.6.1 was implemented from the clean baseline `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. M3.6.2 was implemented from the clean baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e64f7ebaea81e015`. M3.6.3 uses `M3/ProductionCutover` at `af030818d5de705968e26907139c435bc26ecd86`. Every new child still begins with its normal clean-worktree preflight.
 
 The next safe sequence is:
 
-1. execute and independently review `M3.6.3`;
+1. complete the outstanding manual PC smoke and final independent acceptance for `M3.6.3`;
 2. continue `M3.7`–`M3.10` through their normal reviews;
 3. execute `M3.11` and `M3.12` before M4 so generation, replay, atlas observations, and tool sources share stable route-segment identity;
 4. complete the no-backpack vertical slice through `M7.8`, then make the explicit M9 verdict;
@@ -3571,7 +3670,7 @@ The next safe sequence is:
 
 ### Rationale — why M3.6.3 is next
 
-The accepted M3.6.1 runtime binds each generated board to authoritative `BoardState`, a stable board-local player ID, one controller, and a read-only view registry. Accepted M3.6.2 now proves reusable command submission, gating, ordered replay, and controlled recovery in isolation. M3.6.3 must bind that path to production and remove the legacy mutation sources before the M3.6 umbrella is complete. M3.11/M3.12 and M9 can reuse the completed M3.6 boundary, while inserting route identity before M4 prevents generator-era rework.
+The accepted M3.6.1 runtime binds each generated board to authoritative `BoardState`, a stable board-local player ID, one controller, and a read-only view registry. Accepted M3.6.2 proves reusable command submission, gating, ordered replay, and controlled recovery in isolation. M3.6.3 now binds that path to production and removes the legacy mutation sources, but the required manual PC smoke still blocks final acceptance and completion of the M3.6 umbrella. M3.11/M3.12 and M9 can reuse the completed M3.6 boundary, while inserting route identity before M4 prevents generator-era rework.
 
 # Zasada aktualizacji roadmapy
 

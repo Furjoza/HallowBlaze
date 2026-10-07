@@ -232,21 +232,13 @@ namespace HallowBlaze.Presentation.Runtime
             BuildLookup(definitions);
 
         private static readonly ReadOnlyCollection<string> deferredLegacyMutationPaths =
-            Array.AsReadOnly(new[]
-            {
-                "PlayerScript.AttemptMove: movement and Food cost",
-                "PlayerScript.OnTriggerEnter2D: Exit/Food/Soda/Aid pickup and outcome mutations",
-                "PlayerScript.AttemptGathering: Carrot pickup and Food cost",
-                "PlayerScript.OnCantMove: wall damage",
-                "GameManager.Update/MoveEnemies: enemy scheduling",
-                "Enemy.MoveEnemy/OnCantMove: enemy movement, attack, and player health loss"
-            });
+            Array.AsReadOnly(new string[0]);
 
         /// <summary>Gets the complete classification table for every current generated content category.</summary>
         public static IReadOnlyList<LegacyBoardContentDefinition> Definitions => definitions;
 
         /// <summary>
-        /// Gets every legacy mutation path intentionally left connected until the M3.6.3 production cutover.
+        /// Gets outstanding connected legacy mutation paths; empty after the M3.6.3 production cutover.
         /// </summary>
         public static IReadOnlyList<string> DeferredLegacyMutationPaths => deferredLegacyMutationPaths;
 

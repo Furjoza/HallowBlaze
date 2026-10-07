@@ -4,8 +4,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
+using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
+using HallowBlaze.Core.Turns.Contracts;
+using HallowBlaze.Presentation.Runtime;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -37,6 +41,8 @@ namespace HallowBlaze.Tests.PlayMode
         private PreferenceSnapshot soundPreference;
         private IntPreferenceSnapshot highScorePreference;
         private string persistenceRoot;
+        private Component player;
+        private GameObject pickupObject;
 
         [SetUp]
         public void SetUp()
@@ -112,50 +118,49 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputBlocked"), Is.False);
         }
 
-        [Test]
-        public void PauseCanOpenDuringEnemyTurnAndEnemyGateWaits()
+        [UnityTest]
+        public IEnumerator PauseCanOpenDuringPresentationAndCompletionKeepsPauseGate()
         {
-            SetField(gameManager, "playerTurn", false);
-            SetField(gameManager, "enemiesMoving", true);
-
+            yield return null;
+            SetField(player, "moveTime", 0.2f);
+            Assert.That(TrySubmit(new MoveCommand(Direction.East), out Task<CommandSubmission> pending), Is.True);
+            Assert.That(pending.IsCompleted, Is.False);
             Assert.That(GetProperty<bool>(gameManager, "CanPauseGameplay"), Is.True);
             Invoke(pauseMenu, "OpenPause");
             AssertState("PauseRoot");
-
-            IEnumerator gate = (IEnumerator)Invoke(gameManager, "WaitWhileGameplayBlocked");
-            Assert.That(gate.MoveNext(), Is.True);
-
-            Invoke(gameManager, "SetGameplayInputBlocked", false);
-            Assert.That(gate.MoveNext(), Is.False);
+            while (!pending.IsCompleted)
+                yield return null;
+            Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.False);
+            Assert.That(TrySubmit(new WaitCommand(), out _), Is.False);
+            BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter");
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
+            Assert.That(presenter.Coordinator.Gate.Blocks.HasFlag(PresentationInputBlock.Modal), Is.True);
+            Invoke(pauseMenu, "Resume");
+            Assert.That(TrySubmit(new WaitCommand(), out _), Is.False);
+            yield return null;
+            Assert.That(TrySubmit(new WaitCommand(), out Task<CommandSubmission> resumed), Is.True);
+            Assert.That(resumed.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
         }
 
         [Test]
         public void PauseAndSettingsRejectPlayerCostsPickupsAndDamage()
         {
             SetRunResources(73, 61);
-            SetField(gameManager, "playerTurn", true);
-
-            GameObject playerObject = Track(new GameObject("M1.4 Player"));
-            Component player = playerObject.AddComponent(playerType);
-            GameObject pickupObject = Track(new GameObject("M1.4 Food"));
-            pickupObject.tag = "Food";
-            BoxCollider2D pickup = pickupObject.AddComponent<BoxCollider2D>();
-            Vector3 originalPosition = playerObject.transform.position;
+            Vector3 originalPosition = player.transform.position;
 
             Invoke(pauseMenu, "OpenPause");
             Invoke(player, "Update");
-            Invoke(player, "OnTriggerEnter2D", pickup);
-            Invoke(player, "LoseHealth", 17);
+            Assert.That(TrySubmit(new MoveCommand(Direction.East), out _), Is.False);
             Invoke(pauseMenu, "OpenSettings");
             Invoke(player, "Update");
-            Invoke(player, "OnTriggerEnter2D", pickup);
-            Invoke(player, "LoseHealth", 17);
+            Assert.That(TrySubmit(new WaitCommand(), out _), Is.False);
 
             Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.False);
             Assert.That(session.ActiveRun.Food, Is.EqualTo(73));
             Assert.That(session.ActiveRun.Health, Is.EqualTo(61));
-            Assert.That(GetField<bool>(gameManager, "playerTurn"), Is.True);
-            Assert.That(playerObject.transform.position, Is.EqualTo(originalPosition));
+            Assert.That(GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
+            Assert.That(player.transform.position, Is.EqualTo(originalPosition));
             Assert.That(pickupObject.activeSelf, Is.True);
 
             Invoke(pauseMenu, "BackFromSettings");
@@ -164,31 +169,21 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.False);
         }
 
-        [Test]
-        public void MovementTriggersRemainActiveOutsidePauseAfterPlayerTurnEnds()
+        [UnityTest]
+        public IEnumerator SupportedPickupComesFromOrderedReplayNotTriggerTiming()
         {
             SetRunResources(73, 100);
-            SetField(gameManager, "playerTurn", false);
-
-            GameObject playerObject = Track(new GameObject("M1.4 Moving Player"));
-            Component player = playerObject.AddComponent(playerType);
-            GameObject pickupObject = Track(new GameObject("M1.4 Moving Food"));
-            pickupObject.tag = "Food";
-            BoxCollider2D pickup = pickupObject.AddComponent<BoxCollider2D>();
-            GameObject carrotObject = Track(new GameObject("M1.4 Moving Carrot"));
-            carrotObject.tag = "Carrot";
-            BoxCollider2D carrot = carrotObject.AddComponent<BoxCollider2D>();
-
-            Invoke(player, "OnTriggerEnter2D", pickup);
-            Invoke(player, "OnTriggerEnter2D", carrot);
-
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(83));
+            yield return null;
+            Assert.That(TrySubmit(new MoveCommand(Direction.East), out Task<CommandSubmission> pending), Is.True);
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(82));
+            Assert.That(pickupObject.activeSelf, Is.True);
+            Assert.That(TrySubmit(new WaitCommand(), out _), Is.False);
+            while (!pending.IsCompleted)
+                yield return null;
+            Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             Assert.That(pickupObject.activeSelf, Is.False);
-            Assert.That(GetField<bool>(player, "onCarrot"), Is.True);
-
-            Invoke(player, "OnTriggerExit2D", carrot);
-
-            Assert.That(GetField<bool>(player, "onCarrot"), Is.False);
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(82));
+            Assert.That(playerType.GetMethod("OnTriggerEnter2D", InstanceFlags), Is.Null);
         }
 
         [Test]
@@ -233,6 +228,25 @@ namespace HallowBlaze.Tests.PlayMode
             yield return null;
 
             Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator SetupCompletionDoesNotClearPauseAndDisabledViewNeverResolves()
+        {
+            SetField(gameManager, "doingSetup", true);
+            Assert.That(TrySubmit(new WaitCommand(), out _), Is.False);
+            Invoke(gameManager, "SetGameplayInputBlocked", true);
+            Invoke(gameManager, "HideLevelImage");
+            yield return null;
+            Assert.That(TrySubmit(new WaitCommand(), out _), Is.False);
+            Assert.That(GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
+            Invoke(gameManager, "SetGameplayInputBlocked", false);
+            yield return null;
+            ((Behaviour)player).enabled = false;
+            Assert.That(TrySubmit(new WaitCommand(), out _), Is.False);
+            ((Behaviour)player).enabled = true;
+            Assert.That(TrySubmit(new WaitCommand(), out Task<CommandSubmission> resumed), Is.True);
+            Assert.That(resumed.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
         }
 
         [Test]
@@ -336,6 +350,37 @@ namespace HallowBlaze.Tests.PlayMode
             Invoke(gameManager, "EnsurePersistence");
             Invoke(gameManager, "StartNewRun");
             session = GetProperty<GameSession>(gameManager, "Session");
+            GameObject playerObject = Track(new GameObject("Pause Player"));
+            player = playerObject.AddComponent(playerType);
+            var layout = new List<LegacyBoardView>();
+            for (int horizontal = 0; horizontal < 3; horizontal++)
+                for (int vertical = 0; vertical < 2; vertical++)
+                {
+                    GameObject floor = Track(new GameObject("Pause Floor"));
+                    floor.transform.position = new Vector3(horizontal, vertical, 0);
+                    layout.Add(new LegacyBoardView(floor, LegacyBoardContentKind.Floor, new GridPosition(horizontal, vertical)));
+                }
+            layout.Add(new LegacyBoardView(playerObject, LegacyBoardContentKind.Player, new GridPosition(0, 0)));
+            pickupObject = Track(new GameObject("Pause Food"));
+            pickupObject.transform.position = Vector3.right;
+            pickupObject.AddComponent<BoxCollider2D>().isTrigger = true;
+            layout.Add(new LegacyBoardView(pickupObject, LegacyBoardContentKind.Food, new GridPosition(1, 0)));
+            GameObject exit = Track(new GameObject("Pause Exit"));
+            exit.transform.position = new Vector3(2, 1, 0);
+            layout.Add(new LegacyBoardView(exit, LegacyBoardContentKind.Exit, new GridPosition(2, 1)));
+            RunState run = session.ActiveRun;
+            var request = new BoardRequest(run.RunId, run.RunSeed, run.WorldNodeId, run.CurrentDay,
+                run.GetBoardSeed(), "forest", "temperate", 1);
+            BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(request, run, new GridBounds(0, 0, 2, 1), layout);
+            Invoke(gameManager, "PublishBoardRuntime", runtime);
+        }
+
+        private bool TrySubmit(PlayerCommand command, out Task<CommandSubmission> submission)
+        {
+            object[] arguments = { command, null };
+            bool admitted = (bool)Invoke(player, "TrySubmitCommand", arguments);
+            submission = (Task<CommandSubmission>)arguments[1];
+            return admitted;
         }
 
         private void CreatePauseHost()
