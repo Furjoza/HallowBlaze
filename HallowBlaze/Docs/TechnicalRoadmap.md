@@ -1883,7 +1883,7 @@ Validation: baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e
 
 ## `M3.6.3` — Production cutover and PlayMode acceptance gate
 
-**Status:** `Active` — implementation and automated gates complete; independent review is `BLOCKED` solely by the missing manual PC smoke acceptance gate.
+**Status:** `Active` — implementation, automated gates and owner-confirmed manual PC smoke complete; final independent acceptance is pending.
 **Priority:** P0
 **Related contract:** sections 10, 18, and 21.1/21.2/21.5; `M0.8` regression contract.
 
@@ -2015,9 +2015,11 @@ Full PlayMode includes infrastructure/M0.8 (12), ordered presentation (14), paus
 
 Reload-mid-animation proves old replay cancellation/disposal, zero resolutions in the replacement controller, preserved already-resolved resources, and rejection of an old request even when both boards have the same logical identity. Setup completion, pause/resume, route ownership, terminal admission and replacement-view isolation are covered by PlayMode and coordinator tests.
 
-Manual PC smoke: **Not run**. `unity pipeline list` found the package installed but zero reachable servers; `unity command` returned `No Unity Editor instances found with reachable Pipeline servers`. Automated Main-scene/PC-input tests are not a manual smoke result. The owner was unavailable to accept this limitation; free tile, obstacle, supported resource, Wait, exit, pause, route choice, death and reload still require the explicit manual acceptance gate. No legacy Unity integration, package upgrade or second Editor instance was used.
+Manual PC smoke: **Passed, confirmed by the owner on 2026-10-08 for the manual session on 2026-10-07**. The owner confirmed that the manually tested behavior matched expectations, completing the agreed PC smoke gate. This is owner-reported acceptance, not an agent-run manual test or a claim based on automated input. Inert enemies and deferred BuriedFood/Aid interaction are accepted non-goals, not smoke failures. The earlier Editor connection blocker was resolved by opening the active D: project; CLI then confirmed a reachable Pipeline server. No legacy Unity integration or package upgrade was used.
 
-Independent read-only `qwen-reviewer` verdict: **BLOCKED**. The reviewer reported no material semantic code defect after inspecting terminal handling, stale requests, runtime replacement, presentation, gates and stale input. The blocker is the required manual PC smoke, not an automated-test failure; this is not a `PASS` or final acceptance. The card and M3.6 umbrella must not be marked `Done` until the outstanding manual gate and final independent acceptance are complete. Scope is thirteen code/test files plus this Lead-owned handoff; Core, BoardManager, scenes, prefabs, `.meta` files, packages, settings, save schemas and protected agent configuration remain unchanged.
+Closeout display adjustment: at the owner's request, the `Day` label uses `CurrentDay + 1`. Internal day, completed-day score, board identity and save values remain unchanged. Automated tests were not rerun for this one-line display adjustment, as explicitly requested; the test results above belong to the production cutover validation on 2026-10-07.
+
+Initial independent read-only `qwen-reviewer` verdict: **BLOCKED**, solely for missing manual PC smoke evidence, with no material semantic code defect reported after inspecting terminal handling, stale requests, runtime replacement, presentation, gates and stale input. The owner's confirmation now supplies that missing evidence; final independent closeout acceptance is pending. Scope is thirteen code/test files plus this Lead-owned handoff; Core, BoardManager, scenes, prefabs, `.meta` files, packages, settings, save schemas and protected agent configuration remain unchanged.
 
 ---
 
