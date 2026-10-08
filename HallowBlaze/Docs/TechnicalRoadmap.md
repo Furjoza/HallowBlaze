@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6 and M3.7.1-M3.7.4 accepted; M3.7.5 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6 and M3.7.1-M3.7.5 accepted; M3.7.6 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -2297,7 +2297,7 @@ Baseline Git root `D:/Repos/HallowBlaze`, branch `M3/DeterministicPursuitPlanner
 
 ## `M3.7.5` - Cadence-aware planning
 
-**Status:** `Planned`
+**Status:** `Done` - direct implementation accepted 2026-10-09 after focused Unity EditMode validation (59/59) and independent `reviewer` PASS.
 **Priority:** P0
 **Related contract:** section 11.3.
 
@@ -2322,6 +2322,19 @@ Baseline Git root `D:/Repos/HallowBlaze`, branch `M3/DeterministicPursuitPlanner
 **Save and compatibility impact:** No schema change; cadence remains board-local.
 
 **Required handoff:** The phase -> intent table and confirmation that no planning call consumes a cadence step.
+
+### Acceptance (2026-10-09)
+
+[ShamblerPlanner.cs](../Assets/Scripts/Core/Turns/Resolution/ShamblerPlanner.cs) reads the existing board-local phase and returns target-free `Wait` during rest. Active pursuit and the North -> East -> West -> South tie-break are unchanged. Both 10/20 HP variants follow the same cycle:
+
+| Phase | Legal adjacent player | Legal pursuit route | No legal route |
+| --- | --- | --- | --- |
+| Initial Active | Attack | Move | Wait |
+| Rest | Wait | Wait | Wait |
+| Next Active | Attack | Move | Wait |
+| Next Rest | Wait | Wait | Wait |
+
+Only the existing `ConsumeIntent()` transition advances to the next row, including after an unsuccessful active opportunity. No `Plan` call consumes a cadence step or changes the board, definition, or exact locked intent. [ShamblerPlannerTests.cs](../Assets/Tests/EditMode/ShamblerPlannerTests.cs) verifies two complete cycles, repeated planning, rest beside the player, and unchanged pursuit selection. Production enemies remain inert; M3.7.6 is next and M3.7 remains `Planned`.
 
 ---
 

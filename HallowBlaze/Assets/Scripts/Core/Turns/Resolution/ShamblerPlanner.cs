@@ -7,9 +7,9 @@ using HallowBlaze.Core.Turns.Contracts;
 namespace HallowBlaze.Core.Turns.Resolution
 {
     /// <summary>
-    /// Chooses one eligible Shambler opportunity from the authoritative grid without mutation.
+    /// Chooses one cadence-aware Shambler opportunity from the authoritative grid without mutation.
     /// Shortest legal paths use North, East, West, South priority for equal first steps.
-    /// Cadence eligibility and intent retention belong to the caller, not this planner.
+    /// Rest always yields wait; intent retention and cadence advancement belong to the caller.
     /// </summary>
     public sealed class ShamblerPlanner
     {
@@ -22,15 +22,16 @@ namespace HallowBlaze.Core.Turns.Resolution
         };
 
         /// <summary>
-        /// Plans an attack on a legal orthogonally adjacent player, otherwise one shortest-path
-        /// move, or wait when the target is unreachable or either identity is not its expected actor.
+        /// Plans target-free wait during rest. During the active phase, plans an attack on a legal
+        /// orthogonally adjacent player, otherwise one shortest-path move, or wait when the target
+        /// is unreachable or either identity is not its expected actor.
         /// The player's occupied cell is a terminal target, never a movement destination.
         /// A move declares attack on that same cell if the recorded player enters it later.
-        /// This method does not read or advance cadence, replace a locked intent, consume resources,
-        /// or mutate the board. The caller must select an eligible opportunity before calling it.
+        /// This method reads but does not advance cadence, replace a locked intent, consume resources,
+        /// or mutate the board. Only intent consumption advances the active/rest cycle.
         /// </summary>
         /// <param name="boardState">The board snapshot whose layers and bounds determine legality.</param>
-        /// <param name="enemyState">The enemy identity and immutable attack configuration.</param>
+        /// <param name="enemyState">The enemy identity, current cadence phase, and immutable attack configuration.</param>
         /// <param name="playerId">The original player's board-local identity.</param>
         /// <returns>An immutable move, attack, or target-free wait owned by the enemy.</returns>
         /// <exception cref="ArgumentNullException">
@@ -42,6 +43,9 @@ namespace HallowBlaze.Core.Turns.Resolution
                 throw new ArgumentNullException(nameof(boardState));
             if (enemyState == null)
                 throw new ArgumentNullException(nameof(enemyState));
+
+            if (enemyState.Phase == ShamblerPhase.Rest)
+                return new EnemyIntent(enemyState.ActorId, EnemyIntentKind.Wait);
 
             if (!boardState.TryGetEntity(enemyState.ActorId, out BoardEntityState enemy) ||
                 enemy.Definition.Layer != BoardLayer.Actor ||

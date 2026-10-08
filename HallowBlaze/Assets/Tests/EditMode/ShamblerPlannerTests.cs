@@ -9,13 +9,73 @@ using NUnit.Framework;
 namespace HallowBlaze.Tests.EditMode
 {
     /// <summary>
-    /// Verifies deterministic, read-only pursuit for one eligible Shambler opportunity.
+    /// Verifies deterministic, read-only pursuit and cadence-aware planning for one Shambler.
     /// </summary>
     public class ShamblerPlannerTests
     {
         private static readonly EntityId EnemyId = new EntityId(0);
         private static readonly EntityId PlayerId = new EntityId(-1);
         private readonly ShamblerPlanner planner = new ShamblerPlanner();
+
+        /// <summary>
+        /// Both variants repeat active/rest cycles, including unreachable active opportunities,
+        /// without planning advancing cadence, changing the board, or replacing a locked intent.
+        /// </summary>
+        [TestCase(10, 3, 4, false, EnemyIntentKind.Attack)]
+        [TestCase(20, 3, 4, false, EnemyIntentKind.Attack)]
+        [TestCase(10, 3, 5, false, EnemyIntentKind.Move)]
+        [TestCase(20, 3, 5, false, EnemyIntentKind.Move)]
+        [TestCase(10, 4, 4, false, EnemyIntentKind.Move)]
+        [TestCase(20, 4, 4, false, EnemyIntentKind.Move)]
+        [TestCase(10, 3, 5, true, EnemyIntentKind.Wait)]
+        [TestCase(20, 3, 5, true, EnemyIntentKind.Wait)]
+        public void CadenceCyclePlansWithoutAdvancingState(
+            int damage, int playerX, int playerY, bool blocked, EnemyIntentKind activeKind)
+        {
+            var playerPosition = new GridPosition(playerX, playerY);
+            BoardState board = CreateBoard(new GridPosition(3, 3), playerPosition);
+            if (blocked)
+                BlockCell(board, playerPosition, BoardLayer.Obstacle);
+            var definition = new ShamblerDefinition(damage);
+            var enemy = new ShamblerState(EnemyId, definition);
+            var before = board.GetEntities();
+            var expectedPhases = new[]
+            {
+                ShamblerPhase.Active, ShamblerPhase.Rest, ShamblerPhase.Active, ShamblerPhase.Rest
+            };
+            var expectedKinds = new[]
+            {
+                activeKind, EnemyIntentKind.Wait, activeKind, EnemyIntentKind.Wait
+            };
+
+            for (int step = 0; step < expectedPhases.Length; step++)
+            {
+                Assert.That(enemy.Phase, Is.EqualTo(expectedPhases[step]));
+                Assert.That(enemy.LockedIntent, Is.Null);
+                EnemyIntentKind kind = expectedKinds[step];
+                GridPosition? target = kind == EnemyIntentKind.Wait ? (GridPosition?)null : new GridPosition(3, 4);
+                EntityId? targetId = kind == EnemyIntentKind.Wait ? (EntityId?)null : PlayerId;
+
+                EnemyIntent intent = planner.Plan(board, enemy, PlayerId);
+
+                AssertIntent(intent, kind, target, targetId);
+                Assert.That(enemy.Phase, Is.EqualTo(expectedPhases[step]));
+                Assert.That(enemy.LockedIntent, Is.Null);
+                enemy.LockIntent(intent);
+                for (int iteration = 0; iteration < 8; iteration++)
+                {
+                    AssertIntent(planner.Plan(board, enemy, PlayerId), kind, target, targetId);
+                    Assert.That(enemy.Phase, Is.EqualTo(expectedPhases[step]));
+                    Assert.That(enemy.LockedIntent, Is.SameAs(intent));
+                }
+
+                CollectionAssert.AreEqual(before, board.GetEntities());
+                Assert.That(enemy.Definition, Is.SameAs(definition));
+                Assert.That(enemy.ConsumeIntent(), Is.SameAs(intent));
+                Assert.That(enemy.Phase, Is.EqualTo(expectedPhases[(step + 1) % expectedPhases.Length]));
+                Assert.That(enemy.LockedIntent, Is.Null);
+            }
+        }
 
         /// <summary>
         /// All cardinal directions attack at range one and move at range two without entering the player cell.
