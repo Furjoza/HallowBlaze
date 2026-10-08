@@ -1,7 +1,7 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6.2 next; route-leg amendments accepted; M9 deferred**
-> Data ostatniej weryfikacji: 2026-10-04
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6.3 next; route-leg amendments accepted; M9 deferred**
+> Data ostatniej weryfikacji: 2026-10-07
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
 > Zasady pracy agentów: [`../AGENTS.md`](../AGENTS.md)
@@ -1759,13 +1759,13 @@ Legacy mutation paths intentionally deferred to the `M3.6.3` production cutover:
 - `GameManager.Update` / `MoveEnemies`: enemy scheduling;
 - `Enemy.MoveEnemy` / `OnCantMove`: enemy movement, attack, and player health loss.
 
-Validation evidence: Unity 6000.3.21f1 compiled the changed assemblies; focused EditMode coverage (`BoardRuntimeCompositionTests` plus `TurnControllerTests`) passed `36/36`; focused PlayMode coverage (`BoardRuntimeStartupTests` plus `GameSessionLifecycleTests`) passed `21/21`; editor Problems reported no errors; `git diff --check` passed. The accepted implementation baseline was branch `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. Independent `qwen-reviewer` verdict: `PASS`. `M3.6.2` is the next executable child; the M3.6 umbrella remains `Planned` until all three children are accepted.
+Validation evidence: Unity 6000.3.21f1 compiled the changed assemblies; focused EditMode coverage (`BoardRuntimeCompositionTests` plus `TurnControllerTests`) passed `36/36`; focused PlayMode coverage (`BoardRuntimeStartupTests` plus `GameSessionLifecycleTests`) passed `21/21`; editor Problems reported no errors; `git diff --check` passed. The accepted implementation baseline was branch `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. Independent `qwen-reviewer` verdict: `PASS`. At M3.6.1 acceptance, `M3.6.2` was the next executable child; the M3.6 umbrella remains `Planned` until all three children are accepted.
 
 ---
 
 ## `M3.6.2` — Command submission and ordered event presentation
 
-**Status:** `Planned`  
+**Status:** `Done` — Lead implementation accepted 2026-10-07 after mechanical validation and independent Reviewer `PASS`.
 **Priority:** P0
 **Related contract:** sections 10.1/10.2, 18, and 21.2.
 
@@ -1800,6 +1800,84 @@ Validation evidence: Unity 6000.3.21f1 compiled the changed assemblies; focused 
 **Save and compatibility impact:** None. Only the already-resolved domain state crosses existing save boundaries; input focus, queues, animation progress, and modal drafts remain transient.
 
 **Required handoff:** Command-source extension diagram, event-to-handler responsibility table, gate state machine, enabled/disabled animation trace, unknown-event recovery trace, and exact single-submit evidence.
+
+**Implementation handoff (accepted 2026-10-07):**
+
+Command-source extension and ownership:
+
+```text
+PC arrows/WASD -> MoveCommand factory
+PC Space       -> WaitCommand factory
+future binding -> complete-command factory (PcCommandSource.Bind)
+future modal   -> ICommandSource.TryTakeCommand / CancelDraft
+                         |
+                         v
+CommandPresentationCoordinator (one main-thread owner per BoardRuntime)
+   -> PresentationGate admission
+   -> runtime.Controller.Resolve exactly once
+   -> immutable TurnResult
+   -> OrderedEventDispatcher exact-type registry, one awaited event at a time
+   -> BoardEventPresenter registered views / IRunHud / ITurnFeedback / IBoardOutcomeSink
+   -> finally: release submission ownership, preserve external blocks
+```
+
+`PcCommandSource` samples key-down edges at most once per frame. No command is buffered; absent or ambiguous chords produce no command. A blocked coordinator does not sample the source. `CancelDraft` is free and never resolves a partial intent. `Bind` adds complete-command factories without switching over concrete future commands. Target interaction is intentionally unbound; tests may submit an already-complete `InteractCommand` directly.
+
+Event responsibilities:
+
+| Existing domain event | Ordered handler responsibility | Forbidden side effect |
+| --- | --- | --- |
+| `EntityMoved` | interpolate or snap the registered view, preserve its Z, verify the authoritative destination | no occupancy mutation or physics legality query |
+| `EntityWaited` | `ITurnFeedback.ShowEvent` | no move or resource mutation |
+| `InteractionPerformed` | `ITurnFeedback.ShowEvent` | no interaction rule or target picker |
+| `ItemCollected` | verify removal from `BoardState`, hide the registered view | no second collection/reward |
+| `FoodRestored` | refresh HUD with current `RunState.Health/Food` | never apply `Amount` again |
+| `ActionCostApplied` | refresh HUD with current `RunState.Health/Food` | never apply `CostAmount` again |
+| `ExitReached` | `IBoardOutcomeSink.TryNotify(runtime.Request, event)` at this replay index | no production lifecycle binding in this child |
+| `PlayerStarved` | same guarded outcome sink at this replay index | no second starvation rule or persistence |
+| `PlayerDied` | same guarded outcome sink at this replay index | no second damage/death rule or persistence |
+
+The injected outcome owner must reject stale/duplicate requests without effects. Isolated PlayMode sinks prove that guard and ordered delivery. Production `BoardOutcome` composition remains in M3.6.3; controlled exit/death event fixtures do not introduce new domain rules.
+
+Gate state machine:
+
+```text
+Idle + Setup/Modal/Disabled block -> no admission, zero controller calls
+Idle + no external blocks       -> Resolving (gate acquired before sampling)
+Resolving + canceled/no command -> Idle, zero controller calls
+Resolving + domain rejection   -> stable rejection feedback -> Idle
+Resolving + accepted result    -> Presenting
+Presenting + any new submit    -> blocked, zero additional controller calls
+Presenting + completion/fault/cancellation -> Idle in finally
+```
+
+Setup starts blocked and its owner releases it only after synchronization. External blocks are independent flags and are rechecked after command sampling; completing a turn cannot clear a modal/setup/disabled block. Disposed coordinators/runtimes and terminal/resolving controllers also prevent admission. The lifecycle owner disposes the coordinator before replacing the runtime. Disposal requests cooperative cancellation; handlers must finish/stop before their completion task returns.
+
+Animation trace for a Move onto automatic Food, starting at Food 100:
+
+```text
+Resolve once: move -> remove item -> reward 10 -> cost 1; authoritative Food = 109
+enabled:  await movement frames -> hide item -> HUD(100,109) -> HUD(100,109) -> gate Idle
+disabled: snap in same handler -> hide item -> HUD(100,109) -> HUD(100,109) -> gate Idle
+```
+
+Both traces finish with the same player transform, hidden item, unchanged domain result and HUD. Full controlled terminal sequences additionally prove that Exit/Starvation/Death notification comes after movement, removal and HUD refresh in both modes. A real starvation result blocks later input through the terminal controller even after the presentation gate returns to Idle.
+
+Unknown-event/failure recovery trace:
+
+```text
+already-resolved result -> awaited known events -> unknown exact event type at index N
+   -> diagnostic(Code, EventIndex, EventType)
+   -> abort all remaining visual events, including later terminal notifications
+   -> snap/activate existing registered entities; hide removed ones; refresh authoritative HUD
+   -> release submission ownership; do not call Resolve again or roll back the accepted turn
+```
+
+Handler exceptions and replay cancellation use the same recovery path. Diagnostic and recovery callback faults are recorded as secondary errors, not allowed to strand the gate. Recovery attempts every registered view and the HUD independently; missing/destroyed views are explicit errors rather than silently successful recovery. Source/rejection callback exceptions propagate with the gate still released; they do not replay or mutate rejected domain state.
+
+Single-submit evidence: `PendingHandler_BlocksRapidSubmissionsAndPreservesModalOwner` holds the first movement handler unfinished, rejects ten repeat submissions, and asserts `ResolutionCount == 1`, Food 99, no cost handler before movement completion, ordered replay afterward, and preservation of the modal block. PlayMode repeats twenty inputs during a real animation and verifies one resolution and Food 109 after exactly one pickup/reward/cost.
+
+Validation: baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e64f7ebaea81e015`; Unity 6000.3.21f1 compiled the implementation; focused `CommandPresentationPipelineTests` passed `30/30` EditMode and `OrderedBoardPresentationTests` passed `14/14` PlayMode. Reports/logs were written outside the project and fresh XML identities/counts/results were inspected. Editor Problems and `git diff --check` passed. Independent `qwen-reviewer` verdict: `PASS`. Only new presentation/test sources, Unity-generated matching metadata, two required assembly references, and this Lead-owned handoff changed. Core rules, production scripts, scenes, prefabs, packages, settings and save schemas are unchanged. M3.6.3 is the next executable child; the M3.6 umbrella remains `Planned` until production cutover is independently accepted.
 
 ---
 
@@ -3479,22 +3557,21 @@ O-002, O-003, O-004, O-005, O-006, O-007, O-008, and O-009 are resolved in `Game
 
 # Kolejka wykonawcza
 
-M0, M1, and M2 are complete; M3.1–M3.6.1 are `Done`; the M3.6 umbrella is split into three executable children; `M3.6.2` is next; and no card is currently `Active`. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. M3.6.1 was implemented from the clean baseline `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. Every new child still begins with its normal clean-worktree preflight.
+M0, M1, and M2 are complete; M3.1–M3.6.2 are `Done`; the M3.6 umbrella is split into three executable children; `M3.6.3` is next; and no card is currently `Active`. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. M3.6.1 was implemented from the clean baseline `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. M3.6.2 was implemented from the clean baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e64f7ebaea81e015`. Every new child still begins with its normal clean-worktree preflight.
 
 The next safe sequence is:
 
-1. execute and independently review `M3.6.2`;
-2. execute and independently review `M3.6.3`;
-3. continue `M3.7`–`M3.10` through their normal reviews;
-4. execute `M3.11` and `M3.12` before M4 so generation, replay, atlas observations, and tool sources share stable route-segment identity;
-5. complete the no-backpack vertical slice through `M7.8`, then make the explicit M9 verdict;
-6. keep M9 deferred and last unless the owner explicitly changes that order.
+1. execute and independently review `M3.6.3`;
+2. continue `M3.7`–`M3.10` through their normal reviews;
+3. execute `M3.11` and `M3.12` before M4 so generation, replay, atlas observations, and tool sources share stable route-segment identity;
+4. complete the no-backpack vertical slice through `M7.8`, then make the explicit M9 verdict;
+5. keep M9 deferred and last unless the owner explicitly changes that order.
 
 `M0.9` remains deferred by owner decision. No implementation agent performs external history rewriting, exposes historical values, or runs BFG without a separate explicit request.
 
-### Rationale — why M3.6.2 is next
+### Rationale — why M3.6.3 is next
 
-The accepted M3.6.1 runtime now binds each generated board to authoritative `BoardState`, a stable board-local player ID, one controller, and a read-only view registry. `M3.6.2` can therefore prove reusable command submission, gating, and ordered event replay against that boundary before `M3.6.3` removes the production legacy mutation paths. M3.11/M3.12 and M9 can reuse the completed M3.6 boundary, while inserting route identity before M4 prevents generator-era rework.
+The accepted M3.6.1 runtime binds each generated board to authoritative `BoardState`, a stable board-local player ID, one controller, and a read-only view registry. Accepted M3.6.2 now proves reusable command submission, gating, ordered replay, and controlled recovery in isolation. M3.6.3 must bind that path to production and remove the legacy mutation sources before the M3.6 umbrella is complete. M3.11/M3.12 and M9 can reuse the completed M3.6 boundary, while inserting route identity before M4 prevents generator-era rework.
 
 # Zasada aktualizacji roadmapy
 
