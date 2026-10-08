@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6 and M3.7.1-M3.7.2 accepted; M3.7.3 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6 and M3.7.1-M3.7.3 accepted; M3.7.4 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-08
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -2200,7 +2200,7 @@ Scope is the definition, focused fixture, their Unity-generated metadata, the ow
 
 ## `M3.7.3` - Board-local enemy state and intent retention
 
-**Status:** `Planned`
+**Status:** `Done` - direct Lead implementation accepted 2026-10-08 after focused Unity validation (58/58), independent `reviewer` PASS, and owner acceptance without reviewer-provider confirmation.
 **Priority:** P0
 **Related contract:** sections 11.1 and 11.3.
 
@@ -2225,6 +2225,20 @@ Scope is the definition, focused fixture, their Unity-generated metadata, the ow
 **Save and compatibility impact:** No schema change; state is discarded with its board, not copied into `ProfileState` or persisted `RunState`.
 
 **Required handoff:** A short state-transition table including first plan, one consumption, duplicate consumption, and fresh-board reset.
+
+### Acceptance (2026-10-08)
+
+The owner explicitly assigned implementation to the Lead. [ShamblerState.cs](../Assets/Scripts/Core/Turns/Resolution/ShamblerState.cs) owns one enemy's exact locked intent and once-only cadence consumption without storing position or mutating board/run state. The existing [ShamblerModelTests.cs](../Assets/Tests/EditMode/ShamblerModelTests.cs) adds 29 state cases; fresh Unity XML confirms 58/58 passed, zero failed, skipped, or inconclusive. Compilation, changed-file diagnostics, scope/integrity, and diff checks passed. Branch `M3/ExplicitShamblerDefinition` and baseline `f1e388850972f0b7a9ff691bb00d6c2382ba95a8` remain unchanged.
+
+Independent read-only `reviewer` returned PASS without a runtime model override. On 2026-10-08 the owner explicitly accepted this review without provider confirmation, resolving the sole acceptance blocker; no provider attribution is claimed. Code and test content still match the validated and reviewed candidate. Tests were not rerun for this documentation-only closeout. M3.7.4 is the next unstarted child; M3.7 remains `Planned` until all eleven children are independently accepted. Production enemies remain inert, with no save, scene/prefab, assembly, package, settings, or protected-configuration changes.
+
+| Operation | Retained intent | Cadence effect |
+| --- | --- | --- |
+| Fresh state / first lock | None initially; first lock retains the exact actor-matching intent | Starts Active; locking and reads do not advance |
+| Consume active opportunity, including an unsuccessful action or wait | Returns the exact intent and clears it | Active -> Rest once |
+| Lock and consume rest | Rest accepts only Wait; consumption clears it | Rest -> Active once |
+| Duplicate consume / overwrite attempt | Explicit exception; existing state preserved | No advancement |
+| Fresh-board reset | Discards the previous-board intent; preserves actor and definition | Restores initial Active; repeated reset is idempotent |
 
 ---
 
