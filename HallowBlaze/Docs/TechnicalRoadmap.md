@@ -1,7 +1,7 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6.3 active, manual PC smoke pending; route-leg amendments accepted; M9 deferred**
-> Data ostatniej weryfikacji: 2026-10-07
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6 and M3.7.1 accepted; M3.7.2 next; route-leg amendments accepted; M9 deferred**
+> Data ostatniej weryfikacji: 2026-10-08
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
 > Zasady pracy agentów: [`../AGENTS.md`](../AGENTS.md)
@@ -1602,7 +1602,7 @@ Validation observed on Unity 6000.3.21f1: **48/48 EditMode tests passed** (25 `T
 
 ## `M3.6` — Runtime input-to-presentation integration (tracking umbrella)
 
-**Status:** `Planned` — tracking umbrella; it becomes `Done` only after `M3.6.1`–`M3.6.3` are independently accepted.
+**Status:** `Done` — all three children independently accepted; M3.6.3 closeout accepted 2026-10-08 after Reviewer `PASS`.
 **Priority:** P0
 **Related contract:** sections 10.2, 18, and 21.1/21.2/21.5; resolved O-004.
 
@@ -1883,7 +1883,7 @@ Validation: baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e
 
 ## `M3.6.3` — Production cutover and PlayMode acceptance gate
 
-**Status:** `Active` — implementation, automated gates and owner-confirmed manual PC smoke complete; final independent acceptance is pending.
+**Status:** `Done` — accepted 2026-10-08 after final independent Reviewer `PASS`; owner-confirmed manual PC smoke resolves the previous evidence blocker.
 **Priority:** P0
 **Related contract:** sections 10, 18, and 21.1/21.2/21.5; `M0.8` regression contract.
 
@@ -2019,7 +2019,7 @@ Manual PC smoke: **Passed, confirmed by the owner on 2026-10-08 for the manual s
 
 Closeout display adjustment: at the owner's request, the `Day` label uses `CurrentDay + 1`. Internal day, completed-day score, board identity and save values remain unchanged. Automated tests were not rerun for this one-line display adjustment, as explicitly requested; the test results above belong to the production cutover validation on 2026-10-07.
 
-Initial independent read-only `qwen-reviewer` verdict: **BLOCKED**, solely for missing manual PC smoke evidence, with no material semantic code defect reported after inspecting terminal handling, stale requests, runtime replacement, presentation, gates and stale input. The owner's confirmation now supplies that missing evidence; final independent closeout acceptance is pending. Scope is thirteen code/test files plus this Lead-owned handoff; Core, BoardManager, scenes, prefabs, `.meta` files, packages, settings, save schemas and protected agent configuration remain unchanged.
+Initial independent read-only `qwen-reviewer` verdict: **BLOCKED**, solely for missing manual PC smoke evidence, with no material semantic code defect reported after inspecting terminal handling, stale requests, runtime replacement, presentation, gates and stale input. Final independent closeout review on 2026-10-08: **PASS**; the owner's confirmation supplies the missing smoke evidence and the Lead accepts M3.6.3. The automated results above remain the 2026-10-07 evidence and were not rerun for this closeout. Scope is thirteen code/test files plus this Lead-owned handoff; Core, BoardManager, scenes, prefabs, `.meta` files, packages, settings, save schemas and protected agent configuration remain unchanged.
 
 ---
 
@@ -2039,11 +2039,11 @@ Initial independent read-only `qwen-reviewer` verdict: **BLOCKED**, solely for m
 
 **Non-goals:** No Listener, noise, RNG, hidden aggro, final VFX, multi-enemy initiative/reservations/swaps (`M3.8`), intent UI (`M3.9`), production input/runtime cutover, or legacy enemy migration. Do not change `Enemy.cs`, `GameManager`, scenes, prefabs, generator, assemblies, packages, or settings in these children.
 
-**Dependencies:** `M3.5`. The execution queue still closes `M3.6.3` before starting M3.7; this decomposition does not accept or bypass its pending manual PC smoke.
+**Dependencies:** `M3.5`; `M3.6.3` was independently accepted on 2026-10-08, including owner-confirmed manual PC smoke. The execution prerequisite is satisfied.
 
 **Allowed file area:** Only the exact source/test paths listed in the selected child, plus their Unity-generated `.meta` companions under section 5.1. Use the existing Turns Contracts/Resolution assemblies rather than introducing an Enemies assembly. The Lead owns roadmap updates and must not include this document in a Developer write scope.
 
-**Readiness gate (Lead-owned):** The owner resolved pursuit, tie-break, attack, damage, cadence, and the same-cell conditional attack on 2026-10-07; [GameDesignContract section 11.3.1](GameDesignContract.md#1131-accepted-shambler-rule) is authoritative. The accepted defaults are whole-board shortest-path pursuit, orthogonal movement/attack, North -> East -> West -> South on equal paths, active -> rest starting active, one cadence advancement per executed enemy phase even on failure, and damage 10/20 for the existing variants. A rest phase never attacks. Before assignment, verify dependencies and the pending M3.6.3 gate, confirm proposed type paths against current code, reuse equivalent APIs, and seal any adjusted exact allowlist. No additional gameplay choice is delegated to the Developer; statuses remain `Planned` until the execution prerequisites are met.
+**Readiness gate (Lead-owned):** The owner resolved pursuit, tie-break, attack, damage, cadence, and the same-cell conditional attack on 2026-10-07; [GameDesignContract section 11.3.1](GameDesignContract.md#1131-accepted-shambler-rule) is authoritative. The accepted defaults are whole-board shortest-path pursuit, orthogonal movement/attack, North -> East -> West -> South on equal paths, active -> rest starting active, one cadence advancement per executed enemy phase even on failure, and damage 10/20 for the existing variants. A rest phase never attacks. Before assignment, verify dependencies and the accepted M3.6.3 gate, confirm proposed type paths against current code, reuse equivalent APIs, and seal any adjusted exact allowlist. No additional gameplay choice is delegated to the Developer; statuses remain `Planned` until the execution prerequisites are met.
 
 Each row is one delegation and one independent acceptance/review unit, normally one implementation file plus one focused test file. New test fixtures are reused by later children. Run `M3.7.1` through `M3.7.8`, then `M3.7.11`, `M3.7.9`, and `M3.7.10`; the added conditional-execution child preserves the existing child identifiers. Dependency order, not numerical order, controls assignment. Do not combine rows or implement a later row while preparing an earlier one. The model and executor are exercised with one enemy; batch conflict rules remain in M3.8.
 
@@ -2073,7 +2073,7 @@ Each row is one delegation and one independent acceptance/review unit, normally 
 
 ## `M3.7.1` - Immutable enemy intent contract
 
-**Status:** `Planned`
+**Status:** `Done` — direct Lead implementation accepted 2026-10-08 after focused Unity validation (22/22) and independent Reviewer `PASS`; the user authorized discarding the failed local attempt.
 **Priority:** P0
 **Related contract:** section 11.1.
 
@@ -2098,6 +2098,36 @@ Each row is one delegation and one independent acceptance/review unit, normally 
 **Save and compatibility impact:** No schema change; this value is board-local and not a save DTO.
 
 **Required handoff:** Payload examples for each intent kind, immutable-target semantics, and exact focused-test results.
+
+### Implementation handoff (2026-10-08)
+
+The user authorized Git recovery of the failed local attempt and direct implementation by the Lead. Recovery restored the existing fixture and roadmap, removed the failed new asset with its metadata and the worker's temporary project, and verified a clean worktree before writing. Baseline: branch `M3/PureShamblerModel`, commit `6f0eaea0febaae0e2ba4adc9f15777193a784de8`. Branch and `HEAD` remain unchanged; no commit was created.
+
+[EnemyIntent.cs](../Assets/Scripts/Core/Turns/Contracts/EnemyIntent.cs) defines `EnemyIntentKind` and a sealed, getter-only `EnemyIntent`. The actor, action, target identity, target cell, and declared condition are copied scalar values. Move retains the fixed destination and original player's identity with `AttackOnPlayerEntry = true`; attack retains its original player and cell without that condition; wait has no target or condition. Undefined kinds, missing targets, self-targets, and contradictory fields fail explicitly. Zero/negative IDs and origin/extreme coordinates are valid; board bounds and action legality are deliberately validated elsewhere.
+
+```csharp
+var actorId = new EntityId(0);
+var playerId = new EntityId(-1);
+var move = new EnemyIntent(actorId, EnemyIntentKind.Move,
+    new GridPosition(0, 1), playerId, attackOnPlayerEntry: true);
+var attack = new EnemyIntent(actorId, EnemyIntentKind.Attack,
+    new GridPosition(1, 0), playerId);
+var wait = new EnemyIntent(actorId, EnemyIntentKind.Wait);
+```
+
+Changing caller-owned IDs or cell arrays cannot modify an existing intent. The conditional attack refers only to the move's recorded cell and player; it is not a new target search. The contract has English XML documentation and no Unity, clock, RNG, planner, or executor dependency. Unity generated only the new asset's `.meta`; no existing metadata was replaced.
+
+Focused validation:
+
+```powershell
+unity test "D:\Repos\HallowBlaze\HallowBlaze" --mode EditMode --filter HallowBlaze.Tests.EditMode.TurnContractsTests --output "$results\editmode.xml" --timeout 240 -- -nographics -logFile "$results\editmode.log"
+```
+
+`$results` was the external session directory `HB-M371-direct-20261008`, not a project directory. Unity `6000.3.21f1` compiled the project and returned CLI exit code `0`. The Lead checked the fresh XML's expected fixture identities: **22/22 passed**, **0 failed**, **0 skipped**, **0 inconclusive**. This includes the original nine contract tests and thirteen intent cases covering all actions, primitive boundary values, invalid kinds/payloads, immutable snapshots, and the getter-only public API. `git diff --check` passed. Full-suite and PlayMode tests were not run for this pure value contract.
+
+Independent `qwen-reviewer` verdict: **PASS**, after inspecting the actual source, tests, diff, and all validation branches. Unity's incidental post-test scripting-define change was preserved as external validation evidence and reverted through the authorized Git recovery; final `ProjectSettings` content matches the baseline.
+
+No definition, cadence/state owner, planning, execution, production enemy activation, intent UI, scene/prefab, assembly, package, save schema, or protected agent-configuration change is included. M3.7.2 remains the next, unstarted child; acceptance of this value does not activate production enemies.
 
 ---
 

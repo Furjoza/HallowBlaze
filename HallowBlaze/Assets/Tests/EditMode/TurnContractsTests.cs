@@ -7,7 +7,7 @@ using NUnit.Framework;
 namespace HallowBlaze.Tests.EditMode
 {
     /// <summary>
-    /// Verifies player-command, turn-result, and ordered-event contracts without Unity runtime state.
+    /// Verifies command, enemy-intent, turn-result, and ordered-event contracts without Unity runtime state.
     /// </summary>
     public class TurnContractsTests
     {
@@ -161,9 +161,190 @@ namespace HallowBlaze.Tests.EditMode
         [Test]
         public void ContractsAssemblyDoesNotReferenceUnity()
         {
+            Assert.That(typeof(EnemyIntent).Assembly, Is.SameAs(typeof(PlayerCommand).Assembly));
             foreach (var reference in typeof(PlayerCommand).Assembly.GetReferencedAssemblies())
             {
                 Assert.That(reference.Name.StartsWith("Unity", StringComparison.Ordinal), Is.False, reference.FullName);
+            }
+        }
+
+        /// <summary>
+        /// Each intent retains its actor, action, fixed target, and declared player-entry policy.
+        /// </summary>
+        [Test]
+        public void EnemyIntentsPreserveTheirActionSpecificPayloads()
+        {
+            var actorId = new EntityId(1);
+            var playerId = new EntityId(2);
+            var destination = new GridPosition(0, 1);
+            var attackCell = new GridPosition(1, 0);
+            var move = new EnemyIntent(actorId, EnemyIntentKind.Move, destination, playerId, attackOnPlayerEntry: true);
+            var attack = new EnemyIntent(actorId, EnemyIntentKind.Attack, attackCell, playerId);
+            var wait = new EnemyIntent(actorId, EnemyIntentKind.Wait);
+
+            Assert.That(move.ActorId, Is.EqualTo(actorId));
+            Assert.That(move.Kind, Is.EqualTo(EnemyIntentKind.Move));
+            Assert.That(move.TargetPosition, Is.EqualTo(destination));
+            Assert.That(move.TargetId, Is.EqualTo(playerId));
+            Assert.That(move.AttackOnPlayerEntry, Is.True);
+            Assert.That(attack.ActorId, Is.EqualTo(actorId));
+            Assert.That(attack.Kind, Is.EqualTo(EnemyIntentKind.Attack));
+            Assert.That(attack.TargetPosition, Is.EqualTo(attackCell));
+            Assert.That(attack.TargetId, Is.EqualTo(playerId));
+            Assert.That(attack.AttackOnPlayerEntry, Is.False);
+            Assert.That(wait.ActorId, Is.EqualTo(actorId));
+            Assert.That(wait.Kind, Is.EqualTo(EnemyIntentKind.Wait));
+            Assert.That(wait.TargetPosition, Is.Null);
+            Assert.That(wait.TargetId, Is.Null);
+            Assert.That(wait.AttackOnPlayerEntry, Is.False);
+        }
+
+        /// <summary>
+        /// Zero, negative and extreme primitive values are retained without sentinel or board-bound checks.
+        /// </summary>
+        [TestCase(0L, -1L, 0, 0)]
+        [TestCase(-42L, 0L, -10, -20)]
+        [TestCase(long.MinValue, long.MaxValue, int.MinValue, int.MaxValue)]
+        public void EnemyIntentsPreserveValidPrimitiveValues(long actor, long player, int x, int y)
+        {
+            var actorId = new EntityId(actor);
+            var playerId = new EntityId(player);
+            var targetCell = new GridPosition(x, y);
+            var move = new EnemyIntent(actorId, EnemyIntentKind.Move, targetCell, playerId, attackOnPlayerEntry: true);
+            var attack = new EnemyIntent(actorId, EnemyIntentKind.Attack, targetCell, playerId);
+            var wait = new EnemyIntent(actorId, EnemyIntentKind.Wait);
+
+            Assert.That(move.ActorId, Is.EqualTo(actorId));
+            Assert.That(move.TargetPosition, Is.EqualTo(targetCell));
+            Assert.That(move.TargetId, Is.EqualTo(playerId));
+            Assert.That(attack.ActorId, Is.EqualTo(actorId));
+            Assert.That(attack.TargetPosition, Is.EqualTo(targetCell));
+            Assert.That(attack.TargetId, Is.EqualTo(playerId));
+            Assert.That(wait.ActorId, Is.EqualTo(actorId));
+        }
+
+        /// <summary>
+        /// Undefined action discriminators fail at creation rather than producing an ambiguous intent.
+        /// </summary>
+        [TestCase(0)]
+        [TestCase(-1)]
+        [TestCase(int.MaxValue)]
+        public void EnemyIntentsRejectUndefinedKinds(int kind)
+        {
+            var error = Assert.Throws<ArgumentOutOfRangeException>(() =>
+                new EnemyIntent(new EntityId(0), (EnemyIntentKind)kind));
+
+            Assert.That(error.ParamName, Is.EqualTo("kind"));
+        }
+
+        /// <summary>
+        /// Targeted actions require both a recorded cell and a distinct original player identity.
+        /// </summary>
+        [TestCase(EnemyIntentKind.Move)]
+        [TestCase(EnemyIntentKind.Attack)]
+        public void TargetedEnemyIntentsRejectMissingAndSelfTargets(EnemyIntentKind kind)
+        {
+            var actorId = new EntityId(0);
+            var playerId = new EntityId(-1);
+            var targetCell = new GridPosition(0, 0);
+            var conditionalAttack = kind == EnemyIntentKind.Move;
+            var missingCell = Assert.Throws<ArgumentException>(() =>
+                new EnemyIntent(actorId, kind, targetId: playerId, attackOnPlayerEntry: conditionalAttack));
+            var missingIdentity = Assert.Throws<ArgumentException>(() =>
+                new EnemyIntent(actorId, kind, targetCell, attackOnPlayerEntry: conditionalAttack));
+            var selfTarget = Assert.Throws<ArgumentException>(() =>
+                new EnemyIntent(actorId, kind, targetCell, actorId, conditionalAttack));
+
+            Assert.That(missingCell.ParamName, Is.EqualTo("targetPosition"));
+            Assert.That(missingIdentity.ParamName, Is.EqualTo("targetId"));
+            Assert.That(selfTarget.ParamName, Is.EqualTo("targetId"));
+        }
+
+        /// <summary>
+        /// A move cannot omit its declared same-cell attack condition or attach it to a planned attack.
+        /// </summary>
+        [Test]
+        public void EnemyIntentsRejectContradictoryAttackConditions()
+        {
+            var actorId = new EntityId(0);
+            var playerId = new EntityId(-1);
+            var targetCell = new GridPosition(0, 0);
+            var missingCondition = Assert.Throws<ArgumentException>(() =>
+                new EnemyIntent(actorId, EnemyIntentKind.Move, targetCell, playerId));
+            var attackCondition = Assert.Throws<ArgumentException>(() =>
+                new EnemyIntent(actorId, EnemyIntentKind.Attack, targetCell, playerId, attackOnPlayerEntry: true));
+
+            Assert.That(missingCondition.ParamName, Is.EqualTo("attackOnPlayerEntry"));
+            Assert.That(attackCondition.ParamName, Is.EqualTo("attackOnPlayerEntry"));
+        }
+
+        /// <summary>
+        /// Wait rejects target fields and conditional attacks, including otherwise valid zero payloads.
+        /// </summary>
+        [Test]
+        public void WaitIntentRejectsTargetsAndAttackConditions()
+        {
+            var actorId = new EntityId(-1);
+            var cell = Assert.Throws<ArgumentException>(() =>
+                new EnemyIntent(actorId, EnemyIntentKind.Wait, targetPosition: new GridPosition(0, 0)));
+            var identity = Assert.Throws<ArgumentException>(() =>
+                new EnemyIntent(actorId, EnemyIntentKind.Wait, targetId: new EntityId(0)));
+            var condition = Assert.Throws<ArgumentException>(() =>
+                new EnemyIntent(actorId, EnemyIntentKind.Wait, attackOnPlayerEntry: true));
+            Assert.Throws<ArgumentException>(() =>
+                new EnemyIntent(actorId, EnemyIntentKind.Wait, new GridPosition(0, 0), new EntityId(0), true));
+
+            Assert.That(cell.ParamName, Is.EqualTo("targetPosition"));
+            Assert.That(identity.ParamName, Is.EqualTo("targetId"));
+            Assert.That(condition.ParamName, Is.EqualTo("attackOnPlayerEntry"));
+        }
+
+        /// <summary>
+        /// Replacing caller-owned identities and cells cannot change an already recorded action or target.
+        /// </summary>
+        [Test]
+        public void EnemyIntentsOwnImmutableTargetSnapshots()
+        {
+            var actorId = new EntityId(0);
+            var playerIds = new[] { new EntityId(-1) };
+            var cells = new[] { new GridPosition(0, 0), new GridPosition(-3, 4) };
+            var move = new EnemyIntent(actorId, EnemyIntentKind.Move, cells[0], playerIds[0], attackOnPlayerEntry: true);
+            var attack = new EnemyIntent(actorId, EnemyIntentKind.Attack, cells[1], playerIds[0]);
+            var wait = new EnemyIntent(actorId, EnemyIntentKind.Wait);
+
+            actorId = new EntityId(99);
+            playerIds[0] = new EntityId(42);
+            cells[0] = new GridPosition(9, 9);
+            cells[1] = new GridPosition(8, 8);
+
+            Assert.That(move.ActorId, Is.EqualTo(new EntityId(0)));
+            Assert.That(move.TargetId, Is.EqualTo(new EntityId(-1)));
+            Assert.That(move.TargetPosition, Is.EqualTo(new GridPosition(0, 0)));
+            Assert.That(move.Kind, Is.EqualTo(EnemyIntentKind.Move));
+            Assert.That(move.AttackOnPlayerEntry, Is.True);
+            Assert.That(attack.ActorId, Is.EqualTo(new EntityId(0)));
+            Assert.That(attack.TargetId, Is.EqualTo(new EntityId(-1)));
+            Assert.That(attack.TargetPosition, Is.EqualTo(new GridPosition(-3, 4)));
+            Assert.That(attack.Kind, Is.EqualTo(EnemyIntentKind.Attack));
+            Assert.That(attack.AttackOnPlayerEntry, Is.False);
+            Assert.That(wait.ActorId, Is.EqualTo(new EntityId(0)));
+            Assert.That(wait.Kind, Is.EqualTo(EnemyIntentKind.Wait));
+            Assert.That(wait.TargetId, Is.Null);
+            Assert.That(wait.TargetPosition, Is.Null);
+            Assert.That(wait.AttackOnPlayerEntry, Is.False);
+        }
+
+        /// <summary>
+        /// The intent cannot be extended with mutable state and exposes only getter-only value payloads.
+        /// </summary>
+        [Test]
+        public void EnemyIntentHasNoMutablePublicPayload()
+        {
+            Assert.That(typeof(EnemyIntent).IsSealed, Is.True);
+            foreach (var property in typeof(EnemyIntent).GetProperties())
+            {
+                Assert.That(property.CanWrite, Is.False, property.Name);
+                Assert.That(property.PropertyType.IsValueType, Is.True, property.Name);
             }
         }
     }
