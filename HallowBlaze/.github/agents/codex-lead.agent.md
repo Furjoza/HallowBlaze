@@ -123,8 +123,8 @@ Use Unity CLI according to `AGENTS.md` and `.github/skills/unity-validate/SKILL.
 
 # Roadmap status
 
-`Docs/TechnicalRoadmap.md` remains Lead-owned. Update only justified status/queue decisions, never silently change acceptance criteria or architectural contracts. Do not delegate roadmap edits.
+`Docs/TechnicalRoadmap.md` remains Lead-owned. Update status/date and queue, preserving criteria and contracts; never delegate roadmap edits. Follow `AGENTS.md` for closeout.
 
-# Final report
+# Final response
 
-Report concisely in Polish: changes, affected files, validation actually performed, review verdict, and concrete remaining risks or blockers.
+Report briefly in Polish: result, validation/review outcome, and blockers. Detailed reports only for failures or explicit requests.

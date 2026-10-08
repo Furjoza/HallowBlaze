@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6 and M3.7.1 accepted; M3.7.2 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6 and M3.7.1-M3.7.2 accepted; M3.7.3 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-08
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -2133,7 +2133,7 @@ No definition, cadence/state owner, planning, execution, production enemy activa
 
 ## `M3.7.2` - Explicit Shambler definition
 
-**Status:** `Planned`
+**Status:** `Done` - direct Lead implementation accepted 2026-10-08 after focused Unity validation (29/29), independent `reviewer` PASS, and owner acceptance of the unverified reviewer-provider limitation.
 **Priority:** P0
 **Related contract:** sections 11.1 and 11.3.
 
@@ -2158,6 +2158,43 @@ No definition, cadence/state owner, planning, execution, production enemy activa
 **Save and compatibility impact:** No schema change; no definition is added to persistence in this child.
 
 **Required handoff:** The approved parameter contract, its source-of-truth reference, and rejected-configuration examples.
+
+### Implementation handoff (2026-10-08)
+
+The owner authorized Git cleanup of the failed local definition and direct implementation by the Lead. Cleanup removed only the task-attributable file and restored a clean worktree before implementation. Baseline: Git root `D:/Repos/HallowBlaze`, branch `M3/ExplicitShamblerDefinition`, commit `6331c4e97b3324945963398c61faef560a912d48`. Branch and `HEAD` remain unchanged; the Lead created no commit and did not alter the owner's staging.
+
+[ShamblerDefinition.cs](../Assets/Scripts/Core/Turns/Resolution/ShamblerDefinition.cs) implements immutable configuration in the existing Resolution assembly. Its source of truth is [GameDesignContract section 11.3.1](GameDesignContract.md#1131-accepted-shambler-rule), the accepted owner decision of 2026-10-07.
+
+| Parameter | Accepted contract |
+| --- | --- |
+| `RuleName` | `Shortest-path pursuit with alternating rest`, fixed for both variants |
+| `InitialPhase` | `ShamblerPhase.Active`, not configurable |
+| `ActivePhaseTurns` / `RestPhaseTurns` | Exactly 1 / 1 executed enemy phases |
+| `AttackRange` / `OrthogonalAttacksOnly` | Exactly one grid cell / always true |
+| `Damage` | Exactly 10 HP for the existing Enemy1 variant or 20 HP for Enemy2 |
+
+```csharp
+var enemy1 = new ShamblerDefinition(10);
+var enemy2 = new ShamblerDefinition(20, activePhaseTurns: 1, restPhaseTurns: 1, attackRange: 1);
+```
+
+Unsupported damage such as 0, 11, or 21; active/rest lengths other than 1; and attack ranges other than 1 throw `ArgumentOutOfRangeException` at construction with the offending parameter and value. Initial rest, an alternate rule, and diagonal attacks cannot be configured. All properties are getter-only scalar/string values; no mutable collection, cadence advancement, planning, execution, or board/run mutation is exposed. `ShamblerPhase` is a value enum, not a state owner. Public APIs have English XML contract documentation.
+
+[ShamblerModelTests.cs](../Assets/Tests/EditMode/ShamblerModelTests.cs) covers both accepted damage variants, explicit/default configuration, all four rejection branches with boundary values, immutable API/fields, and the existing Resolution assembly's independence from Unity. Unity generated only the two new assets' metadata; no existing GUID was edited.
+
+Lead-owned validation, Unity `6000.3.21f1`:
+
+```powershell
+unity test "D:\Repos\HallowBlaze\HallowBlaze" --mode EditMode --filter HallowBlaze.Tests.EditMode.ShamblerModelTests --output "$env:TEMP\HB-M372-direct-20261008-71c5fc4e.xml" --timeout 240 -- -nographics -logFile "$env:TEMP\HB-M372-direct-20261008-71c5fc4e.log"
+```
+
+Unity import/compilation and the CLI command succeeded with exit code 0. The Lead parsed the fresh external XML report and confirmed the exact `HallowBlaze.Tests.EditMode.ShamblerModelTests` fixture: **29/29 passed**, **0 failed**, **0 skipped**, **0 inconclusive**, executed on 2026-10-08 at 14:59:20Z. Changed-file editor diagnostics reported no errors. Tracked and new-file diff checks found no whitespace errors, with only the existing LF/CRLF normalization warning. Full-suite and PlayMode tests were not run for this pure definition; no tests were rerun for the documentation-only closeout.
+
+Independent read-only `reviewer` verdict: **PASS**, with no material defects after inspecting the actual code, configuration-validation branches, tests, diff, metadata, and Lead-owned validation evidence. The invocation used the configured reviewer without a runtime model override. The actual provider/model routing was not exposed; the agent's self-introduction did not establish it. The owner explicitly authorized closing this card despite that limitation. No Copilot-provider attribution is claimed.
+
+Unity removed `SENTIS_ANALYTICS_ENABLED` from the Standalone scripting defines during validation, leaving `APP_UI_EDITOR_ONLY`. The owner explicitly accepted retaining this sole change in [ProjectSettings.asset](../ProjectSettings/ProjectSettings.asset); it was not reverted. No other task-attributable settings, package, assembly, scene/prefab, persistence, or protected agent-configuration change is included.
+
+Scope is the definition, focused fixture, their Unity-generated metadata, the owner-approved scripting-define removal, and this Lead-owned roadmap closeout. Production enemies remain inert. M3.7.3 is the next unstarted child; M3.7 remains `Planned` until all eleven children are independently accepted.
 
 ---
 

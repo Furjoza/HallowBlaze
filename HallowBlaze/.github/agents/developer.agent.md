@@ -2,7 +2,7 @@
 name: developer
 description: Local bounded implementation developer running on Devstral through Ollama. Reads existing code, implements one focused task with native tools, may perform a bounded self-check, and reports the actual returned state.
 argument-hint: A small implementation task with references, boundaries, and acceptance criteria.
-model: Devstral Small 2 24B - Ollama Custom (customendpoint)
+model: Qwen3-coder - Ollama Custom (customendpoint)
 tools: ['read', 'search', 'edit', 'execute']
 user-invocable: false
 disable-model-invocation: false
