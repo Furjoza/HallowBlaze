@@ -667,7 +667,7 @@ Przewidywalny przeciwnik może być częścią zagadki. Przeciwnik, który po ru
 #### Konsekwencje implementacyjne
 
 - Planowanie i wykonanie korzystają z tego samego modelu planszy.
-- Zablokowany intent nie jest zastępowany nowym ruchem; zwykle kończy się `Wait`.
+- A locked intent never selects a new direction, destination, or target during execution. An invalidated action normally resolves as `Wait`; the Shambler's explicit same-cell movement-to-attack condition and missed attacks follow section 11.3.1 instead of replanning.
 - Rejestracja prefabów i kolejność w hierarchii nie mogą wpływać na inicjatywę.
 
 ### 11.2. Konflikty intentów
@@ -680,7 +680,7 @@ W MVP:
 - pierwszy przeciwnik rezerwuje wolne pole;
 - kolejny próbujący wejść na to samo pole czeka;
 - zamiana miejsc jest zabroniona;
-- przeciwnik z unieważnionym celem czeka zamiast przeplanowywać.
+- An invalidated intent does not replan. Ordinary movement conflicts produce `Wait`; a player occupying a Shambler's locked destination uses the declared condition in section 11.3.1. Another enemy occupying that cell is a blocker, not an attack target.
 
 #### Rationale — dlaczego
 
@@ -700,6 +700,42 @@ Trzeci archetyp, np. biegacz poruszający się po prostej, jest opcjonalny po sp
 #### Rationale — dlaczego
 
 Shambler uczy pozycji i tempa, Listener tworzy możliwość świadomego manipulowania. Dwa jakościowo różne zachowania są cenniejsze niż wiele wariantów obrażeń.
+
+### 11.3.1. Accepted Shambler rule
+
+#### Owner decision - 2026-10-07
+
+**Status:** `Accepted`. These decisions define M3.7 behavior; they do not accept its implementation or the pending M3.6.3 manual PC smoke.
+
+**Named rule:** Shortest-path pursuit with alternating rest.
+
+- The Shambler knows the player's current cell across the whole local board. There is no detection radius, line-of-sight requirement, hidden aggro, or gameplay RNG.
+- In an active phase, it plans `Attack` when the player occupies an orthogonally adjacent, legally reachable cell. Otherwise it plans one orthogonal `Move` on a shortest legal grid path to the player, using BFS or an equivalent deterministic shortest-path method. No diagonal movement or attack is allowed.
+- Pathfinding respects bounds, walkable terrain, impassable obstacles, and other actors. The player's occupied cell is the terminal pursuit target, not a cell the enemy may enter. If no legal route exists, it plans `Wait`.
+- Equally short legal first steps use the fixed priority **North -> East -> West -> South**. A tie does not itself cause waiting. A future less capable or indecisive archetype requires a separate decision; it is not part of this rule.
+
+#### Cadence and initial planning
+
+- Every Shambler starts a fresh board in the active phase. Its first intent is planned before the first player command; all current Shambler variants share this initial phase.
+- The cycle is **active -> rest -> active -> rest**. An active phase allows one move or attack; a rest phase always plans `Wait`, including when the player is adjacent.
+- Each executed enemy phase advances the cycle exactly once, including a blocked move, no available route, a missed attack, a conditional attack, or planned rest. An unsuccessful active opportunity is therefore followed by rest, not an immediate retry.
+- Planning and presentation do not advance cadence. Rejected player commands, pause, and terminal outcomes reached before the enemy phase do not execute that phase or advance its state.
+- Turn order remains player action -> locked enemy phase -> remaining controller phases. For successive accepted nonterminal commands, the enemy outcomes are action, rest, action, rest; there is no additional player turn or resource cost.
+
+#### Locked destinations and attack results
+
+- A planned `Move` retains one fixed orthogonally adjacent destination and the explicit **attack if the player enters this destination** condition. The condition is part of the locked rule, not a fresh planner call or a search for a nearby target.
+- At execution, if that destination is still legal and empty, the enemy moves there. If the player now occupies that same legal destination, the enemy stays in its original cell and attacks the player there once. An impassable destination or a different actor blocking it produces `Wait`; it does not cause friendly fire, retargeting, or another movement choice.
+- Merely moving next to the enemy on a different cell does not activate the condition. A locked `Wait` never becomes an attack. A stale or missing source actor cannot move or deal damage.
+- A planned `Attack` retains the original player identity and target cell. It attacks only that recorded cell: if the original player is no longer there, the attack misses and deals zero damage. It does not follow the player to another adjacent cell, attack a replacement occupant, or become pursuit movement. A no-longer-legal attack is blocked without damage or replanning.
+- Attack-result events distinguish a hit from an empty-cell miss and report the recorded cell and actual health change. A miss must remain reproducible as a swing at the announced cell; it is not another attack opportunity. Health and terminal handling retain their existing domain/controller ownership.
+- The two current variants retain deterministic damage **10 HP** (`Enemy1`) and **20 HP** (`Enemy2`) as definition data, with the same pursuit rule and cadence. Preserving these values does not make either variant a Listener or introduce new enemy combat statistics.
+
+#### Intent visibility and validation
+
+The player must see the movement destination **and its attack-on-player-entry condition before committing a command**. The M3.9 representation must distinguish this conditional movement from unconditional movement and from a planned attack without relying only on color. Showing only a harmless movement arrow and silently changing it into an attack is not acceptable.
+
+Focused tests must cover shortest paths around obstacles, the North/East/West/South tie-break, initial active phase, a complete cadence cycle including failed opportunities, fixed-cell attack misses, player-on-destination attacks, non-player blockers, and no attacks during rest. The same-cell conditional outcome consumes one existing active opportunity and is followed by rest; it never adds a second action, turn, or cost.
 
 ## 12. Hałas
 

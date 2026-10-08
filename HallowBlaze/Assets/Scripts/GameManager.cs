@@ -1,17 +1,19 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using HallowBlaze.Core.Persistence;
 using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
+using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.World;
 using HallowBlaze.Presentation.Runtime;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-public class GameManager : MonoBehaviour
+/// <summary>Composes the active board's single command/presentation path and guarded session lifecycle.</summary>
+public class GameManager : MonoBehaviour, IBoardOutcomeSink
 {
     private const int InitialHealth = 100;
     private const int InitialFood = 100;
@@ -37,7 +39,6 @@ public class GameManager : MonoBehaviour
     internal static string PersistenceRootOverride;
 
     public float levelStartDelay = 2f;
-    public float turnDelay = .1f;
     public static GameManager instance = null;
     public BoardManager boardScript;
     [SerializeField] private TextAsset worldDefinitionJson;
@@ -47,9 +48,6 @@ public class GameManager : MonoBehaviour
     private GameObject levelImage;
     private GameObject restartButton;
     private GameObject menuButton;
-    private List<Enemy> enemies;
-    private bool playerTurn = true;
-    private bool enemiesMoving;
     private bool doingSetup;
     private bool gameplayInputBlocked;
     private bool boardStartupInProgress;
@@ -62,6 +60,9 @@ public class GameManager : MonoBehaviour
     private WorldMapService worldMap;
     private BoardRequest activeBoardRequest;
     private BoardRuntime activeBoardRuntime;
+    private BoardEventPresenter activeBoardPresenter;
+    private PlayerScript activePlayerView;
+    private bool handlingBoardOutcome;
     private bool boardOutcomeHandled;
     private IReadOnlyList<WorldMapExitOption> routeChoices = NoRouteChoices;
     private bool terminalActionRequested;
@@ -84,6 +85,9 @@ public class GameManager : MonoBehaviour
         get { return activeBoardRuntime; }
     }
 
+    /// <summary>Gets the sole presenter for the active board, including its transient gate and diagnostics.</summary>
+    public BoardEventPresenter ActiveBoardPresenter => activeBoardPresenter;
+
     /// <summary>Gets the legal options exposed by the current board exit.</summary>
     public IReadOnlyList<WorldMapExitOption> RouteChoices
     {
@@ -95,8 +99,7 @@ public class GameManager : MonoBehaviour
     {
         get
         {
-            return gameplayInputBlocked
-                && worldMap != null
+            return worldMap != null
                 && worldMap.ChoiceState == RouteChoiceState.AwaitingChoice;
         }
     }
@@ -104,24 +107,26 @@ public class GameManager : MonoBehaviour
     /// <summary>Raised when the placeholder route-choice presentation should refresh.</summary>
     public event Action<IReadOnlyList<WorldMapExitOption>> OnRouteChoicesChanged;
 
+    /// <summary>Gets whether lifecycle and presentation ownership admit a complete board command.</summary>
     public bool IsGameplayInputEnabled
     {
         get
         {
-            return enabled
-                && !doingSetup
-                && !gameplayInputBlocked
+            return !IsGameplayInputBlocked
                 && Time.frameCount > gameplayInputResumeFrame
-                && playerTurn
                 && session != null
                 && session.ActiveRun != null
-                && session.ActiveRun.Status == RunStatus.Active;
+                && session.ActiveRun.Status == RunStatus.Active
+                && activeBoardPresenter != null
+                && activeBoardPresenter.Coordinator.CanSubmit;
         }
     }
 
+    /// <summary>Gets lifecycle blocking independently of transient presentation ownership.</summary>
     public bool IsGameplayInputBlocked
     {
-        get { return gameplayInputBlocked; }
+        get { return !enabled || doingSetup || boardStartupInProgress || gameplayInputBlocked
+                || IsRouteChoiceActive || boardOutcomeHandled || terminalActionRequested; }
     }
 
     /// <summary>Requests another run in the current profile.</summary>
@@ -142,6 +147,7 @@ public class GameManager : MonoBehaviour
         requestedLaunchMode = RunLaunchMode.Continue;
     }
 
+    /// <summary>Gets whether a nonterminal board may open pause without interrupting a terminal outcome.</summary>
     public bool CanPauseGameplay
     {
         get
@@ -151,16 +157,51 @@ public class GameManager : MonoBehaviour
                 && !gameplayInputBlocked
                 && session != null
                 && session.ActiveRun != null
-                && session.ActiveRun.Status == RunStatus.Active;
+                && session.ActiveRun.Status == RunStatus.Active
+                && !IsRouteChoiceActive
+                && !boardOutcomeHandled
+                && activeBoardRuntime != null
+                && !activeBoardRuntime.IsDisposed
+                && !activeBoardRuntime.Controller.IsTerminal;
         }
     }
 
+    /// <summary>Sets the pause owner's block without releasing setup, route, terminal, or presentation ownership.</summary>
     public void SetGameplayInputBlocked(bool blocked)
     {
         gameplayInputBlocked = blocked;
 
         if (!blocked)
             gameplayInputResumeFrame = Time.frameCount;
+        UpdatePresentationBlocks();
+    }
+
+    /// <summary>Admits one complete command through the current board's coordinator; blocked calls never resolve.</summary>
+    /// <param name="command">A complete intent; null is a free no-command sample.</param>
+    /// <param name="submission">The admitted operation, or null when lifecycle ownership blocks admission.</param>
+    /// <returns>Whether the current coordinator was called, independently of domain acceptance.</returns>
+    public bool TrySubmitCommand(PlayerCommand command, out Task<CommandSubmission> submission)
+    {
+        UpdatePresentationBlocks();
+        submission = null;
+        if (!IsGameplayInputEnabled)
+            return false;
+        submission = activeBoardPresenter.Coordinator.SubmitAsync(command);
+        return true;
+    }
+
+    /// <summary>Samples at most one complete intent only when every production input owner admits it.</summary>
+    /// <param name="source">The PC binding or another complete-command source; never sampled while blocked.</param>
+    /// <param name="submission">The admitted operation, or null when blocked.</param>
+    /// <returns>Whether source submission was admitted, not whether an intent was available or accepted.</returns>
+    public bool TrySubmitInput(ICommandSource source, out Task<CommandSubmission> submission)
+    {
+        UpdatePresentationBlocks();
+        submission = null;
+        if (!IsGameplayInputEnabled)
+            return false;
+        submission = activeBoardPresenter.Coordinator.SubmitFromAsync(source);
+        return true;
     }
 
     /// <summary>
@@ -169,7 +210,7 @@ public class GameManager : MonoBehaviour
     /// <returns><c>true</c> when at least one legal route is ready for presentation.</returns>
     public bool BeginRouteChoice()
     {
-        if (gameplayInputBlocked ||
+        if (IsRouteChoiceActive ||
             session == null ||
             session.ActiveRun == null ||
             session.ActiveRun.Status != RunStatus.Active ||
@@ -198,7 +239,6 @@ public class GameManager : MonoBehaviour
             return false;
         }
 
-        SetGameplayInputBlocked(true);
         SetRouteChoices(choicesResult.Exits);
         return true;
     }
@@ -210,7 +250,7 @@ public class GameManager : MonoBehaviour
     /// <returns><c>true</c> only when this call commits a new route and requests the next board.</returns>
     public bool ChooseRoute(string edgeId)
     {
-        if (!gameplayInputBlocked || !TryEnsureWorldMap())
+        if (!IsRouteChoiceActive || !TryEnsureWorldMap())
             return false;
 
         RouteChoiceCommandResult result = worldMap.ChooseRoute(edgeId);
@@ -247,7 +287,6 @@ public class GameManager : MonoBehaviour
 
         instance = this;
         DontDestroyOnLoad(gameObject);
-        enemies = new List<Enemy>();
         boardScript = GetComponent<BoardManager>();
         session = new GameSession(new ProfileState("default-profile", "world-1", 1));
     }
@@ -261,6 +300,7 @@ public class GameManager : MonoBehaviour
             session.OnRunStarted += OnRunStarted;
             session.OnRunAbandoned += OnRunAbandoned;
         }
+        UpdatePresentationBlocks();
     }
 
     private void OnDisable()
@@ -272,6 +312,7 @@ public class GameManager : MonoBehaviour
             session.OnRunStarted -= OnRunStarted;
             session.OnRunAbandoned -= OnRunAbandoned;
         }
+        UpdatePresentationBlocks();
     }
 
     private void OnDestroy()
@@ -350,7 +391,7 @@ public class GameManager : MonoBehaviour
         if (levelTextObject != null)
             levelText = levelTextObject.GetComponent<Text>();
         if (levelText != null)
-            levelText.text = "Day: " + session.GetCurrentRun().CurrentDay;
+            levelText.text = "Day: " + (session.GetCurrentRun().CurrentDay + 1);
 
         restartButton = GameObject.Find("RestartBttn");
         if (restartButton != null)
@@ -365,8 +406,6 @@ public class GameManager : MonoBehaviour
             scoreText = scoreTextObject.GetComponent<Text>();
         if (scoreText != null)
             scoreText.text = string.Empty;
-
-        enemies.Clear();
 
         activeBoardRequest = null;
         activeBoardRuntime = null;
@@ -385,8 +424,7 @@ public class GameManager : MonoBehaviour
             GameObject playerView = GameObject.FindGameObjectWithTag("Player");
             BoardRuntime runtime = boardScript.SetupScene(request, run, playerView);
 
-            activeBoardRequest = request;
-            activeBoardRuntime = runtime;
+            PublishBoardRuntime(runtime);
             boardStartupInProgress = false;
             SetGameplayInputBlocked(false);
             CancelInvoke(nameof(HideLevelImage));
@@ -399,6 +437,63 @@ public class GameManager : MonoBehaviour
             SetGameplayInputBlocked(true);
             Debug.LogError("Board startup failed: " + exception.Message);
         }
+    }
+
+    private void PublishBoardRuntime(BoardRuntime runtime)
+    {
+        activeBoardRuntime = runtime;
+        activeBoardRequest = runtime.Request;
+        activePlayerView = runtime.Views[runtime.PlayerId].GetComponent<PlayerScript>();
+        if (activePlayerView == null)
+            throw new InvalidOperationException("The registered player has no production input/view adapter.");
+        activeBoardPresenter = new BoardEventPresenter(runtime, activePlayerView, activePlayerView,
+            this, ReportPresentationDiagnostic, activePlayerView.moveTime);
+        activeBoardPresenter.AnimationsEnabled = activePlayerView.animationsEnabled;
+        activeBoardPresenter.SynchronizeFromState();
+        UpdatePresentationBlocks();
+    }
+
+    private void ReportPresentationDiagnostic(PresentationDiagnostic diagnostic)
+    {
+        if (diagnostic.Code != PresentationDiagnosticCode.Canceled)
+            Debug.LogError("Board presentation failed: " + diagnostic.Code + " at event " +
+                diagnostic.EventIndex + " (" + diagnostic.EventType + "): " + diagnostic.Error);
+    }
+
+    private void UpdatePresentationBlocks()
+    {
+        if (activeBoardPresenter == null)
+            return;
+        PresentationGate gate = activeBoardPresenter.Coordinator.Gate;
+        gate.SetBlocked(PresentationInputBlock.Setup, doingSetup || boardStartupInProgress);
+        gate.SetBlocked(PresentationInputBlock.Modal, gameplayInputBlocked || IsRouteChoiceActive);
+        gate.SetBlocked(PresentationInputBlock.Disabled, !enabled || boardOutcomeHandled ||
+            terminalActionRequested || Time.frameCount <= gameplayInputResumeFrame);
+    }
+
+    /// <summary>Maps an ordered terminal event from the exact active runtime to its guarded lifecycle outcome.</summary>
+    /// <param name="request">The originating runtime's request instance; replaced-board instances are stale.</param>
+    /// <param name="outcome">An already-resolved exit, starvation, or death event.</param>
+    /// <returns>Whether this active board accepted the outcome once.</returns>
+    public bool TryNotify(BoardRequest request, GameEvent outcome)
+    {
+        if (!ReferenceEquals(request, activeBoardRequest) || boardOutcomeHandled ||
+            activeBoardRuntime == null || activeBoardRuntime.IsDisposed)
+            return false;
+        BoardOutcome boardOutcome;
+        if (outcome is ExitReachedEvent)
+            boardOutcome = BoardOutcome.ExitReached(request);
+        else if (outcome is PlayerStarvedEvent)
+            boardOutcome = BoardOutcome.PlayerDied(request, DeathReason.Starvation);
+        else if (outcome is PlayerDiedEvent)
+            boardOutcome = BoardOutcome.PlayerDied(request, DeathReason.HealthDepleted);
+        else
+            return false;
+        if (!HandleBoardOutcome(boardOutcome))
+            return false;
+        if (activePlayerView != null)
+            activePlayerView.ShowEvent(outcome);
+        return true;
     }
 
     /// <summary>
@@ -426,7 +521,9 @@ public class GameManager : MonoBehaviour
             case BoardOutcomeType.PlayerDied:
                 if (!outcome.DeathReason.HasValue)
                     return false;
-                GameOver(outcome.DeathReason.Value == DeathReason.Starvation);
+                handlingBoardOutcome = true;
+                try { GameOver(outcome.DeathReason.Value == DeathReason.Starvation); }
+                finally { handlingBoardOutcome = false; }
                 break;
 
             default:
@@ -434,6 +531,7 @@ public class GameManager : MonoBehaviour
         }
 
         boardOutcomeHandled = true;
+        UpdatePresentationBlocks();
         return true;
     }
 
@@ -446,7 +544,7 @@ public class GameManager : MonoBehaviour
             return;
 
         doingSetup = false;
-        SetGameplayInputBlocked(false);
+        UpdatePresentationBlocks();
     }
 
     public void GameOver(bool isStarved)
@@ -497,69 +595,11 @@ public class GameManager : MonoBehaviour
         return PlayerPrefs.GetInt("HighScore", 0);
     }
 
-    private void Update()
-    {
-        if (gameplayInputBlocked
-            || doingSetup
-            || session == null
-            || session.ActiveRun == null
-            || session.ActiveRun.Status != RunStatus.Active
-            || playerTurn
-            || enemiesMoving)
-            return;
-
-        StartCoroutine(MoveEnemies());
-    }
-
-    public void AddEnemytoList(Enemy script)
-    {
-        enemies.Add(script);
-    }
-
-    public void EndPlayerTurn()
-    {
-        if (!IsGameplayInputEnabled)
-            return;
-
-        playerTurn = false;
-    }
-
-    private IEnumerator MoveEnemies()
-    {
-        enemiesMoving = true;
-        yield return new WaitForSeconds(turnDelay);
-        yield return WaitWhileGameplayBlocked();
-
-        if (enemies.Count == 0)
-        {
-            yield return new WaitForSeconds(turnDelay);
-            yield return WaitWhileGameplayBlocked();
-        }
-
-        for (int index = 0; index < enemies.Count; index++)
-        {
-            yield return WaitWhileGameplayBlocked();
-            enemies[index].MoveEnemy();
-            yield return new WaitForSeconds(enemies[index].moveTime);
-        }
-
-        yield return WaitWhileGameplayBlocked();
-        playerTurn = true;
-        enemiesMoving = false;
-    }
-
-    private IEnumerator WaitWhileGameplayBlocked()
-    {
-        while (gameplayInputBlocked)
-            yield return null;
-    }
-
     private void OnRunStarted(RunState runState)
     {
         DisposeActiveBoardRuntime();
-        StopAllCoroutines();
-        playerTurn = true;
-        enemiesMoving = false;
+        worldMap = null;
+        boardOutcomeHandled = false;
         if (!boardStartupInProgress)
         {
             doingSetup = false;
@@ -571,10 +611,8 @@ public class GameManager : MonoBehaviour
 
     private void OnRunAbandoned(RunState runState)
     {
-        DisposeActiveBoardRuntime();
-        StopAllCoroutines();
-        playerTurn = false;
-        enemiesMoving = false;
+        if (!handlingBoardOutcome)
+            DisposeActiveBoardRuntime();
         if (!boardStartupInProgress)
             doingSetup = false;
         gameplayInputBlocked = true;
@@ -688,6 +726,10 @@ public class GameManager : MonoBehaviour
 
     private void DisposeActiveBoardRuntime()
     {
+        if (activeBoardPresenter != null)
+            activeBoardPresenter.Dispose();
+        activeBoardPresenter = null;
+        activePlayerView = null;
         if (activeBoardRuntime != null)
             activeBoardRuntime.Dispose();
 
@@ -820,6 +862,7 @@ public class GameManager : MonoBehaviour
     private void SetRouteChoices(IReadOnlyList<WorldMapExitOption> choices)
     {
         routeChoices = choices ?? NoRouteChoices;
+        UpdatePresentationBlocks();
         OnRouteChoicesChanged?.Invoke(routeChoices);
     }
 

@@ -323,7 +323,7 @@ namespace HallowBlaze.Tests.EditMode
                 };
                 Assert.That(presenter.Dispatcher.ReplayAsync(events).Result, Is.Null);
                 Assert.That(runtime.RunState.Food, Is.EqualTo(100));
-                CollectionAssert.AreEqual(new[] { "EntityWaited", "InteractionPerformed", "Hud:100:100", "Hud:100:100",
+                CollectionAssert.AreEqual(new[] { "EntityMoved", "EntityWaited", "InteractionPerformed", "Hud:100:100", "FoodRestored", "Hud:100:100",
                     "ExitReached", "PlayerStarved", "PlayerDied" }, sinks.Trace);
                 var removed = runtime.BoardState.GetEntities().First(entity => entity.Definition.ContentId == "legacy.exit");
                 Assert.That(runtime.BoardState.TryRemove(removed.Id), Is.True);

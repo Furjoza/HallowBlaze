@@ -1,9 +1,12 @@
-using HallowBlaze.Core.Session;
-using HallowBlaze.Core.State;
+using System;
+using System.Threading.Tasks;
+using HallowBlaze.Core.Turns.Contracts;
+using HallowBlaze.Presentation.Runtime;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class PlayerScript : MovingObject
+/// <summary>Samples complete PC commands and presents authoritative resources/audio; never applies gameplay rules.</summary>
+public class PlayerScript : MovingObject, IRunHud, ITurnFeedback
 {
     public float restartLevelDelay = 1f;
     public int wallDamage = 1;
@@ -20,316 +23,94 @@ public class PlayerScript : MovingObject
     public Text foodText;
     public Text healthText;
 
-    private bool onCarrot;
-    private Animator animator;
-    private GameObject tmpCarrot;
-    private Vector2 touchOrigin = -Vector2.one;
-    private GameSession subscribedSession;
+    /// <summary>Controls visual interpolation only; disabling it does not change rules or event order.</summary>
+    public bool animationsEnabled = true;
 
-    private void OnEnable()
-    {
-        BindSession();
-        RefreshResourceText();
-    }
+    private readonly PcCommandSource commandSource = new PcCommandSource();
 
-    protected override void Start()
-    {
-        animator = GetComponent<Animator>();
-        BindSession();
-        RefreshResourceText();
-        base.Start();
-    }
+    /// <summary>Gets the number of actual ordered audio cues played by this view during its lifetime.</summary>
+    public int PresentedSoundCount { get; private set; }
 
-    private void OnDisable()
+    private async void Update()
     {
-        UnbindSession();
-    }
-
-    private void Update()
-    {
-        if (GameManager.instance == null || !GameManager.instance.IsGameplayInputEnabled)
+#if UNITY_EDITOR || UNITY_STANDALONE
+        if (!TrySubmitInput(commandSource, out Task<CommandSubmission> submission))
             return;
-
-        int horizontal = 0;
-        int vertical = 0;
-
-#if UNITY_EDITOR || UNITY_STANDALONE || UNITY_WEBPLAYER
-
-        if (Input.GetKeyDown("space"))
-        {
-            AttemptGathering();
-            return;
-        }
-
-        horizontal = (int)Input.GetAxisRaw("Horizontal");
-        vertical = (int)Input.GetAxisRaw("Vertical");
-
-        if (horizontal != 0)
-            vertical = 0;
-
-#else
-
-        if (Input.touchCount > 0)
-        {
-            Touch myTouch = Input.touches[0];
-
-            if (myTouch.phase == TouchPhase.Began)
-            {
-                touchOrigin = myTouch.position;
-            }
-            else if (myTouch.phase == TouchPhase.Ended && touchOrigin.x >= 0)
-            {
-                Vector2 touchEnd = myTouch.position;
-                float x = touchEnd.x - touchOrigin.x;
-                float y = touchEnd.y - touchOrigin.y;
-                touchOrigin.x = -1;
-                if (Mathf.Abs(x) > Mathf.Abs(y))
-                    horizontal = x > 0 ? 1 : -1;
-                else
-                    vertical = y > 0 ? 1 : -1;
-            }
-        }
-
+        try { await submission; }
+        catch (Exception exception) { Debug.LogException(exception, this); }
 #endif
-
-        if (horizontal != 0 || vertical != 0)
-            AttemptMove<Wall>(horizontal, vertical);
     }
 
-    protected override void AttemptMove<T>(int xDir, int yDir)
+    private void OnDisable() => commandSource.CancelDraft();
+
+    /// <summary>Forwards a complete intent through the same gate as production PC polling.</summary>
+    /// <param name="command">The complete command; this view never resolves it.</param>
+    /// <param name="submission">The admitted operation, or null when blocked.</param>
+    /// <returns>Whether this enabled view and the current lifecycle admitted submission.</returns>
+    public bool TrySubmitCommand(PlayerCommand command, out Task<CommandSubmission> submission)
     {
-        if (!TryGetActiveSession(out GameSession activeSession))
-            return;
-
-        RaycastHit2D hit;
-        bool canMove = Move(xDir, yDir, out hit);
-        T hitComponent = hit.transform == null ? null : hit.transform.GetComponent<T>();
-
-        if (!canMove && hitComponent == null)
-            return;
-
-        activeSession.ConsumeFood();
-
-        if (!canMove)
-            OnCantMove(hitComponent);
-        else if (SoundManager.instance != null)
-            SoundManager.instance.RandomizeSfx(moveSound1, moveSound2);
-
-        CheckIfGameOver();
-
-        if (GameManager.instance != null)
-            GameManager.instance.EndPlayerTurn();
+        submission = null;
+        return OwnsActivePlayerView() &&
+            GameManager.instance.TrySubmitCommand(command, out submission);
     }
 
-    protected void AttemptGathering()
+    /// <summary>Forwards one source sample without sampling or buffering blocked input.</summary>
+    /// <param name="source">A complete-command source, normally the PC key-down adapter.</param>
+    /// <param name="submission">The admitted operation, or null when blocked.</param>
+    /// <returns>Whether the production gate admitted sampling.</returns>
+    public bool TrySubmitInput(ICommandSource source, out Task<CommandSubmission> submission)
     {
-        if (!TryGetActiveSession(out GameSession activeSession))
-            return;
-        if (!onCarrot || tmpCarrot == null || !tmpCarrot.activeInHierarchy)
-            return;
-
-        GameObject gatheredCarrot = tmpCarrot;
-        onCarrot = false;
-        tmpCarrot = null;
-
-        activeSession.RestoreFood(pointsPerFood);
-        if (SoundManager.instance != null)
-            SoundManager.instance.RandomizeSfx(eatSound1, eatSound2);
-        gatheredCarrot.SetActive(false);
-
-        activeSession.ConsumeFood();
-        CheckIfGameOver();
-
-        if (activeSession.ActiveRun.Status == RunStatus.Active)
-        {
-            ShowFoodGain(pointsPerFood);
-
-            if (GameManager.instance != null)
-                GameManager.instance.EndPlayerTurn();
-        }
+        submission = null;
+        return OwnsActivePlayerView() &&
+            GameManager.instance.TrySubmitInput(source, out submission);
     }
 
-    private void OnTriggerEnter2D(Collider2D other)
+    private bool OwnsActivePlayerView()
     {
-        if (GameManager.instance != null && GameManager.instance.IsGameplayInputBlocked)
-            return;
-
-        if (other.tag == "Exit")
-        {
-            GameManager manager = GameManager.instance;
-            BoardRequest request = manager == null ? null : manager.ActiveBoardRequest;
-            if (request != null && manager.HandleBoardOutcome(BoardOutcome.ExitReached(request)))
-                enabled = false;
-        }
-        else if (other.tag == "Food")
-        {
-            if (!TryGetActiveSession(out GameSession activeSession))
-                return;
-
-            activeSession.RestoreFood(pointsPerFood);
-            ShowFoodGain(pointsPerFood);
-            if (SoundManager.instance != null)
-                SoundManager.instance.RandomizeSfx(eatSound1, eatSound2);
-            other.gameObject.SetActive(false);
-        }
-        else if (other.tag == "Soda")
-        {
-            if (!TryGetActiveSession(out GameSession activeSession))
-                return;
-
-            activeSession.RestoreFood(pointsPerSoda);
-            ShowFoodGain(pointsPerSoda);
-            if (SoundManager.instance != null)
-                SoundManager.instance.RandomizeSfx(drinkSound1, drinkSound2);
-            other.gameObject.SetActive(false);
-        }
-        else if (other.tag == "Aid")
-        {
-            if (!TryGetActiveSession(out GameSession activeSession))
-                return;
-
-            activeSession.RestoreHealth(pointsPerAid);
-            ShowHealthGain(pointsPerAid);
-            if (SoundManager.instance != null)
-                SoundManager.instance.RandomizeSfx(drinkSound1, drinkSound2);
-            other.gameObject.SetActive(false);
-        }
-
-        if (other.tag == "Carrot")
-        {
-            onCarrot = true;
-            tmpCarrot = other.gameObject;
-        }
+        BoardRuntime runtime = GameManager.instance == null ? null : GameManager.instance.ActiveBoardRuntime;
+        return isActiveAndEnabled && runtime != null && !runtime.IsDisposed &&
+            runtime.Views.TryGetValue(runtime.PlayerId, out GameObject player) && player == gameObject;
     }
 
-    private void OnTriggerExit2D(Collider2D other)
+    /// <inheritdoc />
+    public void Refresh(int health, int food)
     {
-        if (GameManager.instance != null && GameManager.instance.IsGameplayInputBlocked)
-            return;
-
-        if (other.tag == "Carrot")
-        {
-            onCarrot = false;
-            if (tmpCarrot == other.gameObject)
-                tmpCarrot = null;
-        }
-    }
-
-    protected override void OnCantMove<T>(T component)
-    {
-        Wall hitWall = component as Wall;
-        if (hitWall != null)
-            hitWall.DamageWall(wallDamage);
-        if (animator != null)
-            animator.SetTrigger("playerChop");
-    }
-
-    public void LoseHealth(int loss)
-    {
-        if (GameManager.instance != null && GameManager.instance.IsGameplayInputBlocked)
-            return;
-        if (!TryGetActiveSession(out GameSession activeSession))
-            return;
-
-        if (animator != null)
-            animator.SetTrigger("playerHit");
-
-        activeSession.TakeDamage(loss);
-        ShowHealthLoss(loss);
-        CheckIfGameOver();
-    }
-
-    private void CheckIfGameOver()
-    {
-        if (GameManager.instance == null || GameManager.instance.IsGameplayInputBlocked)
-            return;
-        if (!TryGetActiveSession(out GameSession activeSession))
-            return;
-
-        RunState run = activeSession.ActiveRun;
-        if (run.Food > 0 && run.Health > 0)
-            return;
-
-        if (SoundManager.instance != null)
-            SoundManager.instance.RandomizeSfx(gameOverSound);
-
-        BoardRequest request = GameManager.instance.ActiveBoardRequest;
-        if (request == null)
-            return;
-
-        DeathReason deathReason = run.Food <= 0
-            ? DeathReason.Starvation
-            : DeathReason.HealthDepleted;
-        GameManager.instance.HandleBoardOutcome(BoardOutcome.PlayerDied(request, deathReason));
-    }
-
-    private void BindSession()
-    {
-        GameSession nextSession = GameManager.instance == null
-            ? null
-            : GameManager.instance.Session;
-        if (ReferenceEquals(nextSession, subscribedSession))
-            return;
-
-        UnbindSession();
-        subscribedSession = nextSession;
-        if (subscribedSession == null)
-            return;
-
-        subscribedSession.OnRunStarted += OnRunStateChanged;
-        subscribedSession.OnRunChanged += OnRunStateChanged;
-        subscribedSession.OnRunAbandoned += OnRunStateChanged;
-    }
-
-    private void UnbindSession()
-    {
-        if (subscribedSession == null)
-            return;
-
-        subscribedSession.OnRunStarted -= OnRunStateChanged;
-        subscribedSession.OnRunChanged -= OnRunStateChanged;
-        subscribedSession.OnRunAbandoned -= OnRunStateChanged;
-        subscribedSession = null;
-    }
-
-    private bool TryGetActiveSession(out GameSession activeSession)
-    {
-        BindSession();
-        activeSession = subscribedSession;
-        return activeSession != null
-            && activeSession.ActiveRun != null
-            && activeSession.ActiveRun.Status == RunStatus.Active;
-    }
-
-    private void OnRunStateChanged(RunState runState)
-    {
-        RefreshResourceText();
-    }
-
-    private void RefreshResourceText()
-    {
-        RunState run = subscribedSession == null ? null : subscribedSession.ActiveRun;
         if (foodText != null)
-            foodText.text = run == null ? "Food: -" : "Food: " + run.Food;
+            foodText.text = "Food: " + food;
         if (healthText != null)
-            healthText.text = run == null ? "Health: -" : "Health: " + run.Health;
+            healthText.text = "Health: " + health;
     }
 
-    private void ShowFoodGain(int amount)
+    /// <inheritdoc />
+    public void ShowRejection(CommandRejectionCode reason) => Debug.Log("Command rejected: " + reason, this);
+
+    /// <inheritdoc />
+    public void ShowEvent(GameEvent gameEvent)
     {
-        if (foodText != null && subscribedSession != null && subscribedSession.ActiveRun != null)
-            foodText.text = "Food: " + subscribedSession.ActiveRun.Food + "+" + amount;
+        if (gameEvent is EntityMovedEvent)
+            PlaySound(moveSound1, moveSound2);
+        else if (gameEvent is FoodRestoredEvent restored)
+        {
+            BoardRuntime runtime = GameManager.instance == null ? null : GameManager.instance.ActiveBoardRuntime;
+            bool soda = runtime != null && !runtime.IsDisposed &&
+                runtime.Views.TryGetValue(restored.SourceItemId, out GameObject item) && item != null && item.CompareTag("Soda");
+            if (soda)
+                PlaySound(drinkSound1, drinkSound2);
+            else
+                PlaySound(eatSound1, eatSound2);
+        }
+        else if (gameEvent is PlayerStarvedEvent || gameEvent is PlayerDiedEvent)
+            PlaySound(gameOverSound, null);
     }
 
-    private void ShowHealthGain(int amount)
+    private void PlaySound(AudioClip first, AudioClip second)
     {
-        if (healthText != null && subscribedSession != null && subscribedSession.ActiveRun != null)
-            healthText.text = "Health: " + subscribedSession.ActiveRun.Health + "+" + amount;
-    }
-
-    private void ShowHealthLoss(int amount)
-    {
-        if (healthText != null && subscribedSession != null && subscribedSession.ActiveRun != null)
-            healthText.text = "Health: " + subscribedSession.ActiveRun.Health + "-" + amount;
+        if (SoundManager.instance == null || (first == null && second == null))
+            return;
+        if (first != null && second != null)
+            SoundManager.instance.RandomizeSfx(first, second);
+        else
+            SoundManager.instance.RandomizeSfx(first != null ? first : second);
+        PresentedSoundCount++;
     }
 }

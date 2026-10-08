@@ -4,9 +4,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
+using HallowBlaze.Core.Board.Primitives;
+using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
+using HallowBlaze.Core.Turns.Contracts;
+using HallowBlaze.Presentation.Runtime;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -166,6 +171,9 @@ namespace HallowBlaze.Tests.PlayMode
             session.TakeDamage(11);
             Component firstPlayer = FindSceneComponent(playerType, "Main");
             Assert.That(firstPlayer, Is.Not.Null);
+            BoardRuntime oldRuntime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            BoardEventPresenter oldPresenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
+            oldPresenter.SynchronizeFromState();
             int firstPlayerInstanceId = firstPlayer.GetInstanceID();
             Assert.That(GetField<Text>(firstPlayer, "foodText").text, Is.EqualTo("Food: 86"));
             Assert.That(GetField<Text>(firstPlayer, "healthText").text, Is.EqualTo("Health: 89"));
@@ -185,6 +193,9 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(run.Health, Is.EqualTo(89));
             Assert.That(replacementPlayer, Is.Not.Null);
             Assert.That(replacementPlayer.GetInstanceID(), Is.Not.EqualTo(firstPlayerInstanceId));
+            Assert.That(oldRuntime.IsDisposed, Is.True);
+            Assert.That(oldPresenter.Coordinator.CanSubmit, Is.False);
+            Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
             Assert.That(GetField<Text>(replacementPlayer, "foodText").text, Is.EqualTo("Food: 86"));
             Assert.That(GetField<Text>(replacementPlayer, "healthText").text, Is.EqualTo("Health: 89"));
             Assert.That(GameObject.Find("LevelText").GetComponent<Text>().text, Is.EqualTo("Day: 0"));
@@ -198,7 +209,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(menuButton.activeSelf, Is.False);
             PlayerPrefs.SetInt("HighScore", 0);
 
-            Invoke(replacementPlayer, "LoseHealth", run.Health);
+            yield return PresentHealthDeath(manager);
 
             Assert.That(run.Health, Is.Zero);
             Assert.That(run.Status, Is.EqualTo(RunStatus.Dead));
@@ -250,7 +261,7 @@ namespace HallowBlaze.Tests.PlayMode
             Component player = FindSceneComponent(playerType, "Main");
             Assert.That(player, Is.Not.Null);
 
-            Invoke(player, "LoseHealth", completedRun.Health);
+            yield return PresentHealthDeath(manager);
             GameObject menuButton = GameObject.Find("MenuBttn");
             Assert.That(menuButton, Is.Not.Null);
             Assert.That(menuButton.activeSelf, Is.True);
@@ -283,7 +294,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetStaticField(gameManagerType, "instance"), Is.SameAs(manager));
             Assert.That(((Behaviour)manager).enabled, Is.True);
             Assert.That(Time.timeScale, Is.EqualTo(1f));
-            Assert.That(GetProperty<bool>(manager, "IsGameplayInputBlocked"), Is.False);
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
             Assert.That(session.Profile, Is.SameAs(profile));
             Assert.That(session.ActiveRun, Is.Null);
             Assert.That(profile.RunSummaries.Count, Is.EqualTo(1));
@@ -369,9 +380,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Is.EqualTo(NodeDiscoveryState.Visited));
             Component firstPlayer = FindSceneComponent(playerType, "Main");
             Assert.That(firstPlayer, Is.Not.Null);
-            Collider2D firstExit = CreateExit("First Route Exit");
-
-            Invoke(firstPlayer, "OnTriggerEnter2D", firstExit);
+            yield return PresentExit(firstManager);
 
             IReadOnlyList<WorldMapExitOption> firstChoices =
                 GetProperty<IReadOnlyList<WorldMapExitOption>>(firstManager, "RouteChoices");
@@ -385,7 +394,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(firstRun.WorldNodeId, Is.EqualTo("forest.start"));
             Assert.That(firstRun.Route, Is.Empty);
             Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo("Main"));
-            Assert.That(((Behaviour)firstPlayer).enabled, Is.False);
+            Assert.That(GetProperty<bool>(firstManager, "IsGameplayInputEnabled"), Is.False);
 
             Assert.That(
                 (bool)Invoke(firstManager, "ChooseRoute", "road.start-west-trail"),
@@ -398,7 +407,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(firstRun.Route, Is.EqualTo(new[] { "forest.west-trail" }));
             Assert.That(firstSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
                 Is.EqualTo(NodeDiscoveryState.Visited));
-            Assert.That(GetProperty<bool>(firstManager, "IsGameplayInputBlocked"), Is.False);
+            Assert.That(GetProperty<bool>(firstManager, "IsRouteChoiceActive"), Is.False);
             Assert.That(GetProperty<IReadOnlyList<WorldMapExitOption>>(
                 firstManager,
                 "RouteChoices"), Is.Empty);
@@ -424,8 +433,7 @@ namespace HallowBlaze.Tests.PlayMode
 
             Component continuedPlayer = FindSceneComponent(playerType, "Main");
             Assert.That(continuedPlayer, Is.Not.Null);
-            Collider2D secondExit = CreateExit("Second Route Exit");
-            Invoke(continuedPlayer, "OnTriggerEnter2D", secondExit);
+            yield return PresentExit(continuedManager);
 
             IReadOnlyList<WorldMapExitOption> secondChoices =
                 GetProperty<IReadOnlyList<WorldMapExitOption>>(continuedManager, "RouteChoices");
@@ -474,8 +482,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Is.EqualTo(NodeDiscoveryState.Visited));
 
             Component player = FindSceneComponent(playerType, "Main");
-            Collider2D exit = CreateExit("New Game Regression Exit");
-            Invoke(player, "OnTriggerEnter2D", exit);
+            yield return PresentExit(manager);
             Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
             yield return null;
             yield return null;
@@ -517,8 +524,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Is.EqualTo(EdgeDiscoveryState.Unknown));
 
             Component newGamePlayer = FindSceneComponent(playerType, "Main");
-            Collider2D newGameExit = CreateExit("Fresh Atlas Exit");
-            Invoke(newGamePlayer, "OnTriggerEnter2D", newGameExit);
+            yield return PresentExit(manager);
 
             Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
                 Is.EqualTo(NodeDiscoveryState.Sighted));
@@ -570,6 +576,12 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(run.CurrentDay, Is.Zero);
             Assert.That((bool)Invoke(manager, "HandleBoardOutcome", exit), Is.False);
             Assert.That(run.CurrentDay, Is.Zero);
+            Invoke(manager, "HideLevelImage");
+            Invoke(manager, "SetGameplayInputBlocked", false);
+            yield return null;
+            object[] blocked = { new WaitCommand(), null };
+            Assert.That((bool)Invoke(FindSceneComponent(playerType, "Main"), "TrySubmitCommand", blocked), Is.False);
+            Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
 
             Scene cleanupScene = SceneManager.CreateScene(
                 "M2.7 Exit Cleanup " + Guid.NewGuid().ToString("N"));
@@ -616,6 +628,40 @@ namespace HallowBlaze.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator ReloadDuringAnimationCancelsOldReplayAndRejectsSameIdentityStaleOutcome()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = GetStaticField(gameManagerType, "instance") as Component;
+            BoardRuntime oldRuntime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            BoardRequest oldRequest = oldRuntime.Request;
+            BoardEventPresenter oldPresenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
+            Component oldPlayer = oldRuntime.Views[oldRuntime.PlayerId].GetComponent(playerType);
+            Invoke(manager, "HideLevelImage");
+            yield return null;
+            Direction firstStep = FindExitPath(oldRuntime).First();
+            object[] arguments = { new MoveCommand(firstStep), null };
+            Assert.That((bool)Invoke(oldPlayer, "TrySubmitCommand", arguments), Is.True);
+            var pending = (Task<CommandSubmission>)arguments[1];
+            Assert.That(pending.IsCompleted, Is.False);
+            int resolvedFood = oldRuntime.RunState.Food;
+            Invoke(manager, "BlockBoardStartup");
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            while (!pending.IsCompleted)
+                yield return null;
+            Assert.That(pending.Result.Diagnostic.Code, Is.EqualTo(PresentationDiagnosticCode.Canceled));
+            Assert.That(oldRuntime.IsDisposed, Is.True);
+            Assert.That(oldPresenter.Coordinator.CanSubmit, Is.False);
+            BoardRuntime replacement = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            Assert.That(oldRequest.HasSameIdentity(replacement.Request), Is.True);
+            Assert.That(replacement.RunState.Food, Is.EqualTo(resolvedFood));
+            Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
+            Assert.That(((IBoardOutcomeSink)manager).TryNotify(oldRequest, new PlayerDiedEvent(replacement.PlayerId)), Is.False);
+            Assert.That(replacement.RunState.Status, Is.EqualTo(RunStatus.Active));
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+        }
+
+        [UnityTest]
         public IEnumerator StarvationOutcomeClosesRunWithoutRouteChoice()
         {
             yield return AssertDeathOutcome(
@@ -659,7 +705,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(sceneLoadCount, Is.EqualTo(1));
             Assert.That(requestedScene, Is.EqualTo("Menu"));
             Assert.That(Time.timeScale, Is.EqualTo(1f));
-            Assert.That(GetProperty<bool>(manager, "IsGameplayInputBlocked"), Is.False);
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
             Assert.That(session.Profile, Is.SameAs(profile));
             Assert.That(session.ActiveRun, Is.Null);
             Assert.That(profile.RunSummaries.Count, Is.EqualTo(1));
@@ -715,7 +761,7 @@ namespace HallowBlaze.Tests.PlayMode
 
             Assert.That(sceneLoadCount, Is.EqualTo(1));
             Assert.That(Time.timeScale, Is.EqualTo(1f));
-            Assert.That(GetProperty<bool>(manager, "IsGameplayInputBlocked"), Is.False);
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
             Assert.That(session.Profile, Is.SameAs(profile));
             Assert.That(profile.RunSummaries.Count, Is.EqualTo(1));
             Assert.That(session.ActiveRun, Is.Not.SameAs(completedRun));
@@ -747,6 +793,7 @@ namespace HallowBlaze.Tests.PlayMode
             session.ConsumeFood(3);
             session.TakeDamage(2);
             ((Behaviour)firstPlayer).enabled = true;
+            Invoke(firstPlayer, "Refresh", session.ActiveRun.Health, session.ActiveRun.Food);
 
             Assert.That(firstFood.text, Is.EqualTo("Food: 70"));
             Assert.That(firstHealth.text, Is.EqualTo("Health: 80"));
@@ -790,15 +837,29 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(manager, Is.Not.Null);
             GameSession session = GetProperty<GameSession>(manager, "Session");
             RunState completedRun = session.ActiveRun;
-            BoardRequest request = GetProperty<BoardRequest>(manager, "ActiveBoardRequest");
-            BoardOutcome outcome = BoardOutcome.PlayerDied(request, deathReason);
-
-            Assert.That((bool)Invoke(manager, "HandleBoardOutcome", outcome), Is.True);
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            BoardRequest request = runtime.Request;
+            if (deathReason == DeathReason.Starvation)
+            {
+                session.ConsumeFood(completedRun.Food - 1);
+                Invoke(manager, "HideLevelImage");
+                yield return null;
+                object[] arguments = { new WaitCommand(), null };
+                Assert.That((bool)Invoke(FindSceneComponent(playerType, "Main"), "TrySubmitCommand", arguments), Is.True);
+                var submission = (Task<CommandSubmission>)arguments[1];
+                while (!submission.IsCompleted)
+                    yield return null;
+                Assert.That(submission.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                Assert.That(completedRun.Food, Is.Zero);
+            }
+            else
+                yield return PresentHealthDeath(manager);
             Assert.That(completedRun.Status, Is.EqualTo(RunStatus.Dead));
             Assert.That(session.ActiveRun, Is.Null);
             Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
             Assert.That(GetField<Text>(manager, "levelText").text, Does.Contain(expectedMessage));
-            Assert.That((bool)Invoke(manager, "HandleBoardOutcome", outcome), Is.False);
+            Assert.That(((IBoardOutcomeSink)manager).TryNotify(request,
+                new PlayerDiedEvent(runtime.PlayerId)), Is.False);
             Assert.That(session.Profile.RunSummaries, Has.Count.EqualTo(1));
 
             Scene cleanupScene = SceneManager.CreateScene(
@@ -819,15 +880,82 @@ namespace HallowBlaze.Tests.PlayMode
             Component player = playerObject.AddComponent(playerType);
             SetField(player, "foodText", foodText);
             SetField(player, "healthText", healthText);
-            Invoke(player, "Start");
+            RunState run = GetProperty<GameSession>((Component)GetStaticField(gameManagerType, "instance"), "Session").ActiveRun;
+            Invoke(player, "Refresh", run.Health, run.Food);
             return player;
         }
 
-        private static Collider2D CreateExit(string name)
+        private static IEnumerator PresentExit(Component manager)
         {
-            GameObject exitObject = new GameObject(name);
-            exitObject.tag = "Exit";
-            return exitObject.AddComponent<BoxCollider2D>();
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
+            presenter.AnimationsEnabled = false;
+            Invoke(manager, "HideLevelImage");
+            yield return null;
+            foreach (Direction direction in FindExitPath(runtime))
+            {
+                KeyCode key = direction.Equals(Direction.North) ? KeyCode.UpArrow :
+                    direction.Equals(Direction.East) ? KeyCode.RightArrow :
+                    direction.Equals(Direction.South) ? KeyCode.DownArrow : KeyCode.LeftArrow;
+                object[] arguments = { new PcCommandSource(candidate => candidate == key), null };
+                Assert.That((bool)Invoke(runtime.Views[runtime.PlayerId].GetComponent(
+                    manager.GetType().Assembly.GetType("PlayerScript", true)), "TrySubmitInput", arguments), Is.True);
+                var submission = (Task<CommandSubmission>)arguments[1];
+                while (!submission.IsCompleted)
+                    yield return null;
+                Assert.That(submission.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                yield return null;
+            }
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+        }
+
+        private static IReadOnlyList<Direction> FindExitPath(BoardRuntime runtime)
+        {
+            var entities = runtime.BoardState.GetEntities().ToArray();
+            GridPosition origin = entities.Single(entity => entity.Id.Equals(runtime.PlayerId)).Position;
+            GridPosition destination = entities.Single(entity => entity.Definition.Layer == BoardLayer.Terrain &&
+                entity.Definition.Traits.IsExit).Position;
+            var walkable = new HashSet<GridPosition>(entities.Where(entity => entity.Definition.Layer == BoardLayer.Terrain &&
+                entity.Definition.Traits.IsWalkable).Select(entity => entity.Position));
+            foreach (var entity in entities.Where(entity => entity.Definition.Layer == BoardLayer.Obstacle ||
+                (entity.Definition.Layer == BoardLayer.Actor && !entity.Id.Equals(runtime.PlayerId))))
+                walkable.Remove(entity.Position);
+            var queue = new Queue<GridPosition>();
+            var previous = new Dictionary<GridPosition, (GridPosition Position, Direction Direction)>();
+            queue.Enqueue(origin);
+            previous.Add(origin, (origin, default));
+            while (queue.Count != 0 && !previous.ContainsKey(destination))
+            {
+                GridPosition current = queue.Dequeue();
+                foreach (Direction direction in new[] { Direction.North, Direction.East, Direction.South, Direction.West })
+                {
+                    var next = new GridPosition(current.X + direction.DeltaX, current.Y + direction.DeltaY);
+                    if (!walkable.Contains(next) || previous.ContainsKey(next))
+                        continue;
+                    previous.Add(next, (current, direction));
+                    queue.Enqueue(next);
+                }
+            }
+            Assert.That(previous.ContainsKey(destination), Is.True, "No legal exit path for board seed " + runtime.Request.BoardSeed);
+            var path = new List<Direction>();
+            for (GridPosition current = destination; !current.Equals(origin); current = previous[current].Position)
+                path.Add(previous[current].Direction);
+            path.Reverse();
+            return path;
+        }
+
+        private static IEnumerator PresentHealthDeath(Component manager)
+        {
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            runtime.RunState.TakeDamage(runtime.RunState.Health);
+            Task<PresentationDiagnostic> replay = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter")
+                .Dispatcher.ReplayAsync(new GameEvent[]
+                {
+                    new ActionCostAppliedEvent(runtime.PlayerId, 1), new PlayerDiedEvent(runtime.PlayerId)
+                });
+            while (!replay.IsCompleted)
+                yield return null;
+            Assert.That(replay.Result, Is.Null);
         }
 
         private static Component FindSceneComponent(Type type, string sceneName)

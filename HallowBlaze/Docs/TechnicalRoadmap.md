@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6.3 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6.3 active, manual PC smoke pending; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-07
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -1883,13 +1883,13 @@ Validation: baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e
 
 ## `M3.6.3` — Production cutover and PlayMode acceptance gate
 
-**Status:** `Planned`
+**Status:** `Active` — implementation and automated gates complete; independent review is `BLOCKED` solely by the missing manual PC smoke acceptance gate.
 **Priority:** P0
 **Related contract:** sections 10, 18, and 21.1/21.2/21.5; `M0.8` regression contract.
 
 **Rationale:** The reusable path is valuable only when the scene has exactly one gameplay authority. A separate cutover makes removal of legacy linecast, trigger, direct-resource, and coroutine paths reviewable and prevents a temporary dual system from becoming permanent.
 
-**Current behavior:** `PlayerScript` reads input and mutates resources/outcomes, `MovingObject` uses `Physics2D.Linecast` to decide movement, trigger callbacks collect resources and reach exits, and `GameManager` schedules turns with `playerTurn`, `EndPlayerTurn`, and `MoveEnemies` coroutines.
+**Behavior at ticket entry:** `PlayerScript` read input and mutated resources/outcomes, `MovingObject` used `Physics2D.Linecast` to decide movement, trigger callbacks collected resources and reached exits, and `GameManager` scheduled turns with `playerTurn`, `EndPlayerTurn`, and `MoveEnemies` coroutines. The implementation described below removes these paths.
 
 **Expected outcome:** Production PC gameplay routes every supported board action through the `M3.6.2` coordinator and the one controller created by `M3.6.1`. `PlayerScript` becomes an input/view adapter, `MovingObject` is animation-only or removed, and `GameManager` composes the runtime plus guarded board outcomes without deciding turn legality. The existing art and supported feedback remain, but physics, transforms, triggers, and coroutines no longer mutate or adjudicate gameplay.
 
@@ -1920,65 +1920,831 @@ Validation: baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e
 
 **Required handoff:** Final Input → Command → Result → Events → View diagram, removed/disabled source-of-truth inventory with code-search evidence, current-content/deferred-behavior table, input/gate map, exact automated and manual results, and proof that terminal outcomes and resource costs occur once.
 
+### M3.6.3 implementation handoff (2026-10-07)
+
+The Lead implemented this candidate directly after the owner explicitly authorized discarding the failed local-worker attempt. The recovery baseline is branch `M3/ProductionCutover`, commit `af030818d5de705968e26907139c435bc26ecd86`, Git root `D:/Repos/HallowBlaze`, Unity project `D:/Repos/HallowBlaze/HallowBlaze`. No commit or branch was created by the agent.
+
+```mermaid
+flowchart LR
+   PC[PC key-down] --> Source[PcCommandSource: Move or Wait]
+   Source --> View[Active PlayerScript adapter]
+   View --> Admission[GameManager lifecycle admission]
+   Admission --> Coordinator[One CommandPresentationCoordinator]
+   Coordinator --> Controller[One BoardRuntime TurnController]
+   Controller --> Result[TurnResult: state already resolved]
+   Result --> Events[Ordered GameEvents]
+   Events --> Presenter[BoardEventPresenter]
+   Presenter --> Output[Registered views, authoritative HUD, audio]
+   Presenter --> Outcome[Guarded active BoardOutcome]
+   Outcome --> Lifecycle[Route choice or run completion]
+```
+
+`BoardState` and `RunState` decide legality, supported rewards, action cost, and terminal results. Presentation does not apply amounts again. The composer marks the terrain under a legacy Exit descriptor as walkable exit terrain, retaining stable IDs, content IDs, and its registered Exit item/view. This repairs the import boundary to the existing resolver's terrain-based exit rule without changing Core rules.
+
+The active player view is checked against the runtime registry before it can submit. The manager owns one presenter per board and disposes it before disposing the runtime. Replaced-board replay is canceled; the ordered outcome sink requires the exact current request instance, not merely the same logical board identity. Terminal run abandonment does not dispose the presenter from inside its own death callback.
+
+#### Retired mutation sources
+
+| Previous source | Cutover state |
+| --- | --- |
+| `PlayerScript.AttemptMove`, axis/touch polling and direct Food cost | Removed; PC key-down produces complete commands only |
+| `MovingObject.Move`, `SmoothMovement`, `AttemptMove`, `OnCantMove`, `Physics2D.Linecast` | Removed; the base component retains serialized animation/layer compatibility fields only |
+| Player pickup/exit trigger callbacks, `AttemptGathering`, `OnCantMove`, wall damage | Removed; no parallel pickup, exit, wall-attack, or unsupported interaction path |
+| `PlayerScript.LoseHealth`, `CheckIfGameOver`, resource-delta subscriptions | Removed; HUD/feedback read authoritative state and terminal events |
+| `GameManager.Update`, `playerTurn`, `EndPlayerTurn`, `MoveEnemies`, enemy coroutine state | Removed; no legacy consequence scheduling |
+| `Enemy` registration, movement, cadence and attack callbacks | Removed; serialized art/audio tuning remains, with no AI or damage authority |
+| `LegacyBoardContentCatalog.DeferredLegacyMutationPaths` | Preserved public API, now an empty inventory of connected legacy mutation paths |
+
+Code-search evidence: `Assets/Scripts/{GameManager,PlayerScript,MovingObject,Enemy}.cs` has no matches for `Physics2D\.Linecast|OnTriggerEnter2D|OnTriggerExit2D|AttemptMove|AttemptGathering|OnCantMove|EndPlayerTurn|MoveEnemies|MoveEnemy|playerTurn|enemiesMoving|ConsumeFood|RestoreFood|TakeDamage|TryMove|TryRemove|Input\.GetAxis`. The rebaselined M0.8 test additionally asserts absence of retired methods. Transforms are outputs of composition/presentation, not runtime legality checks.
+
+#### Current content and deferred behavior
+
+| Content | Production behavior after cutover | Deferred behavior |
+| --- | --- | --- |
+| Player | Cardinal Move and Wait through the single controller | Mobile input and future interaction bindings |
+| Floor | Authoritative walkable terrain | None in this card |
+| OuterWall | Presentation-only perimeter art | No separate gameplay mutation |
+| Wall | Domain obstacle; blocked movement is free and does not damage it | Bare-hand/tool interaction rules |
+| Exit | Existing terrain exit rule; one ordered guarded route-choice outcome | Future route-segment identity work |
+| Food / Soda / BushFood | Existing automatic rewards 10 / 20 / 10, then one action cost; item view hidden by replay | No trigger-based alternative |
+| BuriedFood / Aid | Mapped content without a supported PC interaction; no trigger reward/healing | Later accepted interaction/tool/aid rules |
+| Enemy | Inert registered actor occupying and blocking its domain cell | Domain AI and damage in M3.7/M3.8 |
+
+Food/Soda feedback uses the registered collected view only to choose an audio cue; tags do not decide rewards. Missing audio clips/managers are skipped without introducing gameplay effects. Existing prefabs, scenes and serialized tuning references are unchanged.
+
+#### Input and gate map
+
+| Owner or input | Behavior |
+| --- | --- |
+| Arrow keys / WASD | One cardinal `MoveCommand` per unambiguous key-down frame |
+| Space | One `WaitCommand` |
+| No key / ambiguous chord | No command; no Resolve or cost; no buffering |
+| Setup / board startup | Setup block; source is not sampled and controller is not called |
+| Resolving / presenting | Coordinator rejects duplicate submissions until ordered replay completes |
+| Pause / settings | Pause's Modal block remains even if unscaled replay completes or intro ends |
+| Route choice | Independent Modal ownership; releasing pause or a late intro callback cannot reopen input |
+| Resume | Input remains blocked in the release frame; eligible on the next frame |
+| Terminal / disabled manager / requested reload | Disabled ownership prevents further admission |
+| Stale, disabled or inactive player view | Adapter rejects before manager/controller submission |
+| Replaced runtime | Presenter/coordinator disposal cancels old replay and rejects old outcomes |
+
+Starting another run discards the previous `WorldMapService` choice-state cache. Reload creates a fresh runtime/controller and resynchronizes player view and HUD from the active run. No presentation queue or mid-animation state is persisted.
+
+#### Validation and once-only evidence
+
+Unity version: `6000.3.21f1`; Unity Test Framework: `1.6.0`. Tests use isolated temporary persistence roots. Reports/logs are outside the project; the Lead checked fresh XML identities, nonzero execution counts, `Passed`, zero failures and zero skipped tests.
+
+```powershell
+unity test "D:\Repos\HallowBlaze\HallowBlaze" --mode PlayMode --output "$env:TEMP\HB-M363-lead-full-playmode-20261007.xml" -- -nographics -logFile "$env:TEMP\HB-M363-lead-full-playmode-20261007.log"
+unity test "D:\Repos\HallowBlaze\HallowBlaze" --mode EditMode --filter "HallowBlaze.Tests.EditMode.BoardRuntimeCompositionTests;HallowBlaze.Tests.EditMode.CommandPresentationPipelineTests" --output "$env:TEMP\HB-M363-lead-focused-editmode-20261007.xml" -- -nographics -logFile "$env:TEMP\HB-M363-lead-focused-editmode-20261007.log"
+```
+
+| Final automated gate | Passed / total | Failed / skipped |
+| --- | --- | --- |
+| Full `HallowBlaze.Tests.PlayMode` assembly | 66 / 66 | 0 / 0 |
+| `BoardRuntimeCompositionTests` | 12 / 12 | 0 / 0 |
+| `CommandPresentationPipelineTests` | 30 / 30 | 0 / 0 |
+| Changed-file editor diagnostics | No errors | Not a substitute for Unity compilation |
+| `git diff --check` | Passed | Only existing LF/CRLF normalization warnings |
+
+Full PlayMode includes infrastructure/M0.8 (12), ordered presentation (14), pause (11), lifecycle (18), startup (4), atlas (1), ownership/persistence (3), atlas persistence (1), persistence path (1), and offline records (1).
+
+`PlayerMoveResolvesOnce` admits injected PC input, blocks twenty rapid duplicate submissions during animation, and observes exactly one Resolve, one move, one Food cost and one movement sound. Rejected wall/out-of-bounds attempts preserve Food, wall health and view/audio state; invalid Direction is rejected before submission. Space costs once without movement. Supported Food rewards occur before cost, with HUD and item view changes only at their ordered replay positions. Soda pickup has the same authoritative result, final HUD and two audio cues with animation on or off.
+
+`EnteringExitSnapsOnceCostsOnceAndGuardsOneOutcome` uses legal commands, checks the final view before route notification, costs once per move and rejects duplicate outcomes. Main-scene route lifecycle tests now traverse a legal path using injected PC key bindings rather than synthesizing Exit events. Starvation is produced by a real Wait at Food 1; health death remains an explicit existing-event fixture and does not invent an enemy-damage rule.
+
+Reload-mid-animation proves old replay cancellation/disposal, zero resolutions in the replacement controller, preserved already-resolved resources, and rejection of an old request even when both boards have the same logical identity. Setup completion, pause/resume, route ownership, terminal admission and replacement-view isolation are covered by PlayMode and coordinator tests.
+
+Manual PC smoke: **Not run**. `unity pipeline list` found the package installed but zero reachable servers; `unity command` returned `No Unity Editor instances found with reachable Pipeline servers`. Automated Main-scene/PC-input tests are not a manual smoke result. The owner was unavailable to accept this limitation; free tile, obstacle, supported resource, Wait, exit, pause, route choice, death and reload still require the explicit manual acceptance gate. No legacy Unity integration, package upgrade or second Editor instance was used.
+
+Independent read-only `qwen-reviewer` verdict: **BLOCKED**. The reviewer reported no material semantic code defect after inspecting terminal handling, stale requests, runtime replacement, presentation, gates and stale input. The blocker is the required manual PC smoke, not an automated-test failure; this is not a `PASS` or final acceptance. The card and M3.6 umbrella must not be marked `Done` until the outstanding manual gate and final independent acceptance are complete. Scope is thirteen code/test files plus this Lead-owned handoff; Core, BoardManager, scenes, prefabs, `.meta` files, packages, settings, save schemas and protected agent configuration remain unchanged.
+
 ---
 
-## `M3.7` — Czysty model Shamblera i zablokowany intent
+## `M3.7` - Pure Shambler model and locked intent (tracking umbrella)
 
-**Status:** `Planned`  
-**Priorytet:** P0  
-**Powiązany kontrakt:** sekcje 11.1 i 11.3.
+**Status:** `Planned` - tracking umbrella; it becomes `Done` only after `M3.7.1` through `M3.7.11` are independently accepted.
+**Priority:** P0
+**Related contract:** sections 10.2, 11.1, and the accepted owner decision in 11.3.1.
 
-**Rationale:** Przewidywalny zombie jest elementem zagadki. Intent policzony przed wejściem gracza musi pozostać ten sam podczas wykonania, nawet jeśli cel stanie się nieważny.
+**Rationale:** A predictable enemy is part of the puzzle. Planning, retaining a plan, and executing it are separate contracts. Fixed-cell attacks and the declared attack-on-entry condition must preserve the announced target rather than select a hidden replacement action.
 
-**Obecne zachowanie:** AI działa w komponentach i może zależeć od listy `GameManager`, pozycji obiektów i czasu Unity.
+**Current behavior:** The M3.6.3 production candidate leaves enemy actors inert in the authoritative grid. `TurnController` already exposes phase 5 (`ExecuteLockedIntents`) and phase 8 (`PlanNextIntents`) through `TurnPhaseHandlers`, but their default implementations are no-ops. No accepted pure Shambler planner or executor is connected to those hooks.
 
-**Oczekiwany rezultat:** Czysty Shambler planuje `Move`, `Attack` lub `Wait` według jednej nazwanej reguły; intent jest zapisany w stanie tury i później wykonywany bez przeplanowania.
+**Expected outcome:** A pure Shambler uses shortest-path pursuit with alternating rest. Board-local turn state retains the exact intent and its declared conditions until execution. Ordinary blocked movement produces `Wait`; a player entering the locked movement destination is attacked there without enemy movement; a player leaving a planned attack cell causes a zero-damage miss. No execution branch invokes planning, changes the recorded destination, or follows another target. The next plan is created only at the next planning boundary.
 
-**Zakres:** Enemy state/definition, planner Shamblera, podstawowy path/tie-break, cadence i events wykonania.
+**Scope:** Enemy intent values, definition and state, deterministic pursuit and tie-break, cadence, locked movement/attack events, and isolated integration with the existing turn-phase hooks.
 
-**Non-goals:** Bez Listenera, hałasu, losowych decyzji, ukrytego aggro i finalnego VFX.
+**Non-goals:** No Listener, noise, RNG, hidden aggro, final VFX, multi-enemy initiative/reservations/swaps (`M3.8`), intent UI (`M3.9`), production input/runtime cutover, or legacy enemy migration. Do not change `Enemy.cs`, `GameManager`, scenes, prefabs, generator, assemblies, packages, or settings in these children.
 
-**Zależności:** `M3.5`.
+**Dependencies:** `M3.5`. The execution queue still closes `M3.6.3` before starting M3.7; this decomposition does not accept or bypass its pending manual PC smoke.
 
-**Dozwolony obszar plików:** Core Enemies/Turns/Board, testy; `Enemy.cs` dopiero w adapterach `M3.6` i `M3.9`.
+**Allowed file area:** Only the exact source/test paths listed in the selected child, plus their Unity-generated `.meta` companions under section 5.1. Use the existing Turns Contracts/Resolution assemblies rather than introducing an Enemies assembly. The Lead owns roadmap updates and must not include this document in a Developer write scope.
 
-**Kryteria akceptacji:** Ten sam stan daje ten sam intent; tie-break jest jawny; zablokowany cel kończy się `Wait`, nie replanem; plan nie mutuje planszy; cadence jest częścią definicji/stanu.
+**Readiness gate (Lead-owned):** The owner resolved pursuit, tie-break, attack, damage, cadence, and the same-cell conditional attack on 2026-10-07; [GameDesignContract section 11.3.1](GameDesignContract.md#1131-accepted-shambler-rule) is authoritative. The accepted defaults are whole-board shortest-path pursuit, orthogonal movement/attack, North -> East -> West -> South on equal paths, active -> rest starting active, one cadence advancement per executed enemy phase even on failure, and damage 10/20 for the existing variants. A rest phase never attacks. Before assignment, verify dependencies and the pending M3.6.3 gate, confirm proposed type paths against current code, reuse equivalent APIs, and seal any adjusted exact allowlist. No additional gameplay choice is delegated to the Developer; statuses remain `Planned` until the execution prerequisites are met.
 
-**Plan testów:** EditMode dla kierunków, przeszkód, tie-breaków, cadence, invalidated target i attack range.
+Each row is one delegation and one independent acceptance/review unit, normally one implementation file plus one focused test file. New test fixtures are reused by later children. Run `M3.7.1` through `M3.7.8`, then `M3.7.11`, `M3.7.9`, and `M3.7.10`; the added conditional-execution child preserves the existing child identifiers. Dependency order, not numerical order, controls assignment. Do not combine rows or implement a later row while preparing an earlier one. The model and executor are exercised with one enemy; batch conflict rules remain in M3.8.
 
-**Wpływ na save i kompatybilność:** Intenty nie są zapisywane między planszami; mid-board save pozostaje Deferred.
+| Child | One observable effect | Primary files | One focused validation |
+| --- | --- | --- | --- |
+| `M3.7.1` | An immutable intent identifies the action, fixed target, and declared attack-on-entry condition. | `EnemyIntent.cs`, existing `TurnContractsTests.cs` | EditMode `TurnContractsTests` |
+| `M3.7.2` | A validated Shambler definition exposes explicit rule/cadence parameters. | `ShamblerDefinition.cs`, `ShamblerModelTests.cs` | EditMode `ShamblerModelTests` |
+| `M3.7.3` | One enemy retains and consumes its locked intent without double cadence advancement. | `ShamblerState.cs`, reused `ShamblerModelTests.cs` | EditMode `ShamblerModelTests` |
+| `M3.7.4` | The same board snapshot produces the same pursuit intent. | `ShamblerPlanner.cs`, `ShamblerPlannerTests.cs` | EditMode `ShamblerPlannerTests` |
+| `M3.7.5` | The planner respects the explicit cadence instead of acting on every opportunity. | reused planner and planner tests | EditMode `ShamblerPlannerTests` |
+| `M3.7.6` | A locked `Move` executes exactly or becomes `Wait`. | `ShamblerIntentExecutor.cs`, `ShamblerIntentExecutorTests.cs` | EditMode `ShamblerIntentExecutorTests` |
+| `M3.7.7` | An attack result has an immutable presentation event contract. | `EnemyAttackResolvedEvent.cs`, existing `TurnContractsTests.cs` | EditMode `TurnContractsTests` |
+| `M3.7.8` | A locked `Attack` hits its recorded target or misses at the same cell. | reused executor and executor tests | EditMode `ShamblerIntentExecutorTests` |
+| `M3.7.11` | A player occupying the locked movement destination receives one same-cell attack. | reused executor and executor tests | EditMode `ShamblerIntentExecutorTests` |
+| `M3.7.9` | An accepted turn consumes the old intent and plans the next one through existing hooks. | `ShamblerTurnPhases.cs`, existing `TurnControllerTests.cs` | EditMode `TurnControllerTests` |
+| `M3.7.10` | One controller-level regression distinguishes a fixed-cell miss from hidden pursuit replanning. | existing `TurnControllerTests.cs` only | EditMode the named regression test |
 
-**Wymagany handoff:** Jednozdaniowa reguła AI możliwa do pokazania graczowi oraz komplet przykładów tie-break.
+**Acceptance criteria:** All eleven children are `Done`; identical state yields identical intent; North/East/West/South tie-break examples are explicit; planning does not mutate board/run/cadence; definition/state own the active/rest cycle; ordinary blocked movement produces `Wait`; the same-cell player-entry condition produces one attack, no movement, and subsequent rest; planned attacks miss without following an escaped player; both 10/20 damage variants are covered; rejected and terminal commands preserve the accepted turn contract. Multi-enemy conflicts and player-facing display remain M3.8/M3.9 work, not implementation gates for this umbrella.
+
+**Test plan:** The child filters collectively cover directions, obstacles, tie-breaks, active/rest cadence, locked-target invalidation, attack hits/misses and range, same-cell conditional attacks, rest-phase adjacency, initial planning, and accepted/rejected/terminal phase behavior. These are planned EditMode gates, not claims that tests already exist or have passed.
+
+**Save and compatibility impact:** No save schema change. Intent and cadence state live only for the current board; intents are not persisted between boards. Mid-board save remains `Deferred`.
+
+**Required handoff:** Link each child's independent validation/review evidence; provide the one-sentence player-readable AI rule, complete tie-break examples, and traces of initial planning -> accepted action -> locked movement, hit, miss, or `Wait` -> next planning/rest. Record the conditional-visibility requirement left for M3.9 without activating production enemies here.
 
 ---
 
-## `M3.8` — Konflikty intentów i stabilna inicjatywa
+## `M3.7.1` - Immutable enemy intent contract
 
-**Status:** `Planned`  
-**Priorytet:** P0  
-**Powiązany kontrakt:** sekcja 11.2.
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 11.1.
 
-**Rationale:** Dwa zombie celujące w to samo pole nie mogą być rozstrzygane przez kolejność GameObjectów. Reguła konfliktu jest widoczną częścią logiki planszy i musi być odtwarzalna.
+**Rationale:** Execution cannot preserve a plan unless the plan captures its action and target as immutable data.
 
-**Obecne zachowanie:** Kolejność listy przeciwników i callbacków Unity może wpływać na rezultat.
+**Current behavior:** Turn events and stable grid/entity IDs exist, but there is no accepted enemy-intent value contract.
 
-**Oczekiwany rezultat:** Stabilna inicjatywa rezerwuje cele; pierwszy legalny intent wykonuje się, kolejny czeka, swap jest zabroniony, a invalid intent nie planuje ponownie.
+**Expected outcome:** A caller can create and inspect a valid `Move`, `Attack`, or `Wait` intent without Unity dependencies or mutable target references. `Move` captures its fixed destination and explicit attack-on-player-entry condition; `Attack` captures the player identity and original target cell.
 
-**Zakres:** Batch plan/execution dla wielu przeciwników oraz deterministyczny resolver konfliktów.
+**Scope:** Add only the intent value contract and focused value/validation tests. Capture the actor and the target identity/cell required by the approved action policy.
 
-**Non-goals:** Bez reakcji łańcuchowych, opportunity attacks, knockbacku, stadnego AI i równoległego wykonywania.
+**Non-goals:** No definition, enemy-state owner, planner, executor, cadence, or phase wiring.
 
-**Zależności:** `M3.7`.
+**Dependencies:** `M3.5`; the umbrella readiness gate for intent target semantics.
 
-**Dozwolony obszar plików:** Core Enemies/Turns i testy EditMode.
+**Allowed file area:** `Assets/Scripts/Core/Turns/Contracts/EnemyIntent.cs`; `Assets/Tests/EditMode/TurnContractsTests.cs`.
 
-**Kryteria akceptacji:** Permutacja kolejności wejściowej listy nie zmienia wyniku; wspólny cel ma jednego zwycięzcę; swap nie zachodzi; event order odpowiada inicjatywie.
+**Acceptance criteria:** All three intent kinds are representable; invalid payloads fail explicitly; previously created intents cannot change when caller-owned data changes; no Unity object, clock, or RNG is referenced.
 
-**Plan testów:** Parametryzowane konflikty 2–5 encji, permutacje listy, swap, chain blocking i usunięty aktor.
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.TurnContractsTests`, extended only with intent value cases.
 
-**Wpływ na save i kompatybilność:** Brak zmiany schema.
+**Save and compatibility impact:** No schema change; this value is board-local and not a save DTO.
 
-**Wymagany handoff:** Tabela konfliktów i uzasadnienie wybranej inicjatywy.
+**Required handoff:** Payload examples for each intent kind, immutable-target semantics, and exact focused-test results.
+
+---
+
+## `M3.7.2` - Explicit Shambler definition
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11.1 and 11.3.
+
+**Rationale:** The named rule and movement rhythm must be data, not implicit behavior inherited from a prefab or coroutine.
+
+**Current behavior:** No accepted pure definition exposes the parameters required by the Shambler rule.
+
+**Expected outcome:** A valid definition exposes the accepted rule identity, initial active phase, alternating active/rest cadence, orthogonal attack range, and damage 10 or 20 for the existing variants; invalid configuration is rejected before planning or execution.
+
+**Scope:** Add the definition and configuration-validation tests. Use approved parameters without choosing balance values in code.
+
+**Non-goals:** No per-enemy state, intent planning, attacks, production configuration, or ScriptableObject/prefab changes.
+
+**Dependencies:** `M3.5`; the umbrella readiness gate for rule and configuration semantics. This child does not require production integration.
+
+**Allowed file area:** `Assets/Scripts/Core/Turns/Resolution/ShamblerDefinition.cs`; `Assets/Tests/EditMode/ShamblerModelTests.cs`.
+
+**Acceptance criteria:** Cadence and attack configuration are explicit and validated; the rule has one stable name; the definition is pure data and cannot advance a turn or mutate a board/run.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ShamblerModelTests`, initially covering valid and rejected definitions.
+
+**Save and compatibility impact:** No schema change; no definition is added to persistence in this child.
+
+**Required handoff:** The approved parameter contract, its source-of-truth reference, and rejected-configuration examples.
+
+---
+
+## `M3.7.3` - Board-local enemy state and intent retention
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11.1 and 11.3.
+
+**Rationale:** One board-local owner must retain the intent and cadence phase until consumption, independently of animation timing.
+
+**Current behavior:** Definitions and intent values are available after M3.7.1/M3.7.2, but no enemy state owns their lifecycle.
+
+**Expected outcome:** One enemy retains a locked intent unchanged until it is consumed once. Fresh state starts active; consuming either an active or resting phase advances the active/rest cycle once, including unsuccessful active opportunities.
+
+**Scope:** Add pure state keyed by `EntityId`, its definition association, cadence phase, and lock/consume/reset operations. Read position from `BoardState`; do not create another position authority.
+
+**Non-goals:** No pathfinding, board/run mutation, movement/damage, event emission, production runtime binding, or multi-enemy store.
+
+**Dependencies:** `M3.7.1`, `M3.7.2`; the umbrella readiness gate for initial phase and consumption semantics.
+
+**Allowed file area:** `Assets/Scripts/Core/Turns/Resolution/ShamblerState.cs`; existing `Assets/Tests/EditMode/ShamblerModelTests.cs` from M3.7.2.
+
+**Acceptance criteria:** Locking preserves the exact intent; accidental overwrite/double consumption cannot silently advance cadence; read/plan operations do not advance it; a fresh board starts with no retained previous-board intent. Board/run state is untouched.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ShamblerModelTests`, extended with lock/consume/reset and cadence-transition cases.
+
+**Save and compatibility impact:** No schema change; state is discarded with its board, not copied into `ProfileState` or persisted `RunState`.
+
+**Required handoff:** A short state-transition table including first plan, one consumption, duplicate consumption, and fresh-board reset.
+
+---
+
+## `M3.7.4` - Deterministic pursuit planner
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11.1 and 11.3.
+
+**Rationale:** Pursuit must be explainable from the authoritative grid, including ties and blocked routes.
+
+**Current behavior:** Intent/definition/state contracts exist, but no pure function chooses a Shambler action.
+
+**Expected outcome:** For an active opportunity, identical board and enemy/player state produce the same `Move`, `Attack`, or `Wait` intent: orthogonally adjacent legal player target -> attack; otherwise one shortest-path step with North -> East -> West -> South ties, or wait if unreachable. A move retains the declared same-cell attack condition.
+
+**Scope:** Implement pursuit, action selection, grid legality, and explicit path/direction tie-break for one enemy. Use existing board layers, bounds, and actor occupancy rather than physics. This child handles eligible opportunities only; cadence eligibility is added in M3.7.5.
+
+**Non-goals:** No state advancement, locked execution, damage, RNG, hidden aggro, multi-enemy conflict solver, or phase wiring.
+
+**Dependencies:** `M3.7.3`; the umbrella readiness gate for pursuit, tie-break, and attack selection/range.
+
+**Allowed file area:** `Assets/Scripts/Core/Turns/Resolution/ShamblerPlanner.cs`; `Assets/Tests/EditMode/ShamblerPlannerTests.cs`.
+
+**Acceptance criteria:** Directions, obstacles, unreachable targets, attack-range boundaries, and equal alternatives follow the approved rule; insertion order cannot change the result; planning leaves board/run/enemy state unchanged.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ShamblerPlannerTests` with fixed grid fixtures and explicit tie-break expectations.
+
+**Save and compatibility impact:** No schema change; the planner neither loads nor writes save data.
+
+**Required handoff:** The one-sentence AI rule and complete tie-break examples with expected intent payloads.
+
+---
+
+## `M3.7.5` - Cadence-aware planning
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 11.3.
+
+**Rationale:** A visible movement rhythm must derive from definition/state, not elapsed frames or callback counts.
+
+**Current behavior:** The planner handles eligible opportunities, and state exposes cadence, but the planner does not yet apply eligibility.
+
+**Expected outcome:** The initial active phase yields the accepted action, the following rest phase yields `Wait` even beside the player, and the cycle repeats without planning advancing state.
+
+**Scope:** Extend the existing planner only to apply the approved cadence policy. Reuse the state transitions accepted in M3.7.3 rather than introducing another counter.
+
+**Non-goals:** No new rule/balance choice, state-owner changes, timer, executor, production wiring, or multi-enemy scheduling.
+
+**Dependencies:** `M3.7.4`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/ShamblerPlanner.cs`; existing `Assets/Tests/EditMode/ShamblerPlannerTests.cs`.
+
+**Acceptance criteria:** First phase and a complete cadence cycle match the approved policy; repeated planning at one phase returns the same intent without advancement; cadence gating does not change the accepted pursuit tie-break.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ShamblerPlannerTests`, extended with a table-driven cadence cycle.
+
+**Save and compatibility impact:** No schema change; cadence remains board-local.
+
+**Required handoff:** The phase -> intent table and confirmation that no planning call consumes a cadence step.
+
+---
+
+## `M3.7.6` - Locked movement and wait execution
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10.2 and 11.1.
+
+**Rationale:** A move must use its recorded destination even when the board has changed since planning.
+
+**Current behavior:** A cadence-aware intent can be retained, but no executor applies a locked movement action.
+
+**Expected outcome:** A locked `Move` moves its actor to the recorded legal empty cell or resolves as `Wait`; an explicit `Wait` leaves position/resources unchanged. This isolated foundation does not yet implement the player-entry attack condition; M3.7.11 must add it before phase integration or umbrella acceptance.
+
+**Scope:** Add one-enemy execution of `Move`/`Wait`, revalidate against current board state, and append the existing movement/wait event payloads. Consume the intent/cadence once using M3.7.3 state semantics. `Attack` is explicitly unsupported until M3.7.8. Preserve the conditional intent payload without applying damage until M3.7.11; no production activation occurs in this intermediate step.
+
+**Non-goals:** No planner call during execution, retargeting, damage, extra player cost/turn, environment rule, initiative/reservation solver, or production binding.
+
+**Dependencies:** `M3.7.5`.
+
+**Allowed file area:** `Assets/Scripts/Core/Turns/Resolution/ShamblerIntentExecutor.cs`; `Assets/Tests/EditMode/ShamblerIntentExecutorTests.cs`.
+
+**Acceptance criteria:** Legal movement updates authoritative occupancy once; a now-blocked/occupied target gives `Wait` without replacement movement; stale/missing actors have no board/run effect; event facts match the actual outcome; no additional player action cost is applied.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ShamblerIntentExecutorTests` for legal movement, explicit wait, target invalidation, and stale actor handling.
+
+**Save and compatibility impact:** No schema change; execution only mutates the active board and board-local enemy state.
+
+**Required handoff:** Locked intent -> resulting position/event examples, including a blocked destination, and confirmation that no planner is invoked.
+
+---
+
+## `M3.7.7` - Immutable attack-result event
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10.2 and 11.1.
+
+**Rationale:** Attack execution needs a fact payload for later presentation; adding that contract must not also activate damage or production animation.
+
+**Current behavior:** Generic `GameEvent` and movement/wait events exist; the required attack-result payload must be confirmed at readiness.
+
+**Expected outcome:** An immutable event describes an attempted attack at its fixed cell, with a hit/miss outcome and actual health effect, without requiring presentation to recalculate targets or damage.
+
+**Scope:** Add the missing attack-result payload and its contract tests only. If an equivalent event already exists, reuse and verify it; do not add a duplicate type. The Lead seals that reduced exact scope before delegation.
+
+**Non-goals:** No executor changes, damage application, planner, death decision, presenter, or VFX.
+
+**Dependencies:** `M3.7.1`, `M3.7.2`; the umbrella readiness gate for attack semantics. This contract-only child may be accepted before movement execution; it does not activate enemies.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Contracts/EnemyAttackResolvedEvent.cs`; existing `Assets/Tests/EditMode/TurnContractsTests.cs`. An equivalent existing payload requires an explicit adjusted allowlist, not a wildcard.
+
+**Acceptance criteria:** The payload identifies the attacker, fixed target cell, hit/miss result, actual affected target where present, and actual health change. It represents an empty-cell miss with zero damage as well as 10/20 hits. Data is immutable and Unity-free; creating/reading an event never mutates board/run state.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.TurnContractsTests`, extended only with attack-event payload cases.
+
+**Save and compatibility impact:** No schema change; events are turn results, not persisted DTOs.
+
+**Required handoff:** The payload contract, example values, and the reuse-versus-new-type decision.
+
+---
+
+## `M3.7.8` - Locked attack execution
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10.2 and 11.1.
+
+**Rationale:** An attack must not follow a player who moved away or hit a replacement occupant selected after the player's action. A visible swing at the original cell remains a miss, not a new plan.
+
+**Current behavior:** The executor handles locked movement/wait, and an attack event contract is available, but attack effects are not implemented.
+
+**Expected outcome:** A locked `Attack` deals its variant's 10/20 damage once to the original player still on the recorded legal cell. An escaped or missing target produces a fixed-cell attack miss with zero damage; a stale source or illegal attack cannot deal damage. No branch retargets or becomes movement.
+
+**Scope:** Extend the existing executor with target/range revalidation, health mutation through the existing `RunState` API, and the accepted attack event. Consume the intent once through existing enemy-state semantics. Leave terminal checks to `TurnController`.
+
+**Non-goals:** No pursuit changes, opportunity attack, replacement target, new attack balance, independent death/save lifecycle, additional player cost, multi-enemy ordering, or production binding.
+
+**Dependencies:** `M3.7.6`, `M3.7.7`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/ShamblerIntentExecutor.cs`; existing `Assets/Tests/EditMode/ShamblerIntentExecutorTests.cs`.
+
+**Acceptance criteria:** Orthogonal range boundaries and recorded target identity/cell follow section 11.3.1; 10/20 hits and event effects occur once; escaped, missing, or replaced targets cause an attack miss and no damage; illegal attacks cannot hit; attempted active attacks advance to rest once; movement/wait behavior remains unchanged; execution never invokes planning.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ShamblerIntentExecutorTests`, extended with both damage variants, orthogonal range boundaries, escaped/replaced target misses, zero-damage miss events, and duplicate-consumption cases.
+
+**Save and compatibility impact:** No schema change; health uses existing run state, while intent/cadence remain board-local.
+
+**Required handoff:** Locked target -> actual health/event examples and confirmation that terminal handling remains with the controller.
+
+---
+
+## `M3.7.9` - Shambler adapter for existing turn phases
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10.2 and 11.1.
+
+**Rationale:** The independently accepted planner and executor must use the existing phase boundaries, not create another turn controller or production gameplay path.
+
+**Current behavior:** All Shambler components work in isolation, but `TurnPhaseHandlers` still defaults to no-op enemy phases.
+
+**Expected outcome:** An isolated controller with one Shambler executes the retained intent in phase 5 and retains the next plan in phase 8, exactly once per accepted nonterminal turn.
+
+**Scope:** Add a thin adapter supplying existing `ExecuteLockedIntents`/`PlanNextIntents` delegates. Expose initial planning before the first command, without advancing cadence or mutating board/run. Compose it with a controller in focused tests only; do not alter the controller's phase order or the production runtime importer.
+
+**Non-goals:** No new AI algorithm/state owner, changes to `TurnController`/`TurnPhaseHandlers`, environment behavior, multi-enemy composition, production `GameManager`/`Enemy.cs` wiring, legacy removal, or intent UI.
+
+**Dependencies:** `M3.7.8`, `M3.7.11`.
+
+**Allowed file area:** `Assets/Scripts/Core/Turns/Resolution/ShamblerTurnPhases.cs`; existing `Assets/Tests/EditMode/TurnControllerTests.cs`.
+
+**Acceptance criteria:** Initial active intent exists before first input; phase 5 uses its recorded target/condition rather than planning again; phase 8 publishes only the next intent; blocked actions, misses, and conditional hits are followed by one rest phase; rest never attacks despite adjacency; rejected commands do not consume intent/cadence or emit enemy effects; phase-4 terminal outcomes skip enemy execution; phase-7 terminal outcomes skip next planning; environment order and player cost remain unchanged.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.TurnControllerTests`, extended with single-enemy initialization and accepted/rejected/terminal phase traces, including attack-induced death.
+
+**Save and compatibility impact:** No schema change; a fresh adapter/state is composed per board. Tests use isolated in-memory board/run data, not a player's profile.
+
+**Required handoff:** Initial and subsequent turn traces, hook ownership, and exact behavior still excluded from production and M3.8/M3.9.
+
+---
+
+## `M3.7.10` - Fixed-cell attack miss regression
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10.2 and 11.1.
+
+**Rationale:** Unit checks alone may miss accidental replanning at the controller boundary after player mutation.
+
+**Current behavior:** The isolated controller path is covered, but it needs one explicit regression that would fail if phase 5 replaced the pre-input intent.
+
+**Expected outcome:** One regression proves that a planned `Attack` misses at its original cell after the player's accepted move away, even when replanning the resulting board in an active phase would choose pursuit movement.
+
+**Scope:** Add one named EditMode regression to the existing controller test fixture. Capture the initial intent, submit the player action, and assert old-intent execution versus separately expected next-phase planning.
+
+**Non-goals:** No production implementation changes, executor/planner repair, extra test fixture, multi-enemy conflict case, replay framework, UI, or manual gameplay activation.
+
+**Dependencies:** `M3.7.9`.
+
+**Allowed file area:** Existing `Assets/Tests/EditMode/TurnControllerTests.cs` only.
+
+**Acceptance criteria:** `LockedShamblerAttack_PlayerLeavesTarget_MissesWithoutReplanning` checks one player turn/cost, unchanged enemy position, a miss event at the original attack cell with zero health change in phase 5, and next planning only at phase 8, producing the required rest intent. The fixture is chosen so fresh active-phase pursuit would move toward the escaped player; hidden replanning cannot also pass by returning the expected miss. Same-cell movement-to-attack is tested separately in M3.7.11 and must not be mistaken for a replan failure.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.TurnControllerTests.LockedShamblerAttack_PlayerLeavesTarget_MissesWithoutReplanning`; require exactly one passing test with that identity.
+
+**Save and compatibility impact:** None; in-memory regression only.
+
+**Required handoff:** The initial and post-player grid/intent examples, the behavior the regression discriminates, and its exact identity/result. A failure is evidence against umbrella acceptance, not permission to expand this test-only delegation.
+
+---
+
+## `M3.7.11` - Declared movement-to-attack condition
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10.2, 11.1, and the accepted owner decision in 11.3.1.
+
+**Rationale:** The owner's player-entry exception needs its own observable implementation effect, not a hidden target search or an expansion of movement foundation work.
+
+**Current behavior:** Locked movement/wait and planned attacks work in isolation after M3.7.6/M3.7.8, but the player's entry into a movement destination still needs its declared conditional outcome.
+
+**Expected outcome:** If the player occupies the recorded legal movement destination during an active opportunity, the Shambler remains in its original cell and attacks that player there once, then advances to rest.
+
+**Scope:** Extend the existing executor only with the condition already captured in the immutable move intent. Reuse the accepted attack effect/event and intent-consumption path; do not call the planner, choose another target, or add an action.
+
+**Non-goals:** No planner/state/event contract redesign, new target search, friendly fire, attack during rest, movement after an attack, multi-enemy conflict rule, UI, or production activation.
+
+**Dependencies:** `M3.7.6`, `M3.7.8`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/ShamblerIntentExecutor.cs`; existing `Assets/Tests/EditMode/ShamblerIntentExecutorTests.cs`.
+
+**Acceptance criteria:** Both 10/20 variants hit only the player on the recorded legal destination; enemy position is unchanged; intent and cadence are consumed once and the next phase is rest. A player on a different adjacent cell does not trigger an attack; another enemy or impassable destination gives `Wait`; a missing source has no effect; locked `Wait` never attacks. No extra turn/resource cost or planner invocation occurs.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ShamblerIntentExecutorTests`, extended with exact-destination player hits for both variants, another-adjacent-cell player, non-player/terrain blockers, rest, and duplicate-consumption cases.
+
+**Save and compatibility impact:** No schema change; existing board/run mutation ownership and board-local cadence remain unchanged.
+
+**Required handoff:** A table of locked cell -> current occupant -> outcome/event -> next cadence phase. Identify the pre-command conditional-visibility requirement still owned by M3.9. This child must be accepted before M3.7.9 binds the executor to controller phases.
+
+---
+
+## `M3.8` - Intent conflicts and stable initiative (tracking umbrella)
+
+**Status:** `Planned` - tracking umbrella; it becomes `Done` only after `M3.8.1` through `M3.8.10` are independently accepted.
+**Priority:** P0
+**Related contract:** sections 10.2, 11.2, and the accepted Shambler condition in 11.3.1.
+
+**Rationale:** Input collection order must not decide which enemy acts first or enters a contested cell. Ordering, shared-state planning, conflict handling, and controller integration are separate effects; implementing them together would require the Developer to design several cooperating classes before any result could be accepted.
+
+**Current behavior:** The accepted turn core supplies execution/planning hooks and authoritative occupancy. M3.7 is still planned and owns the single-enemy model, planner, executor, and cadence. This card describes a follow-up batch path over those APIs, not existing production enemy behavior.
+
+**Expected outcome:** All enemies plan from the same board state without advancing cadence. Locked intents execute serially in stable initiative order; the first legal move into a contested free cell succeeds, later contenders wait, swaps are forbidden, and invalid actions never replan. Ordered events and final board/run/enemy state are identical for every permutation of the same input actors.
+
+**Scope:** Deterministic ordering, batch planning, serial execution, same-destination conflicts, swap prevention, chain blocking, stale actors, reuse of Shambler hits/misses/conditional attacks, and isolated binding to existing turn phases.
+
+**Non-goals:** No new AI, group strategy, chain reactions, opportunity attacks, knockback, parallel execution, UI, replay/hash framework, production runtime/input cutover, legacy migration, scene/prefab changes, new assembly, or persistence change. Do not change `Enemy.cs`, `GameManager`, `BoardManager`, `BoardState`, `EntityId`, `TurnController`, packages, or settings.
+
+**Dependencies:** The complete `M3.7` umbrella, not a partially accepted child. This split does not bypass M3.6.3 or start enemy implementation.
+
+**Allowed file area:** Only the selected child's exact source/test paths and their Unity-generated `.meta` companions under section 5.1. All new implementation files belong to the existing Turns Resolution assembly. Reuse one `EnemyBatchTests.cs` fixture throughout; controller integration extends the existing `TurnControllerTests.cs`. The roadmap is Lead-owned, never part of a Developer allowlist.
+
+**Readiness gate (Lead-owned):** Before assignment, read the actual accepted M3.7 APIs and seal a compact packet with the one requested effect, exact allowlist, implementation/test references, a few explicit input -> outcome examples, and the child filter. Confirm reusable operations for retaining plans, executing one intent, and consuming a conflict as `Wait` exactly once without replacing the locked target. Proposed filenames are not permission to duplicate equivalent accepted APIs. If a required operation is absent or needs changes outside the child, stop and define a separate bounded prerequisite; do not ask the Developer to redesign neighboring classes inside this assignment.
+
+**Remaining owner decision:** Section 11.2 forbids swaps but does not say whether an enemy may enter a cell vacated by an earlier enemy during the same phase. Before M3.8.6 becomes `Ready`, record the chosen occupancy policy in the contract or an accepted ADR, with examples for both initiative orders. Neither a phase-start snapshot policy nor live sequential occupancy is accepted by this decomposition. Basic nonconflicting and initially-free contested-cell cases can be specified without choosing that behavior; M3.8.5/M3.8.6 and final integration must preserve the separately approved rule.
+
+Run the children in order as separate delegations. Foundation children are validated in isolation and must not be wired into production or treated as a complete batch implementation. The final adapter is assigned only after the planner, executor, and every conflict branch have passed their own gates.
+
+| Child | One observable effect | Primary files | One focused validation |
+| --- | --- | --- | --- |
+| `M3.8.1` | A detached enemy list has stable initiative order. | `EnemyInitiativeOrder.cs`, new `EnemyBatchTests.cs` | EditMode `InitiativeOrder_IsStableAndDetached` |
+| `M3.8.2` | Every next intent is planned from the same unchanged board state. | `EnemyBatchPlanner.cs`, reused batch tests | EditMode `BatchPlanning_UsesOneBoardState` |
+| `M3.8.3` | Nonconflicting locked intents execute once in initiative order. | `EnemyBatchExecutor.cs`, reused batch tests | EditMode `BatchExecution_NonconflictingIntentsExecuteOnce` |
+| `M3.8.4` | An initially free contested destination has one legal winner. | reused executor and batch tests | EditMode `ContestedDestination_FirstLegalMoveWins` |
+| `M3.8.5` | Two enemies cannot exchange their source cells. | reused executor and batch tests | EditMode `Swap_IsBlockedForBothInitiativeOrders` |
+| `M3.8.6` | A movement chain follows the explicitly approved occupancy policy. | reused executor and batch tests | EditMode `MovementChain_UsesApprovedOccupancyPolicy` |
+| `M3.8.7` | A removed source actor cannot act or reserve a destination. | reused executor and batch tests | EditMode `RemovedActor_DoesNotActOrReserve` |
+| `M3.8.8` | Batch execution preserves the accepted Shambler attack outcomes. | reused executor and batch tests | EditMode `BatchAttacks_PreserveLockedOutcomes` |
+| `M3.8.9` | The controller runs one complete enemy batch per eligible turn. | `EnemyBatchTurnPhases.cs`, existing controller tests | EditMode `EnemyBatchPhases_RespectControllerBoundaries` |
+| `M3.8.10` | Input permutations preserve outcomes and ordered event payloads. | reused `EnemyBatchTests.cs` only | EditMode `InputPermutations_PreserveOutcomesAndOrderedEvents` |
+
+**Acceptance criteria:** All ten children are `Done`; ascending `EntityId.CompareTo` determines initiative independently of input or view order; planning leaves board/run/cadence unchanged; one legal mover wins a shared free cell; losers consume their opportunity as `Wait`; swaps never occur; chains match the approved decision; missing sources have no gameplay effect; Shambler fixed-cell hits/misses and attack-on-player-entry remain intact; ordered events and authoritative state are invariant under input permutations.
+
+**Test plan:** The child filters cover 2-5 enemies, both relative initiative orders, shared targets, swaps, chains, stale actors, hits/misses, conditional attacks, rest, and controller boundaries. The final regression compares typed event payloads and expected authoritative values rather than only event counts or two equally incorrect runs. These are future EditMode gates, not claims that tests already exist or passed.
+
+**Save and compatibility impact:** No schema change. Initiative ordering and movement reservations belong to one board/phase; they do not survive a new board or alter profile/run persistence.
+
+**Required handoff:** Per-child test/review evidence, the initiative rule, the approved chain-policy reference, and a compact conflict table covering shared destination, swap, chain, removed actor, and conditional attack. Identify the remaining UI and production composition work without implementing it here.
+
+---
+
+## `M3.8.1` - Stable initiative ordering
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 11.2.
+
+**Rationale:** A small deterministic ordering contract removes input-list and Unity hierarchy order from every later batch operation.
+
+**Current behavior:** `EntityId.CompareTo` and `BoardState.GetEntities()` already use signed numeric ID order; a batch of M3.7 enemy states needs the same detached ordering.
+
+**Expected outcome:** The same unique enemies produce the same ascending-ID list for any input permutation, without changing the caller's collection.
+
+**Scope:** Add only ordering for the accepted enemy-state type, or reuse an equivalent existing ordering API. Reject duplicate IDs or malformed input explicitly before any enemy operation; do not silently deduplicate. Use `CompareTo`, not arithmetic subtraction or a new initiative stat.
+
+**Non-goals:** No board queries, planning, execution, reservations, cadence changes, or phase wiring.
+
+**Dependencies:** `M3.7` and the umbrella readiness check of actual state APIs.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/EnemyInitiativeOrder.cs`; `Assets/Tests/EditMode/EnemyBatchTests.cs`.
+
+**Acceptance criteria:** Ordering is detached and deterministic; signed IDs including zero/negative/extreme values follow `CompareTo`; duplicate identities cannot lead to two actions; input and enemy states are unchanged.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.EnemyBatchTests.InitiativeOrder_IsStableAndDetached`, with parameterized permutations and invalid-input cases.
+
+**Save and compatibility impact:** None; no IDs or initiative data are persisted or reassigned.
+
+**Required handoff:** Input IDs -> ordered IDs examples, invalid-input behavior, and exact test identity/count/result.
+
+---
+
+## `M3.8.2` - Shared-state batch planning
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10.2, 11.1, and 11.2.
+
+**Rationale:** Planning one enemy must not move it or change the board seen by the next enemy.
+
+**Current behavior:** M3.7 provides a pure single-enemy planner and intent retention; M3.8.1 provides a deterministic actor list.
+
+**Expected outcome:** Every enemy receives one next intent computed from the same board state, with retained payloads presented in stable initiative order.
+
+**Scope:** Add a thin loop over ordered enemy states using the existing planner and lock operation. Keep one borrowed unchanged board or detached planning snapshot for the entire call; do not simulate movement between planner calls. Retain each accepted plan without creating another enemy-state store.
+
+**Non-goals:** No new pursuit algorithm, initiative choice, conflict resolution, execution, cadence advancement, board/run mutation, or production wiring.
+
+**Dependencies:** `M3.8.1`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/EnemyBatchPlanner.cs`; existing `Assets/Tests/EditMode/EnemyBatchTests.cs`.
+
+**Acceptance criteria:** The same pre-plan values give the same per-ID intent map regardless of input order; board/run/cadence remain unchanged; only next-intent retention changes; a shared planned destination is not secretly replaced with another direction; rest remains `Wait`.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.EnemyBatchTests.BatchPlanning_UsesOneBoardState`, using a fixed multi-enemy board and expected intent payloads.
+
+**Save and compatibility impact:** None; retained plans remain board-local as in M3.7.
+
+**Required handoff:** Before/after board and cadence values, per-ID planned intents, and confirmation that no executor is called.
+
+---
+
+## `M3.8.3` - Serial execution of nonconflicting intents
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10.2 and 11.2.
+
+**Rationale:** Ordered dispatch should be proven before adding any contested-cell or dependency-chain behavior.
+
+**Current behavior:** A single-enemy executor exists, but no accepted batch path sequences its calls and their event output.
+
+**Expected outcome:** A fixed nonconflicting batch executes each retained intent once in ascending initiative and appends each actor's event block in that order.
+
+**Scope:** Add a thin batch executor over the existing ordering and single-enemy executor. Validate the batch structure before dispatch, then preserve each actor's local event order. Use only disjoint legal movement/wait fixtures in this foundation; later children prove conflict and attack cases before integration.
+
+**Non-goals:** No planner calls, conflict policy choice, new event type, duplicate action cost, terminal-controller rewrite, parallel dispatch, or production binding.
+
+**Dependencies:** `M3.8.1`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/EnemyBatchExecutor.cs`; existing `Assets/Tests/EditMode/EnemyBatchTests.cs`.
+
+**Acceptance criteria:** Every live fixture actor consumes one retained intent/cadence step, not zero or two; source and destination indexes match expected positions; events are grouped by ascending actor ID without altering their internal order; no player turn/resource cost is added.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.EnemyBatchTests.BatchExecution_NonconflictingIntentsExecuteOnce`, with disjoint moves and planned waits.
+
+**Save and compatibility impact:** None; batch dispatch uses existing authoritative state only.
+
+**Required handoff:** A short ID -> action -> event trace and confirmation that this isolated foundation is not yet the accepted conflict resolver.
+
+---
+
+## `M3.8.4` - One winner for a contested destination
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 11.2.
+
+**Rationale:** Several locked movements into one free cell must have one deterministic winner, not one winner per input ordering.
+
+**Current behavior:** Serial dispatch is accepted for disjoint cells; shared destinations need their own verified outcome.
+
+**Expected outcome:** The first legal movement in initiative order enters an initially free contested cell; every later movement contender waits and stays at its source.
+
+**Scope:** Extend or verify the existing executor's same-destination branch. Reuse authoritative occupancy; add phase-local reservations only if needed by the accepted APIs. A failed or invalid earlier candidate must not reserve a cell. Consume each losing live actor's opportunity as `Wait` through the existing M3.7 operation, without overwriting its locked target.
+
+**Non-goals:** No chain/vacated-cell choice, swap solver, attack-target reservation, replanning, another movement choice, persistent reservation state, or executor API redesign.
+
+**Dependencies:** `M3.8.3`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/EnemyBatchExecutor.cs`; existing `Assets/Tests/EditMode/EnemyBatchTests.cs`.
+
+**Acceptance criteria:** Exactly one legal winner occupies the initially free cell; losers remain at source, emit the existing wait outcome, and advance cadence once; an invalid earlier contender does not block a later legal one; reservations cannot leak into another execution call. If accepted dispatch/occupancy already enforces this behavior, a focused test-only diff is sufficient.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.EnemyBatchTests.ContestedDestination_FirstLegalMoveWins`, parameterized for 2-4 orthogonally adjacent contenders, a fifth unrelated actor, and a nonwinning earlier candidate. Do not invent a fifth legal adjacent source cell.
+
+**Save and compatibility impact:** None; reservations, if used, last only for the current enemy phase.
+
+**Required handoff:** Initiative order, contender legality, winning ID, loser wait/cadence values, and proof of fresh next-phase behavior.
+
+---
+
+## `M3.8.5` - Explicit swap prevention
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 11.2.
+
+**Rationale:** A pair targeting each other's source cells must not bypass actor occupancy or turn into an accidental simultaneous exchange.
+
+**Current behavior:** Initially free contested cells are covered; reciprocal occupied destinations need a separate acceptance case.
+
+**Expected outcome:** Two retained reciprocal moves cannot exchange positions, whichever actor has higher initiative.
+
+**Scope:** Extend or verify swap blocking in the existing batch executor using fixed source/destination pairs. Both live actors resolve as `Wait`, consuming their opportunity once. Reuse current actor occupancy rather than implementing simultaneous movement or a general graph solver. Build an explicit locked-intent fixture; do not weaken the M3.7 planner to make it plan into another enemy's occupied cell.
+
+**Non-goals:** No chain propagation, arbitrary cycle optimizer, future-cell reservation strategy, conditional attacks against other enemies, or production binding.
+
+**Dependencies:** `M3.8.4`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/EnemyBatchExecutor.cs`; existing `Assets/Tests/EditMode/EnemyBatchTests.cs`.
+
+**Acceptance criteria:** Both source positions and occupancy indexes are unchanged; both actors wait once without replanning; both initiative assignments and input orders have the same no-swap result. Existing correct occupancy may make this a test-only change.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.EnemyBatchTests.Swap_IsBlockedForBothInitiativeOrders`, with swapped ID assignments and reversed input lists.
+
+**Save and compatibility impact:** None; no extra state is persisted.
+
+**Required handoff:** The two-cell fixture, both relative ID assignments, and ordered wait/cadence evidence.
+
+---
+
+## `M3.8.6` - Approved occupancy policy for movement chains
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 11.2 and the owner-approved chain occupancy decision required by the umbrella.
+
+**Rationale:** The Developer must not infer whether following into a freshly vacated cell is legal from whichever data structure is easiest to implement.
+
+**Current behavior:** Single destinations and swaps are covered; the contract has not yet selected phase-start versus live occupancy for following chains.
+
+**Expected outcome:** A short chain uses exactly the separately approved occupancy policy in both initiative orders, with no implicit cascade or replanning.
+
+**Scope:** Extend only the existing executor's chain occupancy decision. The Lead supplies an accepted decision reference and explicit examples before assignment: A targets B's source, B targets a free cell; and the same chain with B unable to move. Seal expected positions/waits for both initiative orders rather than asking the Developer to choose them. Use explicit retained-intent fixtures to exercise execution-time occupancy; do not change the accepted planner's rule against planning into occupied enemy cells.
+
+**Non-goals:** No owner decision inside implementation, group pathfinding, chain reaction, parallel commit, hidden replan, or modification of `BoardState`/the single-enemy planner.
+
+**Dependencies:** `M3.8.5`; accepted owner decision recorded before this child becomes `Ready`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/EnemyBatchExecutor.cs`; existing `Assets/Tests/EditMode/EnemyBatchTests.cs`.
+
+**Acceptance criteria:** A 2-3 actor chain matches the approved expected positions/events for both ID orderings; a blocked leading actor does not cause illegal overlap or invented movement; every executed live actor consumes cadence once. Any occupancy snapshot/reservation remains local to the phase, and the no-swap behavior remains intact.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.EnemyBatchTests.MovementChain_UsesApprovedOccupancyPolicy`, with Lead-supplied expected results, not implementation-derived expectations.
+
+**Save and compatibility impact:** None; no snapshot or reservation is saved.
+
+**Required handoff:** Accepted decision reference and chain table: starting occupancy -> initiative -> expected final cells/waits -> observed result.
+
+---
+
+## `M3.8.7` - Removed actors do not participate
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11.1, 11.2, and 11.3.1.
+
+**Rationale:** A retained intent can outlive its source actor; it must not reserve space or stop valid actors from executing.
+
+**Current behavior:** Conflict cases use live actors. A source removed after planning needs a focused batch regression.
+
+**Expected outcome:** A removed enemy cannot move, attack, or reserve its intended destination, while remaining live actors continue in initiative order.
+
+**Scope:** Extend or verify stale-source handling in the existing executor. Remove the source in the in-memory fixture after intent retention, before dispatch; preserve the single-enemy stale-source contract and do not manufacture a replacement actor.
+
+**Non-goals:** No entity lifecycle feature, ID reassignment, cleanup of production objects, save migration, new terminal policy, or additional planner call.
+
+**Dependencies:** `M3.8.6`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/EnemyBatchExecutor.cs`; existing `Assets/Tests/EditMode/EnemyBatchTests.cs`.
+
+**Acceptance criteria:** Removed sources cause no board/run effect or successful action event; they reserve no cell; a later legal actor can still enter an initially free shared destination; surviving actors retain ordered events and one consumption each. An already correct stale-source branch may be verified by a test-only diff.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.EnemyBatchTests.RemovedActor_DoesNotActOrReserve`, covering retained move/attack from a removed source and a surviving contender.
+
+**Save and compatibility impact:** None; tests use isolated board/run state and no real profile directory.
+
+**Required handoff:** Removed source ID, retained intent, actual live actor IDs, absence of stale effects/reservations, and surviving actor results.
+
+---
+
+## `M3.8.8` - Preserve Shambler attack outcomes in a batch
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11.2 and 11.3.1.
+
+**Rationale:** Movement conflict handling must not suppress fixed-cell attacks or reinterpret the explicit player-entry condition as a new plan.
+
+**Current behavior:** M3.7 accepts hits, fixed-cell misses, conditional attacks, and rest in isolation; batch dispatch must preserve those branches.
+
+**Expected outcome:** A multi-enemy phase retains the same per-source hit, miss, conditional attack, or rest outcome as the accepted single-enemy rules, with event blocks in initiative order.
+
+**Scope:** Extend or verify dispatch of the accepted attack outcomes through the existing executor. Reuse existing damage/event APIs; reserve only actual movement destinations, not attacks on the player's occupied cell. Keep fixtures nonlethal so this child does not introduce a death-timing policy.
+
+**Non-goals:** No attack redesign, new balance, new event contract, retargeting, friendly fire, attack during rest, per-enemy terminal short-circuit, UI, or production wiring.
+
+**Dependencies:** `M3.8.7`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/EnemyBatchExecutor.cs`; existing `Assets/Tests/EditMode/EnemyBatchTests.cs`.
+
+**Acceptance criteria:** Both 10/20 variants preserve actual health change and fixed event cell; escaped players yield zero-damage misses; player entry on the locked movement destination yields one attack without movement; another enemy remains a blocker; rest never attacks. Attack outcomes do not claim a free movement reservation, add a turn/cost, or invoke planning; each executed actor advances cadence once.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.EnemyBatchTests.BatchAttacks_PreserveLockedOutcomes`, using small nonlethal multi-enemy fixtures for each existing outcome.
+
+**Save and compatibility impact:** None; health/cadence retain their accepted owners.
+
+**Required handoff:** Per-ID locked action/condition -> actual event and health change -> next cadence, plus confirmation that no new attack/terminal policy was chosen.
+
+---
+
+## `M3.8.9` - Bind accepted batches to existing turn phases
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10.2 and 11.2.
+
+**Rationale:** Phase integration should compose already verified operations rather than implement conflict rules inside the controller.
+
+**Current behavior:** M3.8.2 and M3.8.8 provide independently accepted planning/execution paths; the controller has reusable phase hooks.
+
+**Expected outcome:** One isolated controller executes one retained enemy batch in phase 5 and plans one next batch in phase 8 only when the existing controller permits it.
+
+**Scope:** Add a thin adapter that exposes the existing `TurnPhaseHandlers` delegates and initial batch planning before first input. Reuse the accepted batch planner/executor unchanged. Compose the adapter in tests only; preserve the controller's environment/terminal order, existing phase-7 death check, and single-enemy APIs.
+
+**Non-goals:** No conflict implementation, new state store, change to `TurnController`/`TurnPhaseHandlers`, per-enemy death-timing decision, new command type, production `GameManager`/runtime wiring, UI, or legacy removal.
+
+**Dependencies:** `M3.8.2`, `M3.8.8`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/EnemyBatchTurnPhases.cs`; existing `Assets/Tests/EditMode/TurnControllerTests.cs`.
+
+**Acceptance criteria:** Initial intents exist before input; an accepted nonterminal command executes the old batch once, then plans the next batch in the existing phase order; rejected commands preserve all intents/cadence; exit/starvation before phase 5 skip the batch; a lethal enemy phase prevents phase-8 planning through the existing terminal check. One player cost remains one cost; integration never reorders events or activates production enemies.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.TurnControllerTests.EnemyBatchPhases_RespectControllerBoundaries`, parameterized for accepted, rejected, early-terminal, and lethal-enemy outcomes.
+
+**Save and compatibility impact:** None; fresh board-local batch state is composed in memory, with no profile access.
+
+**Required handoff:** Initial/accepted/rejected/terminal phase traces and exact reusable API references. Record production composition and intent presentation as remaining work, not delivered functionality.
+
+---
+
+## `M3.8.10` - Input permutation regression
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 11.2.
+
+**Rationale:** A final bounded regression must detect an input-order dependency that isolated conflict examples can miss.
+
+**Current behavior:** All batch branches and phase integration are accepted; permutation invariance needs one explicit cross-case acceptance check.
+
+**Expected outcome:** Fixed batches of 2, 3, 4, and 5 enemies yield the same expected authoritative values and ordered event payloads for every permutation of their input collection.
+
+**Scope:** Add one parameterized test method to the existing batch fixture. Reuse the accepted fixture helpers and batch APIs; recreate independent board/run/enemy states per permutation. Cover contested destination, no-swap, the approved chain case, and stale-source behavior across the four small fixtures. Compare final per-ID positions/cadence, health, and typed event payloads with explicit expected values, not only with the first permutation.
+
+**Non-goals:** No production source edits, repairs of failed executor behavior, additional test file, fuzzing framework, canonical hash/replay implementation, performance benchmark, or broad refactor.
+
+**Dependencies:** `M3.8.9`.
+
+**Allowed file area:** Existing `Assets/Tests/EditMode/EnemyBatchTests.cs` only.
+
+**Acceptance criteria:** All permutations of each 2-5 actor fixture pass; winner, waits, source/destination indexes, health, cadence, and event order/payload match the expected contract. Fresh per-permutation state prevents reservation or consumed-intent leakage. Test output identifies the fixture and ID permutation on failure.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.EnemyBatchTests.InputPermutations_PreserveOutcomesAndOrderedEvents`; require parameterized evidence for all four actor counts, with no skips or zero-test pass.
+
+**Save and compatibility impact:** None; isolated in-memory regression only.
+
+**Required handoff:** Actor counts, permutations exercised, expected conflict outcomes, exact test results, and reproducible failing IDs if any. A regression failure is not permission to widen this test-only delegation into implementation repair.
 
 ---
 
@@ -1994,6 +2760,8 @@ Validation: baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e
 
 **Oczekiwany rezultat:** Każdy zombie pokazuje ikonę/kształt i cel `Move`, `Attack`, `Investigate` lub `Wait`; UI odświeża się wyłącznie po fazie planowania.
 
+**Accepted Shambler condition:** Before command submission, display the locked movement destination together with its attack-on-player-entry condition from [GameDesignContract section 11.3.1](GameDesignContract.md#1131-accepted-shambler-rule). The symbol must distinguish conditional movement, a planned attack, and rest without relying only on color. Preserve the announced target and replay a fixed-cell missed attack rather than hiding it as another plan.
+
 **Zakres:** Presenter intentów, symbole, dostępna legenda, synchronizacja z eventami i testy mapowania.
 
 **Non-goals:** Bez finalnego artu, przewidywania wielu tur, pokazywania ukrytych przyszłych losowań i tutorialu tekstowego dla całej gry.
@@ -2005,6 +2773,8 @@ Validation: baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e
 **Kryteria akceptacji:** Wszystkie wspierane intenty są rozróżnialne bez samego koloru; cel jest jednoznaczny; UI nie zmienia intentu; zablokowany intent nie „przeskakuje” po ruchu gracza.
 
 **Plan testów:** PlayMode mapowania model→symbol i lifecycle; ręczny test z wyłączonymi animacjami oraz krótki blind prediction test.
+
+**Conditional-intent validation:** Include pre-input mapping for the movement/attack condition, same-cell entry -> attack without movement, different-cell entry -> no retarget, planned attack -> fixed-cell miss, and rest despite adjacency. The player must be able to predict these outcomes before committing the command; presentation does not decide them.
 
 **Wpływ na save i kompatybilność:** Brak; UI jest odtwarzane ze stanu planszy.
 
@@ -3557,12 +4327,12 @@ O-002, O-003, O-004, O-005, O-006, O-007, O-008, and O-009 are resolved in `Game
 
 # Kolejka wykonawcza
 
-M0, M1, and M2 are complete; M3.1–M3.6.2 are `Done`; the M3.6 umbrella is split into three executable children; `M3.6.3` is next; and no card is currently `Active`. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. M3.6.1 was implemented from the clean baseline `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. M3.6.2 was implemented from the clean baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e64f7ebaea81e015`. Every new child still begins with its normal clean-worktree preflight.
+M0, M1, and M2 are complete; M3.1–M3.6.2 are `Done`; the M3.6 umbrella is split into three executable children; `M3.6.3` is `Active`, with its production implementation and automated gates complete, no material code defects reported by independent review, and final acceptance `BLOCKED` by the missing manual PC smoke. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. M3.6.1 was implemented from the clean baseline `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. M3.6.2 was implemented from the clean baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e64f7ebaea81e015`. M3.6.3 uses `M3/ProductionCutover` at `af030818d5de705968e26907139c435bc26ecd86`. Every new child still begins with its normal clean-worktree preflight.
 
 The next safe sequence is:
 
-1. execute and independently review `M3.6.3`;
-2. continue `M3.7`–`M3.10` through their normal reviews;
+1. complete the outstanding manual PC smoke and final independent acceptance for `M3.6.3`;
+2. use the accepted Shambler rule in contract section 11.3.1, verify the remaining M3.7 readiness prerequisites, and execute `M3.7.1` through `M3.7.8`, then `M3.7.11`, `M3.7.9`, and `M3.7.10` as separate delegations; after M3.7 acceptance, execute `M3.8.1` through `M3.8.10` separately, resolving the chain-occupancy decision before M3.8.6; accept M3.8 before continuing M3.9/M3.10;
 3. execute `M3.11` and `M3.12` before M4 so generation, replay, atlas observations, and tool sources share stable route-segment identity;
 4. complete the no-backpack vertical slice through `M7.8`, then make the explicit M9 verdict;
 5. keep M9 deferred and last unless the owner explicitly changes that order.
@@ -3571,7 +4341,7 @@ The next safe sequence is:
 
 ### Rationale — why M3.6.3 is next
 
-The accepted M3.6.1 runtime binds each generated board to authoritative `BoardState`, a stable board-local player ID, one controller, and a read-only view registry. Accepted M3.6.2 now proves reusable command submission, gating, ordered replay, and controlled recovery in isolation. M3.6.3 must bind that path to production and remove the legacy mutation sources before the M3.6 umbrella is complete. M3.11/M3.12 and M9 can reuse the completed M3.6 boundary, while inserting route identity before M4 prevents generator-era rework.
+The accepted M3.6.1 runtime binds each generated board to authoritative `BoardState`, a stable board-local player ID, one controller, and a read-only view registry. Accepted M3.6.2 proves reusable command submission, gating, ordered replay, and controlled recovery in isolation. M3.6.3 now binds that path to production and removes the legacy mutation sources, but the required manual PC smoke still blocks final acceptance and completion of the M3.6 umbrella. M3.11/M3.12 and M9 can reuse the completed M3.6 boundary, while inserting route identity before M4 prevents generator-era rework.
 
 # Zasada aktualizacji roadmapy
 

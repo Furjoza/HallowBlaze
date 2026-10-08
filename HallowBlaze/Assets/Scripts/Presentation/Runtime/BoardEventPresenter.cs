@@ -29,7 +29,7 @@ namespace HallowBlaze.Presentation.Runtime
         void ShowEvent(GameEvent gameEvent);
     }
 
-    /// <summary>The injectable guarded lifecycle boundary; production BoardOutcome binding belongs to M3.6.3.</summary>
+    /// <summary>The injectable guarded lifecycle boundary for ordered terminal events.</summary>
     public interface IBoardOutcomeSink
     {
         /// <summary>
@@ -57,7 +57,7 @@ namespace HallowBlaze.Presentation.Runtime
         /// <param name="runtime">The active runtime; this presenter borrows rather than disposes it.</param>
         /// <param name="hud">Authoritative-value HUD sink.</param>
         /// <param name="feedback">Rejection and informational feedback sink.</param>
-        /// <param name="outcomes">Guarded lifecycle sink, unbound to production in this child.</param>
+        /// <param name="outcomes">Guarded lifecycle sink for the active board.</param>
         /// <param name="diagnostic">Mandatory failure sink for unknown events and controlled faults.</param>
         /// <param name="moveDuration">Finite nonnegative movement duration in unscaled seconds.</param>
         public BoardEventPresenter(BoardRuntime runtime, IRunHud hud, ITurnFeedback feedback,
@@ -76,7 +76,7 @@ namespace HallowBlaze.Presentation.Runtime
             Dispatcher.Register<EntityWaitedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<InteractionPerformedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<ItemCollectedEvent>((gameEvent, token) => HideItem(gameEvent));
-            Dispatcher.Register<FoodRestoredEvent>((gameEvent, token) => RefreshHud());
+            Dispatcher.Register<FoodRestoredEvent>((gameEvent, token) => RefreshFood(gameEvent));
             Dispatcher.Register<ActionCostAppliedEvent>((gameEvent, token) => RefreshHud());
             Dispatcher.Register<ExitReachedEvent>((gameEvent, token) => NotifyOutcome(gameEvent));
             Dispatcher.Register<PlayerStarvedEvent>((gameEvent, token) => NotifyOutcome(gameEvent));
@@ -145,6 +145,14 @@ namespace HallowBlaze.Presentation.Runtime
             view.transform.position = target;
             if (!runtime.BoardState.TryGetEntity(gameEvent.EntityId, out entity) || !entity.Position.Equals(gameEvent.To))
                 throw new InvalidOperationException("Authoritative position changed during presentation: " + gameEvent.EntityId);
+            feedback.ShowEvent(gameEvent);
+        }
+
+        private Task RefreshFood(FoodRestoredEvent gameEvent)
+        {
+            RefreshHud();
+            feedback.ShowEvent(gameEvent);
+            return Task.CompletedTask;
         }
 
         private Task HideItem(ItemCollectedEvent gameEvent)

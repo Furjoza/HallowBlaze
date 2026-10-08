@@ -62,7 +62,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(immediate.FoodView.activeSelf, Is.False);
             Assert.That(animated.Runtime.RunState.Food, Is.EqualTo(immediate.Runtime.RunState.Food));
             CollectionAssert.AreEqual(animated.Sink.Trace, immediate.Sink.Trace);
-            CollectionAssert.AreEqual(new[] { "Hud:100:109", "Hud:100:109" }, animated.Sink.Trace);
+            CollectionAssert.AreEqual(new[] { "EntityMoved", "Hud:100:109", "FoodRestored", "Hud:100:109" }, animated.Sink.Trace);
             Assert.That(animated.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
             Assert.That(immediate.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
             Assert.That(animated.Presenter.Coordinator.CanSubmit, Is.True);
