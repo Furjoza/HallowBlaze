@@ -1,7 +1,7 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6 and M3.7.1-M3.7.3 accepted; M3.7.4 next; route-leg amendments accepted; M9 deferred**
-> Data ostatniej weryfikacji: 2026-10-08
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6 and M3.7.1-M3.7.4 accepted; M3.7.5 next; route-leg amendments accepted; M9 deferred**
+> Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
 > Zasady pracy agentów: [`../AGENTS.md`](../AGENTS.md)
@@ -2244,7 +2244,7 @@ Independent read-only `reviewer` returned PASS without a runtime model override.
 
 ## `M3.7.4` - Deterministic pursuit planner
 
-**Status:** `Planned`
+**Status:** `Done` - direct Lead implementation accepted 2026-10-09 after focused Unity validation (51/51) and independent `reviewer` PASS.
 **Priority:** P0
 **Related contract:** sections 11.1 and 11.3.
 
@@ -2269,6 +2269,29 @@ Independent read-only `reviewer` returned PASS without a runtime model override.
 **Save and compatibility impact:** No schema change; the planner neither loads nor writes save data.
 
 **Required handoff:** The one-sentence AI rule and complete tie-break examples with expected intent payloads.
+
+### Acceptance (2026-10-09)
+
+On an eligible opportunity, Shambler attacks a legally reachable orthogonal neighbor, otherwise takes one step along a shortest legal route using North -> East -> West -> South ties, or waits if unreachable.
+
+[ShamblerPlanner.cs](../Assets/Scripts/Core/Turns/Resolution/ShamblerPlanner.cs) performs read-only BFS using authoritative bounds, walkable terrain, obstacle traits, and actor occupancy. The player is a terminal target, never a movement destination; items do not block. Missing or incorrectly classified actors produce wait, null dependencies fail explicitly, and integer-coordinate limits do not overflow. Planning neither consumes cadence nor replaces a locked intent and has no run, save, Unity, or RNG dependency. Cadence eligibility remains M3.7.5; production enemies remain inert.
+
+Complete equal-first-step examples from enemy cell `(3,3)`, with walkable terrain and no other blockers:
+
+| Equal alternatives | Player cell | Impassable obstacle | Move target cell |
+| --- | --- | --- | --- |
+| North / East | `(4,4)` | none | `(3,4)` |
+| North / West | `(2,4)` | none | `(3,4)` |
+| North / South | `(5,3)` | `(4,3)` | `(3,4)` |
+| East / West | `(3,5)` | `(3,4)` | `(4,3)` |
+| East / South | `(4,2)` | none | `(4,3)` |
+| West / South | `(2,2)` | none | `(2,3)` |
+
+Each table payload has `ActorId = 0`, `Kind = Move`, `TargetId = -1`, the listed fixed `TargetPosition`, and `AttackOnPlayerEntry = true`. A legal player at `(3,4)` instead yields `Attack` with the same IDs, target `(3,4)`, and no entry condition. An unreachable player yields `Wait` with actor `0`, no target cell/identity, and no condition. Shorter routes take precedence over direction priority.
+
+Lead-owned Unity `6000.3.21f1` compilation and EditMode filter `HallowBlaze.Tests.EditMode.ShamblerPlannerTests` passed: fresh external XML confirms **51/51 passed**, zero failed, skipped, inconclusive, or foreign-fixture cases. [ShamblerPlannerTests.cs](../Assets/Tests/EditMode/ShamblerPlannerTests.cs) covers directions, all six tie pairs, shortest detours, layer legality, disconnected regions, full-board pursuit, bounds, insertion order, and unchanged board/enemy state. Changed-file diagnostics, whitespace, and closed-scope checks passed; independent read-only `reviewer` returned **PASS** without a runtime model override. No provider attribution is claimed. Full-suite and PlayMode checks were not run for this isolated pure-domain addition.
+
+Baseline Git root `D:/Repos/HallowBlaze`, branch `M3/DeterministicPursuitPlanner`, and `HEAD` `8b50d7c54a27d45122083f92beae709ea7f84c0f` remain unchanged. Changes are limited to the planner, its fixture, their Unity-generated metadata, and this roadmap closeout; no commit, staging, settings, package, assembly, scene/prefab, persistence, or protected-configuration change is included. M3.7.5 is next; M3.7 remains `Planned` until all eleven children are accepted.
 
 ---
 
