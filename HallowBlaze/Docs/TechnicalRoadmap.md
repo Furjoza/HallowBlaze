@@ -2748,114 +2748,1949 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ---
 
-## `M3.9` — Czytelne UI intentów
+## `M3.9` - Readable locked-intent presentation (tracking umbrella)
 
-**Status:** `Planned`  
-**Priorytet:** P0  
-**Powiązany kontrakt:** sekcje 11, 18 i bramka intentów w sekcji 22.
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10.2, 11, 18, 21.2, and the intent gate in section 22; [accepted Shambler rule](GameDesignContract.md#1131-accepted-shambler-rule).
 
-**Rationale:** Deterministyczny intent ma wartość tylko wtedy, gdy gracz potrafi go odczytać przed decyzją. Informacja nie może zależeć wyłącznie od krótkiej animacji lub koloru.
+**Rationale:** Intent projection, drawing, replay timing, board lifetime, production binding, and human readability are different acceptance problems. A symbol assignment must not also require inventing AI, changing turn ownership, migrating legacy enemies, and running a playtest.
 
-**Obecne zachowanie:** Przeciwnicy wykonują ruch, ale nie pokazują zablokowanego planu w spójnym języku UI.
+**Current behavior:** `BoardEventPresenter` already registers exact-type ordered handlers and recovers views/HUD from authoritative state. There is no locked-intent projection, symbol renderer, or legend. The current `BoardRuntime` constructs its controller without enemy phase hooks, and legacy enemy content remains intentionally disabled; isolated M3.7/M3.8 acceptance does not itself deliver production enemy composition.
 
-**Oczekiwany rezultat:** Każdy zombie pokazuje ikonę/kształt i cel `Move`, `Attack`, `Investigate` lub `Wait`; UI odświeża się wyłącznie po fazie planowania.
+**Expected outcome:** Each active enemy visibly identifies its retained action and fixed target before input. `Move`, conditional `Move`, `Attack`, `Investigate`, and `Wait` have distinct non-color-only symbols. The next plan becomes visible only after its planning and preceding replay are complete. A missed attack remains visible at the announced cell. `Investigate` presentation support does not introduce Listener behavior before its owning ticket.
 
-**Accepted Shambler condition:** Before command submission, display the locked movement destination together with its attack-on-player-entry condition from [GameDesignContract section 11.3.1](GameDesignContract.md#1131-accepted-shambler-rule). The symbol must distinguish conditional movement, a planned attack, and rest without relying only on color. Preserve the announced target and replay a fixed-cell missed attack rather than hiding it as another plan.
+**Scope:** Execute the children below separately: read-only projection, prototype symbols and targets, shared-cell identity, explicit publication/lifetime, attack replay, legend, one replay-completion hook, presentation integration, production UI binding, regression, and the Lead-owned readability gate.
 
-**Zakres:** Presenter intentów, symbole, dostępna legenda, synchronizacja z eventami i testy mapowania.
+**Delegation readiness:** Before each implementation child, the Lead supplies one observable effect, the closed file scope, actual accepted M3.7/M3.8 API references, one nearby test/helper, small input -> visible output examples, and the single filter below. Proposed names are not permission to duplicate an equivalent existing operation. Use the existing Presentation Runtime assembly and Unity Test Framework. If a required API, asset, or ownership decision is missing, stop and define a separate bounded prerequisite rather than expanding the child.
 
-**Non-goals:** Bez finalnego artu, przewidywania wielu tur, pokazywania ukrytych przyszłych losowań i tutorialu tekstowego dla całej gry.
+**Production readiness boundary:** Before M3.9.11 becomes `Ready`, separately accepted production composition must provide stable board-local enemy IDs, the approved 10/20 Shambler definitions/states, the accepted batch phase hooks on the runtime's sole controller, initial plans before input, and read-only access to retained plans for the active runtime. The Lead must name that accepted prerequisite and its evidence. The M3.9.11 fixture must use that boundary, not replace a private controller through reflection or introduce a second resolver. These UI children do not authorize changes to `BoardRuntime`, `LegacyBoardRuntimeComposer`, `LegacyBoardLayout`, `BoardManager`, or `Enemy.cs` to fill this gap. M3.9 cannot be accepted with only a synthetic fixture or with production enemies still disabled.
 
-**Zależności:** `M3.8` i `M3.6`.
+**Visual readiness:** The Lead supplies a small prototype symbol sheet, target/source association examples, fixed marker sizes and sorting/depth conventions, and exact existing asset references if needed. The renderer can use simple runtime-owned prototype geometry; no asset generation, prefab/scene mutation, final art, or new package is bundled into drawing. Any required serialized asset work needs its own explicit file allowlist and Unity-aware validation.
 
-**Dozwolony obszar plików:** Presentation/Enemies/UI, prefaby i sceny jawnie wymienione, testy PlayMode.
+**Non-goals:** No AI/noise/cadence/conflict changes, production enemy activation or legacy migration, new domain intent/event, gameplay prediction, multi-turn previews, hidden future randomness, replay/hash framework, final VFX, broad tutorial, new assembly, package/settings change, or persistence work. Presentation never calls a planner, resolves a command again, or mutates board/run/enemy state.
 
-**Kryteria akceptacji:** Wszystkie wspierane intenty są rozróżnialne bez samego koloru; cel jest jednoznaczny; UI nie zmienia intentu; zablokowany intent nie „przeskakuje” po ruchu gracza.
+**Dependencies:** Full acceptance of `M3.8` and `M3.6`; the explicit production prerequisite before M3.9.11. An umbrella dependency requires all its children, not partial acceptance.
 
-**Plan testów:** PlayMode mapowania model→symbol i lifecycle; ręczny test z wyłączonymi animacjami oraz krótki blind prediction test.
+**Allowed file area:** The exact source/test paths named by M3.9.1-M3.9.13 and the single Lead-owned report in M3.9.14. They are individual allowlists, not permission to edit the full directory. Unity-generated `.meta` companions must be recorded and inspected; never invent GUIDs or replace existing metadata.
 
-**Conditional-intent validation:** Include pre-input mapping for the movement/attack condition, same-cell entry -> attack without movement, different-cell entry -> no retarget, planned attack -> fixed-cell miss, and rest despite adjacency. The player must be able to predict these outcomes before committing the command; presentation does not decide them.
+**Execution order:** Accept M3.9.1 through M3.9.10 as separate delegations, resolve the production prerequisite before M3.9.11, then accept M3.9.11 through M3.9.13 separately. The Lead performs M3.9.14 after automated gates pass. One writer at a time; independent prerequisites do not authorize simultaneous writers.
 
-**Wpływ na save i kompatybilność:** Brak; UI jest odtwarzane ze stanu planszy.
+**Acceptance criteria:** Every implemented action and the declared player-entry condition remain readable without color or animation; targets and source associations are unambiguous, including shared destinations. Rejection does not refresh/replan; replay does not expose next intents early; terminal/replaced boards cannot publish stale markers. Fixed-cell misses are shown without following the player. Production has visible initial intents before input and a working legend. All fourteen children are independently accepted, including the human gate; screenshots or enum assertions alone do not prove readability.
 
-**Wymagany handoff:** Screenshot każdego intentu i odsetek poprawnych przewidywań z testu jakościowego.
+**Test plan:** Use each child's one focused EditMode/PlayMode filter. Reuse `EnemyIntentProjectionTests`, `EnemyIntentPresentationTests`, and the existing pipeline/ordered/startup fixtures rather than adding a fixture per behavior. Finish with animation-on/off regression and the contract's manual blind-prediction gate. The filters below are planned checks, not claims that tests exist or have passed.
 
----
+**Save and compatibility impact:** None; display snapshots are disposable presentation data, never a second gameplay owner or save DTO. No profile directory is used by these tests.
 
-## `M3.10` — Replay komend i hash deterministyczności
-
-**Status:** `Planned`  
-**Priorytet:** P0  
-**Powiązany kontrakt:** sekcje 16, 21.2 i 22.
-
-**Rationale:** Seed bez historii komend nie odtwarza decyzji, a screenshot nie wyjaśnia rozbieżności modelu. Lekki replay jest narzędziem debugowania i fundamentem solvera, nie funkcją dla gracza.
-
-**Obecne zachowanie:** Błędu tury nie można jednoznacznie odtworzyć z małego zestawu danych.
-
-**Oczekiwany rezultat:** Testowy recorder zapisuje wersję zasad, seed, board blueprint i komendy; replay daje stabilny hash kanonicznego stanu po każdej turze. Commands use an explicitly versioned tagged representation, and unknown tags fail with a diagnostic instead of being ignored.
-
-**Zakres:** Kanoniczna serializacja do testów/debugu, state hash, runner replay i raport pierwszej rozbieżności. Document the extension rule: every new authoritative gameplay field or command type must update the replay-rules version, canonical hash coverage, and focused tests in its owning ticket.
-
-**Non-goals:** Bez publicznego formatu replay, synchronizacji sieciowej, anty-cheatu, nagrywania animacji i kompatybilności między dowolnymi wersjami gry.
-
-**Zależności:** `M3.1`–`M3.9`.
-
-**Dozwolony obszar plików:** Core Diagnostics/Turns, testy i ignorowany katalog wyników.
-
-**Kryteria akceptacji:** Dwa uruchomienia tych samych danych mają identyczne hashe; zmiana komendy daje kontrolowany różnicę; hash nie zależy od kolejności słowników, Transform ani czasu; unknown command tags fail explicitly; a contract test fails when a registered authoritative state contributor is omitted from hashing.
-
-**Plan testów:** EditMode powtarzalności, permutacji kolekcji i raportu divergence; PlayMode porównania modelu z końcową prezentacją.
-
-**Wpływ na save i kompatybilność:** Replay jest artefaktem diagnostycznym i nie zastępuje save. Zawiera własny jawny numer wersji.
-
-**Wymagany handoff:** Minimalny zredagowany przykład replay i hashów; lokalizacja artefaktów oraz potwierdzenie, że są ignorowane.
+**Required handoff:** Link each child's validation/review evidence, retained plan -> symbol/target examples, publication/recovery traces, the accepted production prerequisite, and the readability report with screenshots and prediction counts. Do not mark this umbrella `Done` while the production binding or human gate is blocked.
 
 ---
 
-## `M3.11` — Route-leg state and stable board address
+## `M3.9.1` - Project a retained intent without computing behavior
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11.1, 11.3.1, 18, and 21.2.
+
+**Rationale:** The renderer needs a small read-only input, not access to a planner or mutable enemy state.
+
+**Current behavior:** Accepted M3.7/M3.8 APIs retain intents; there is no detached display projection.
+
+**Expected outcome:** One retained intent maps to immutable source ID/cell, action symbol, exact target when present, and the explicit player-entry condition.
+
+**Scope:** Add the projection value and mapping operation in one source file. Copy accepted intent fields and a supplied authoritative source cell; do not infer a new target from player position, pathfinding, occupancy, or a Transform. Include distinct `Move`, conditional `Move`, `Attack`, `Wait`, and an `Investigate` presentation key. Map `Investigate` from the domain only if the accepted intent contract already supports it; otherwise retain a presentation-only example for future Listener binding. Unsupported domain values fail explicitly rather than becoming `Wait`.
+
+**Non-goals:** No renderer, batch owner, planner call, domain contract expansion, Listener/noise implementation, production wiring, or persistence.
+
+**Dependencies:** `M3.8`, `M3.6`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Presentation/Runtime/EnemyIntentProjection.cs`; proposed `Assets/Tests/EditMode/EnemyIntentProjectionTests.cs`.
+
+**Acceptance criteria:** Source identity, recorded cell/target identity, and condition survive projection unchanged; a rest intent has no invented attack target. Repeated projection is equal and does not advance cadence or mutate any input. Later input/state changes cannot rewrite an already projected value. Invalid/unsupported input has a tested explicit failure.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.EnemyIntentProjectionTests.RetainedIntent_ProjectsWithoutMutation`, parameterized over accepted actions/conditions and invalid input.
+
+**Save and compatibility impact:** None; the value is presentation-only and recreated from retained plans.
+
+**Required handoff:** Mapping table, actual accepted intent API reference, invalid-input behavior, and the boundary between current domain support and future `Investigate` binding.
+
+---
+
+## `M3.9.2` - Draw distinct persistent action symbols
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11.3.1 and 18.
+
+**Rationale:** Different enum values are not evidence that the player sees different symbols.
+
+**Current behavior:** M3.9.1 supplies projection data; no visible action glyph consumes it.
+
+**Expected outcome:** A single view renders five distinguishable prototype states: ordinary movement, conditional movement, attack, investigation, and wait.
+
+**Scope:** Add one runtime-owned symbol view using the Lead's supplied prototype sheet and reusable project rendering conventions. Encode meaning in shape and a persistent conditional badge, not only hue or a timed effect. Render `Investigate` from a presentation fixture without introducing its AI. Use runtime-created test objects and geometry/existing assets; do not modify a prefab or scene.
+
+**Non-goals:** No target placement, batch ownership, UI refresh policy, final art, external asset generation, localization overhaul, or gameplay code.
+
+**Dependencies:** `M3.9.1`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Presentation/Runtime/EnemyIntentView.cs`; proposed `Assets/Tests/PlayMode/EnemyIntentPresentationTests.cs`.
+
+**Acceptance criteria:** All five shapes/badge combinations differ visibly when given the same color; each remains drawn with animation disabled and does not resize when its action changes. The conditional marker is present before any command, not only on impact. Tests inspect active rendered elements/geometry, not just a symbol enum; screenshots remain part of the later human gate.
+
+**Test plan:** PlayMode filter `HallowBlaze.Tests.PlayMode.EnemyIntentPresentationTests.Symbols_AreDistinctWithoutColorOrAnimation`.
+
+**Save and compatibility impact:** None; view objects are transient and presentation-owned.
+
+**Required handoff:** Symbol -> visible shape/badge table, fixed dimensions, actual render assertions, and screenshot capture points for M3.9.14.
+
+---
+
+## `M3.9.3` - Anchor one symbol to its recorded grid target
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11.1, 11.3.1, and 18.
+
+**Rationale:** Correct action art is insufficient when the threatened or destination cell is ambiguous.
+
+**Current behavior:** M3.9.2 renders action meaning without a tested board target association.
+
+**Expected outcome:** One enemy's marker/connector identifies the supplied source and exact locked target cell in the current grid-to-world convention.
+
+**Scope:** Extend the existing view with source/target placement using projected grid coordinates and the supplied sorting/depth conventions. Reuse the current unit-grid position convention from `BoardEventPresenter`; do not introduce a new grid transform abstraction. Keep `Wait` associated with its source and conditional movement associated with the same fixed destination as its attack condition.
+
+**Non-goals:** No batch collision layout, following the player/Transform, occupancy prediction, retargeting, AI, or refresh timing.
+
+**Dependencies:** `M3.9.2`.
+
+**Allowed file area:** Existing `Assets/Scripts/Presentation/Runtime/EnemyIntentView.cs`; existing `Assets/Tests/PlayMode/EnemyIntentPresentationTests.cs`.
+
+**Acceptance criteria:** Four cardinal targets and board-edge cells map to the exact recorded cell; no diagonal or replacement cell is invented. A moved player or interpolating enemy view does not move the locked target. Target glyphs remain visible within the camera/board-edge fixture, and placement does not modify authoritative positions.
+
+**Test plan:** PlayMode filter `HallowBlaze.Tests.PlayMode.EnemyIntentPresentationTests.TargetMarker_UsesRecordedGridCell`, parameterized for directions, edges, and `Wait`.
+
+**Save and compatibility impact:** None; coordinates are disposable display values.
+
+**Required handoff:** Source/target placement examples, sorting/depth values, and evidence that player/view movement cannot retarget the marker.
+
+---
+
+## `M3.9.4` - Preserve source identity at a shared target
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11.2 and 18.
+
+**Rationale:** Several correctly drawn arrows can still become one unreadable mark on a contested cell.
+
+**Current behavior:** Single-enemy target placement is accepted; overlapping source associations are unverified.
+
+**Expected outcome:** Markers for several enemies sharing one destination retain distinguishable links to their own sources without changing the target cell.
+
+**Scope:** Extend only the view's small presentation layout using the Lead's shared-cell examples. Stable offsets/connector endpoints may separate glyphs within the recorded cell; they must not imply another gameplay destination. Cover two to four orthogonally adjacent contenders and an unrelated fifth enemy, not five impossible orthogonal contenders. Do not compute or display a new initiative winner prediction.
+
+**Non-goals:** No reservation/initiative logic, label-heavy tutorial, view pooling, batch planner, authoritative-state change, or camera redesign.
+
+**Dependencies:** `M3.9.3`.
+
+**Allowed file area:** Existing `Assets/Scripts/Presentation/Runtime/EnemyIntentView.cs`; existing `Assets/Tests/PlayMode/EnemyIntentPresentationTests.cs`.
+
+**Acceptance criteria:** Each marker remains attributable to its `EntityId`/source with color removed; layouts retain the exact common target and stable dimensions. Permuting marker input does not arbitrarily swap source associations. The fifth unrelated marker does not overlap the contested group in the supplied fixture.
+
+**Test plan:** PlayMode filter `HallowBlaze.Tests.PlayMode.EnemyIntentPresentationTests.SharedTarget_PreservesSourceAssociations`.
+
+**Save and compatibility impact:** None; offsets are cosmetic and are never fed back into grid state.
+
+**Required handoff:** Shared-target before/after layout, source association assertions, and a screenshot fixture for the human gate.
+
+---
+
+## `M3.9.5` - Publish one detached locked-intent display batch
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10.2, 11.1, and 18.
+
+**Rationale:** A presenter must display the retained batch rather than continuously reading mutable state during a turn.
+
+**Current behavior:** Projection and views are accepted; no owner publishes a complete display batch.
+
+**Expected outcome:** One explicit publication replaces the current markers from a detached retained-plan snapshot, with no partial frame or automatic replan.
+
+**Scope:** Add a thin presenter that composes the accepted projection/view operations, keyed by board-local ID. Accept a read-only retained-plan source or supplied batch and explicit publication calls. Capture source cells at publication, build/validate the whole projection before replacing the previous display, and reuse existing stable ordering. Test callers control publication here; automatic controller/replay integration belongs to M3.9.11.
+
+**Non-goals:** No polling in `Update`, direct planner call, new enemy state store, production runtime API, controller change, replay hook, pooling framework, or legend.
+
+**Dependencies:** `M3.9.4`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Presentation/Runtime/EnemyIntentPresenter.cs`; existing `Assets/Tests/PlayMode/EnemyIntentPresentationTests.cs`.
+
+**Acceptance criteria:** Initial publication shows the complete supplied batch; later domain changes do not alter displayed intent until another explicit publication. Duplicate/malformed input cannot leave a partially replaced batch. Publication never mutates board/run/cadence, and markers contain the original targets/conditions rather than inferred replacements.
+
+**Test plan:** PlayMode filter `HallowBlaze.Tests.PlayMode.EnemyIntentPresentationTests.Publication_ReplacesOnlyCompleteDetachedBatch`.
+
+**Save and compatibility impact:** None; the snapshot is a temporary display of authoritative plans, not persisted gameplay state.
+
+**Required handoff:** Read-only input contract, explicit publication trace, malformed-batch behavior, and owned versus borrowed view/state references.
+
+---
+
+## `M3.9.6` - Clear markers at the owning board lifetime boundary
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11.1, 18, and 21.2.
+
+**Rationale:** Board-local IDs can recur on another board; an old presenter must never publish into the new board.
+
+**Current behavior:** M3.9.5 owns one published batch; disposal, source removal, and replacement are not yet accepted.
+
+**Expected outcome:** Removing a source at the next explicit refresh or ending/replacing a board removes its owned markers, and stale publication is rejected.
+
+**Scope:** Add idempotent clear/dispose and active-board identity/lifetime guarding to the existing presenter. A new complete publication removes markers absent from its authoritative batch. Clear on explicit terminal/disposal ownership; an old async caller cannot republish after replacement, including when IDs match. Keep borrowed runtime/enemy views intact.
+
+**Non-goals:** No scene polling, session persistence, controller/AI changes, global registry, replay recovery integration, or automatic per-frame source checks.
+
+**Dependencies:** `M3.9.5`.
+
+**Allowed file area:** Existing `Assets/Scripts/Presentation/Runtime/EnemyIntentPresenter.cs`; existing `Assets/Tests/PlayMode/EnemyIntentPresentationTests.cs`.
+
+**Acceptance criteria:** Refresh removes stale source markers; repeated clear/dispose is harmless; terminal/old-board calls cannot resurrect symbols. A new board with reused IDs has only its own markers. Disposing the presenter destroys only its owned UI objects and does not dispose borrowed runtime/views or mutate domain state.
+
+**Test plan:** PlayMode filter `HallowBlaze.Tests.PlayMode.EnemyIntentPresentationTests.BoardLifetime_ClearsAndRejectsStalePublication`.
+
+**Save and compatibility impact:** None; lifecycle handling does not touch player persistence.
+
+**Required handoff:** Removal/replacement/disposal trace, stale-call outcome, and object ownership assertions.
+
+---
+
+## `M3.9.7` - Replay one fixed-cell attack outcome
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11.3.1, 18, and 21.2.
+
+**Rationale:** A planned miss must still be visible as an attack on the announced cell, not disappear or follow the escaped player.
+
+**Current behavior:** M3.7 supplies the accepted attack-result event; ordered presentation has no handler for it.
+
+**Expected outcome:** One reusable handler shows the recorded source/cell and hit-or-miss outcome without movement or a second damage application.
+
+**Scope:** Add a small presentation handler for the actual accepted M3.7 attack event, using registered views and its immutable event payload. Reuse existing animation/cancellation conventions and current-value HUD refresh rather than health deltas. The animation-disabled path still emits distinguishable hit/miss feedback at the recorded cell. Register the handler directly in isolated tests; production presenter registration belongs to M3.9.8.
+
+**Non-goals:** No new domain event, damage computation/application, following the player, substitute target, gameplay movement, final combat VFX, next-intent publication, or production registration.
+
+**Dependencies:** `M3.9.6`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Presentation/Runtime/EnemyAttackPresenter.cs`; existing `Assets/Tests/PlayMode/OrderedBoardPresentationTests.cs`.
+
+**Acceptance criteria:** Both 10/20 hit variants and a zero-damage miss reproduce the actual recorded outcome; the source stays in its authoritative cell and an escaped/replacement player is not followed. Animation on/off preserves event order and health; missing views or cancellation use the existing controlled dispatcher diagnostic/recovery, not another resolution.
+
+**Test plan:** PlayMode filter `HallowBlaze.Tests.PlayMode.OrderedBoardPresentationTests.EnemyAttackReplay_UsesRecordedOutcomeWithoutGameplayMutation`.
+
+**Save and compatibility impact:** None; the handler only reads event/current-state values and owns transient effects.
+
+**Required handoff:** Hit/miss feedback trace, event cell versus current player cell, unchanged authoritative health/position, and diagnostic/cancellation evidence.
+
+---
+
+## `M3.9.8` - Register accepted attack replay in the board presenter
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10.2 and 21.2.
+
+**Rationale:** Adding a verified handler to the existing dispatcher is a separate effect from designing its visuals.
+
+**Current behavior:** M3.9.7 accepts the handler in isolation; `BoardEventPresenter` still does not register the enemy event.
+
+**Expected outcome:** The normal board presenter accepts the existing attack event at its resolver-ordered position instead of treating it as unknown.
+
+**Scope:** Compose/register the accepted helper once in `BoardEventPresenter`, forwarding the existing animation setting, HUD, feedback, cancellation, and recovery ownership. Preserve existing movement/resource/terminal handler registrations and public behavior. Use existing ordered presentation fixtures; do not attach intent UI or enable enemies in this child.
+
+**Non-goals:** No handler redesign, coordinator/resolver modification, intent publication, domain composition, legacy activation, or `GameManager` wiring.
+
+**Dependencies:** `M3.9.7`.
+
+**Allowed file area:** Existing `Assets/Scripts/Presentation/Runtime/BoardEventPresenter.cs`; existing `Assets/Tests/PlayMode/OrderedBoardPresentationTests.cs`.
+
+**Acceptance criteria:** A move/cost/attack/terminal sequence replays once in original order with the terminal sink last. Existing attack events are registered exactly once; truly unknown events still diagnose/recover as before. No extra health change, command, or turn is introduced.
+
+**Test plan:** PlayMode filter `HallowBlaze.Tests.PlayMode.OrderedBoardPresentationTests.RegisteredEnemyAttack_PreservesOrderedReplayAndTerminalSink`.
+
+**Save and compatibility impact:** None; event handling does not alter save contracts.
+
+**Required handoff:** Registry ownership and full ordered trace, with confirmation that enemy domain/runtime composition remains a separate prerequisite.
+
+---
+
+## `M3.9.9` - Provide a matching accessible intent legend
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11.3.1 and 18.
+
+**Rationale:** The declared conditional action needs an available explanation using the same visible symbols, not a hidden surprise.
+
+**Current behavior:** Symbols and targets are accepted; no reusable legend explains their meanings.
+
+**Expected outcome:** A small informational legend presents the same glyphs and explains movement, attack-on-player-entry, fixed-cell attack/miss, investigation, and wait.
+
+**Scope:** Add one runtime-owned legend view using the accepted symbol operations and the Lead's concise player-facing wording/localization convention. Supply an accessible labeled control and explicit show/hide operations; do not bind a new gameplay key or create commands. Keep fixed responsive bounds and keep the inspected board visible. `Investigate` explains a symbol without claiming Listener AI is already active. Production attachment belongs to M3.9.12.
+
+**Non-goals:** No general tutorial, new language policy, planner/prediction, input-source redesign, gameplay modal action, serialized scene/prefab, or production attachment.
+
+**Dependencies:** `M3.9.2`, `M3.9.3`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Presentation/Runtime/EnemyIntentLegend.cs`; existing `Assets/Tests/PlayMode/EnemyIntentPresentationTests.cs`.
+
+**Acceptance criteria:** Legend glyphs match the renderer; conditional movement is distinguished from ordinary movement and attack, and a miss does not promise a new target. Show/hide never invokes the resolver or changes resources/cadence. Supplied desktop/narrow viewport fixtures contain all text and controls without covering the required inspected cells or producing orphaned objects after disposal.
+
+**Test plan:** PlayMode filter `HallowBlaze.Tests.PlayMode.EnemyIntentPresentationTests.Legend_MatchesSymbolsWithoutSubmittingCommands`.
+
+**Save and compatibility impact:** None; visibility is transient UI state.
+
+**Required handoff:** Symbol/wording table, accessible control identity, viewport bounds evidence, and the explicit production-attachment operation.
+
+---
+
+## `M3.9.10` - Expose one post-replay completion boundary
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10.2 and 21.2.
+
+**Rationale:** Domain phase 8 completes before animations; publishing its plans immediately would expose the next turn during replay of the current one.
+
+**Current behavior:** `CommandPresentationCoordinator` resolves synchronously, replays the result, and releases the gate, but exposes no completion notification to a retained-intent display owner.
+
+**Expected outcome:** A presentation-only completion callback can observe the sole accepted result after replay/recovery and before submission ownership is released.
+
+**Scope:** Add one optional completion hook to the existing coordinator, preserving existing callers. Invoke it once for an accepted result after replay succeeds or finishes controlled recovery, while the gate still blocks submission. Rejected/blocked/no-command/pre-resolution canceled paths do not publish completion. Callback failure must use existing diagnostics/recovery without another resolver call and still release the gate in `finally`. A disposed coordinator cannot notify an old UI owner.
+
+**Non-goals:** No intent renderer/source, new phase, planner call, domain event, extra resolution, input-binding change, or `BoardEventPresenter` integration.
+
+**Dependencies:** `M3.9.8`, `M3.6`.
+
+**Allowed file area:** Existing `Assets/Scripts/Presentation/Runtime/CommandPresentationPipeline.cs`; existing `Assets/Tests/EditMode/CommandPresentationPipelineTests.cs`.
+
+**Acceptance criteria:** Held replay proves the callback does not run early; completion runs once with the original result and a still-held gate. Rejection/admission failures do not invoke it. Recovery/callback failure never resolve again or strand submission ownership, and disposal suppresses a late callback. Existing callers retain their admission/rejection behavior.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.CommandPresentationPipelineTests.CompletionHook_RunsOnceAfterReplayBeforeGateRelease`.
+
+**Save and compatibility impact:** None; the hook is transient presentation coordination, not a gameplay event or save contributor.
+
+**Required handoff:** Resolve -> replay/recovery -> callback -> gate-release traces, invocation counts, and disposed/failing callback outcomes.
+
+---
+
+## `M3.9.11` - Bind publication to setup and replay completion
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10.2, 11.1, 11.3.1, and 18.
+
+**Rationale:** Verified symbols and a completion hook still need one explicit owner for their refresh/recovery timing.
+
+**Current behavior:** M3.9.5/M3.9.6 support explicit safe publication; M3.9.10 supplies the post-replay boundary.
+
+**Expected outcome:** Initial plans are shown before Setup release; displayed targets remain locked during replay, and the accepted next batch is published before the next input.
+
+**Scope:** Compose the accepted intent presenter/read-only plan source in `BoardEventPresenter` using the existing setup synchronization, completion callback, and recovery sink. Make attachment optional for existing callers. Recovery resynchronizes from authoritative retained state without planning or duplicate publication; terminal/disposed owners clear instead of showing an obsolete next plan. Test composition with the accepted batch phase adapter on the runtime's sole controller through the separately accepted production prerequisite; no private-field replacement or second resolver is allowed. That prerequisite must be accepted and named before this child becomes `Ready`.
+
+**Non-goals:** No coordinator/renderer redesign, phase-order change, domain runtime composition API, production enemy activation, legacy migration, or `GameManager` attachment.
+
+**Dependencies:** `M3.9.6`, `M3.9.10`, `M3.8.9`; separately accepted production enemy composition as required by the umbrella's readiness boundary.
+
+**Allowed file area:** Existing `Assets/Scripts/Presentation/Runtime/BoardEventPresenter.cs`; existing `Assets/Tests/PlayMode/EnemyIntentPresentationTests.cs`.
+
+**Acceptance criteria:** Initial publication precedes input; held movement replay retains the old target/condition even though phase 8 has calculated the next batch. Success publishes once before unlock; rejected commands preserve the displayed batch. Cancellation/unknown-event recovery produces a consistent current display without another turn, and terminal/disposal prevents stale publication. Pause/resume does not advance AI or invent a new plan.
+
+**Test plan:** PlayMode filter `HallowBlaze.Tests.PlayMode.EnemyIntentPresentationTests.ReplayBoundary_PreservesLockedDisplayUntilNextPublication`.
+
+**Save and compatibility impact:** None; recovery reads existing state and never persists a display snapshot.
+
+**Required handoff:** Initial/rejected/accepted/recovery/terminal refresh traces, held-replay marker values, and proof that publication/recovery never calls planning.
+
+---
+
+## `M3.9.12` - Attach accepted intent UI to the production board owner
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11.1, 11.3.1, 18, and 21.5.
+
+**Rationale:** A fixture-only display does not let a player inspect production enemies before choosing a command.
+
+**Current behavior:** The reusable intent presenter, legend, and replay boundary are accepted in isolation; production has not attached them.
+
+**Expected outcome:** `GameManager` attaches one board-owned intent display and legend to the already accepted enemy-enabled runtime, before gameplay input becomes available.
+
+**Scope:** Add only composition/lifetime calls using the already accepted read-only enemy-plan source and presentation APIs. Borrow existing stable ID/view bindings; do not discover enemies by hierarchy order or recompute intent. Attach before Setup release, route disable/terminal/board replacement through accepted UI lifetime operations, and dispose old UI before publishing a new board. Use isolated persistence in the existing startup fixture. Do not enable this child until the umbrella's production prerequisite is accepted and named in its handoff.
+
+**Non-goals:** No enabling/remapping legacy enemies, definition extraction, creation of domain states/hooks, modifications to `BoardRuntime`/composer/catalog/generator, UI redesign, scene/prefab mutation, new input source, or profile-format change.
+
+**Dependencies:** `M3.9.8`, `M3.9.9`, `M3.9.11`; separately accepted production enemy composition is a mandatory readiness gate, not an assumed existing API.
+
+**Allowed file area:** Existing `Assets/Scripts/GameManager.cs`; existing `Assets/Tests/PlayMode/BoardRuntimeStartupTests.cs`.
+
+**Acceptance criteria:** An enemy-enabled production startup fixture has one visible marker per live enemy and the correct initial condition before input. An accepted turn uses the sole existing coordinator; rejection/pause/legend operations add no turn or cost. Replacement/terminal cleanup leaves no old markers/legend callbacks, even with reused IDs; UI failures preserve diagnostics and block unsafe startup rather than opening input with missing required intent information.
+
+**Test plan:** PlayMode filter `HallowBlaze.Tests.PlayMode.BoardRuntimeStartupTests.ProductionIntents_AppearBeforeInputAndRespectBoardLifetime`; the final manual production smoke remains M3.9.14.
+
+**Save and compatibility impact:** No save changes; tests use an isolated temporary save root and restore existing fixture overrides.
+
+**Required handoff:** Accepted production prerequisite ID/evidence, exact source/attachment APIs, setup ordering, single-coordinator counts, and board replacement/terminal cleanup trace. A missing source/hook is a blocker, not permission to migrate enemies here.
+
+---
+
+## `M3.9.13` - Conditional-intent and animation-parity regression
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11.3.1, 18, and 22.
+
+**Rationale:** A final narrow regression must tie pre-input information to real resolved outcomes, not merely test glyph selection.
+
+**Current behavior:** Presentation primitives and production attachment are accepted; cross-case announced-versus-executed parity needs one explicit check.
+
+**Expected outcome:** Fixed Shambler scenarios produce the announced outcome and identical final marker/view/HUD state with animations enabled or disabled.
+
+**Scope:** Add one parameterized test to the shared intent fixture using accepted domain batch/controller and presentation helpers. Recreate state for each scenario/mode. Cover empty locked destination -> move; same-cell player entry -> attack without movement; different adjacent player cell -> no retarget; planned attack -> fixed-cell zero-damage miss; rest beside player -> `Wait`; and a blocked/shared destination retaining the announced target until execution. Verify visible pre-input condition and ordered outcome payloads, not only end-state enums.
+
+**Non-goals:** No production source edits, repair of failed behavior, new fixture, AI/conflict changes, screenshot automation framework, benchmark, or replay/hash work.
+
+**Dependencies:** `M3.9.12`.
+
+**Allowed file area:** Existing `Assets/Tests/PlayMode/EnemyIntentPresentationTests.cs` only.
+
+**Acceptance criteria:** Every scenario passes in both animation modes with explicit expected targets, health, source position, cadence, feedback, ordered events, and final next/rest display. Holding animated replay cannot change the displayed locked target early. Each accepted action consumes one existing cost; rejected control cases consume none. Failures identify scenario, source IDs, and animation mode.
+
+**Test plan:** PlayMode filter `HallowBlaze.Tests.PlayMode.EnemyIntentPresentationTests.AnnouncedConditionalOutcomes_HaveAnimationParity`; require all parameterized cases, no skips or zero-test pass.
+
+**Save and compatibility impact:** None; isolated test state only.
+
+**Required handoff:** Scenario -> announced target/condition -> actual event -> next display table and exact test counts/results. A failure does not authorize implementation repairs inside this test-only delegation.
+
+---
+
+## `M3.9.14` - Lead-owned intent readability gate
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 18 and the intent gate in section 22.
+
+**Rationale:** Automated geometry and event assertions cannot establish that players understand the information before acting.
+
+**Current behavior:** M3.9.13 supplies mechanical evidence; production smoke and blind-prediction evidence are still absent.
+
+**Expected outcome:** The Lead records whether production intent UI is readable without animation/color and whether a majority of testers correctly predict known Shambler behavior.
+
+**Scope:** This is a manual acceptance task, not a Developer implementation delegation. Run a production PC smoke with animations disabled, inspect symbols/targets in grayscale and at the supported viewport sizes, and capture each supported symbol including the conditional badge and legend. Use a small recorded blind-prediction sheet: after the same brief legend/rule familiarization, the tester commits a prediction before seeing the resolved outcome. Include the conditional entry, different-cell entry, fixed-cell miss, adjacent rest, and shared-target cases. Record denominators, per-case and per-tester results, misunderstood symbols, and a `PASS`/`BLOCKED` verdict. Treat `Investigate` as a presentation-only capture until Listener is implemented; do not claim its gameplay comprehension gate passed.
+
+**Non-goals:** No code/art repair during the gate, invented tester feedback, statistical market claims, new product rules, broad playtest program, or external transmission of project/tester data.
+
+**Dependencies:** `M3.9.13`.
+
+**Allowed file area:** Proposed Lead-owned `Docs/Validation/M3.9IntentReadability.md` only. Keep screenshots/test captures in an explicit local directory outside the Unity project and reference their paths in the report; do not create unapproved project assets.
+
+**Acceptance criteria:** Actual production startup/turn/lifecycle smoke passes; grayscale and animation-disabled inspection preserves action/target/condition visibility. Report every supported symbol and the actual prediction counts/percentages. Apply the contract's majority-of-testers gate, not a newly invented numeric target or an averaged success rate that hides misunderstanding of the same-cell attack condition. The Lead records the sample limitation and explicitly evaluates the conditional cases; absent human evidence leaves this child and umbrella blocked.
+
+**Test plan:** One manual gate: production smoke plus the recorded pre-outcome blind-prediction sheet and screenshot set. No Unity test filter substitutes for human acceptance; inspect actual evidence before recording `PASS`.
+
+**Save and compatibility impact:** None; smoke uses an isolated test profile and does not write to the player's real profile directory.
+
+**Required handoff:** Local capture paths, viewport/animation/grayscale settings, prediction sheet with anonymized counts and percentages, concrete readability findings, and the Lead's acceptance verdict. Any needed repair is a separately scoped task, followed by the relevant automated gate and a fresh readability check.
+
+---
+
+## `M3.10` - Command replay and canonical state hash (tracking umbrella)
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 16, 21.2, 22, and 27.9.
+
+**Rationale:** Command representation, state capture, canonical encoding, completeness enforcement, recording, replay, and divergence detection have different failure modes. Accept each operation before composing it; do not ask one Developer to create a diagnostics framework and change production flow at once.
+
+**Current behavior:** The domain has immutable commands, enumerable grid state, explicit run state, and one synchronous `TurnController` with reusable phase hooks. M3.7/M3.8 provide retained enemy plans. There is no portable replay input or canonical hash. The generator's `BoardBlueprint` belongs to M4.2 and cannot be a prerequisite of M3.10, because M4 depends on the M3 gate.
+
+**Expected outcome:** A small diagnostic document contains format/rules versions, seed/context, an exact initial model description, versioned tagged commands, and expected post-attempt hashes/results. A fresh headless controller reproduces it and reports the first mismatch. Ordered diagnostic state capture has no Unity references or dependency on generation. M4.2 can later export its blueprint through the accepted capture seam.
+
+**Scope:** Execute the children separately: command tags, primitive encoding, board/run/enemy capture, required contributor manifest, hashing, document, strict JSON codec, recorder, runner, divergence comparison, deterministic regression, presentation parity, and the Lead-owned evidence/extension checklist.
+
+**Delegation readiness:** Before each child the Lead supplies actual accepted APIs, an explicit field/owner inventory for the supported rules version, one nearby fixture/helper, small input -> expected output examples, the exact two-file allowlist, and its filter. Confirm that public read/restore operations cover all required values; missing domain access requires a separately scoped prerequisite, never private-field reflection or widening a snapshot assignment. Reuse the existing Turns Resolution assembly for the proposed `Diagnostics` subfolder and the installed Newtonsoft JSON package. If an assembly reference is actually missing, accept a separate bounded reference-only prerequisite before the codec; do not create a new assembly or change packages inside a child.
+
+**Initial-state boundary:** This diagnostic description is not a gameplay save or a mid-board resume feature. Capture a fresh, active board after initial planning and before its first command; include exact bounds/entities/traits/rewards, run resources/tools/travel context, immutable enemy definition parameters, cadence/locked plans, and player identity. Restore independent values without planning again or sharing mutable owners. Hash the existing controller terminal latch after each attempt; transient resolution/presentation locks, views, profile storage, clock, and cosmetic randomness are not gameplay hash inputs. Do not fabricate future RNG state; its owning ticket must extend the format when introduced.
+
+**Extension rule:** Every new authoritative field, rule parameter, or command type must update the independently declared coverage inventory, replay-rules version, initial capture/restore and tagged codec where relevant, canonical hash coverage, and mutation/omission tests in its owning ticket. The inventory is not inferred only from the contributors that happen to be supplied. M3.11 extends route/address state after this umbrella is accepted; future tool/noise/inventory tickets follow the same rule.
+
+**Non-goals:** No generator/BoardBlueprint implementation, public replay compatibility promise, network/anti-cheat, animation recording, production recorder hook, new RNG, new save schema, domain balance/AI changes, profile restoration, mid-board resume, new package/assembly, or reflection-based state access.
+
+**Dependencies:** Full acceptance of `M3.1` through `M3.9`. Neither M4 nor M3.11 is a prerequisite of this initial version; later state additions explicitly extend it.
+
+**Allowed file area:** Only the exact child source/test paths and the single Lead-owned report below. Proposed diagnostics sources live under the existing `Assets/Scripts/Core/Turns/Resolution/Diagnostics/` boundary. Generated `.meta` companions are inspected, never hand-authored. No production/session/persistence/scene/prefab/configuration edits are authorized by these children.
+
+**Execution order:** Accept M3.10.1 through M3.10.14 separately, then perform the Lead-owned M3.10.15 gate. One writer at a time. A failing test-only child is not permission to repair implementation in that delegation.
+
+**Acceptance criteria:** Equal initial values and command sequences produce equal initial/post-attempt hashes and accepted/rejected results; unordered collection permutations do not change hashes. Ordered route/tool/command data retains its semantics. Changed commands produce a reproducible first divergence. Missing required contributors, unsupported versions/tags, malformed snapshots, and unknown commands fail explicitly before replay effects. Rejections preserve state/cadence/resources; terminal behavior and presentation parity match the existing controller. All fifteen children and extension evidence are accepted.
+
+**Test plan:** Each implementation/test child has one focused EditMode/PlayMode method below, using the shared `ReplayTests` fixture and existing presentation fixture. The Lead verifies actual case counts and a reproducible, synthetic artifact outside the repository. Future test names are acceptance targets, not tests already run.
+
+**Save and compatibility impact:** No player save changes. Replay has separate format and rules versions and rejects unsupported versions rather than silently reinterpreting them. Artifacts use an explicit external temporary directory, so they cannot be staged or imported by Unity; no `.gitignore` change is required.
+
+**Required handoff:** Accepted child evidence, format/rules versions, complete field/owner/ordering inventory, fixed encoding/hash vectors, one redacted replay and first-divergence example, and an external artifact path. No real profile/player data or secrets are exported.
+
+---
+
+## `M3.10.1` - Round-trip versioned command tags
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 21.2 and 27.9.
+
+**Rationale:** Commands need explicit diagnostic tags before a document or runner can safely consume them.
+
+**Current behavior:** `MoveCommand`, `WaitCommand`, and `InteractCommand` are immutable domain values, not a versioned wire representation.
+
+**Expected outcome:** Each accepted command round-trips through a detached tagged record with exactly its required payload.
+
+**Scope:** Add one record/codec source for the three existing commands. Preserve direction and full signed `EntityId` values; reject unknown tags, missing/extra payloads, invalid directions, and unsupported command versions. Define explicit stable tags rather than CLR type names or arbitrary `CommandType` dispatch. JSON parsing belongs to M3.10.9.
+
+**Non-goals:** No new command, reflection polymorphism, resolver call, file I/O, document, or future inventory tag.
+
+**Dependencies:** `M3.9`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayCommandRecord.cs`; proposed `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** Move/Wait/Interact reconstruct equivalent values without side effects. Negative, zero, and extreme target IDs survive; unsupported commands/tags/versions produce diagnostics and are never skipped or converted to `Wait`.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.CommandTags_RoundTripAndRejectUnsupportedInput`.
+
+**Save and compatibility impact:** Diagnostic command version only; no save-format change.
+
+**Required handoff:** Tag/version/payload table and actual invalid-input diagnostics.
+
+---
+
+## `M3.10.2` - Encode canonical primitive values
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 16.
+
+**Rationale:** Culture, delimiters, or platform byte order must not create a different hash for equivalent values.
+
+**Current behavior:** There is no shared canonical diagnostics encoder.
+
+**Expected outcome:** Named primitive values have an unambiguous deterministic byte encoding with fixed test vectors.
+
+**Scope:** Add one small writer for integers, booleans, explicit enum discriminants, nullable values, and length-prefixed UTF-8 strings/collections. Specify widths, byte order, null versus empty, and framing. Use ordinal keys and ordered calls; callers own collection semantics. Use structured encoding, not concatenated display strings or platform `GetHashCode()`.
+
+**Non-goals:** No state discovery, hashing, JSON, domain seed algorithm, compression, or serialization framework.
+
+**Dependencies:** `M3.10.1`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/CanonicalValueWriter.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** Fixed vectors cover integer extremes, empty/null/delimiter-containing/non-ASCII strings, and nested framing; distinct framed values cannot alias merely through concatenation. Changing current culture does not change bytes.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.CanonicalEncoding_HasCultureIndependentVectors`.
+
+**Save and compatibility impact:** Encoding is tied to replay-rules version, not the player's DTO schema.
+
+**Required handoff:** Encoding specification and observed vectors, with no dependency on Unity/time.
+
+---
+
+## `M3.10.3` - Capture and rebuild the initial board model
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 16 and 21.1.
+
+**Rationale:** Replay must reconstruct actual grid data without waiting for the future generator blueprint.
+
+**Current behavior:** `BoardState.GetEntities()` supplies an ID-ordered detached enumeration; definitions/traits determine resolution.
+
+**Expected outcome:** A diagnostic board description rebuilds an independent board with equivalent bounds, entities, definitions, positions, and behavior-affecting traits/rewards.
+
+**Scope:** Add capture, validation, canonical-value writing, and reconstruction for this one owner in one source. Include full stable IDs/layers/kinds/content IDs and every accepted definition field, not just positions. Reuse existing constructors and `TryAdd`; reject duplicate IDs/cells, illegal bounds/layers, and unresolved definition input before publishing a board.
+
+**Non-goals:** No GameObject/Transform, `BoardBlueprint`, generation algorithm, run/enemy cadence, JSON, or domain-owner modification.
+
+**Dependencies:** `M3.10.2`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayBoardSnapshot.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** Valid input round-trips all board fields/index lookups and canonical values; reconstruction shares no mutable collection. Input/insertion permutations preserve ID ordering. Invalid rows cannot expose a partial board; definition mutations alter canonical output.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.BoardSnapshot_RebuildsExactIndependentGrid`.
+
+**Save and compatibility impact:** Diagnostic snapshot only; not persisted as normal board resume.
+
+**Required handoff:** Complete board field inventory and malformed-row diagnostics; identify the future blueprint export seam without implementing it.
+
+---
+
+## `M3.10.4` - Capture and rebuild run inputs
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 16, 21.1, and 27.9.
+
+**Rationale:** Matching the board while omitting food, tools, or travel context is not deterministic replay.
+
+**Current behavior:** `RunState` exposes current node/day, resources, status, tool slots, and ordered node route.
+
+**Expected outcome:** A detached run description rebuilds the exact active initial run and canonically describes its accepted authoritative fields.
+
+**Scope:** Add capture, canonical-value writing, validation, and independent reconstruction for current `RunState` only, using public APIs. Preserve run ID/root seed, node/day, health/food, ordered route, and ordered tool slots/uses. Capture terminal/status values for post-attempt hashing; initial replay accepts only the active, fresh-board boundary stated by the umbrella. Do not use the profile or persistence serializer as a surrogate for canonical state.
+
+**Non-goals:** No new run schema, private-field setters, route-leg state ahead of M3.11, lifecycle/storage, profile capture, or backpack fields.
+
+**Dependencies:** `M3.10.3`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayRunSnapshot.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** Every current field round-trips for supported initial input; collections are independent and preserve meaningful order. Post-attempt zero health/food and terminal status encode correctly. Invalid initial state fails before publication; mutating each inventoried field changes its canonical description.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.RunSnapshot_PreservesResourcesToolsAndOrderedContext`.
+
+**Save and compatibility impact:** None; current save mapper remains untouched and M3.11 later extends this diagnostic description.
+
+**Required handoff:** Run field/owner/order inventory and public reconstruction operations; missing access is a prerequisite blocker, not permission to widen this child.
+
+---
+
+## `M3.10.5` - Capture retained enemy inputs
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11.1, 11.3.1, and 16.
+
+**Rationale:** Cadence and a locked target affect the next turn even when enemy positions are identical.
+
+**Current behavior:** Accepted M3.7/M3.8 own definitions, per-enemy cadence, and retained intent batches outside the board's position index.
+
+**Expected outcome:** A detached enemy description rebuilds accepted definition/state/locked-plan values without fresh planning.
+
+**Scope:** Add capture, canonical writing, and reconstruction for accepted Shambler inputs. Include board-local source IDs, definition/rule parameters including 10/20 damage, cadence, intent presence/consumption, exact target identity/cell, and the player-entry condition. Sort unordered enemy rows by ID and preserve semantically ordered intent data. Position remains owned by the board description.
+
+**Non-goals:** No planner call, cadence advancement, duplicated position owner, Listener/noise/RNG, rule changes, or changes to M3.7/M3.8 sources.
+
+**Dependencies:** `M3.10.4`, `M3.8`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayEnemySnapshot.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** Hit/miss/conditional/rest inputs retain their exact cells/conditions/cadence after independent rebuild. Equivalent input permutations encode equally. Different locked targets, conditions, consumed state, or damage change canonical values. Invalid definition/source/board associations fail explicitly without planning or mutation.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.EnemySnapshot_RestoresLockedPlansWithoutReplanning`.
+
+**Save and compatibility impact:** Diagnostic only; no enemy mid-board save promise.
+
+**Required handoff:** Accepted public restoration APIs, per-field coverage, and canonical examples for all retained outcome branches.
+
+---
+
+## `M3.10.6` - Reject incomplete authoritative contributions
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 16 and 27.9.
+
+**Rationale:** Hashing whatever contributors arrive cannot detect that an entire authoritative owner was omitted.
+
+**Current behavior:** Three snapshot owners can write values; no independent completeness manifest constrains their composition.
+
+**Expected outcome:** The supported replay-rules version declares required board/run/enemy/controller contributions independently of the supplied implementations.
+
+**Scope:** Add a small explicit coverage manifest/registry with stable contributor keys and an independently declared required set. Include player ID and the controller terminal latch; exclude transient resolver/presentation locks. Validate duplicate, missing, unsupported, or unrecognized contributions before canonical output. Enumerate the required field inventory in the owning APIs/documentation; do not discover arbitrary private members with reflection.
+
+**Non-goals:** No auto-registration framework, hashing, new authoritative fields, reflection-driven schema, or production state store.
+
+**Dependencies:** `M3.10.5`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayStateCoverage.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** Complete supported input passes; omitting each required owner fails with its key before bytes/hash are accepted. Removing one supplied contributor does not also shrink the required set. Duplicate keys and unsupported rules versions fail. An explicit mutation/coverage table covers every current authoritative field.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.RequiredContributors_CannotBeSilentlyOmitted`.
+
+**Save and compatibility impact:** Coverage is versioned with replay rules; save schema is unchanged.
+
+**Required handoff:** Required keys and field inventory, omitted-contributor diagnostics, and future extension procedure.
+
+---
+
+## `M3.10.7` - Hash validated canonical state
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 16.
+
+**Rationale:** Hash orchestration should combine already accepted capture/encoding/coverage rather than invent another state mapping.
+
+**Current behavior:** Canonical writer and complete contributors are accepted; no stable digest composes them.
+
+**Expected outcome:** One supported stable state produces a deterministic canonical digest using the standard .NET SHA-256 implementation.
+
+**Scope:** Add a thin hasher composing the accepted contributions/writer and replay-rules version. Order unordered contributors/entities ordinally/by signed ID, retain route/tool-slot order, and hash the resulting canonical bytes. Read the controller only at the stable pre/post-attempt boundary. Do not hash JSON formatting or duplicate snapshot field selection.
+
+**Non-goals:** No seed algorithm, cryptographic security claim, resolver/recorder, clock/view/cosmetic inputs, new capture format, or custom digest algorithm.
+
+**Dependencies:** `M3.10.6`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayStateHasher.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** Fixed vectors pass across cultures; unordered insertion permutations hash equally. A change to any covered authoritative field or rules version changes the canonical preimage and fixture digest. Meaningful route/tool order changes remain visible; missing contributors prevent hashing rather than yielding a partial digest.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.StateHash_IsCanonicalAndFieldSensitive`.
+
+**Save and compatibility impact:** Replay digest only; no save-checksum replacement.
+
+**Required handoff:** Exact vectors, covered/excluded field table, stable-boundary requirement, and verification that Unity/time is absent.
+
+---
+
+## `M3.10.8` - Validate one immutable replay document
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 16 and 27.9.
+
+**Rationale:** Header, initial context, command attempts, and expected outcomes must agree before execution starts.
+
+**Current behavior:** Individual records and snapshots exist without a complete replay input contract.
+
+**Expected outcome:** A detached document contains explicit format/rules/command versions, seed/context, validated initial descriptions, ordered command attempts, and optional expected result/hash frames.
+
+**Scope:** Add document/header/frame values in one source, reusing the accepted snapshot and tagged record APIs. Distinguish attempt index from accepted-turn count; a rejected command may be recorded but does not become a gameplay turn. Frame expectations include acceptance/rejection code and canonical state hash. Specify initial checksum and validate version/context/sequence consistency without invoking resolution.
+
+**Non-goals:** No JSON parsing, file storage, recorder/runner, event reserialization, save DTO reuse, or future route address invented ahead of M3.11.
+
+**Dependencies:** `M3.10.7`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayDocument.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** Valid documents own independent read-only collections; source mutation cannot change a document. Invalid versions, missing initial fields, mismatched root seed/context, malformed commands, or inconsistent expectation indexes fail explicitly. Diagnostic metadata is not a second gameplay owner.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.ReplayDocument_ValidatesDetachedVersionedInputs`.
+
+**Save and compatibility impact:** Independent replay format version; unsupported versions are rejected, not silently migrated as player saves.
+
+**Required handoff:** Header/frame schema, supported versions, initial boundary, and examples of each invalid-input diagnostic.
+
+---
+
+## `M3.10.9` - Round-trip the diagnostic JSON document strictly
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 16, 27.9, and repository external-data rules.
+
+**Rationale:** An external replay artifact must not bypass the validated record/snapshot contracts or instantiate arbitrary CLR types.
+
+**Current behavior:** M3.10.8 defines validated in-memory data; no external artifact codec exists.
+
+**Expected outcome:** One structured JSON codec round-trips supported documents and rejects malformed/unsupported input before replay.
+
+**Scope:** Use the installed Newtonsoft package and its structured token/serializer APIs, following the strict parsing style of `PersistenceJsonSerializer` without calling the player save serializer. Decode explicit tags through M3.10.1; reject duplicate keys, trailing content, missing/invalid/unknown fields, unsupported versions/tags, and invalid snapshot associations. Disable type-name-driven materialization. Confirm assembly access in the readiness packet before writing.
+
+**Non-goals:** No package/assembly changes, player save migration, file I/O, compatibility across arbitrary rules versions, or permissive unknown-field fallback.
+
+**Dependencies:** `M3.10.8`; any actually needed reference-only prerequisite must already be accepted.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayJsonCodec.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** Supported synthetic replay round-trips all fields and hashes independent of JSON whitespace/property order. Each malformed input fails before constructing a replay controller; unknown tags are never skipped. Stable diagnostics identify the offending version/tag/field without secrets or arbitrary object activation.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.ReplayJson_StrictlyRoundTripsOrRejects`.
+
+**Save and compatibility impact:** Replay JSON only; normal profile/run deserialization remains unchanged.
+
+**Required handoff:** Synthetic JSON example, strict parser settings, supported schema, and observed invalid-input cases.
+
+---
+
+## `M3.10.10` - Record an already resolved command attempt
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 21.2 and 27.9.
+
+**Rationale:** Recording must observe the sole controller result, not cause an extra resolution or record animation timing.
+
+**Current behavior:** Records/documents/hash exist; a caller cannot yet accumulate one diagnostic command trace.
+
+**Expected outcome:** Explicit calls append a command, its actual accepted/rejected result, and a stable post-attempt hash to one detached replay trace.
+
+**Scope:** Add one recorder that accepts the initial validated description and supplied command/result/state contribution inputs. Use the accepted tagged codec/hasher/document; append in attempt order and advance accepted-turn count only for accepted results. Test callers resolve exactly once then record. Return a detached document suitable for the accepted JSON codec.
+
+**Non-goals:** No production input/coordinator hook, autonomous controller call, UI/animation samples, profile/file I/O, or hidden command interception.
+
+**Dependencies:** `M3.10.9`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayRecorder.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** Supplied results are recorded once in order; rejection records unchanged state with no accepted-turn increment. Missing/inconsistent inputs cannot append a partial frame. Recording changes no board/run/enemy state and invokes no resolver/planner; returned trace is immune to later recorder/input mutation.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.Recorder_ObservesOneResolutionWithoutEffects`.
+
+**Save and compatibility impact:** None; in-memory diagnostic trace, never player storage.
+
+**Required handoff:** Accepted/rejected attempt trace, invocation counts, and exact document export operation.
+
+---
+
+## `M3.10.11` - Replay through one fresh domain controller
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 10.2, 11, 16, and 21.2.
+
+**Rationale:** The runner must compose accepted domain operations rather than duplicate resolution rules.
+
+**Current behavior:** Initial snapshots and tagged commands can be independently reconstructed; no runner executes them.
+
+**Expected outcome:** A validated document reconstructs one fresh board/run/enemy batch and produces actual result/hash frames with one controller call per command attempt.
+
+**Scope:** Add a thin headless runner using accepted snapshot rebuilders, M3.8 phase adapter, `TurnController`, command decoder, and hasher. Restore the recorded initial locked plans without planning again. Validate all command/schema/context input before effects; use the already approved environment rules, not a new configurable arbitrary-code hook. Preserve rejected/early-terminal/enemy-terminal behavior and return detached actual frames/results.
+
+**Non-goals:** No GameObject, runtime/presentation controller replacement, production integration, AI/turn implementation, generator, diagnostics file I/O, or divergence algorithm.
+
+**Dependencies:** `M3.10.10`, `M3.8.9`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayRunner.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** Fresh runs produce the expected state/results from exact initial data; each attempt has one resolution and one stable hash. Rejection/commands after terminal preserve state; initial intent targets/cadence are not silently replaced. No mutable replay owners are shared with the recording fixture; unsupported input cannot partially execute.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.ReplayRunner_UsesFreshOwnersAndOneController`.
+
+**Save and compatibility impact:** None; reconstruction is diagnostics-only and does not restore player files.
+
+**Required handoff:** Initial/restored owner identities and command -> result/hash traces, including rejected and terminal paths.
+
+---
+
+## `M3.10.12` - Report the first deterministic divergence
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 16 and 22.
+
+**Rationale:** A useful replay report identifies the first bad boundary, not only a final unequal digest.
+
+**Current behavior:** Expected and actual frames exist without an explicit comparison/report operation.
+
+**Expected outcome:** One pure comparison returns success or the first differing initial/attempt boundary with reproducible context.
+
+**Scope:** Add a comparator/report value for initial checksum, frame count, acceptance/rejection code, and canonical state hash. Include seed/context, rules version, attempt index, accepted-turn number, command tag/payload, and expected/actual values. Stop at the first mismatch; distinguish a missing/extra frame from a state mismatch. Never rerun a command to produce the report.
+
+**Non-goals:** No state repair, deep reflection diff, UI, file writer, automatic retry, or broad telemetry framework.
+
+**Dependencies:** `M3.10.11`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayComparison.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** Equal traces pass; changed initial state/command/result/hash and missing/extra frames identify the earliest exact boundary. Report values are stable under repeated comparison and contain no Unity/time/secrets. Comparison mutates nothing and never invokes the resolver.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.Divergence_ReportsFirstExactBoundary`.
+
+**Save and compatibility impact:** None; report is diagnostic data only.
+
+**Required handoff:** Minimal equal/divergent examples and actual diagnostic context, including attempt versus accepted-turn indexes.
+
+---
+
+## `M3.10.13` - Cross-case canonical replay regression
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 11, 16, and 27.9.
+
+**Rationale:** Local encoder tests need one bounded end-to-end check using real accepted turn rules.
+
+**Current behavior:** Individual replay operations are accepted; cross-case permutation and completeness evidence is still missing.
+
+**Expected outcome:** Fixed synthetic turn traces repeat exactly under unordered collection permutations, while intentional command/state changes and omitted owners are detected.
+
+**Scope:** Add one parameterized test in the existing fixture. Reuse accepted M3.7/M3.8 helpers and independent initial data per run. Cover 2-5 enemies, shared targets, conditional attacks, fixed-cell misses/rest, rejected commands, and terminal state across small fixtures. Permute only unordered entity/enemy/contributor inputs; do not permute meaningful route, slot, or command order. Mutate covered fields and omit each independently required owner in separate cases.
+
+**Non-goals:** No source repair, new fixture, large-seed benchmark, RNG/generator, replay rules expansion, or implementation redesign.
+
+**Dependencies:** `M3.10.12`.
+
+**Allowed file area:** Existing `Assets/Tests/EditMode/ReplayTests.cs` only.
+
+**Acceptance criteria:** Repeated/permuted traces equal explicit expected results/hashes at every boundary. A command change reports the expected first divergence; rejections cost nothing; omission fails explicitly. Failures identify fixture, seed, source IDs, input permutation, and attempt. No skip or zero-test success counts as evidence.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.CanonicalReplay_PreservesExpectedOutcomesAcrossPermutations`.
+
+**Save and compatibility impact:** None; synthetic isolated test data.
+
+**Required handoff:** Fixture/case/permutation counts, exact results, and reproducible failure context if any; repair requires a new scoped task.
+
+---
+
+## `M3.10.14` - Compare headless replay with final presentation
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 16, 18, and 21.2.
+
+**Rationale:** A reproducible domain trace must agree with what the existing presentation path finally shows.
+
+**Current behavior:** M3.9 accepts real enemy presentation; M3.10.13 accepts headless replay separately.
+
+**Expected outcome:** The same initial capture and commands yield identical domain hashes and final displayed positions/resources/intents in animation-on/off modes.
+
+**Scope:** Add one test to the accepted shared intent fixture. Capture initial data from its real accepted runtime/phase composition, run an independent headless replay, and submit the same commands through the fixture's sole presentation coordinator. Reuse existing fixture setup/view/HUD assertions. Compare actual hashes per completed attempt and final registered views/HUD/locked markers; never replace the runtime's private controller or feed presentation values back into hashing.
+
+**Non-goals:** No production source edits, repairs, new fixture, screenshot framework, model hash based on Transform, or automatic production recorder hook.
+
+**Dependencies:** `M3.10.13`, `M3.9.13`.
+
+**Allowed file area:** Existing `Assets/Tests/PlayMode/EnemyIntentPresentationTests.cs` only.
+
+**Acceptance criteria:** Both animation modes show the authoritative final cells/resources/retained intents and match headless hashes/results. Held replay blocks another command; rejection does not mutate or publish a new plan. Conditional hit and fixed-cell miss remain at recorded cells. All fixture storage is isolated from the player's profile.
+
+**Test plan:** PlayMode filter `HallowBlaze.Tests.PlayMode.EnemyIntentPresentationTests.HeadlessReplay_MatchesFinalPresentationInBothAnimationModes`.
+
+**Save and compatibility impact:** None; no real player file or persisted replay hook.
+
+**Required handoff:** Per-attempt hash/result parity, final view/HUD/intent assertions, animation modes, and resolution counts.
+
+---
+
+## `M3.10.15` - Lead-owned replay evidence and extension checklist
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 16, 22, and 27.9.
+
+**Rationale:** Future state owners need an explicit version/coverage contract, and acceptance needs an actual reproducible artifact.
+
+**Current behavior:** Automated operations/regressions are accepted; their complete schema/coverage evidence has not been collected.
+
+**Expected outcome:** One short validation report records observed replay evidence and the exact extension obligations for future authoritative state.
+
+**Scope:** The Lead writes the report after the implementation writer finishes. Include accepted format/rules versions, field/owner/order/required-contributor inventory, source/test references, actual filters/counts/results, and a synthetic JSON replay plus earliest-divergence example exported to an explicit directory outside the repository/Unity project. Record that external artifacts cannot be staged/imported; do not edit parent `.gitignore`. Include the owning-ticket checklist for adding a command or authoritative field and identify M3.11's required extension.
+
+**Non-goals:** No implementation repair, copied real profile, secrets, external upload, new compatibility policy, or version bump without a behavior/schema change.
+
+**Dependencies:** `M3.10.14`.
+
+**Allowed file area:** Proposed Lead-owned `Docs/Validation/M3.10Replay.md` only.
+
+**Acceptance criteria:** The example is actually decoded/replayed with nonzero passing evidence, not merely plausible JSON. Missing-contributor and first-divergence checks were observed. Every authoritative owner is accounted for, exclusions are explicit, and extension instructions require rules-version/capture/codec/hash/tests updates together. Missing executable evidence keeps the umbrella blocked.
+
+**Test plan:** One Lead evidence check: reproduce the synthetic document with the accepted runner, inspect the fresh focused reports and exported artifact, and cross-check the coverage inventory against accepted owning APIs.
+
+**Save and compatibility impact:** No save change; report explicitly distinguishes diagnostic reconstruction from supported gameplay resume.
+
+**Required handoff:** Report link, external artifact location, reproducible command/filter, observed counts, and extension checklist; no unverified claim of test success.
+
+---
+
+## `M3.11` - Route-leg state and stable board address (tracking umbrella)
 
 **Status:** `Planned`
 **Priority:** P0 architecture gate
-**Related contract:** sections 4, 5, 6, 7, 8, 16, 21, and 27.1–27.3.
+**Related contract:** sections 4-8, 16, 21, and [accepted route-leg contract](GameDesignContract.md#272-route-legs-local-boards-and-days).
 
-**Rationale:** The current model equates one destination node with one board and derives board identity from node/day. A multi-board edge would therefore repeat seeds and could accept a stale outcome from another segment. Stable travel and board identity must exist before the generator, atlas samples, and fixed tool sources depend on the wrong boundary.
+**Rationale:** Segment authoring, travel-state transitions, identity/seed derivation, stale-outcome guards, save migration, and replay extension are separate acceptance surfaces. A single domain model assignment must not also change scenes, rewrite persistence, and convert route selection.
 
-**Current behavior:** `RunState` stores `WorldNodeId`, `CurrentDay`, and a list of node IDs. Route selection immediately reaches the destination and marks the edge traversed. `BoardRequest` and stale-outcome guards use run + node + day + seed, while `GetBoardSeed()` has no edge or segment identity.
+**Current behavior:** `WorldEdgeDefinition` has no segments. `RunState` owns node/day and ordered node IDs; `WorldMapService.ChooseRoute()` immediately reaches the destination. `BoardFlowContracts` identifies a board by run/node/day/seed. Run schema is currently v1; the new M3.10 diagnostics must be extended rather than bypassed.
 
-**Expected outcome:** World edges own ordered, non-empty stable `RouteSegmentDefinition` IDs. `RunState` distinguishes the last reached checkpoint from an optional `ActiveRouteLegState` and stores structured travel entries. The active leg includes durable `Pending`/`Presented` Day-transition state. One immutable `BoardAddress` identifies the active local board by run, edge, segment, day, generator/config version, and deterministic seed.
+**Expected outcome:** Edges expose ordered non-empty stable segment definitions. The run owns a reached checkpoint, completed-day count, structured history, and an optional persisted active leg with a unique run-local traversal ID. The leg has one 1-based displayed day, stable segment cursor/progress, and `Pending`/`Consumed` intro state. A `BoardAddress` identifies run, traversal, edge, segment, day, generation version/configuration, and deterministic seed. Separate child acceptance precedes production travel flow in M3.12.
 
-**Scope:**
+**Source-of-truth correction:** Section 27.2 already accepts `Pending`/`Consumed`, with `Consumed` durably checkpointed before rendering for at-most-once intro semantics. `Presented` and checkpoint-after-render wording in older planning text is not the governing rule. This umbrella implements only the state/serialization/identity foundation; before M3.12 becomes `Ready`, its own planning must be aligned with the accepted contract. No Day UI or crash checkpoint orchestration is implemented here.
 
-- Extend `WorldEdgeDefinition` with an ordered segment list; route length is derived from this list rather than duplicated as an independent count.
-- Add `ActiveRouteLegState` with edge/from/to, 1-based day number, current segment identity/index, completed segment count, durable Day-transition status, and an extension point for a route observation accumulator.
-- Replace the node-ID-only route history with structured entries that can distinguish different edges reaching the same node.
-- Introduce `BoardAddress`; update `BoardRequest`, `BoardOutcome`, seed derivation, same-identity guards, and diagnostics to use it.
-- Separate completed-day count from the current leg's displayed day.
-- Version and migrate run persistence and replay/hash coverage.
+**Delegation readiness:** Each child receives one effect, actual accepted neighboring APIs, one existing/shared test helper, exact input -> output examples, a closed 1-2 file scope, and one filter. The Lead supplies the stable segment registry, generation/configuration identifiers, explicit legacy compatibility table, new schema/version mapping, and fixed seed vectors before their owning children become `Ready`. Unresolved content/profile compatibility decisions are owner gates, not permission for a Developer to reset data. New/materially changed public APIs include accurate English XML contracts.
 
-**Non-goals:** No multi-board scene flow or Day transition presentation yet; no route-resource observations, fixed tool sources, generator rewrite, backpack, satiety, or mid-board snapshot.
+**Ownership and compilation boundary:** Keep World/State/Session/Persistence responsibilities and existing assembly references. State values accept validated stable IDs/value inputs, not `WorldDefinition`, Unity objects, or profile owners. Cross-owner coordination lives in Session. Introduce optional/new APIs before changing callers; keep legacy constructors/reader paths as explicit checkpoint-only adapters until their named cutover. Each child compiles with unchanged callers; no private-field reflection, mutable duplicate travel log, or arbitrary placeholder identity is allowed. A missing access/reference/fixture requires a separate bounded prerequisite.
 
-**Dependencies:** `M2.7`, `M3.10`, and the accepted O-007/O-008 contract.
+**Compatibility boundary:** Existing production route selection remains checkpoint-based until M3.12 activates leg travel. Preserve it through an explicitly identified adapter; new active-leg APIs never pretend the destination has already been reached. New published world JSON names its segments explicitly; the temporary five-argument edge/old JSON adapter uses the Lead's frozen one-segment mapping, not list position or Unity identity. Ordered segment lists define travel order, but board identity/seed never uses an ordinal cursor as a substitute for stable segment ID. Existing profile/world binding must remain valid; do not silently bump world identity/version or reset a profile when adding metadata.
 
-**Allowed file area:** Core State/World/Session/Persistence/Diagnostics/Random contracts, world data required for the existing prototype, focused tests, and migration fixtures. Scene and prefab changes are forbidden.
+**Scope:** Execute segment/value/catalogue/authoring children, run checkpoint and one-transition-at-a-time children, address/seed/request/guard children, independent v2 DTO/mapping/migration/activation children, replay extension/regression, and the Lead-owned integration gate below.
 
-**Acceptance criteria:**
+**Non-goals:** No production `ChooseRoute` cutover, multi-board scene flow, intro rendering/checkpoint orchestration, discovery commits, resource observation values, tool-source availability, generator/RNG-stream rewrite, backpack/satiety, mid-board save, scene/prefab edits, package/settings/assembly changes, or unrelated documentation migration. The observation extension remains owned by the active leg; do not invent future data now.
 
-- every edge has at least one segment and all segment IDs are stable and unique within the published world;
-- two segments on the same edge produce different deterministic board addresses/seeds;
-- reorder of definitions does not change the identity or seed of an unchanged stable segment;
-- a result from another segment, edge, day, or run is rejected as stale;
-- day is player-facing from `1`, while a fresh checkpoint may still have zero completed days;
-- a new active leg persists `Pending`; marking the intro `Presented` is an idempotent state transition included in run round-trip/hash coverage;
-- structured travel distinguishes parallel edges with the same destination;
-- old run schema migrates to a reached-node checkpoint with no fabricated active leg, and profile data is never discarded;
-- canonical replay/hash includes active leg and board address.
+**Dependencies:** Full acceptance of `M2.7` and `M3.10`, with accepted O-007/O-008/section 27.2 semantics. M3.12/M4 are consumers, never prerequisites of this umbrella.
 
-**Test plan:** EditMode validation of segment definitions, address equality, deterministic seed vectors, parallel edges, stale outcomes, route-log invariants, schema round-trip/migration/corruption, and replay/hash expansion. Run full EditMode after focused tests.
+**Allowed file area:** Only each child's exact source/test paths and the single Lead-owned validation report. No blanket permission to edit Core, world assets, or production callers. Unity-generated metadata is inspected, not invented; existing GUIDs are preserved.
 
-**Save and compatibility impact:** New run schema. An old node-based active run migrates as a safe reached checkpoint with `completedDayCount = old currentDay` and no active leg; its next chosen edge starts the next displayed day. If a particular legacy save cannot satisfy the checkpoint invariants, reject only that run with a clear recovery path and preserve the profile.
+**Execution order:** Accept M3.11.1 through M3.11.31 separately, then perform M3.11.32. The early v2 DTO/mapper/migrator are callable but do not change default save behavior until M3.11.25; the integrated round-trip gate precedes activation. Accept replay extension before final review. One writer at a time.
 
-**Required handoff:** State diagram, complete field/owner table, old→new schema mapping, fixed seed vectors, world segment-ID registry, and proof that stale outcomes cannot cross segment boundaries.
+**Acceptance criteria:** Published edges/segments are valid and globally unique; unchanged stable identity has stable addressing/seed independent of catalogue enumeration. Different supported segment/traversal contexts do not alias through node/day-only derivation; equality always compares full identity, not a 32-bit seed. Repeated edge traversal has a new persisted leg ID. Day 1 starts from zero completed days; intermediate segment advancement changes neither day nor checkpoint. Intro consumption is idempotent and persisted. Parallel edges remain distinct in structured history. Foreign run/leg/edge/segment/day/config outcomes are rejected before effects. Old v1 run migration yields a reached checkpoint without fabricated edges/legs, preserving resources/tools/profile. New run/address state round-trips and participates in versioned replay/coverage/hash. All thirty-two children and the full EditMode gate are accepted.
+
+**Test plan:** One focused EditMode method per implementation/test child, reusing existing World/RunState/Persistence/Replay fixtures and one `RouteLegTests` fixture. Production guard wiring uses existing startup tests. The Lead ends with fresh full EditMode and focused PlayMode guard evidence; filters below are planned, not checks already run.
+
+**Save and compatibility impact:** Explicit v1 -> v2 run migration; profile schema/data is unchanged. `completedDayCount = old currentDay`, last reached node is preserved, active leg is absent, and old route nodes become explicitly legacy checkpoint entries with no invented edge/traversal/day evidence. Unrecoverable run input fails with existing controlled recovery while profile remains usable. V2 stores traversal sequence/history and active segment/intro state at stable boundaries, not a mid-board snapshot.
+
+**Required handoff:** Child evidence, state/ownership diagram, version/migration/compatibility table, authored segment registry, fixed seed vectors, stale-identity matrix, new JSON round-trips, replay coverage/version evidence, and concrete M3.12 readiness requirements. Never present the foundation as completed multi-board travel.
+
+---
+
+## `M3.11.1` - Define one stable route segment
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 27.2.
+
+**Rationale:** A segment value must be accepted before edges or persistence depend on its identity.
+
+**Current behavior:** World edges have no addressable segment type.
+
+**Expected outcome:** One immutable segment has a stable ID and explicit generation/configuration identifiers needed by its future board address.
+
+**Scope:** Add `RouteSegmentDefinition` with validated stable IDs and positive generation version, using the Lead's minimal field table. Keep generation configuration a stable identifier, not an implemented generator or asset reference.
+
+**Non-goals:** No edge collection, world registry, segment length policy, template/generator, run state, or asset creation.
+
+**Dependencies:** `M3.10`, `M2.7`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/World/RouteSegmentDefinition.cs`; existing `Assets/Tests/EditMode/WorldDefinitionTests.cs`.
+
+**Acceptance criteria:** Valid values are immutable and preserve IDs exactly; null/blank/surrounding-whitespace IDs and invalid generation versions fail. Identity is not an index or display label.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.WorldDefinitionTests.RouteSegment_ValidatesStableGenerationIdentity`.
+
+**Save and compatibility impact:** No default save/content path changes yet; published IDs become migration-sensitive once authored.
+
+**Required handoff:** Field/validation table and actual future-consumer API.
+
+---
+
+## `M3.11.2` - Give an edge an ordered segment list
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 27.2.
+
+**Rationale:** Route length must derive from one ordered list rather than a second mutable count.
+
+**Current behavior:** Existing edge constructors describe endpoints/direction/clue only.
+
+**Expected outcome:** An edge exposes a detached non-empty segment list and derived length while existing callers still compile.
+
+**Scope:** Add the explicit segment-aware overload and validation to `WorldEdgeDefinition`. Preserve the old constructor through the Lead's documented frozen singleton mapping for legacy checkpoints; do not silently reorder segments. This adapter is transitional, not the published multi-board format.
+
+**Non-goals:** No JSON, global duplicate detection, caller migration, production travel, or independently stored length.
+
+**Dependencies:** `M3.11.1`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/World/WorldEdgeDefinition.cs`; existing `Assets/Tests/EditMode/WorldDefinitionTests.cs`.
+
+**Acceptance criteria:** Order/length are correct and source-list mutation cannot change an edge. Empty/null/duplicate segment input fails. Old callers retain endpoint behavior and the documented stable compatibility segment.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.WorldDefinitionTests.EdgeSegments_AreOrderedDetachedAndNonempty`.
+
+**Save and compatibility impact:** Existing checkpoint behavior remains compatible; no fabricated active leg.
+
+**Required handoff:** Constructor compatibility mapping, order/length evidence, and duplicate/null diagnostics.
+
+---
+
+## `M3.11.3` - Enforce published segment uniqueness
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 21.3 and 27.2.
+
+**Rationale:** Per-edge validation cannot detect the same stable segment ID reused on another road.
+
+**Current behavior:** `WorldDefinition` validates node/edge identity, not global segment identity.
+
+**Expected outcome:** A catalogue rejects duplicate segment IDs across its published edges and provides an unambiguous segment-to-edge lookup.
+
+**Scope:** Extend only catalogue construction/read-only lookup using accepted edge lists and ordinal stable keys. Preserve semantic segment order within each edge and existing node/edge ordering/lookups. Reuse existing exception conventions rather than changing the graph diagnostic system.
+
+**Non-goals:** No graph distance rules, authoring codec/data, route state, seed computation, or changes to graph validator contracts.
+
+**Dependencies:** `M3.11.2`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/World/WorldDefinition.cs`; existing `Assets/Tests/EditMode/WorldDefinitionTests.cs`.
+
+**Acceptance criteria:** Duplicate IDs fail with deterministic segment/edge context. Valid lookup is independent of node/edge enumeration; segment order within its owning edge remains intact. Existing graph access is preserved.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.WorldDefinitionTests.Catalogue_RejectsGlobalSegmentAliases`.
+
+**Save and compatibility impact:** Invalid published identity cannot become a save/address binding.
+
+**Required handoff:** Duplicate/lookup examples and stable registry ordering.
+
+---
+
+## `M3.11.4` - Read explicit authored segments
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 21.3 and 27.2.
+
+**Rationale:** Authoring JSON must carry the approved stable identities rather than recreate them from array positions.
+
+**Current behavior:** `WorldDefinitionJson` materializes only legacy edge fields.
+
+**Expected outcome:** Structured JSON segment rows build the accepted definitions in declared order.
+
+**Scope:** Extend the existing edge DTO/parser for explicit segment fields, reusing strict Newtonsoft parsing. Temporarily support absent legacy segment fields through the same documented singleton mapping as M3.11.2; explicit null/empty/malformed lists are errors, not fallback. Preserve unknown/duplicate-property rejection.
+
+**Non-goals:** No world asset edit, new parser/package, profile-version reset, generator, or constructor redesign.
+
+**Dependencies:** `M3.11.3`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/World/WorldDefinitionJson.cs`; existing `Assets/Tests/EditMode/WorldDefinitionTests.cs`.
+
+**Acceptance criteria:** Explicit rows preserve IDs/order/configuration; malformed/duplicate IDs fail without a partial catalogue. Legacy JSON uses only the named compatibility path; explicit bad input cannot be mistaken for legacy absence.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.WorldDefinitionTests.WorldJson_ReadsExplicitSegmentsAndRejectsMalformedRows`.
+
+**Save and compatibility impact:** Existing authoring still loads during the staged conversion; profile schema remains unchanged.
+
+**Required handoff:** New JSON row example and explicit legacy-versus-invalid parsing cases.
+
+---
+
+## `M3.11.5` - Author the prototype segment registry
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 27.2.
+
+**Rationale:** Published content needs stable authored identities before an address is persisted.
+
+**Current behavior:** The prototype world omits segment metadata and uses the transitional adapter.
+
+**Expected outcome:** Every prototype edge has the Lead-approved non-empty explicit segment/configuration list.
+
+**Scope:** Update only prototype JSON and its focused catalogue test with the frozen registry supplied before delegation. Preserve nodes/topology/endpoints/clues and the accepted profile/world binding. Segment counts are authored input; neither one nor five is a universal invariant. If adding metadata requires a world-version compatibility decision, resolve it before this child becomes `Ready`.
+
+**Non-goals:** No authoring new roads/biomes, parser changes, generator behavior, profile reset/migration, or scene assets.
+
+**Dependencies:** `M3.11.4`.
+
+**Allowed file area:** Existing `Assets/GameData/World/prototype-world.json`; existing `Assets/Tests/EditMode/WorldDefinitionTests.cs`.
+
+**Acceptance criteria:** Real authored data loads with non-empty globally unique segments and matches the supplied registry exactly. Existing graph/route choices and profile/world identity remain valid; no node/edge discovery ID changes.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.WorldDefinitionTests.PrototypeWorld_HasFrozenExplicitSegmentRegistry`.
+
+**Save and compatibility impact:** Stable segment IDs/configurations become compatibility-sensitive; no unapproved world/profile version change.
+
+**Required handoff:** Exact registry and proof that existing profile binding/topology was preserved.
+
+---
+
+## `M3.11.6` - Represent structured travel and legacy checkpoints
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 27.1 and 27.2.
+
+**Rationale:** A destination node alone cannot distinguish parallel edges; old saves cannot truthfully reconstruct an edge.
+
+**Current behavior:** Run history is a sequence of node IDs.
+
+**Expected outcome:** One immutable travel entry distinguishes a completed addressed traversal from an explicitly legacy reached-node checkpoint.
+
+**Scope:** Add a tagged value with validated run-local leg ID, edge/from/to/day/progress fields for completed travel and a separate legacy checkpoint form with only evidence actually present in v1. Keep unknown legacy edge/day/traversal information absent, not guessed. Include explicit factories and equality appropriate to ordered history.
+
+**Non-goals:** No migration JSON, profile summary rewrite, active progress owner, atlas observations, or inferred parallel-edge selection.
+
+**Dependencies:** `M3.11.5`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/State/TravelHistoryEntry.cs`; proposed `Assets/Tests/EditMode/RouteLegTests.cs`.
+
+**Acceptance criteria:** Parallel-edge completed entries differ even with the same destination. Legacy entries cannot claim fabricated edge/leg/day evidence. Invalid mixed tags/fields and contradictory completed progress fail.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.TravelEntry_DistinguishesParallelEdgesAndLegacyEvidence`.
+
+**Save and compatibility impact:** Defines the explicit safe v1 history representation for the later v2 mapper.
+
+**Required handoff:** Entry field/tag/invariant table and old node -> legacy entry examples.
+
+---
+
+## `M3.11.7` - Define one validated active leg
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 27.2.
+
+**Rationale:** The active leg's cursor, completed segments, displayed day, and intro state must agree before RunState can own it.
+
+**Current behavior:** No pure active-leg value exists.
+
+**Expected outcome:** An immutable leg snapshot records traversal/edge/endpoints, ordered stable segment/configuration values, current cursor, completed count, day, and `Pending`/`Consumed`.
+
+**Scope:** Add the value and intro-state enum in one source. Accept stable value inputs rather than a World/Unity dependency; validate non-empty detached ordered segments, cursor/count consistency, positive day, and legal intro states. Keep source/checkpoint identity separate from destination. Document the observation-owner extension without implementing an accumulator.
+
+**Non-goals:** No run mutation, leg-ID allocator, progress service, rendering/checkpoint I/O, observations, or world catalogue edits.
+
+**Dependencies:** `M3.11.6`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/State/ActiveRouteLegState.cs`; existing `Assets/Tests/EditMode/RouteLegTests.cs`.
+
+**Acceptance criteria:** Valid initial/intermediate/consumed snapshots are immutable and internally consistent. Invalid index/count/day/IDs/config/state fail. `Presented` is not a supported persisted state; no value stores GameObjects or duplicate board position state.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.ActiveLeg_ValidatesDetachedProgressAndIntroState`.
+
+**Save and compatibility impact:** Durable intro state follows accepted pre-render `Consumed` semantics; persistence is a later child.
+
+**Required handoff:** Cursor/count/day/intro invariant matrix and State-only dependencies.
+
+---
+
+## `M3.11.8` - Add checkpoint and history ownership to the run
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 27.1 and 27.2.
+
+**Rationale:** Structured history must have one owner before leg transitions are added.
+
+**Current behavior:** `RunState` stores legacy day/node and a mutable internal node-route list.
+
+**Expected outcome:** The run exposes completed-day count, reached checkpoint, ordered structured history, and an optional leg slot while existing checkpoint callers still compile.
+
+**Scope:** Add the ownership/read/import/reset boundary to `RunState`. Use structured history as the sole travel-history authority; derive any temporary node-route compatibility view rather than maintaining a second mutable log. Existing checkpoint APIs/imports create explicit legacy checkpoint entries. Provide validated stable-boundary restore for the later mapper; no active-leg starts/progress yet. Preserve the existing constructor/configuration adapter.
+
+**Non-goals:** No service/caller rewrite, leg activation, schema, profile reset, duplicate travel ledger, or new UI day rendering.
+
+**Dependencies:** `M3.11.7`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/State/RunState.cs`; existing `Assets/Tests/EditMode/RunStateTests.cs`.
+
+**Acceptance criteria:** Fresh checkpoint has zero completed days and no active leg; legacy initial day maps to completed days. Reset clears only run-owned travel data, not profile knowledge. History/view imports are detached and ordered; invalid restore leaves the run unchanged. Existing resource/tool/checkpoint contracts remain usable.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.RunStateTests.CheckpointTravelState_HasOneHistoryOwnerAndSafeReset`.
+
+**Save and compatibility impact:** Runtime foundation only; default serializer remains v1 until the explicit cutover.
+
+**Required handoff:** Field owners, compatibility projection, validated restore operation, and reset evidence.
+
+---
+
+## `M3.11.9` - Start one leg without arriving at its destination
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 27.2.
+
+**Rationale:** Choosing an edge needs a pure run operation before orchestration can safely start travel.
+
+**Current behavior:** M3.11.8 provides ownership but no addressed leg start.
+
+**Expected outcome:** One validated start creates a unique run-local leg ID, first segment, next displayed day, and `Pending`, leaving the reached checkpoint/completed days unchanged.
+
+**Scope:** Add the single start transition to `RunState`, taking validated stable route values from Session callers. Persist a monotonic/deterministic traversal sequence so repeating an edge after a later completion gets a distinct ID; no clock/GUID/cosmetic RNG. Validate source checkpoint, active status, no existing leg, and overflow before mutation. Do not call this operation from production route selection yet.
+
+**Non-goals:** No intermediate/final transition, discovery/save, WorldMapService cutover, profile knowledge, or generated scenes.
+
+**Dependencies:** `M3.11.8`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/State/RunState.cs`; existing `Assets/Tests/EditMode/RouteLegTests.cs`.
+
+**Acceptance criteria:** Zero completed days yields Day 1; start does not append completed traversal, move checkpoint, or mark discovery. Bad/repeated/concurrent-context/overflow starts leave all fields unchanged. Sequence restores safely without ID reuse.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.StartLeg_CreatesPendingIdentityWithoutArrival`.
+
+**Save and compatibility impact:** Sequence/leg fields must later be stored in v2 and hashed; no default file writes here.
+
+**Required handoff:** Start transition before/after fields, deterministic ID examples, and rejected/overflow cases.
+
+---
+
+## `M3.11.10` - Consume the intro idempotently in run state
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 27.2.
+
+**Rationale:** At-most-once rendering requires one explicit state transition, not a volatile view flag.
+
+**Current behavior:** New legs are Pending; no operation marks the intro consumed.
+
+**Expected outcome:** The matching active leg transitions Pending -> Consumed once, with repeated consumption returning no change.
+
+**Scope:** Add the intro-state transition only, guarded by active traversal identity. Preserve cursor/day/history/resources. Document that the future service must durably save this state before rendering; this pure API alone is not persistence or a successful intro display.
+
+**Non-goals:** No UI, save-store call, phase advancement, intro replay/retry policy, or mark-after-render state.
+
+**Dependencies:** `M3.11.9`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/State/RunState.cs`; existing `Assets/Tests/EditMode/RouteLegTests.cs`.
+
+**Acceptance criteria:** First valid consumption changes only intro state; repeated matching call is idempotent. Wrong/no/terminal leg cannot consume another traversal. Rejected calls do not advance anything.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.IntroConsumption_IsIdentityGuardedAndIdempotent`.
+
+**Save and compatibility impact:** Defines the state later round-tripped in v2; M3.12 owns durable-before-render ordering.
+
+**Required handoff:** Pending/Consumed transition trace and the explicit durability obligation left for M3.12.
+
+---
+
+## `M3.11.11` - Advance one intermediate segment
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 27.2.
+
+**Rationale:** Progress within a leg must not masquerade as another day or arrival.
+
+**Current behavior:** The active leg can start/consume intro but cannot advance its cursor.
+
+**Expected outcome:** A matching current-segment completion advances cursor/completed segment count exactly once and changes no day/checkpoint/history.
+
+**Scope:** Add the intermediate transition to `RunState`, requiring expected leg ID and stable current segment ID. Only a consumed, active non-final segment advances; an old repeated segment cannot advance the new cursor. Validate before replacement of the immutable leg snapshot.
+
+**Non-goals:** No final arrival, profile/discovery mutation, save/checkpoint service, scene load, atlas, or new Day intro.
+
+**Dependencies:** `M3.11.10`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/State/RunState.cs`; existing `Assets/Tests/EditMode/RouteLegTests.cs`.
+
+**Acceptance criteria:** Two- and five-segment fixtures advance in declared order with one displayed day. Duplicate/stale/final/pending-intro/terminal input is rejected without progress/resource changes. Destination remains unreached and structured completed history unchanged.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.IntermediateSegment_AdvancesOnceWithoutDayOrArrival`.
+
+**Save and compatibility impact:** Stable progress is later serializable; no boundary file writes in this child.
+
+**Required handoff:** Segment-ID/index/count traces and duplicate/stale rejection behavior.
+
+---
+
+## `M3.11.12` - Complete the leg in run state once
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 27.2.
+
+**Rationale:** Only final completion can change the reached checkpoint and append addressed travel history.
+
+**Current behavior:** Intermediate progress is accepted; final run-state arrival is absent.
+
+**Expected outcome:** A matching consumed final segment atomically reaches the destination, advances completed-day count once, appends one structured entry, and clears the active leg.
+
+**Scope:** Add only final completion to `RunState`, reusing the accepted entry/leg APIs and traversal sequence. Validate final cursor/identity/status before mutation. Test repeated edge traversals through the already accepted start operation and distinguish their leg IDs. Keep profile discovery/observation/save orchestration for M3.12/M7.
+
+**Non-goals:** No WorldMapService flow, profile edge/node discovery, sample aggregation, save I/O, terminal/death policy change, or UI.
+
+**Dependencies:** `M3.11.11`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/State/RunState.cs`; existing `Assets/Tests/EditMode/RouteLegTests.cs`.
+
+**Acceptance criteria:** Valid final completion changes the intended run fields once; duplicate/non-final/foreign identities leave them unchanged. Parallel edges produce distinct entries. Reusing an edge on a later legal traversal generates a new ID and does not overwrite history; one leg counts as one completed day.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.FinalSegment_CommitsOneStructuredArrival`.
+
+**Save and compatibility impact:** Stable completed checkpoint/history become v2 data; no profile changes here.
+
+**Required handoff:** Final transition field table, parallel/repeated-edge examples, and operations deliberately left to M3.12.
+
+---
+
+## `M3.11.13` - Define complete board-address equality
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 7, 16, and 27.2.
+
+**Rationale:** Equality must distinguish repeated traversal and generation context even when node/day/seed happen to match.
+
+**Current behavior:** Board requests use node-based identity.
+
+**Expected outcome:** One immutable address validates and compares run ID, leg ID, edge ID, segment ID, displayed day, generation version/configuration ID, and board seed.
+
+**Scope:** Add the State-owned value, ordinal equality, deterministic diagnostic representation, and ordinary dictionary hash support. Validate fields and distinguish structural equality from the diagnostic canonical replay hash. Do not use destination node, cursor ordinal, Transform, or only seed as identity.
+
+**Non-goals:** No derivation, run mutation, request/caller migration, JSON DTO, or collision-free 32-bit-seed claim.
+
+**Dependencies:** `M3.11.12`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/State/BoardAddress.cs`; existing `Assets/Tests/EditMode/RouteLegTests.cs`.
+
+**Acceptance criteria:** Equal values compare equally; changing each identity field makes them unequal, including equal-seed cases. Day starts at 1; invalid identifiers/versions fail. Diagnostic output contains reproducible identity but no private player data.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.BoardAddress_UsesEveryStableIdentityField`.
+
+**Save and compatibility impact:** Address fields are versioned in later DTO/replay steps; no default persistence yet.
+
+**Required handoff:** Identity/equality matrix and canonical field order for later replay encoding.
+
+---
+
+## `M3.11.14` - Derive a stable segment address and seed
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 16 and 27.2.
+
+**Rationale:** Two segments must not share a board stream merely because their run/node/day context matches.
+
+**Current behavior:** `RunState.GetBoardSeed()` hashes node/day; active leg/configuration values now exist independently.
+
+**Expected outcome:** A pure Session factory produces the current leg's address and deterministic seed using an explicit versioned stable identity preimage.
+
+**Scope:** Add address/seed derivation using the Lead's frozen encoding/domain/version vectors and accepted State values. Include root seed and run/leg/edge/stable segment/day/generation configuration; exclude catalogue enumeration and cursor ordinal. Reuse length-framed deterministic hashing conventions without introducing gameplay RNG streams. Validate world/segment/configuration associations before returning an address.
+
+**Non-goals:** No generator/global RNG, request wiring, save, State-to-World dependency, profile, or changing production checkpoint seed before its adapter is ready.
+
+**Dependencies:** `M3.11.13`, `M3.11.3`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Session/BoardAddressFactory.cs`; existing `Assets/Tests/EditMode/RouteLegTests.cs`.
+
+**Acceptance criteria:** Fixed vectors repeat exactly and distinguish the supplied two-segment/repeated-traversal/configuration cases. Reordering catalogue/segment definitions cannot change the seed of unchanged stable address inputs. No universal collision-free promise is made for finite int seeds; full address remains the identity authority.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.BoardSeed_HasStableSegmentIdentityVectors`.
+
+**Save and compatibility impact:** Algorithm/generation version is explicit; no unversioned substitution of old node-based seed input.
+
+**Required handoff:** Exact preimage/algorithm/version and observed vectors; no ordinal aliasing or cosmetic RNG input.
+
+---
+
+## `M3.11.15` - Carry addresses through request and outcome contracts
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 7 and 27.2.
+
+**Rationale:** A correct address is useless if results discard it and compare only node/day.
+
+**Current behavior:** `BoardFlowContracts` stores the original node-based request in every outcome.
+
+**Expected outcome:** Addressed requests/outcomes retain the exact full address and compare it without legacy fallback.
+
+**Scope:** Add the segment-aware request creation/constructor path and address exposure in the same existing contract source; outcomes retain their original request/address. `CreateFromRun` uses the accepted factory when a leg exists; preserve explicit checkpoint-only old construction for unchanged callers. Addressed-versus-legacy requests never compare equal; context/destination metadata is not identity. Document inherited fields as compatibility metadata where appropriate.
+
+**Non-goals:** No scene/travel flow, call-site mass migration, new terminal events, generator, or domain seed implementation in the contract.
+
+**Dependencies:** `M3.11.14`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Session/BoardFlowContracts.cs`; existing `Assets/Tests/EditMode/RouteLegTests.cs`.
+
+**Acceptance criteria:** Each outcome preserves request/address identity; foreign run/leg/edge/segment/day/configuration/seed compares false. No-address input cannot bypass an addressed guard, even with matching node/day/seed. Existing checkpoint callers compile and retain their explicitly legacy equality.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.BoardRequestAndOutcome_PreserveFullAddressIdentity`.
+
+**Save and compatibility impact:** Requests/outcomes remain transient; run DTO is separate.
+
+**Required handoff:** Constructor/factory/equality compatibility table and full foreign-field matrix.
+
+---
+
+## `M3.11.16` - Reject foreign addressed outcomes before effects
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 7, 21.2, and 27.2.
+
+**Rationale:** Current request equality must also agree with the active run/leg, not just another supplied request.
+
+**Current behavior:** Request equality exists without a reusable current-state outcome guard.
+
+**Expected outcome:** A pure guard validates the outcome against the expected active request and current run/leg address without mutation.
+
+**Scope:** Add one Session guard using accepted full-address equality/factory and current run identity/status. Preserve an explicit no-leg checkpoint compatibility path; reject mixed addressed/legacy modes and stale traversal/segment/generation context. Return stable diagnostics including address context rather than only node/day. Do not apply arrival/death/progress or storage effects here.
+
+**Non-goals:** No lifecycle flow, profile/discovery, duplicate exit advancement logic, scene loading, or guessed address from seed.
+
+**Dependencies:** `M3.11.15`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Session/BoardOutcomeIdentityGuard.cs`; existing `Assets/Tests/EditMode/RouteLegTests.cs`.
+
+**Acceptance criteria:** Matching addressed input validates; each foreign field or stale current cursor/traversal is rejected with zero run/profile/save effects. Identical node/day/seed cannot rescue the wrong leg/segment. Checkpoint compatibility never accepts an addressed outcome.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.OutcomeGuard_RejectsForeignAddressBeforeMutation`.
+
+**Save and compatibility impact:** No writes; stale input cannot reach a save operation.
+
+**Required handoff:** Guard result/diagnostic matrix and the exact active-state inputs consumed.
+
+---
+
+## `M3.11.17` - Validate addressed runtime composition
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 7, 21.1, and 27.2.
+
+**Rationale:** The legacy runtime composer must not validate a segment request against the old node-derived seed.
+
+**Current behavior:** `LegacyBoardRuntimeComposer.ValidateIdentity` calls the old node/day seed and node matching.
+
+**Expected outcome:** Runtime composition validates addressed input using the accepted full identity path while retaining unchanged checkpoint composition.
+
+**Scope:** Replace only the composer's identity validation branch with accepted factory/guard operations. Keep descriptor validation, terrain/index construction, deterministic entity IDs, and view registry unchanged. An addressed request uses current leg/configuration identity and contextual metadata; a checkpoint-only request uses the documented legacy adapter. No production leg is started here.
+
+**Non-goals:** No board generator, enemy migration, view layout, runtime ownership redesign, travel scene flow, or weaker validation.
+
+**Dependencies:** `M3.11.16`.
+
+**Allowed file area:** Existing `Assets/Scripts/Presentation/Runtime/LegacyBoardRuntimeComposer.cs`; existing `Assets/Tests/EditMode/BoardRuntimeCompositionTests.cs`.
+
+**Acceptance criteria:** A supplied valid addressed fixture composes; foreign segment/leg/configuration and mixed mode fail before runtime publication. Existing checkpoint fixtures still compose. Invalid composition does not mutate the run or publish partial registry/state.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.BoardRuntimeCompositionTests.AddressedComposition_RejectsStaleIdentityWithoutPartialRuntime`.
+
+**Save and compatibility impact:** None; runtime remains reconstructed/transient.
+
+**Required handoff:** Addressed/legacy validation trace and preserved descriptor/registry behavior.
+
+---
+
+## `M3.11.18` - Wire the guarded production outcome boundary
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 7, 21.5, and 27.2.
+
+**Rationale:** A pure guard needs a single production entry point before lifecycle effects.
+
+**Current behavior:** `GameManager` checks active request and run/node/day fields at outcome admission.
+
+**Expected outcome:** Production outcome admission uses the accepted full-address guard before resource/lifecycle/save/scene effects.
+
+**Scope:** Replace only duplicated identity validation in the current `GameManager` outcome boundary. Reuse accepted request/runtime composition and existing one-outcome/one-coordinator ownership; use isolated startup fixture helpers. Preserve production checkpoint behavior. Test foreign addressed admission without activating multi-board route choice or changing matched-outcome travel semantics, which belong to M3.12.
+
+**Non-goals:** No route selection cutover, segment advance orchestration, discovery timing, new outcomes/controller, Day UI, scene/prefab edit, or persistence migration.
+
+**Dependencies:** `M3.11.17`.
+
+**Allowed file area:** Existing `Assets/Scripts/GameManager.cs`; existing `Assets/Tests/PlayMode/BoardRuntimeStartupTests.cs`.
+
+**Acceptance criteria:** Foreign run/leg/segment/configuration calls reach no lifecycle/save/scene sink; duplicate/stale callbacks retain existing guard behavior. Legacy checkpoint positive flow is unchanged. Addressed tests use the accepted runtime/guard seam, never a second resolver or private controller replacement.
+
+**Test plan:** PlayMode filter `HallowBlaze.Tests.PlayMode.BoardRuntimeStartupTests.ForeignBoardAddress_CannotReachProductionOutcomeEffects`.
+
+**Save and compatibility impact:** No format changes; tests isolate all storage from player data.
+
+**Required handoff:** Guard-before-effects trace, sink/resolution counts, and explicit matched active-leg flow still deferred to M3.12.
+
+---
+
+## `M3.11.19` - Define the independent v2 run document
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 21.4, 27.1, and 27.2.
+
+**Rationale:** DTO shape and version validation must be accepted before replacing the default save path.
+
+**Current behavior:** `RunStateDto` is v1; no durable leg/progress/intro/traversal-history data exists.
+
+**Expected outcome:** A separate explicit v2 DTO family names all run-owned travel data and preserves resources/tools/status.
+
+**Scope:** Add `RunStateV2Dto` and its small nested travel/segment DTOs in one source, following existing opt-in JSON conventions. Include completed-day count, reached checkpoint, traversal sequence, tagged ordered history, optional active leg with Pending/Consumed and its ordered segment/configuration cursor values. Store reproducible address inputs without creating a separately mutable competing address cache. Leave the old DTO/default version untouched.
+
+**Non-goals:** No mapper, migration/default serializer activation, profile DTO, storage path, resource observations, or mid-board state.
+
+**Dependencies:** `M3.11.18`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Persistence/Dto/RunStateV2Dto.cs`; existing `Assets/Tests/EditMode/PersistenceDtoTests.cs`.
+
+**Acceptance criteria:** Opt-in field/tag names and version are explicit; required fields/nullability/intro IDs match accepted State contracts. V1 class/current behavior is unchanged; v2 cannot accidentally serialize as v1 or store Unity references.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.PersistenceDtoTests.RunV2Dto_HasExplicitTravelSchemaWithoutV1Cutover`.
+
+**Save and compatibility impact:** Defines v2 only; no production write/read cutover yet.
+
+**Required handoff:** V1/v2 field mapping and required/optional/tag table with State owners.
+
+---
+
+## `M3.11.20` - Map current travel state to v2 and back
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 21.4 and 27.2.
+
+**Rationale:** A mapper must round-trip the domain's stable boundary rather than patch private fields or invent progress.
+
+**Current behavior:** V2 shape exists; `RunStateMapper` still serves v1 checkpoint serialization.
+
+**Expected outcome:** A dedicated v2 mapper validates and reconstructs independent checkpoint/active/terminal run state using accepted public restore operations.
+
+**Scope:** Add one mapper for the new DTO family; reuse existing tool/resource/status validation patterns and M3.11.8's restore API. Validate leg/history/sequence/day/checkpoint/intro invariants before publishing a run. Recompute address from restored inputs using the accepted factory at Session-level tests, not by adding a State/World dependency to Persistence.
+
+**Non-goals:** No v1 conversion, serializer default change, world discovery/profile, private setters/reflection, storage I/O, or DTO redesign.
+
+**Dependencies:** `M3.11.19`, `M3.11.12`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Persistence/Mapping/RunStateV2Mapper.cs`; existing `Assets/Tests/EditMode/PersistenceDtoTests.cs`.
+
+**Acceptance criteria:** Checkpoint, Pending, Consumed, intermediate, and terminal fixtures preserve every field and independent collections. Invalid sequence/progress/day/tag combinations fail with controlled field context and no partial run. Next legal traversal after restore cannot reuse an existing ID.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.PersistenceDtoTests.RunV2Mapper_RoundTripsAllStableTravelBoundaries`.
+
+**Save and compatibility impact:** V2 round-trip APIs exist independently; old production serializer still unchanged.
+
+**Required handoff:** Field-by-field comparison, corruption diagnostics, and persisted address reconstruction evidence.
+
+---
+
+## `M3.11.21` - Migrate one validated v1 run to a checkpoint
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** section 27.1 and the explicit M3.11 migration contract.
+
+**Rationale:** Old node history has no truthful traversal or segment evidence; migration must not fabricate it.
+
+**Current behavior:** Valid v1 documents load through the existing mapper only.
+
+**Expected outcome:** One pure migrator converts v1 into validated v2 checkpoint data with no active leg and preserved run resources/tools/status.
+
+**Scope:** Add a v1 -> v2 DTO migrator using existing v1 validation and accepted legacy checkpoint entries. Set completed days from old currentDay, preserve last reached node/root seed/run ID, and initialize a safe non-reusing traversal sequence for future new legs. Preserve repeated node entries in order without guessing edge/from/day identities. Reject invalid legacy input through existing controlled error conventions.
+
+**Non-goals:** No profile access/reset, route reconstruction from current graph, automatic file rewrite, new active leg, schema-default activation, or unknown-version migration.
+
+**Dependencies:** `M3.11.20`.
+
+**Allowed file area:** Proposed `Assets/Scripts/Core/Persistence/Mapping/RunStateV1Migration.cs`; existing `Assets/Tests/EditMode/PersistenceDtoTests.cs`.
+
+**Acceptance criteria:** Synthetic v1 active/dead/won/max-value fixtures preserve evidence and yield a valid checkpoint. No fabricated leg/edge/segment/day appears. Invalid v1 fails without profile data in diagnostics; the next new leg starts the next day or rejects overflow unchanged.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.PersistenceDtoTests.RunV1Migration_PreservesCheckpointWithoutInventedTravel`.
+
+**Save and compatibility impact:** Approved run-only migration; no reset or profile schema change.
+
+**Required handoff:** Exact old -> new mapping and unrecoverable-run cases with profile-preservation obligation.
+
+---
+
+## `M3.11.22` - Read supported run schemas strictly
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 21.4 and 27.1.
+
+**Rationale:** Version dispatch belongs at parsing, before DTO materialization and before any player-file rewrite.
+
+**Current behavior:** Default persistence accepts only the current v1 run schema; v2 mapper/migration are accepted in isolation.
+
+**Expected outcome:** An explicit v2 reader decodes v2 or migrates supported v1, rejecting malformed/unsupported input deterministically.
+
+**Scope:** Extend `PersistenceJsonSerializer` with a separately named travel-aware read entry point. Reuse strict one-document/duplicate-key/unknown-field validation and dispatch only supported run versions to accepted mapper/migrator. Leave default `DeserializeRun` and profile deserialization unchanged until cutover.
+
+**Non-goals:** No filesystem recovery, default write/read activation, profile migration, permissive field dropping, or new parser/package.
+
+**Dependencies:** `M3.11.21`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Persistence/PersistenceJsonSerializer.cs`; existing `Assets/Tests/EditMode/PersistenceDtoTests.cs`.
+
+**Acceptance criteria:** V1/v2 fixtures read correctly; unknown version, duplicate/trailing JSON, missing travel fields, invalid IDs/progress/intro tags fail with controlled diagnostics. Bad input does not write or return a partially repaired run; profile reader behavior is identical.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.PersistenceDtoTests.TravelRunReader_DispatchesSupportedSchemasOrRejects`.
+
+**Save and compatibility impact:** Explicit new reader only; no production storage switch yet.
+
+**Required handoff:** Version/error dispatch matrix and proof that player/profile/default v1 paths were not activated or changed.
+
+---
+
+## `M3.11.23` - Write explicit v2 stable-boundary JSON
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 21.4 and 27.2.
+
+**Rationale:** Writing v2 should consume the verified mapper rather than reopen state/migration design.
+
+**Current behavior:** The explicit travel-aware reader exists; default serialization still emits v1.
+
+**Expected outcome:** A separately named write operation emits one strict v2 run document at supported stable boundaries.
+
+**Scope:** Add only the explicit travel-aware writer to the existing serializer using the accepted v2 mapper/settings. Validate before encoding. Preserve ordered history/segments and nullable active leg; emit Pending/Consumed IDs exactly. Do not change default SerializeRun/profile methods yet.
+
+**Non-goals:** No file storage, cutover, new DTO/mapper, intro UI, persistence transaction orchestration, or schema guessed from field presence.
+
+**Dependencies:** `M3.11.22`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Persistence/PersistenceJsonSerializer.cs`; existing `Assets/Tests/EditMode/PersistenceDtoTests.cs`.
+
+**Acceptance criteria:** Explicit output has v2 and all required authoritative fields, no stale node-route duplicate authority, and no Unity references. Reading it through the explicit reader preserves exact state/address inputs. Default v1/profile methods remain unchanged in this child.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.PersistenceDtoTests.TravelRunWriter_EmitsCompleteV2StableState`.
+
+**Save and compatibility impact:** Explicit v2 writer exists; activation waits for the following integrated gate.
+
+**Required handoff:** Synthetic v2 checkpoint/Pending/Consumed examples and exact writer/readback evidence.
+
+---
+
+## `M3.11.24` - Integrated migration and corruption regression
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 21.4, 27.1, and 27.2.
+
+**Rationale:** The default path must not switch until supported old/new documents prove complete round-trip behavior.
+
+**Current behavior:** Explicit read/write/migration operations are accepted individually.
+
+**Expected outcome:** One parameterized regression proves complete v1 migration and v2 boundary round-trip before production activation.
+
+**Scope:** Add tests only to the existing DTO fixture, reusing accepted synthetic inputs and actual explicit reader/writer. Cover zero/max days, repeated legacy nodes, tools/resources/status, Pending/Consumed, intermediate cursor, complete history, restored traversal allocation, malformed fields/tags, and reconstructed address equality. No real file/profile directory is accessed.
+
+**Non-goals:** No implementation repairs, extra fixture, default activation, storage transaction tests, or profile-version changes.
+
+**Dependencies:** `M3.11.23`.
+
+**Allowed file area:** Existing `Assets/Tests/EditMode/PersistenceDtoTests.cs` only.
+
+**Acceptance criteria:** Explicit expected field/address comparisons pass in every valid case; bad cases reject with expected errors and no fabricated travel. Legacy migration plus v2 read/write is stable under a second round-trip. Report nonzero cases and no skips.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.PersistenceDtoTests.TravelPersistence_RoundTripsMigratesAndRejectsCorruption`.
+
+**Save and compatibility impact:** Acceptance evidence for the upcoming v2 switch; no default file mutation.
+
+**Required handoff:** Fixture/case count, exact mapping/error results, and stable address/sequence comparisons.
+
+---
+
+## `M3.11.25` - Activate the accepted run schema path
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 21.4 and 27.1.
+
+**Rationale:** Default schema activation is a small forwarding change after independent serialization acceptance.
+
+**Current behavior:** Explicit v2 APIs are verified; normal SerializeRun/DeserializeRun still use v1.
+
+**Expected outcome:** Existing normal run serializer entry points write v2 and read supported v1/v2 through the accepted operations.
+
+**Scope:** Forward only normal run serialization/deserialization to the verified travel-aware writer/reader. Preserve profile serialization, public entry-point names, strict errors, and existing storage integration. Keep v1 DTO/version constants as historical migration inputs rather than relabeling v1 shape as v2. Existing callers and tests must compile; wider caller/schema assumptions become separately scoped prerequisites, not edits bundled here.
+
+**Non-goals:** No mapper/migration repair, storage path/transaction redesign, profile schema, route flow cutover, or mass test rewrite.
+
+**Dependencies:** `M3.11.24`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Persistence/PersistenceJsonSerializer.cs`; existing `Assets/Tests/EditMode/PersistenceDtoTests.cs`.
+
+**Acceptance criteria:** Normal run output is v2; normal v1/v2 reads preserve approved state. Profile output remains its accepted version with identical data. Strict failure behavior is preserved; no v1 relabeling or double-migration occurs. Normal existing save caller APIs remain compatible.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.PersistenceDtoTests.DefaultRunSchema_UsesAcceptedV2WithoutProfileChange`.
+
+**Save and compatibility impact:** Deliberate run-schema activation; old run support is the accepted migrator, not an approved reset.
+
+**Required handoff:** Default entry-point/version evidence, profile invariance, and any separately accepted caller prerequisite references.
+
+---
+
+## `M3.11.26` - Verify isolated save-store recovery and profile preservation
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 21.4 and 27.1.
+
+**Rationale:** Run-only corruption/migration must not destroy persistent profile knowledge when exercised through real storage.
+
+**Current behavior:** The v2 default codec is accepted; storage/recovery behavior with migrated travel data needs evidence.
+
+**Expected outcome:** Existing save-store/lifecycle APIs round-trip v2/migrate supported v1 and reject unrecoverable run data while the isolated profile remains intact.
+
+**Scope:** Add a focused storage regression using existing external temporary-root helpers and actual normal serializer/store APIs. Preserve profile bytes/knowledge, backup/failure behavior, Pending/Consumed/cursor data, and old checkpoint mapping. Test corrupt run recovery separately from valid profile load; do not add a new recovery policy or modify storage implementation in this test-only child.
+
+**Non-goals:** No player directory, destructive cleanup of user saves, source repairs, new storage layer, UI/menu redesign, or world-version reset.
+
+**Dependencies:** `M3.11.25`.
+
+**Allowed file area:** Existing `Assets/Tests/EditMode/PersistenceStorageTests.cs` only.
+
+**Acceptance criteria:** Valid current/legacy run files yield expected state; invalid run data produces the existing controlled recovery result and cannot erase/overwrite the valid profile. Pending/Consumed/address reconstruction survives disk round-trip. Fixture temporary data is isolated/cleaned by existing ownership conventions.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.PersistenceStorageTests.TravelRunRecovery_PreservesProfileAndStableBoundary`.
+
+**Save and compatibility impact:** Evidence for safe run-only migration/recovery; no profile schema change.
+
+**Required handoff:** Actual storage results, isolated location, preserved profile comparison, and recoverable versus rejected run cases.
+
+---
+
+## `M3.11.27` - Extend the replay run snapshot with travel state
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 16, 27.2, and 27.9.
+
+**Rationale:** The accepted M3.10 node-era snapshot must not omit new authoritative travel ownership.
+
+**Current behavior:** M3.10 captures run resources/tools/node history; M3.11 adds checkpoint/leg/sequence/history/intro fields.
+
+**Expected outcome:** The diagnostic run snapshot captures, independently restores, and canonically writes every new travel field using accepted public APIs.
+
+**Scope:** Extend only `ReplayRunSnapshot` for completed days/checkpoint, traversal sequence, tagged ordered history, and optional active leg with stable segment/configuration/cursor/day/intro data. Replace node-history-only mapping with the approved legacy view/structured ownership. Keep existing resources/tools/status behavior; use the accepted restore boundary without invoking travel or fresh planning.
+
+**Non-goals:** No new save mapper, command tag, runner/JSON change, rules-version activation, profile state, or private-field reflection.
+
+**Dependencies:** `M3.11.26`, `M3.10.4`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayRunSnapshot.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** Checkpoint/Pending/Consumed/intermediate/complete travel values rebuild exactly and independently. Each new field affects canonical description; meaningful segment/history order is preserved. Reconstruction neither allocates a new leg ID nor consumes intro or plans enemies.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.TravelRunSnapshot_CoversAndRestoresEveryAuthoritativeField`.
+
+**Save and compatibility impact:** Diagnostic capture extension only; normal v2 persistence remains unchanged.
+
+**Required handoff:** Added/replaced field inventory and mutation/restore evidence for each travel field.
+
+---
+
+## `M3.11.28` - Add full address to the replay document
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 16 and 27.9.
+
+**Rationale:** Run travel state is insufficient if replay context still identifies the initial board only by node/day/seed.
+
+**Current behavior:** M3.10 document header is node-era; M3.11 now has an immutable full address.
+
+**Expected outcome:** The replay document retains exact optional checkpoint-mode versus required active-leg address context and validates it against restored travel inputs.
+
+**Scope:** Extend document/header values and validation for the accepted `BoardAddress` fields and identity mode. Keep legacy checkpoint representation explicit; active-leg documents require complete address data and cannot downgrade to legacy. Add canonical address contribution using the accepted primitive writer/field order, not a display string. Expose new version constants without activating unsupported old JSON as new rules.
+
+**Non-goals:** No JSON parsing, controller/command changes, codec fallback, file save, or seed derivation duplicate.
+
+**Dependencies:** `M3.11.27`, `M3.11.15`, `M3.10.8`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayDocument.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** Run/leg/edge/segment/day/configuration/seed context is retained and consistent. Partial/mismatched/legacy-downgraded addressed input fails. Addresses differing only by traversal/segment remain different diagnostic inputs even with equal board grids/seeds.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.TravelReplayDocument_RequiresFullConsistentAddress`.
+
+**Save and compatibility impact:** Replay schema/rules extension is separate from run v2 migration; no automatic promise to read older replay versions.
+
+**Required handoff:** Context/address field and version table, active versus checkpoint rules, and mismatch diagnostics.
+
+---
+
+## `M3.11.29` - Require complete travel-aware replay coverage
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 16 and 27.9; M3.10 extension contract.
+
+**Rationale:** Adding snapshot/header fields requires an independent mandatory field/owner inventory, not silent partial hashing.
+
+**Current behavior:** New values can encode travel/address, but required coverage still targets the prior replay-rules version.
+
+**Expected outcome:** The required manifest/rules version admits only complete travel/address contributions before a canonical hash is accepted.
+
+**Scope:** Update only the independently required travel/address field/contribution inventory and rules version. The Lead supplies exact accepted field/version mappings and confirms that hasher/runner/recorder consume registered operations without further source edits. Reject missing travel/address input before hashing. If a consumer cannot accept the established registration seam, define a separate adapter prerequisite before delegation rather than modifying it here.
+
+**Non-goals:** No JSON codec, new command, old-replay migration, hasher/runner/recorder edits, save schema, or planner call.
+
+**Dependencies:** `M3.11.28`, `M3.10.6`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayStateCoverage.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** New rules hash complete checkpoint/Pending/Consumed/address fixtures; omitting any newly required contribution fails with its stable key. Field mutation alters canonical input and registered contributions cannot shrink the required set. Unsupported rules versions fail explicitly. Consumer source remains unchanged or the child is blocked by the separately scoped adapter prerequisite.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.TravelReplayCoverage_RequiresEveryNewAuthoritativeContribution`.
+
+**Save and compatibility impact:** Diagnostic rules-version extension; no player schema or wire-format activation.
+
+**Required handoff:** Required fields/keys/rules version, observed omission/mutation tests, and unchanged-consumer or accepted prerequisite evidence.
+
+---
+
+## `M3.11.30` - Activate the strict travel-aware replay codec
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 16 and 27.9.
+
+**Rationale:** Wire-format activation should reuse accepted snapshot/header/coverage rather than change hashing at the same time.
+
+**Current behavior:** Travel/address and new rules coverage are accepted in memory; JSON still describes the previous diagnostic format.
+
+**Expected outcome:** The codec round-trips complete supported travel-aware documents and rejects partial/unsupported wire input.
+
+**Scope:** Extend only strict JSON fields/version dispatch through the accepted snapshot/document operations. Preserve command tags, stable identity mode, ordered history/segments, and Pending/Consumed. Validate full address against run context before replay. Unsupported old replay versions are rejected explicitly unless a separate migration was approved; player run migration is not replay migration.
+
+**Non-goals:** No manifest/hash/runner/recorder change, new command, implicit fallback, save-schema update, or file I/O.
+
+**Dependencies:** `M3.11.29`, `M3.10.9`.
+
+**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayJsonCodec.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+
+**Acceptance criteria:** Checkpoint/Pending/Consumed/current-address fixtures round-trip every new field and replay hash. Missing/mixed/foreign address input, bad intro/progress, unknown tags, and unsupported versions fail before controller effects. JSON property order/whitespace does not affect reconstructed values; no field is silently dropped.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.TravelReplayCodec_RoundTripsOrRejectsUnsupportedInput`.
+
+**Save and compatibility impact:** Explicit diagnostic wire-version activation only; v1/v2 player saves are unchanged.
+
+**Required handoff:** Supported rules/format versions, synthetic JSON round-trips, strict errors, and actual post-decode hash comparisons.
+
+---
+
+## `M3.11.31` - Addressed save/replay and stale-identity regression
+
+**Status:** `Planned`
+**Priority:** P0
+**Related contract:** sections 16, 27.2, and 27.9.
+
+**Rationale:** One final bounded cross-case regression must connect persisted travel identity with local turn replay.
+
+**Current behavior:** Travel state, v2 persistence, addresses, and versioned replay extension are individually accepted.
+
+**Expected outcome:** Equivalent captured/persisted travel context reproduces the same local turn hashes, while different traversal/segment/intro/progress context is detected.
+
+**Scope:** Add one test-only matrix using accepted persistence/snapshot/factory/runner/hasher helpers and independent owners per case. Cover parallel edges, repeat traversal IDs, two segments at one day, Pending/Consumed, v1-to-checkpoint migration, and foreign outcome fields. Round-trip supported current documents, mutate each travel/address field, and exercise required-owner omissions. Catalogue enumeration permutations must not alter a fixed captured leg/address; do not assert that a semantically reordered future travel sequence has the same full run hash.
+
+**Non-goals:** No source repairs, new fixture, scene travel, intro rendering, generator/large-seed gate, or old replay compatibility beyond supported versions.
+
+**Dependencies:** `M3.11.30`, `M3.11.16`, `M3.11.26`.
+
+**Allowed file area:** Existing `Assets/Tests/EditMode/ReplayTests.cs` only.
+
+**Acceptance criteria:** Explicit expected addresses/seeds/state/results/hashes survive valid persistence/replay round-trips. Each changed identity/progress/intro/sequence field changes canonical input or rejects inconsistent data. Foreign outcomes have no effects; missing required contributions fail. Failures identify seed/run/leg/edge/segment/case and first differing attempt.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.AddressedTravel_RoundTripsAndRejectsForeignOrIncompleteState`.
+
+**Save and compatibility impact:** Evidence for v2/diagnostic compatibility, with no real player/profile access.
+
+**Required handoff:** Matrix/case counts, exact outcomes, reproduced first divergence, and accepted supported-version boundaries.
+
+---
+
+## `M3.11.32` - Lead-owned route/address integration gate
+
+**Status:** `Planned`
+**Priority:** P0 architecture gate
+**Related contract:** sections 21.4, 22, and 27.1-27.2.
+
+**Rationale:** Shared State/Session/Persistence compatibility changes require a final independent integration check after focused child acceptance.
+
+**Current behavior:** Child-level validation exists; umbrella-wide regression/ownership/migration evidence is not yet consolidated.
+
+**Expected outcome:** The Lead accepts the foundation only with fresh full EditMode, production guard evidence, complete field/compatibility mapping, and explicit remaining M3.12 work.
+
+**Scope:** After the implementation writer finishes, run the repository's verified full EditMode gate and focused PlayMode production identity test, inspect fresh reports for real counts/results, and perform independent review. Write one report with state diagram, field/owner/day/cursor/intro tables, authored segment registry, fixed seed vectors, v1->v2 mapping, actual profile-preservation/storage evidence, foreign-address matrix, and replay rules/coverage evidence. Confirm no production leg/Day UI flow was silently activated and list the contract-alignment prerequisite for M3.12.
+
+**Non-goals:** No implementation rescue, scene/prefab changes, player-save cleanup, documentation rewrite of M3.12, or acceptance from an agent claim without executable reports.
+
+**Dependencies:** `M3.11.31`.
+
+**Allowed file area:** Proposed Lead-owned `Docs/Validation/M3.11RouteAddress.md` only; test reports/logs remain outside the Unity project.
+
+**Acceptance criteria:** Full EditMode and focused PlayMode identity gate actually pass with nonzero expected counts and no required skips; independent review passes. All field/compatibility/migration requirements have evidence. Player profile remains untouched; new code does not introduce State-to-World/Unity coupling. M3.12 still owns production leg/segment/discovery/save/intro orchestration and must adopt pre-render Consumed semantics before Ready.
+
+**Test plan:** One Lead integration gate: fresh full EditMode, `HallowBlaze.Tests.PlayMode.BoardRuntimeStartupTests.ForeignBoardAddress_CannotReachProductionOutcomeEffects`, report inspection, and independent final review.
+
+**Save and compatibility impact:** V2 activation is accepted only with explicit run migration/profile-preservation evidence; no approved reset.
+
+**Required handoff:** Report link, actual command/filter/count/results, review verdict, complete ownership/migration/identity evidence, and the exact bounded prerequisites remaining for M3.12.
 
 ---
 
@@ -4332,8 +6167,8 @@ M0, M1, and M2 are complete; M3.1–M3.6.2 are `Done`; the M3.6 umbrella is spli
 The next safe sequence is:
 
 1. complete the outstanding manual PC smoke and final independent acceptance for `M3.6.3`;
-2. use the accepted Shambler rule in contract section 11.3.1, verify the remaining M3.7 readiness prerequisites, and execute `M3.7.1` through `M3.7.8`, then `M3.7.11`, `M3.7.9`, and `M3.7.10` as separate delegations; after M3.7 acceptance, execute `M3.8.1` through `M3.8.10` separately, resolving the chain-occupancy decision before M3.8.6; accept M3.8 before continuing M3.9/M3.10;
-3. execute `M3.11` and `M3.12` before M4 so generation, replay, atlas observations, and tool sources share stable route-segment identity;
+2. use the accepted Shambler rule in contract section 11.3.1, verify the remaining M3.7 readiness prerequisites, and execute `M3.7.1` through `M3.7.8`, then `M3.7.11`, `M3.7.9`, and `M3.7.10` as separate delegations; after M3.7 acceptance, execute `M3.8.1` through `M3.8.10` separately, resolving the chain-occupancy decision before M3.8.6; after M3.8 acceptance, execute `M3.9.1` through `M3.9.10` separately, require an explicitly scoped and accepted production enemy-composition prerequisite before M3.9.11, then accept M3.9.11 through M3.9.13 separately and the Lead-owned M3.9.14 readability gate; execute `M3.10.1` through `M3.10.14` separately and accept the Lead-owned M3.10.15 replay/extension evidence gate;
+3. after M3.10 acceptance, execute `M3.11.1` through `M3.11.31` separately, with integrated v2 round-trip acceptance before M3.11.25 default activation; accept M3.11.32 with full EditMode and focused PlayMode identity evidence; align M3.12 planning with accepted section 27.2 Pending/Consumed and checkpoint-before-render semantics before making it Ready, then execute M3.12 before M4 so generation, replay, atlas observations, and tool sources share stable route-segment identity;
 4. complete the no-backpack vertical slice through `M7.8`, then make the explicit M9 verdict;
 5. keep M9 deferred and last unless the owner explicitly changes that order.
 
