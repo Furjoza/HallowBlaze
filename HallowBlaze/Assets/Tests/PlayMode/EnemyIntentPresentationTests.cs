@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Linq;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
+using HallowBlaze.Core.Session;
+using HallowBlaze.Core.State;
 using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.Turns.Resolution;
 using HallowBlaze.Presentation.Runtime;
@@ -18,11 +20,15 @@ namespace HallowBlaze.Tests.PlayMode
     public sealed class EnemyIntentPresentationTests
     {
         private readonly List<GameObject> objects = new List<GameObject>();
+        private readonly List<BoardRuntime> runtimes = new List<BoardRuntime>();
 
         /// <summary>Releases all transient views and their owned materials after each isolated fixture.</summary>
         [TearDown]
         public void TearDown()
         {
+            foreach (BoardRuntime runtime in runtimes)
+                runtime.Dispose();
+            runtimes.Clear();
             foreach (GameObject instance in objects)
                 if (instance != null)
                     UnityEngine.Object.DestroyImmediate(instance);
@@ -405,6 +411,122 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(presenter.GetComponentsInChildren<EnemyIntentView>().Length, Is.EqualTo(3));
         }
 
+        /// <summary>Removal, clear, terminal disposal and board replacement never resurrect old markers or destroy borrowed state/views.</summary>
+        [UnityTest]
+        public IEnumerator BoardLifetime_ClearsAndRejectsStalePublication()
+        {
+            BoardRuntime first = CreateIntentRuntime(out ShamblerState enemy);
+            BoardRuntime activeRuntime = first;
+            var owner = new GameObject("First board intent owner");
+            objects.Add(owner);
+            EnemyIntentPresenter presenter = owner.AddComponent<EnemyIntentPresenter>();
+            presenter.Bind(first.BoardState, () => activeRuntime == null || activeRuntime.IsDisposed ? null : activeRuntime.BoardState);
+            Assert.Throws<InvalidOperationException>(() => presenter.Bind(first.BoardState, () => first.BoardState));
+            var borrowedViews = first.Views.Values.ToArray();
+            var controller = first.Controller;
+            int health = first.RunState.Health;
+            int food = first.RunState.Food;
+            EnemyIntent locked = enemy.LockedIntent;
+            presenter.Publish(first.BoardState, new[] { enemy });
+            EnemyIntentView removedMarker = presenter.Views[enemy.ActorId];
+            Material removedMaterial = ActiveGlyphLines(removedMarker)[0].sharedMaterial;
+            Assert.That(first.BoardState.TryGetEntity(enemy.ActorId, out BoardEntityState source), Is.True);
+            Assert.That(first.BoardState.TryRemove(enemy.ActorId), Is.True);
+
+            presenter.Publish(first.BoardState, Array.Empty<ShamblerState>());
+
+            Assert.That(presenter.Views, Is.Empty);
+            Assert.That(presenter.Projections, Is.Empty);
+            Assert.That(removedMarker.gameObject.activeInHierarchy, Is.False);
+            yield return null;
+            Assert.That(removedMarker == null, Is.True);
+            Assert.That(removedMaterial == null, Is.True);
+            Assert.That(first.BoardState.TryAdd(source), Is.True);
+            presenter.Publish(first.BoardState, new[] { enemy });
+            presenter.Clear();
+            presenter.Clear();
+            Assert.That(presenter.Views, Is.Empty);
+            Assert.That(presenter.IsDisposed, Is.False);
+            presenter.Publish(first.BoardState, new[] { enemy });
+            EnemyIntentView staleMarker = presenter.Views[enemy.ActorId];
+            var firstSnapshot = first.BoardState.GetEntities();
+
+            BoardRuntime second = CreateIntentRuntime(out ShamblerState newEnemy);
+            activeRuntime = second;
+            var newOwner = new GameObject("Second board intent owner");
+            objects.Add(newOwner);
+            EnemyIntentPresenter replacement = newOwner.AddComponent<EnemyIntentPresenter>();
+            replacement.Bind(second.BoardState, () => activeRuntime == null || activeRuntime.IsDisposed ? null : activeRuntime.BoardState);
+            var secondSnapshot = second.BoardState.GetEntities();
+            var newBorrowedViews = second.Views.Values.ToArray();
+            replacement.Publish(second.BoardState, new[] { newEnemy });
+            Assert.That(newEnemy.ActorId, Is.EqualTo(enemy.ActorId));
+            EnemyIntentView newMarker = replacement.Views[newEnemy.ActorId];
+            Assert.That(newMarker, Is.Not.SameAs(staleMarker));
+
+            Assert.Throws<InvalidOperationException>(() => presenter.Publish(first.BoardState, new[] { enemy }));
+
+            Assert.That(presenter.IsDisposed, Is.True);
+            Assert.That(presenter.Views, Is.Empty);
+            Assert.That(staleMarker.gameObject.activeInHierarchy, Is.False);
+            Assert.Throws<ObjectDisposedException>(() => presenter.Publish(second.BoardState, new[] { newEnemy }));
+            Assert.Throws<ObjectDisposedException>(() => presenter.Bind(second.BoardState, () => second.BoardState));
+            Assert.That(newMarker.gameObject.activeInHierarchy, Is.True);
+            replacement.Dispose();
+            replacement.Dispose();
+            replacement.Clear();
+            Assert.That(replacement.Views, Is.Empty);
+            Assert.Throws<ObjectDisposedException>(() => replacement.Publish(second.BoardState, new[] { newEnemy }));
+            Assert.That(newMarker.gameObject.activeInHierarchy, Is.False);
+
+            EnemyIntentPresenter destroyed = newOwner.AddComponent<EnemyIntentPresenter>();
+            destroyed.Bind(second.BoardState, () => second.BoardState);
+            destroyed.Publish(second.BoardState, new[] { newEnemy });
+            EnemyIntentView destroyedMarker = destroyed.Views[newEnemy.ActorId];
+            Material destroyedMaterial = ActiveGlyphLines(destroyedMarker)[0].sharedMaterial;
+            UnityEngine.Object.Destroy(destroyed);
+            yield return null;
+            yield return null;
+            Assert.That(destroyedMarker == null && destroyedMaterial == null, Is.True);
+            Assert.That(newOwner != null, Is.True);
+            Assert.That(borrowedViews.Concat(newBorrowedViews).All(instance => instance != null && instance.activeInHierarchy), Is.True);
+            Assert.That(first.IsDisposed || second.IsDisposed, Is.False);
+            Assert.That(first.Controller, Is.SameAs(controller));
+            Assert.That(first.RunState.Health, Is.EqualTo(health));
+            Assert.That(first.RunState.Food, Is.EqualTo(food));
+            Assert.That(second.RunState.Health, Is.EqualTo(100));
+            Assert.That(second.RunState.Food, Is.EqualTo(25));
+            CollectionAssert.AreEqual(firstSnapshot, first.BoardState.GetEntities());
+            CollectionAssert.AreEqual(secondSnapshot, second.BoardState.GetEntities());
+            Assert.That(enemy.LockedIntent, Is.SameAs(locked));
+            Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Active));
+            Assert.That(newEnemy.Phase, Is.EqualTo(ShamblerPhase.Active));
+        }
+
+        private BoardRuntime CreateIntentRuntime(out ShamblerState enemy)
+        {
+            var run = new RunState("intent-lifetime-" + runtimes.Count, 12345, new RunStateConfiguration(100, 25, 0, "forest.start"));
+            var request = new BoardRequest(run.RunId, run.RunSeed, run.WorldNodeId, run.CurrentDay,
+                run.GetBoardSeed(), "forest", "temperate", 1);
+            var layout = new List<LegacyBoardView>();
+            foreach (LegacyBoardContentKind kind in new[] { LegacyBoardContentKind.Floor, LegacyBoardContentKind.Floor,
+                LegacyBoardContentKind.Player, LegacyBoardContentKind.Exit })
+            {
+                int horizontal = layout.Count == 1 || kind == LegacyBoardContentKind.Exit ? 1 : 0;
+                var instance = new GameObject("Borrowed runtime " + kind);
+                instance.transform.position = new Vector3(horizontal, 0, 0);
+                objects.Add(instance);
+                layout.Add(new LegacyBoardView(instance, kind, new GridPosition(horizontal, 0)));
+            }
+            BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(request, run, new GridBounds(0, 0, 1, 0), layout);
+            runtimes.Add(runtime);
+            enemy = new ShamblerState(new EntityId(0), new ShamblerDefinition(10));
+            enemy.LockIntent(new EnemyIntent(enemy.ActorId, EnemyIntentKind.Wait));
+            var definition = new BoardEntityDefinition(BoardLayer.Actor, EntityKind.Enemy, "lifetime.enemy", BoardEntityTraits.Default);
+            Assert.That(runtime.BoardState.TryAdd(new BoardEntityState(enemy.ActorId, definition, new GridPosition(1, 0))), Is.True);
+            return runtime;
+        }
+
         private EnemyIntentPresenter CreatePublisherFixture(out BoardState board, out ShamblerState[] enemies)
         {
             board = new BoardState();
@@ -421,7 +543,10 @@ namespace HallowBlaze.Tests.PlayMode
             }
             var instance = new GameObject("Intent publisher fixture");
             objects.Add(instance);
-            return instance.AddComponent<EnemyIntentPresenter>();
+            EnemyIntentPresenter presenter = instance.AddComponent<EnemyIntentPresenter>();
+            BoardState capturedBoard = board;
+            presenter.Bind(capturedBoard, () => capturedBoard);
+            return presenter;
         }
 
         private static IEnumerable<EnemyIntentProjection[]> ProjectionPermutations(EnemyIntentProjection[] projections)

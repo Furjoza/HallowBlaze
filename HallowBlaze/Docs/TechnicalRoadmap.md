@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1-5 accepted; M3.9.6 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1-6 accepted; M3.9.7 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -3057,7 +3057,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.6` - Clear markers at the owning board lifetime boundary
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09; lifetime PlayMode 1/1 passed, full presentation fixture 24/24 passed, independent review PASS. One-time Bind uses exact BoardState identity and an explicit active-board provider. Clear permits a fresh publication only during the same lifetime; Dispose and stale publication permanently close the owner. Markers/materials are owned, while runtime, domain state, and source views remain borrowed.
 **Priority:** P0
 **Related contract:** sections 11.1, 18, and 21.2.
 
