@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HallowBlaze.Core.Board.Primitives;
+using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
 using HallowBlaze.Core.Turns.Contracts;
@@ -21,10 +22,14 @@ namespace HallowBlaze.Tests.PlayMode
         private readonly List<GameObject> objects = new List<GameObject>();
         private readonly List<BoardEventPresenter> presenters = new List<BoardEventPresenter>();
         private readonly List<BoardRuntime> runtimes = new List<BoardRuntime>();
+        private readonly List<EnemyAttackPresenter> attackPresenters = new List<EnemyAttackPresenter>();
 
         [TearDown]
         public void TearDown()
         {
+            foreach (EnemyAttackPresenter attack in attackPresenters)
+                attack.Dispose();
+            attackPresenters.Clear();
             foreach (BoardEventPresenter presenter in presenters)
                 presenter.Dispose();
             foreach (BoardRuntime runtime in runtimes)
@@ -243,6 +248,100 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.Presenter.Coordinator.CanSubmit, Is.True);
         }
 
+        [UnityTest]
+        public IEnumerator EnemyAttackReplay_UsesRecordedOutcomeWithoutGameplayMutation()
+        {
+            var shapes = new HashSet<string>();
+            foreach (bool animations in new[] { true, false })
+            {
+                foreach (string scenario in new[] { "hit10", "hit20", "miss", "replacement", "missing-attacker", "missing-affected", "canceled" })
+                {
+                    Fixture fixture = CreateFixture(animations);
+                    bool hit = scenario == "hit10" || scenario == "hit20" || scenario == "missing-affected";
+                    int damage = scenario == "hit20" ? 20 : 10;
+                    Assert.That(fixture.Runtime.BoardState.TryRemove(fixture.AidId), Is.True);
+                    var enemyDefinition = new BoardEntityDefinition(BoardLayer.Actor, EntityKind.Enemy, "attack.enemy", BoardEntityTraits.Default);
+                    Assert.That(fixture.Runtime.BoardState.TryAdd(new BoardEntityState(fixture.AidId, enemyDefinition, new GridPosition(0, 1))), Is.True);
+                    if (hit)
+                        fixture.Runtime.RunState.TakeDamage(damage);
+                    else
+                    {
+                        Assert.That(fixture.Runtime.BoardState.TryMove(fixture.Runtime.PlayerId, new GridPosition(1, 0)), Is.True);
+                        fixture.Runtime.Views[fixture.Runtime.PlayerId].transform.position = new Vector3(1, 0, 3);
+                    }
+                    if (scenario == "replacement")
+                        Assert.That(fixture.Runtime.BoardState.TryAdd(new BoardEntityState(new EntityId(500), enemyDefinition, new GridPosition(0, 0))), Is.True);
+                    var gameEvent = new EnemyAttackResolvedEvent(fixture.AidId, new GridPosition(0, 0), hit,
+                        hit ? (EntityId?)fixture.Runtime.PlayerId : null, hit ? -damage : 0);
+                    var entitiesBefore = fixture.Runtime.BoardState.GetEntities();
+                    int health = fixture.Runtime.RunState.Health;
+                    int food = fixture.Runtime.RunState.Food;
+                    var attack = new EnemyAttackPresenter(fixture.Runtime, fixture.Sink, fixture.Sink, 0.04f) { AnimationsEnabled = animations };
+                    attackPresenters.Add(attack);
+                    var dispatcher = new OrderedEventDispatcher(value => fixture.Sink.Diagnostic = value, fixture.Presenter.SynchronizeFromState);
+                    dispatcher.Register<EntityWaitedEvent>((value, token) => { fixture.Sink.ShowEvent(value); return Task.CompletedTask; });
+                    dispatcher.Register<EnemyAttackResolvedEvent>(attack.ReplayAsync);
+                    if (scenario == "missing-attacker")
+                        UnityEngine.Object.DestroyImmediate(fixture.Runtime.Views[fixture.AidId]);
+                    if (scenario == "missing-affected")
+                        UnityEngine.Object.DestroyImmediate(fixture.Runtime.Views[fixture.Runtime.PlayerId]);
+                    using (var cancellation = new CancellationTokenSource())
+                    {
+                        if (scenario == "canceled" && !animations)
+                            cancellation.Cancel();
+                        Task<PresentationDiagnostic> pending = dispatcher.ReplayAsync(new GameEvent[] {
+                            new EntityWaitedEvent(fixture.Runtime.PlayerId), gameEvent, new EntityWaitedEvent(fixture.Runtime.PlayerId) }, cancellation.Token);
+                        if (scenario == "canceled" && animations)
+                            cancellation.Cancel();
+                        while (!pending.IsCompleted)
+                            yield return null;
+                        bool failure = scenario.StartsWith("missing-", StringComparison.Ordinal) || scenario == "canceled";
+                        if (failure)
+                        {
+                            Assert.That(pending.Result.Code, Is.EqualTo(scenario == "canceled" ? PresentationDiagnosticCode.Canceled : PresentationDiagnosticCode.HandlerFailed));
+                            if (scenario != "canceled" || animations)
+                                Assert.That(pending.Result.EventType, Is.EqualTo(typeof(EnemyAttackResolvedEvent).FullName));
+                            Assert.That(fixture.Sink.Diagnostic, Is.SameAs(pending.Result));
+                            Assert.That(attack.TargetFeedback, Is.Null);
+                            Assert.That(fixture.Sink.Trace.Last(), Is.EqualTo("Hud:" + health + ":" + food));
+                            Assert.That(fixture.Sink.Trace.Count, Is.EqualTo(scenario == "canceled" && !animations ? 1 : 2));
+                        }
+                        else
+                        {
+                            Assert.That(pending.Result, Is.Null);
+                            CollectionAssert.AreEqual(new[] { "EntityWaited", "Hud:" + health + ":" + food,
+                                "EnemyAttackResolved", "EntityWaited" }, fixture.Sink.Trace);
+                            Assert.That(fixture.Sink.LastAttack, Is.SameAs(gameEvent));
+                            Assert.That(attack.TargetFeedback.transform.position, Is.EqualTo(new Vector3(0, 0, EnemyIntentView.MarkerDepth)));
+                            Transform outcome = attack.TargetFeedback.transform.Find("Outcome");
+                            LineRenderer[] lines = outcome.GetComponentsInChildren<LineRenderer>();
+                            Assert.That(lines.Length, Is.EqualTo(hit ? 2 : 1));
+                            Assert.That(lines.All(line => line.enabled && line.gameObject.activeInHierarchy &&
+                                line.startColor == Color.white && line.endColor == Color.white), Is.True);
+                            Assert.That(lines[0].loop, Is.EqualTo(!hit));
+                            shapes.Add(hit ? "cross" : "ring");
+                            LineRenderer sourceLink = attack.TargetFeedback.GetComponentsInChildren<LineRenderer>()
+                                .Single(line => line.transform.parent == attack.TargetFeedback.transform);
+                            Assert.That(sourceLink.transform.TransformPoint(sourceLink.GetPosition(0)), Is.EqualTo(new Vector3(0, 1, EnemyIntentView.MarkerDepth)));
+                            Assert.That(fixture.Runtime.Views[fixture.AidId].transform.position, Is.EqualTo(new Vector3(0, 1, 3)));
+                            Vector3 expectedPlayer = hit ? new Vector3(0, 0, 3) : new Vector3(1, 0, 3);
+                            Assert.That(fixture.Runtime.Views[fixture.Runtime.PlayerId].transform.position, Is.EqualTo(expectedPlayer));
+                        }
+                    }
+                    CollectionAssert.AreEqual(entitiesBefore, fixture.Runtime.BoardState.GetEntities());
+                    Assert.That(fixture.Runtime.RunState.Health, Is.EqualTo(health));
+                    Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(food));
+                    Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+                    Assert.That(fixture.Runtime.IsDisposed, Is.False);
+                    TestContext.WriteLine("Animations=" + animations + "; outcome=" + scenario + "; HP=" + health);
+                    attack.Dispose();
+                    attack.Dispose();
+                    Assert.That(attack.TargetFeedback, Is.Null);
+                }
+            }
+            Assert.That(shapes.Count, Is.EqualTo(2));
+        }
+
         private static void AssertRecovered(Fixture fixture)
         {
             Assert.That(fixture.Runtime.Views[fixture.Runtime.PlayerId].transform.position, Is.EqualTo(new Vector3(1, 0, 3)));
@@ -328,10 +427,16 @@ namespace HallowBlaze.Tests.PlayMode
             public CommandRejectionCode Rejection;
             public int OutcomeCalls;
             public int AcceptedOutcomes;
+            public EnemyAttackResolvedEvent LastAttack;
 
             public void Refresh(int health, int food) => Trace.Add("Hud:" + health + ":" + food);
             public void ShowRejection(CommandRejectionCode reason) => Rejection = reason;
-            public void ShowEvent(GameEvent gameEvent) => Trace.Add(gameEvent.EventType);
+            public void ShowEvent(GameEvent gameEvent)
+            {
+                Trace.Add(gameEvent.EventType);
+                if (gameEvent is EnemyAttackResolvedEvent attack)
+                    LastAttack = attack;
+            }
 
             public bool TryNotify(BoardRequest request, GameEvent outcome)
             {

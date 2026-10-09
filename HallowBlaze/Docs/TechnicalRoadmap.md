@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1-6 accepted; M3.9.7 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1-7 accepted; M3.9.8 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -3087,7 +3087,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.7` - Replay one fixed-cell attack outcome
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09; focused PlayMode 1/1 passed across 14 hit/miss/failure traces, independent review PASS. Prototype hit/miss feedback uses a white cross or empty ring at the exact event cell, with an authoritative-source link. Pulse animation affects time/scale only; outcome geometry persists without animation. The helper forwards the original event and current HUD values, never health deltas.
 **Priority:** P0
 **Related contract:** sections 11.3.1, 18, and 21.2.
 
