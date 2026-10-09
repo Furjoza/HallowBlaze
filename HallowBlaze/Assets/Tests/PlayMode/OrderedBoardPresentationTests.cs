@@ -342,6 +342,63 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(shapes.Count, Is.EqualTo(2));
         }
 
+        [UnityTest]
+        public IEnumerator RegisteredEnemyAttack_PreservesOrderedReplayAndTerminalSink()
+        {
+            foreach (bool animations in new[] { true, false })
+            {
+                Fixture fixture = CreateFixture(animations);
+                Assert.That(fixture.Runtime.BoardState.TryRemove(fixture.AidId), Is.True);
+                var definition = new BoardEntityDefinition(BoardLayer.Actor, EntityKind.Enemy, "registered.attack", BoardEntityTraits.Default);
+                Assert.That(fixture.Runtime.BoardState.TryAdd(new BoardEntityState(fixture.AidId, definition, new GridPosition(1, 1))), Is.True);
+                fixture.Runtime.Views[fixture.AidId].transform.position = new Vector3(1, 1, 3);
+                Assert.That(fixture.Runtime.BoardState.TryMove(fixture.Runtime.PlayerId, new GridPosition(1, 0)), Is.True);
+                fixture.Runtime.RunState.ConsumeFood(1);
+                fixture.Runtime.RunState.TakeDamage(80);
+                fixture.Runtime.RunState.TakeDamage(20);
+                var attack = new EnemyAttackResolvedEvent(fixture.AidId, new GridPosition(1, 0), true, fixture.Runtime.PlayerId, -20);
+                var terminal = new PlayerDiedEvent(fixture.Runtime.PlayerId);
+                var events = new GameEvent[] { new EntityMovedEvent(fixture.Runtime.PlayerId, new GridPosition(0, 0), new GridPosition(1, 0)),
+                    new ActionCostAppliedEvent(fixture.Runtime.PlayerId, 1), attack, terminal };
+                var entitiesBefore = fixture.Runtime.BoardState.GetEntities();
+                Assert.Throws<ArgumentException>(() => fixture.Presenter.Dispatcher.Register<EnemyAttackResolvedEvent>((value, token) => Task.CompletedTask));
+
+                Task<PresentationDiagnostic> pending = fixture.Presenter.Dispatcher.ReplayAsync(events);
+
+                if (animations)
+                {
+                    Assert.That(pending.IsCompleted, Is.False);
+                    Assert.That(fixture.Sink.OutcomeCalls, Is.Zero);
+                }
+                else
+                    Assert.That(pending.IsCompleted, Is.True);
+                while (!pending.IsCompleted)
+                    yield return null;
+                Assert.That(pending.Result, Is.Null);
+                CollectionAssert.AreEqual(new[] { "EntityMoved", "Hud:0:99", "Hud:0:99", "EnemyAttackResolved", "PlayerDied" }, fixture.Sink.Trace);
+                Assert.That(fixture.Sink.Trace.Last(), Is.EqualTo(terminal.EventType));
+                Assert.That(fixture.Sink.LastAttack, Is.SameAs(attack));
+                Assert.That(fixture.Sink.AcceptedOutcomes, Is.EqualTo(1));
+                Assert.That(fixture.Runtime.RunState.Health, Is.Zero);
+                Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(99));
+                Assert.That(fixture.Runtime.Views[fixture.AidId].transform.position, Is.EqualTo(new Vector3(1, 1, 3)));
+                Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+                CollectionAssert.AreEqual(entitiesBefore, fixture.Runtime.BoardState.GetEntities());
+                fixture.Sink.Trace.Clear();
+
+                PresentationDiagnostic unknown = fixture.Presenter.Dispatcher.ReplayAsync(new GameEvent[] { new UnknownEvent(), attack, terminal }).Result;
+
+                Assert.That(unknown.Code, Is.EqualTo(PresentationDiagnosticCode.UnknownEvent));
+                Assert.That(unknown.EventType, Is.EqualTo(typeof(UnknownEvent).FullName));
+                CollectionAssert.AreEqual(new[] { "Hud:0:99" }, fixture.Sink.Trace);
+                Assert.That(fixture.Sink.OutcomeCalls, Is.EqualTo(1));
+                Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+                CollectionAssert.AreEqual(entitiesBefore, fixture.Runtime.BoardState.GetEntities());
+                fixture.Presenter.Dispose();
+                Assert.That(fixture.Runtime.IsDisposed, Is.False);
+            }
+        }
+
         private static void AssertRecovered(Fixture fixture)
         {
             Assert.That(fixture.Runtime.Views[fixture.Runtime.PlayerId].transform.position, Is.EqualTo(new Vector3(1, 0, 3)));

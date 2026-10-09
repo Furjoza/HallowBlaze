@@ -52,6 +52,7 @@ namespace HallowBlaze.Presentation.Runtime
         private readonly IRunHud hud;
         private readonly ITurnFeedback feedback;
         private readonly IBoardOutcomeSink outcomes;
+        private readonly EnemyAttackPresenter attacks;
 
         /// <summary>Composes isolated presentation; the caller synchronizes and releases Setup when ready.</summary>
         /// <param name="runtime">The active runtime; this presenter borrows rather than disposes it.</param>
@@ -70,6 +71,7 @@ namespace HallowBlaze.Presentation.Runtime
             if (float.IsNaN(moveDuration) || float.IsInfinity(moveDuration) || moveDuration < 0f)
                 throw new ArgumentOutOfRangeException(nameof(moveDuration));
             MoveDuration = moveDuration;
+            attacks = new EnemyAttackPresenter(runtime, hud, feedback, moveDuration);
             Dispatcher = new OrderedEventDispatcher(diagnostic, SynchronizeFromState);
             Coordinator = new CommandPresentationCoordinator(runtime, new PresentationGate(), Dispatcher, feedback.ShowRejection);
             Dispatcher.Register<EntityMovedEvent>(MoveAsync);
@@ -78,6 +80,11 @@ namespace HallowBlaze.Presentation.Runtime
             Dispatcher.Register<ItemCollectedEvent>((gameEvent, token) => HideItem(gameEvent));
             Dispatcher.Register<FoodRestoredEvent>((gameEvent, token) => RefreshFood(gameEvent));
             Dispatcher.Register<ActionCostAppliedEvent>((gameEvent, token) => RefreshHud());
+            Dispatcher.Register<EnemyAttackResolvedEvent>((gameEvent, token) =>
+            {
+                attacks.AnimationsEnabled = AnimationsEnabled;
+                return attacks.ReplayAsync(gameEvent, token);
+            });
             Dispatcher.Register<ExitReachedEvent>((gameEvent, token) => NotifyOutcome(gameEvent));
             Dispatcher.Register<PlayerStarvedEvent>((gameEvent, token) => NotifyOutcome(gameEvent));
             Dispatcher.Register<PlayerDiedEvent>((gameEvent, token) => NotifyOutcome(gameEvent));
@@ -87,7 +94,7 @@ namespace HallowBlaze.Presentation.Runtime
         public CommandPresentationCoordinator Coordinator { get; }
         /// <summary>Gets the extensible registry; future concrete events can register handlers before replay.</summary>
         public OrderedEventDispatcher Dispatcher { get; }
-        /// <summary>Gets or sets whether movement interpolates; false uses the same handler with zero visual delay.</summary>
+        /// <summary>Gets or sets whether movement and attacks animate; false uses the same handlers with zero visual delay.</summary>
         public bool AnimationsEnabled { get; set; } = true;
         /// <summary>Gets movement duration in unscaled seconds; zero completes synchronously in either mode.</summary>
         public float MoveDuration { get; }
@@ -190,7 +197,11 @@ namespace HallowBlaze.Presentation.Runtime
 
         private static Vector3 Position(GridPosition position, float depth) => new Vector3(position.X, position.Y, depth);
 
-        /// <summary>Cancels this presenter's coordinator without destroying the borrowed runtime or its views.</summary>
-        public void Dispose() => Coordinator.Dispose();
+        /// <summary>Cancels replay and releases owned attack feedback without destroying the borrowed runtime or its views.</summary>
+        public void Dispose()
+        {
+            Coordinator.Dispose();
+            attacks.Dispose();
+        }
     }
 }

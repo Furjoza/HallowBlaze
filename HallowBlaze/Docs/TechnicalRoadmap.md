@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1-7 accepted; M3.9.8 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1-8 accepted; M3.9.9 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -3117,7 +3117,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.8` - Register accepted attack replay in the board presenter
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09; focused registration PlayMode 1/1 passed, full ordered presentation fixture 16/16 passed, independent review PASS. BoardEventPresenter owns one accepted EnemyAttackPresenter and one exact-type event registration, forwarding animation settings and current HUD/feedback. Domain enemy composition and activation remain separate prerequisites.
 **Priority:** P0
 **Related contract:** sections 10.2 and 21.2.
 
