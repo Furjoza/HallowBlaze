@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8, M3.9.1 and M3.9.2 accepted; M3.9.3 active; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1-3 accepted; M3.9.4 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -2967,7 +2967,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.3` - Anchor one symbol to its recorded grid target
 
-**Status:** `Active` - direct Lead implementation, 2026-10-09. Unit grid X/Y maps directly to world X/Y, as in BoardEventPresenter. Marker Z is -0.1; glyph/source/connector use Default sorting layer/order 20. Source cue and connector use copied cells; wait remains at its source.
+**Status:** `Done` - accepted 2026-10-09; focused target placement 10/10 passed, fresh PlayMode fixture 11/11 passed, independent review PASS. Unit grid X/Y maps directly to world X/Y, as in BoardEventPresenter. Marker Z is -0.1; glyph/source/connector use Default sorting layer/order 20. Source cue and connector use copied cells; wait remains at its source.
 **Priority:** P0
 **Related contract:** sections 11.1, 11.3.1, and 18.
 
