@@ -14,6 +14,120 @@ namespace HallowBlaze.Tests.EditMode
     public class EnemyBatchTests
     {
         /// <summary>
+        /// Explicit 2-3 actor chains use live sequential occupancy for both initiative orders and all inputs.
+        /// A blocked leader prevents following, and an earlier blocked follower is never retried.
+        /// </summary>
+        [TestCase(2, false, false)]
+        [TestCase(2, true, false)]
+        [TestCase(2, false, true)]
+        [TestCase(2, true, true)]
+        [TestCase(3, false, false)]
+        [TestCase(3, true, false)]
+        [TestCase(3, false, true)]
+        [TestCase(3, true, true)]
+        public void MovementChain_UsesApprovedOccupancyPolicy(int actorCount, bool frontFirst, bool leadingBlocked)
+        {
+            var playerId = new EntityId(-100);
+            long[] initiativeIds = { -5, 0, 7 };
+            long[] chainIds = initiativeIds.Take(actorCount).ToArray();
+            if (frontFirst)
+                Array.Reverse(chainIds);
+            GridPosition[] sources = Enumerable.Range(0, actorCount)
+                .Select(index => new GridPosition(index + 1, 1)).ToArray();
+            GridPosition[] destinations = sources.Select(source => source.Move(Direction.East)).ToArray();
+            bool[] expectedMoves = Enumerable.Range(0, actorCount)
+                .Select(index => !leadingBlocked && (frontFirst || index == actorCount - 1)).ToArray();
+            GridPosition[] expectedPositions = Enumerable.Range(0, actorCount)
+                .Select(index => expectedMoves[index] ? destinations[index] : sources[index]).ToArray();
+            ShamblerState[] templates = chainIds.Select(id =>
+                new ShamblerState(new EntityId(id), new ShamblerDefinition(10))).ToArray();
+            var executor = new EnemyBatchExecutor();
+
+            foreach (ShamblerState[] permutation in Permutations(templates))
+            {
+                BoardState board = CreateBoard(playerId, new GridPosition(7, 7));
+                RunState run = CreateRun();
+                ShamblerState[] enemies = permutation.Select(enemy =>
+                    new ShamblerState(enemy.ActorId, enemy.Definition)).ToArray();
+                ShamblerState[] inputBefore = enemies.ToArray();
+                for (int index = 0; index < actorCount; index++)
+                {
+                    var actorId = new EntityId(chainIds[index]);
+                    Add(board, actorId.Value, BoardLayer.Actor, EntityKind.Enemy, sources[index]);
+                    enemies.Single(enemy => enemy.ActorId.Equals(actorId)).LockIntent(
+                        new EnemyIntent(actorId, EnemyIntentKind.Move, destinations[index], playerId, true));
+                }
+                var blockerId = new EntityId(42);
+                GridPosition leadingDestination = destinations[actorCount - 1];
+                if (leadingBlocked)
+                    Add(board, blockerId.Value, BoardLayer.Actor, EntityKind.Enemy, leadingDestination);
+                var retained = enemies.ToDictionary(enemy => enemy.ActorId, enemy => enemy.LockedIntent);
+                var nonActors = board.GetEntities().Where(entity => entity.Definition.Layer != BoardLayer.Actor).ToArray();
+                int count = board.Count;
+                var events = new List<GameEvent>();
+
+                executor.Execute(board, run, enemies, events);
+
+                Assert.That(board.Count, Is.EqualTo(count));
+                CollectionAssert.AreEqual(nonActors,
+                    board.GetEntities().Where(entity => entity.Definition.Layer != BoardLayer.Actor).ToArray());
+                Assert.That(events.Count, Is.EqualTo(actorCount));
+                for (int eventIndex = 0; eventIndex < actorCount; eventIndex++)
+                {
+                    var actorId = new EntityId(initiativeIds[eventIndex]);
+                    int chainIndex = Array.IndexOf(chainIds, actorId.Value);
+                    Assert.That(board.TryGetEntity(actorId, out BoardEntityState actor), Is.True);
+                    Assert.That(actor.Position, Is.EqualTo(expectedPositions[chainIndex]));
+                    Assert.That(board.TryGetEntity(BoardLayer.Actor, actor.Position,
+                        out BoardEntityState occupant), Is.True);
+                    Assert.That(occupant, Is.SameAs(actor));
+                    if (expectedMoves[chainIndex])
+                    {
+                        Assert.That(events[eventIndex], Is.TypeOf<EntityMovedEvent>());
+                        var movement = (EntityMovedEvent)events[eventIndex];
+                        Assert.That(movement.EntityId, Is.EqualTo(actorId));
+                        Assert.That(movement.From, Is.EqualTo(sources[chainIndex]));
+                        Assert.That(movement.To, Is.EqualTo(destinations[chainIndex]));
+                    }
+                    else
+                    {
+                        Assert.That(events[eventIndex], Is.TypeOf<EntityWaitedEvent>());
+                        Assert.That(((EntityWaitedEvent)events[eventIndex]).EntityId, Is.EqualTo(actorId));
+                    }
+                    ShamblerState enemy = enemies.Single(state => state.ActorId.Equals(actorId));
+                    Assert.That(enemy.LockedIntent, Is.Null);
+                    Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
+                    Assert.That(retained[actorId].Kind, Is.EqualTo(EnemyIntentKind.Move));
+                    Assert.That(retained[actorId].TargetPosition, Is.EqualTo(destinations[chainIndex]));
+                }
+                for (int cellIndex = 0; cellIndex <= actorCount; cellIndex++)
+                {
+                    var position = new GridPosition(cellIndex + 1, 1);
+                    int occupantIndex = Array.IndexOf(expectedPositions, position);
+                    if (leadingBlocked && position.Equals(leadingDestination))
+                    {
+                        Assert.That(board.TryGetEntity(BoardLayer.Actor, position, out BoardEntityState blocker), Is.True);
+                        Assert.That(blocker.Id, Is.EqualTo(blockerId));
+                        Assert.That(board.TryGetEntity(blockerId, out BoardEntityState indexedBlocker), Is.True);
+                        Assert.That(indexedBlocker, Is.SameAs(blocker));
+                    }
+                    else if (occupantIndex >= 0)
+                    {
+                        Assert.That(board.TryGetEntity(BoardLayer.Actor, position, out BoardEntityState occupant), Is.True);
+                        Assert.That(occupant.Id, Is.EqualTo(new EntityId(chainIds[occupantIndex])));
+                    }
+                    else
+                        Assert.That(board.TryGetEntity(BoardLayer.Actor, position, out _), Is.False);
+                }
+                Assert.That(board.TryGetEntity(playerId, out BoardEntityState player), Is.True);
+                Assert.That(player.Position, Is.EqualTo(new GridPosition(7, 7)));
+                Assert.That(run.Health, Is.EqualTo(100));
+                Assert.That(run.Food, Is.EqualTo(25));
+                CollectionAssert.AreEqual(inputBefore, enemies);
+            }
+        }
+
+        /// <summary>
         /// Reciprocal locked moves resolve as two waits under both initiative assignments and input orders.
         /// </summary>
         [TestCase(false, false)]

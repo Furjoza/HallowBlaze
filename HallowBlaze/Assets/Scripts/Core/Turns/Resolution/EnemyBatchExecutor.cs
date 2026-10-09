@@ -18,6 +18,9 @@ namespace HallowBlaze.Core.Turns.Resolution
         /// <summary>
         /// Validates the entire batch before dispatch, then appends each actor's outcomes unchanged
         /// in ascending ID order. Each single-enemy executor consumes its own intent exactly once.
+        /// Movement uses live occupancy: later actors may enter cells vacated by earlier actors.
+        /// Another enemy on the destination produces a wait without retry; reciprocal swaps remain blocked.
+        /// The declared attack condition for the original player on a locked destination remains unchanged.
         /// No player cost or extra turn is applied. The caller owns board/run lifetime and terminal
         /// checks and must not mutate supplied states concurrently during this synchronous phase.
         /// </summary>

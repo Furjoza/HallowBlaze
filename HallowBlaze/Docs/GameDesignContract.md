@@ -686,6 +686,29 @@ W MVP:
 
 Reguły konfliktu są częścią zachowania widocznego dla gracza. Pozostawienie ich kolejności komponentów Unity powodowałoby niestabilne i trudne do odtworzenia rezultaty.
 
+#### Accepted sequential occupancy - owner decision 2026-10-09
+
+**Status:** `Accepted`. Movement uses live sequential occupancy, not a phase-start occupancy snapshot.
+
+- Every board character has a deterministic place in its action order. The player-first phase order in section 10.2 remains unchanged; within the current enemy phase, ascending stable `EntityId` determines initiative. Input collection order, hierarchy order, and animation timing cannot change it.
+- Locked enemy intents execute one at a time. Each movement checks the authoritative board after all earlier actions in that phase. A later actor may enter a cell that an earlier actor has already vacated, provided the recorded destination remains otherwise legal and empty.
+- A destination still occupied by another enemy when an actor executes blocks that movement as `Wait`. The Shambler's declared attack-on-original-player-entry condition remains governed by section 11.3.1; it is not replaced with `Wait`. A blocked actor is not retried after a later actor moves. There is no simultaneous exchange, automatic chain propagation, extra opportunity, or replanning.
+- Reciprocal moves remain blocked: neither actor can vacate its source by entering the other's occupied source. A blocked leading actor does not permit followers to overlap it.
+- This occupancy decision does not change the accepted Shambler planner's rule against planning through occupied enemy cells. Following behavior for future archetypes can use this execution policy but requires its own planning contract; it is not implemented by this decision.
+
+For the following examples, A starts at `(1,1)` and targets `(2,1)`; B starts at `(2,1)` and targets `(3,1)`. The extended chain adds C at `(3,1)` targeting `(4,1)`. Every listed actor retains one explicit `Move`, and the leading destination is initially free unless marked blocked.
+
+| Chain | Initiative order | Expected final cells | Ordered outcomes |
+| --- | --- | --- | --- |
+| A -> B -> free | B, A | A `(2,1)`, B `(3,1)` | B moves, A moves |
+| A -> B -> free | A, B | A `(1,1)`, B `(3,1)` | A waits, B moves |
+| A -> B -> blocked | B, A or A, B | A `(1,1)`, B `(2,1)` | Both wait in initiative order |
+| A -> B -> C -> free | C, B, A | A `(2,1)`, B `(3,1)`, C `(4,1)` | C moves, B moves, A moves |
+| A -> B -> C -> free | A, B, C | A `(1,1)`, B `(2,1)`, C `(4,1)` | A waits, B waits, C moves |
+| A -> B -> C -> blocked | C, B, A or A, B, C | A `(1,1)`, B `(2,1)`, C `(3,1)` | All wait in initiative order |
+
+Each executed actor consumes its retained opportunity once, including a blocked move. No initiative or occupancy state is saved by this policy.
+
 ### 11.3. Archetypy vertical slice
 
 #### Decyzja
