@@ -6,7 +6,7 @@ namespace HallowBlaze.Presentation.Runtime
 {
     /// <summary>
     /// Draws persistent prototype intent shapes without animation or gameplay access.
-    /// The view owns its transient geometry/material; glyph selection never changes its transform.
+    /// Owns transient geometry/material and places glyphs from copied unit-grid cells, not entity transforms.
     /// </summary>
     public sealed class EnemyIntentView : MonoBehaviour
     {
@@ -16,18 +16,24 @@ namespace HallowBlaze.Presentation.Runtime
         public const float StrokeWidth = 0.04f;
         /// <summary>Default-layer sorting order above ordinary board sprites for prototype glyphs.</summary>
         public const int GlyphSortingOrder = 20;
+        /// <summary>Presentation-owned world Z in front of board sprites at Z zero.</summary>
+        public const float MarkerDepth = -0.1f;
 
         private readonly Dictionary<EnemyIntentSymbol, GameObject> shapes = new Dictionary<EnemyIntentSymbol, GameObject>();
         private Material material;
+        private Transform glyph;
+        private LineRenderer sourceCue;
+        private LineRenderer sourceLink;
 
         /// <summary>Gets the immutable display value currently drawn, or null before publication.</summary>
         public EnemyIntentProjection Projection { get; private set; }
-        /// <summary>Gets the fixed local layout bounds containing all glyphs and their stroke width.</summary>
+        /// <summary>Gets fixed glyph-local layout bounds; source cues and links lie outside this footprint.</summary>
         public Bounds LocalBounds => new Bounds(Vector3.zero, new Vector3(MarkerSize, MarkerSize, 0.1f));
 
         /// <summary>
         /// Selects a persistent shape synchronously, including the badge before player input.
-        /// Null input fails without replacing the current display. Source/target placement is caller-owned.
+        /// Places it at the exact copied target, or source for wait, and connects it to the copied source.
+        /// Null input fails without replacing the current display; no occupancy or transform is queried.
         /// </summary>
         /// <param name="projection">Immutable display data; no planner or gameplay state is accessed.</param>
         /// <exception cref="ArgumentNullException"><paramref name="projection"/> is null.</exception>
@@ -39,6 +45,17 @@ namespace HallowBlaze.Presentation.Runtime
             InitializeGeometry();
             foreach (var shape in shapes)
                 shape.Value.SetActive(shape.Key == projection.Symbol);
+            GridPositionToWorld(projection.SourcePosition, out Vector3 source);
+            GridPositionToWorld(projection.TargetPosition ?? projection.SourcePosition, out Vector3 target);
+            transform.SetPositionAndRotation(target, Quaternion.identity);
+            Vector3 sourceOffset = source - target;
+            sourceCue.transform.localPosition = sourceOffset;
+            sourceCue.enabled = projection.TargetPosition.HasValue;
+            sourceLink.enabled = projection.TargetPosition.HasValue;
+            sourceLink.SetPosition(0, sourceOffset);
+            sourceLink.SetPosition(1, sourceOffset.normalized * (MarkerSize / 2f + StrokeWidth));
+            glyph.localRotation = projection.Symbol == EnemyIntentSymbol.Move || projection.Symbol == EnemyIntentSymbol.ConditionalMove
+                ? Quaternion.FromToRotation(Vector3.up, target - source) : Quaternion.identity;
             Projection = projection;
         }
 
@@ -50,6 +67,14 @@ namespace HallowBlaze.Presentation.Runtime
             if (shader == null)
                 throw new InvalidOperationException("Intent glyphs require the built-in sprite shader.");
             material = new Material(shader) { name = "Intent glyph material", hideFlags = HideFlags.HideAndDontSave };
+            var glyphObject = new GameObject("Glyph") { hideFlags = HideFlags.DontSave };
+            glyphObject.transform.SetParent(transform, false);
+            glyph = glyphObject.transform;
+            sourceCue = DrawLine(gameObject, "SourceCue", true, new Vector3(-0.08f, -0.08f),
+                new Vector3(0.08f, -0.08f), new Vector3(0.08f, 0.08f), new Vector3(-0.08f, 0.08f));
+            sourceLink = DrawLine(gameObject, "SourceLink", false, Vector3.zero, Vector3.zero);
+            sourceCue.enabled = false;
+            sourceLink.enabled = false;
 
             GameObject move = CreateShape(EnemyIntentSymbol.Move);
             DrawArrow(move);
@@ -81,7 +106,7 @@ namespace HallowBlaze.Presentation.Runtime
         private GameObject CreateShape(EnemyIntentSymbol symbol)
         {
             var shape = new GameObject(symbol.ToString()) { hideFlags = HideFlags.DontSave };
-            shape.transform.SetParent(transform, false);
+            shape.transform.SetParent(glyph, false);
             shape.SetActive(false);
             shapes.Add(symbol, shape);
             return shape;
@@ -93,7 +118,7 @@ namespace HallowBlaze.Presentation.Runtime
             DrawLine(parent, "Head", false, new Vector3(-0.18f, 0.06f), new Vector3(0, 0.24f), new Vector3(0.18f, 0.06f));
         }
 
-        private void DrawLine(GameObject parent, string name, bool loop, params Vector3[] positions)
+        private LineRenderer DrawLine(GameObject parent, string name, bool loop, params Vector3[] positions)
         {
             var instance = new GameObject(name) { hideFlags = HideFlags.DontSave };
             instance.transform.SetParent(parent.transform, false);
@@ -109,6 +134,12 @@ namespace HallowBlaze.Presentation.Runtime
             line.startColor = Color.white;
             line.endColor = Color.white;
             line.sortingOrder = GlyphSortingOrder;
+            return line;
+        }
+
+        private static void GridPositionToWorld(HallowBlaze.Core.Board.Primitives.GridPosition position, out Vector3 world)
+        {
+            world = new Vector3(position.X, position.Y, MarkerDepth);
         }
 
         private void OnDestroy()
