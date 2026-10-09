@@ -269,9 +269,9 @@ Deterministic failures should report enough information to reproduce them, inclu
 
 Gameplay and cosmetic randomness must not share the same RNG stream.
 
-Do not claim that a build or test passed unless it was actually run and observed.
+Run checks and inspect results; unavailable: `Not run` and cause.
 
-If validation cannot run because of the environment, report it as `Not run` with the concrete reason.
+Keep review evidence in packets; reports only for failures/blockers or explicit requests.
 
 ## 10. Definition of done
 
@@ -286,7 +286,7 @@ A task is complete only when:
 - documentation/configuration was updated when the task changed a public contract;
 - implementation received the required independent review; controlled worker benchmarks use the Lead's brief final acceptance review without implementation repairs.
 
-Partial implementation, token limits, or plausible-looking code are not evidence of completion.
+Successful closeout: status/date and brief summary; no test reports or `Implementation handoff`, regardless of templates.
 
 ## 11. Security and external data
 

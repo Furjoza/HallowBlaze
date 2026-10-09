@@ -1,5 +1,5 @@
 ---
-name: qwen-developer
+name: developer
 description: Local bounded implementation developer running on Devstral through Ollama. Reads existing code, implements one focused task with native tools, may perform a bounded self-check, and reports the actual returned state.
 argument-hint: A small implementation task with references, boundaries, and acceptance criteria.
 model: devstral-small-2:24b (ollama-models)
@@ -92,4 +92,4 @@ Then report:
 - focused self-check actually performed, if any, with observed result/counts;
 - concrete blocker or remaining risk, if any.
 
-Use `PASS` only when the requested implementation exists on disk and any self-check you did not explicitly mark as unavailable has succeeded. Do not claim completion from intended actions. Independent validation and review belong to the Lead and `qwen-reviewer`.
+Use `PASS` only when the requested implementation exists on disk and any self-check you did not explicitly mark as unavailable has succeeded. Do not claim completion from intended actions. Independent validation and review belong to the Lead and `reviewer`.
