@@ -1,7 +1,7 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6.3 active, manual PC smoke pending; route-leg amendments accepted; M9 deferred**
-> Data ostatniej weryfikacji: 2026-10-07
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6 and M3.7.1-M3.7.3 accepted; M3.7.4 next; route-leg amendments accepted; M9 deferred**
+> Data ostatniej weryfikacji: 2026-10-08
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
 > Zasady pracy agentów: [`../AGENTS.md`](../AGENTS.md)
@@ -1602,7 +1602,7 @@ Validation observed on Unity 6000.3.21f1: **48/48 EditMode tests passed** (25 `T
 
 ## `M3.6` — Runtime input-to-presentation integration (tracking umbrella)
 
-**Status:** `Planned` — tracking umbrella; it becomes `Done` only after `M3.6.1`–`M3.6.3` are independently accepted.
+**Status:** `Done` — all three children independently accepted; M3.6.3 closeout accepted 2026-10-08 after Reviewer `PASS`.
 **Priority:** P0
 **Related contract:** sections 10.2, 18, and 21.1/21.2/21.5; resolved O-004.
 
@@ -1883,7 +1883,7 @@ Validation: baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e
 
 ## `M3.6.3` — Production cutover and PlayMode acceptance gate
 
-**Status:** `Active` — implementation and automated gates complete; independent review is `BLOCKED` solely by the missing manual PC smoke acceptance gate.
+**Status:** `Done` — accepted 2026-10-08 after final independent Reviewer `PASS`; owner-confirmed manual PC smoke resolves the previous evidence blocker.
 **Priority:** P0
 **Related contract:** sections 10, 18, and 21.1/21.2/21.5; `M0.8` regression contract.
 
@@ -2015,9 +2015,11 @@ Full PlayMode includes infrastructure/M0.8 (12), ordered presentation (14), paus
 
 Reload-mid-animation proves old replay cancellation/disposal, zero resolutions in the replacement controller, preserved already-resolved resources, and rejection of an old request even when both boards have the same logical identity. Setup completion, pause/resume, route ownership, terminal admission and replacement-view isolation are covered by PlayMode and coordinator tests.
 
-Manual PC smoke: **Not run**. `unity pipeline list` found the package installed but zero reachable servers; `unity command` returned `No Unity Editor instances found with reachable Pipeline servers`. Automated Main-scene/PC-input tests are not a manual smoke result. The owner was unavailable to accept this limitation; free tile, obstacle, supported resource, Wait, exit, pause, route choice, death and reload still require the explicit manual acceptance gate. No legacy Unity integration, package upgrade or second Editor instance was used.
+Manual PC smoke: **Passed, confirmed by the owner on 2026-10-08 for the manual session on 2026-10-07**. The owner confirmed that the manually tested behavior matched expectations, completing the agreed PC smoke gate. This is owner-reported acceptance, not an agent-run manual test or a claim based on automated input. Inert enemies and deferred BuriedFood/Aid interaction are accepted non-goals, not smoke failures. The earlier Editor connection blocker was resolved by opening the active D: project; CLI then confirmed a reachable Pipeline server. No legacy Unity integration or package upgrade was used.
 
-Independent read-only `qwen-reviewer` verdict: **BLOCKED**. The reviewer reported no material semantic code defect after inspecting terminal handling, stale requests, runtime replacement, presentation, gates and stale input. The blocker is the required manual PC smoke, not an automated-test failure; this is not a `PASS` or final acceptance. The card and M3.6 umbrella must not be marked `Done` until the outstanding manual gate and final independent acceptance are complete. Scope is thirteen code/test files plus this Lead-owned handoff; Core, BoardManager, scenes, prefabs, `.meta` files, packages, settings, save schemas and protected agent configuration remain unchanged.
+Closeout display adjustment: at the owner's request, the `Day` label uses `CurrentDay + 1`. Internal day, completed-day score, board identity and save values remain unchanged. Automated tests were not rerun for this one-line display adjustment, as explicitly requested; the test results above belong to the production cutover validation on 2026-10-07.
+
+Initial independent read-only `qwen-reviewer` verdict: **BLOCKED**, solely for missing manual PC smoke evidence, with no material semantic code defect reported after inspecting terminal handling, stale requests, runtime replacement, presentation, gates and stale input. Final independent closeout review on 2026-10-08: **PASS**; the owner's confirmation supplies the missing smoke evidence and the Lead accepts M3.6.3. The automated results above remain the 2026-10-07 evidence and were not rerun for this closeout. Scope is thirteen code/test files plus this Lead-owned handoff; Core, BoardManager, scenes, prefabs, `.meta` files, packages, settings, save schemas and protected agent configuration remain unchanged.
 
 ---
 
@@ -2037,11 +2039,11 @@ Independent read-only `qwen-reviewer` verdict: **BLOCKED**. The reviewer reporte
 
 **Non-goals:** No Listener, noise, RNG, hidden aggro, final VFX, multi-enemy initiative/reservations/swaps (`M3.8`), intent UI (`M3.9`), production input/runtime cutover, or legacy enemy migration. Do not change `Enemy.cs`, `GameManager`, scenes, prefabs, generator, assemblies, packages, or settings in these children.
 
-**Dependencies:** `M3.5`. The execution queue still closes `M3.6.3` before starting M3.7; this decomposition does not accept or bypass its pending manual PC smoke.
+**Dependencies:** `M3.5`; `M3.6.3` was independently accepted on 2026-10-08, including owner-confirmed manual PC smoke. The execution prerequisite is satisfied.
 
 **Allowed file area:** Only the exact source/test paths listed in the selected child, plus their Unity-generated `.meta` companions under section 5.1. Use the existing Turns Contracts/Resolution assemblies rather than introducing an Enemies assembly. The Lead owns roadmap updates and must not include this document in a Developer write scope.
 
-**Readiness gate (Lead-owned):** The owner resolved pursuit, tie-break, attack, damage, cadence, and the same-cell conditional attack on 2026-10-07; [GameDesignContract section 11.3.1](GameDesignContract.md#1131-accepted-shambler-rule) is authoritative. The accepted defaults are whole-board shortest-path pursuit, orthogonal movement/attack, North -> East -> West -> South on equal paths, active -> rest starting active, one cadence advancement per executed enemy phase even on failure, and damage 10/20 for the existing variants. A rest phase never attacks. Before assignment, verify dependencies and the pending M3.6.3 gate, confirm proposed type paths against current code, reuse equivalent APIs, and seal any adjusted exact allowlist. No additional gameplay choice is delegated to the Developer; statuses remain `Planned` until the execution prerequisites are met.
+**Readiness gate (Lead-owned):** The owner resolved pursuit, tie-break, attack, damage, cadence, and the same-cell conditional attack on 2026-10-07; [GameDesignContract section 11.3.1](GameDesignContract.md#1131-accepted-shambler-rule) is authoritative. The accepted defaults are whole-board shortest-path pursuit, orthogonal movement/attack, North -> East -> West -> South on equal paths, active -> rest starting active, one cadence advancement per executed enemy phase even on failure, and damage 10/20 for the existing variants. A rest phase never attacks. Before assignment, verify dependencies and the accepted M3.6.3 gate, confirm proposed type paths against current code, reuse equivalent APIs, and seal any adjusted exact allowlist. No additional gameplay choice is delegated to the Developer; statuses remain `Planned` until the execution prerequisites are met.
 
 Each row is one delegation and one independent acceptance/review unit, normally one implementation file plus one focused test file. New test fixtures are reused by later children. Run `M3.7.1` through `M3.7.8`, then `M3.7.11`, `M3.7.9`, and `M3.7.10`; the added conditional-execution child preserves the existing child identifiers. Dependency order, not numerical order, controls assignment. Do not combine rows or implement a later row while preparing an earlier one. The model and executor are exercised with one enemy; batch conflict rules remain in M3.8.
 
@@ -2071,7 +2073,7 @@ Each row is one delegation and one independent acceptance/review unit, normally 
 
 ## `M3.7.1` - Immutable enemy intent contract
 
-**Status:** `Planned`
+**Status:** `Done` — direct Lead implementation accepted 2026-10-08 after focused Unity validation (22/22) and independent Reviewer `PASS`; the user authorized discarding the failed local attempt.
 **Priority:** P0
 **Related contract:** section 11.1.
 
@@ -2097,11 +2099,41 @@ Each row is one delegation and one independent acceptance/review unit, normally 
 
 **Required handoff:** Payload examples for each intent kind, immutable-target semantics, and exact focused-test results.
 
+### Implementation handoff (2026-10-08)
+
+The user authorized Git recovery of the failed local attempt and direct implementation by the Lead. Recovery restored the existing fixture and roadmap, removed the failed new asset with its metadata and the worker's temporary project, and verified a clean worktree before writing. Baseline: branch `M3/PureShamblerModel`, commit `6f0eaea0febaae0e2ba4adc9f15777193a784de8`. Branch and `HEAD` remain unchanged; no commit was created.
+
+[EnemyIntent.cs](../Assets/Scripts/Core/Turns/Contracts/EnemyIntent.cs) defines `EnemyIntentKind` and a sealed, getter-only `EnemyIntent`. The actor, action, target identity, target cell, and declared condition are copied scalar values. Move retains the fixed destination and original player's identity with `AttackOnPlayerEntry = true`; attack retains its original player and cell without that condition; wait has no target or condition. Undefined kinds, missing targets, self-targets, and contradictory fields fail explicitly. Zero/negative IDs and origin/extreme coordinates are valid; board bounds and action legality are deliberately validated elsewhere.
+
+```csharp
+var actorId = new EntityId(0);
+var playerId = new EntityId(-1);
+var move = new EnemyIntent(actorId, EnemyIntentKind.Move,
+    new GridPosition(0, 1), playerId, attackOnPlayerEntry: true);
+var attack = new EnemyIntent(actorId, EnemyIntentKind.Attack,
+    new GridPosition(1, 0), playerId);
+var wait = new EnemyIntent(actorId, EnemyIntentKind.Wait);
+```
+
+Changing caller-owned IDs or cell arrays cannot modify an existing intent. The conditional attack refers only to the move's recorded cell and player; it is not a new target search. The contract has English XML documentation and no Unity, clock, RNG, planner, or executor dependency. Unity generated only the new asset's `.meta`; no existing metadata was replaced.
+
+Focused validation:
+
+```powershell
+unity test "D:\Repos\HallowBlaze\HallowBlaze" --mode EditMode --filter HallowBlaze.Tests.EditMode.TurnContractsTests --output "$results\editmode.xml" --timeout 240 -- -nographics -logFile "$results\editmode.log"
+```
+
+`$results` was the external session directory `HB-M371-direct-20261008`, not a project directory. Unity `6000.3.21f1` compiled the project and returned CLI exit code `0`. The Lead checked the fresh XML's expected fixture identities: **22/22 passed**, **0 failed**, **0 skipped**, **0 inconclusive**. This includes the original nine contract tests and thirteen intent cases covering all actions, primitive boundary values, invalid kinds/payloads, immutable snapshots, and the getter-only public API. `git diff --check` passed. Full-suite and PlayMode tests were not run for this pure value contract.
+
+Independent `qwen-reviewer` verdict: **PASS**, after inspecting the actual source, tests, diff, and all validation branches. Unity's incidental post-test scripting-define change was preserved as external validation evidence and reverted through the authorized Git recovery; final `ProjectSettings` content matches the baseline.
+
+No definition, cadence/state owner, planning, execution, production enemy activation, intent UI, scene/prefab, assembly, package, save schema, or protected agent-configuration change is included. M3.7.2 remains the next, unstarted child; acceptance of this value does not activate production enemies.
+
 ---
 
 ## `M3.7.2` - Explicit Shambler definition
 
-**Status:** `Planned`
+**Status:** `Done` - direct Lead implementation accepted 2026-10-08 after focused Unity validation (29/29), independent `reviewer` PASS, and owner acceptance of the unverified reviewer-provider limitation.
 **Priority:** P0
 **Related contract:** sections 11.1 and 11.3.
 
@@ -2127,11 +2159,48 @@ Each row is one delegation and one independent acceptance/review unit, normally 
 
 **Required handoff:** The approved parameter contract, its source-of-truth reference, and rejected-configuration examples.
 
+### Implementation handoff (2026-10-08)
+
+The owner authorized Git cleanup of the failed local definition and direct implementation by the Lead. Cleanup removed only the task-attributable file and restored a clean worktree before implementation. Baseline: Git root `D:/Repos/HallowBlaze`, branch `M3/ExplicitShamblerDefinition`, commit `6331c4e97b3324945963398c61faef560a912d48`. Branch and `HEAD` remain unchanged; the Lead created no commit and did not alter the owner's staging.
+
+[ShamblerDefinition.cs](../Assets/Scripts/Core/Turns/Resolution/ShamblerDefinition.cs) implements immutable configuration in the existing Resolution assembly. Its source of truth is [GameDesignContract section 11.3.1](GameDesignContract.md#1131-accepted-shambler-rule), the accepted owner decision of 2026-10-07.
+
+| Parameter | Accepted contract |
+| --- | --- |
+| `RuleName` | `Shortest-path pursuit with alternating rest`, fixed for both variants |
+| `InitialPhase` | `ShamblerPhase.Active`, not configurable |
+| `ActivePhaseTurns` / `RestPhaseTurns` | Exactly 1 / 1 executed enemy phases |
+| `AttackRange` / `OrthogonalAttacksOnly` | Exactly one grid cell / always true |
+| `Damage` | Exactly 10 HP for the existing Enemy1 variant or 20 HP for Enemy2 |
+
+```csharp
+var enemy1 = new ShamblerDefinition(10);
+var enemy2 = new ShamblerDefinition(20, activePhaseTurns: 1, restPhaseTurns: 1, attackRange: 1);
+```
+
+Unsupported damage such as 0, 11, or 21; active/rest lengths other than 1; and attack ranges other than 1 throw `ArgumentOutOfRangeException` at construction with the offending parameter and value. Initial rest, an alternate rule, and diagonal attacks cannot be configured. All properties are getter-only scalar/string values; no mutable collection, cadence advancement, planning, execution, or board/run mutation is exposed. `ShamblerPhase` is a value enum, not a state owner. Public APIs have English XML contract documentation.
+
+[ShamblerModelTests.cs](../Assets/Tests/EditMode/ShamblerModelTests.cs) covers both accepted damage variants, explicit/default configuration, all four rejection branches with boundary values, immutable API/fields, and the existing Resolution assembly's independence from Unity. Unity generated only the two new assets' metadata; no existing GUID was edited.
+
+Lead-owned validation, Unity `6000.3.21f1`:
+
+```powershell
+unity test "D:\Repos\HallowBlaze\HallowBlaze" --mode EditMode --filter HallowBlaze.Tests.EditMode.ShamblerModelTests --output "$env:TEMP\HB-M372-direct-20261008-71c5fc4e.xml" --timeout 240 -- -nographics -logFile "$env:TEMP\HB-M372-direct-20261008-71c5fc4e.log"
+```
+
+Unity import/compilation and the CLI command succeeded with exit code 0. The Lead parsed the fresh external XML report and confirmed the exact `HallowBlaze.Tests.EditMode.ShamblerModelTests` fixture: **29/29 passed**, **0 failed**, **0 skipped**, **0 inconclusive**, executed on 2026-10-08 at 14:59:20Z. Changed-file editor diagnostics reported no errors. Tracked and new-file diff checks found no whitespace errors, with only the existing LF/CRLF normalization warning. Full-suite and PlayMode tests were not run for this pure definition; no tests were rerun for the documentation-only closeout.
+
+Independent read-only `reviewer` verdict: **PASS**, with no material defects after inspecting the actual code, configuration-validation branches, tests, diff, metadata, and Lead-owned validation evidence. The invocation used the configured reviewer without a runtime model override. The actual provider/model routing was not exposed; the agent's self-introduction did not establish it. The owner explicitly authorized closing this card despite that limitation. No Copilot-provider attribution is claimed.
+
+Unity removed `SENTIS_ANALYTICS_ENABLED` from the Standalone scripting defines during validation, leaving `APP_UI_EDITOR_ONLY`. The owner explicitly accepted retaining this sole change in [ProjectSettings.asset](../ProjectSettings/ProjectSettings.asset); it was not reverted. No other task-attributable settings, package, assembly, scene/prefab, persistence, or protected agent-configuration change is included.
+
+Scope is the definition, focused fixture, their Unity-generated metadata, the owner-approved scripting-define removal, and this Lead-owned roadmap closeout. Production enemies remain inert. M3.7.3 is the next unstarted child; M3.7 remains `Planned` until all eleven children are independently accepted.
+
 ---
 
 ## `M3.7.3` - Board-local enemy state and intent retention
 
-**Status:** `Planned`
+**Status:** `Done` - direct Lead implementation accepted 2026-10-08 after focused Unity validation (58/58), independent `reviewer` PASS, and owner acceptance without reviewer-provider confirmation.
 **Priority:** P0
 **Related contract:** sections 11.1 and 11.3.
 
@@ -2156,6 +2225,20 @@ Each row is one delegation and one independent acceptance/review unit, normally 
 **Save and compatibility impact:** No schema change; state is discarded with its board, not copied into `ProfileState` or persisted `RunState`.
 
 **Required handoff:** A short state-transition table including first plan, one consumption, duplicate consumption, and fresh-board reset.
+
+### Acceptance (2026-10-08)
+
+The owner explicitly assigned implementation to the Lead. [ShamblerState.cs](../Assets/Scripts/Core/Turns/Resolution/ShamblerState.cs) owns one enemy's exact locked intent and once-only cadence consumption without storing position or mutating board/run state. The existing [ShamblerModelTests.cs](../Assets/Tests/EditMode/ShamblerModelTests.cs) adds 29 state cases; fresh Unity XML confirms 58/58 passed, zero failed, skipped, or inconclusive. Compilation, changed-file diagnostics, scope/integrity, and diff checks passed. Branch `M3/ExplicitShamblerDefinition` and baseline `f1e388850972f0b7a9ff691bb00d6c2382ba95a8` remain unchanged.
+
+Independent read-only `reviewer` returned PASS without a runtime model override. On 2026-10-08 the owner explicitly accepted this review without provider confirmation, resolving the sole acceptance blocker; no provider attribution is claimed. Code and test content still match the validated and reviewed candidate. Tests were not rerun for this documentation-only closeout. M3.7.4 is the next unstarted child; M3.7 remains `Planned` until all eleven children are independently accepted. Production enemies remain inert, with no save, scene/prefab, assembly, package, settings, or protected-configuration changes.
+
+| Operation | Retained intent | Cadence effect |
+| --- | --- | --- |
+| Fresh state / first lock | None initially; first lock retains the exact actor-matching intent | Starts Active; locking and reads do not advance |
+| Consume active opportunity, including an unsuccessful action or wait | Returns the exact intent and clears it | Active -> Rest once |
+| Lock and consume rest | Rest accepts only Wait; consumption clears it | Rest -> Active once |
+| Duplicate consume / overwrite attempt | Explicit exception; existing state preserved | No advancement |
+| Fresh-board reset | Discards the previous-board intent; preserves actor and definition | Restores initial Active; repeated reset is idempotent |
 
 ---
 
