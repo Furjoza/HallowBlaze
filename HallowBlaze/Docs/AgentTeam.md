@@ -4,23 +4,37 @@
 
 | Role | Agent | Model | Writes project files |
 |---|---|---|---|
-| Tech Lead | `codex-lead` | `GPT 5.6 Sol (openai-codex)` | Authorized configuration and roadmap; not routine implementation |
-| Developer | `qwen-developer` | `qwen3-coder:30b (ollama-models)` | Direct native filesystem edits |
-| Reviewer | `qwen-reviewer` | `qwen3.6:27b (ollama-models)` | No |
+| Tech Lead | `codex-lead` | `GPT 6.1 Sol (openai-codex)` | Authorized configuration and roadmap; not routine implementation |
+| Developer | `developer` | `Devstral Small 2 24B - Ollama Custom (customendpoint)` | Direct native filesystem edits |
+| Reviewer | `reviewer` | No pinned model; workspace Auto preference applies when supported | No |
 
-`codex-lead` is the user-facing coordinator. The two local Qwen agents are internal native subagents and run sequentially.
+`codex-lead` is the user-facing coordinator. `developer` and `reviewer` are internal native subagent roles and run sequentially. Their names identify responsibilities, not model vendors.
 
-The Developer uses `read`, `search`, `edit`, and `execute`. The Reviewer uses only `read` and `search`. Each local model is pinned in its agent configuration; switching to a frontier model requires explicit user approval.
+The Developer uses `read`, `search`, `edit`, and `execute`, and retains its configured local model. The Reviewer uses only `read` and `search`. The intended default reviewer provider is GitHub Copilot; the owner explicitly selects a local reviewer when the Copilot allowance is exhausted. Missing routing metadata does not block acceptance. An invocation failure is not evidence of exhausted allowance and must not silently change the configured provider.
+
+The roles were renamed from `qwen-developer` and `qwen-reviewer` on 2026-10-08. Historical roadmap handoffs and validation reports retain their original agent names and model attribution; the rename does not turn past local reviews into Copilot reviews. If the agent picker or subagent catalog still exposes the old identifiers, reload VS Code or start a fresh session rather than invoking obsolete names.
+
+## Model Routing
+
+[Workspace settings](../.vscode/settings.json) enable `chat.subagents.defaultToAuto`. [Reviewer configuration](../.github/agents/reviewer.agent.md) intentionally omits `model`; [Developer configuration](../.github/agents/developer.agent.md) keeps its explicit local selection.
+
+For native VS Code subagents, model selection prioritizes an explicit invocation override, then the selected agent's `model`, then Auto when the workspace preference and availability conditions permit it, and finally the main conversation model. The Lead must not supply a model override unless the user explicitly requests one.
+
+Auto selection for subagents is experimental. It does not override an agent's configured model. If Auto is unavailable, the main model is used; subagents of a BYOK model continue using that model unless another is explicitly selected. An SDK adapter may implement different routing. The Lead does not require confirmation of the actual reviewer model/provider and does not inspect session logs solely to establish routing. Acceptance depends on scope, validation, and independent semantic review, not on routing metadata. Report a provider only when known; otherwise report the review result without provider attribution. See the [VS Code subagent model-selection documentation](https://code.visualstudio.com/docs/copilot/agents/subagents).
+
+Use the qualified model names offered by VS Code completion in agent frontmatter. Runtime SDK identifiers are a different layer and must be resolved to the correct provider, not substituted blindly into the agent files.
+
+The optional [local profile initializer](../Tools/LocalAgentHarness/Initialize-LocalAgentCodexProfiles.ps1) writes the local reviewer catalog as `hallowblaze-reviewer-model.json`. Existing user-level catalogs are not migrated or deleted by this repository rename; the initializer is not run automatically.
 
 ## Workflow
 
 ```text
 Codex Lead
-  -> native runSubagent (qwen-developer)
+  -> native runSubagent (developer)
   -> direct filesystem edits
   -> local compile/test/fix iterations
   -> Lead completion and integrity gates
-  -> native runSubagent (qwen-reviewer)
+  -> native runSubagent (reviewer)
   -> Lead arbitration and acceptance
 ```
 
@@ -68,8 +82,8 @@ Worktrees isolate repository content, not arbitrary terminal effects. An invocat
 
 - [Project rules](../AGENTS.md)
 - [Lead](../.github/agents/codex-lead.agent.md)
-- [Developer](../.github/agents/qwen-developer.agent.md)
-- [Reviewer](../.github/agents/qwen-reviewer.agent.md)
+- [Developer](../.github/agents/developer.agent.md)
+- [Reviewer](../.github/agents/reviewer.agent.md)
 - [Unity validation](../.github/skills/unity-validate/SKILL.md)
 - [Game-design contract](GameDesignContract.md)
 - [Technical roadmap](TechnicalRoadmap.md)
