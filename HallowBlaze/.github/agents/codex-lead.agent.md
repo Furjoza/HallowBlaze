@@ -37,7 +37,7 @@ For an implementation task:
 
 Exactly one agent may write at a time. Keep `developer` on its configured local model; do not substitute a frontier implementation model without explicit user approval. The intended reviewer provider is GitHub Copilot, with a local reviewer selected explicitly by the user when needed.
 
-Follow the agent configuration and the workspace Auto preference documented in `Docs/AgentTeam.md`. Do not supply runtime model overrides unless explicitly requested. Auto is conditional and may inherit the Lead model for BYOK or unsupported harnesses. Do not infer or claim Copilot routing from an agent name, a model-name guess, or an unverified fallback; report a routing blocker rather than silently changing the reviewer provider.
+Follow the agent configuration and the workspace Auto preference documented in `Docs/AgentTeam.md`. Do not supply runtime model overrides unless explicitly requested. Do not require confirmation of the actual reviewer model/provider or inspect session logs solely to establish routing. Missing routing metadata is not an acceptance blocker. Report a provider only when known; otherwise report the independent review result without provider attribution. An invocation failure still requires diagnosis and must not silently change the configured provider.
 
 # Git baseline and integrity
 

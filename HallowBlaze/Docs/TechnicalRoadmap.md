@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6 and M3.7.1-M3.7.5 accepted; M3.7.6 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7 and M3.8.1-M3.8.5 accepted; M3.8.6 blocked on the owner occupancy decision; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -2025,7 +2025,7 @@ Initial independent read-only `qwen-reviewer` verdict: **BLOCKED**, solely for m
 
 ## `M3.7` - Pure Shambler model and locked intent (tracking umbrella)
 
-**Status:** `Planned` - tracking umbrella; it becomes `Done` only after `M3.7.1` through `M3.7.11` are independently accepted.
+**Status:** `Done` - all eleven children independently accepted by 2026-10-09. Deterministic pursuit, alternating cadence, locked movement/attacks, declared player-entry hits, and isolated controller phases are validated. Production composition and intent visibility remain outside this umbrella.
 **Priority:** P0
 **Related contract:** sections 10.2, 11.1, and the accepted owner decision in 11.3.1.
 
@@ -2340,7 +2340,7 @@ Only the existing `ConsumeIntent()` transition advances to the next row, includi
 
 ## `M3.7.6` - Locked movement and wait execution
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09 after focused Unity EditMode validation (26/26) and independent Reviewer `PASS`. Direct Lead implementation; the owner removed the routing-confirmation gate. No Developer agent was invoked.
 **Priority:** P0
 **Related contract:** sections 10.2 and 11.1.
 
@@ -2370,7 +2370,7 @@ Only the existing `ConsumeIntent()` transition advances to the next row, includi
 
 ## `M3.7.7` - Immutable attack-result event
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09 after focused Unity EditMode validation (29/29) and independent Reviewer `PASS`; direct Lead implementation.
 **Priority:** P0
 **Related contract:** sections 10.2 and 11.1.
 
@@ -2400,7 +2400,7 @@ Only the existing `ConsumeIntent()` transition advances to the next row, includi
 
 ## `M3.7.8` - Locked attack execution
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09 after focused Unity EditMode validation (52/52) and independent Reviewer `PASS`; direct Lead implementation.
 **Priority:** P0
 **Related contract:** sections 10.2 and 11.1.
 
@@ -2430,7 +2430,7 @@ Only the existing `ConsumeIntent()` transition advances to the next row, includi
 
 ## `M3.7.9` - Shambler adapter for existing turn phases
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09 after focused Unity EditMode validation (35/35) and independent Reviewer `PASS`; direct Lead implementation.
 **Priority:** P0
 **Related contract:** sections 10.2 and 11.1.
 
@@ -2460,7 +2460,7 @@ Only the existing `ConsumeIntent()` transition advances to the next row, includi
 
 ## `M3.7.10` - Fixed-cell attack miss regression
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09 after the exact focused Unity EditMode regression passed (1/1) and independent Reviewer `PASS`; direct Lead implementation.
 **Priority:** P0
 **Related contract:** sections 10.2 and 11.1.
 
@@ -2490,7 +2490,7 @@ Only the existing `ConsumeIntent()` transition advances to the next row, includi
 
 ## `M3.7.11` - Declared movement-to-attack condition
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09 after focused Unity EditMode validation (61/61) and independent Reviewer `PASS`; direct Lead implementation.
 **Priority:** P0
 **Related contract:** sections 10.2, 11.1, and the accepted owner decision in 11.3.1.
 
@@ -2526,7 +2526,7 @@ Only the existing `ConsumeIntent()` transition advances to the next row, includi
 
 **Rationale:** Input collection order must not decide which enemy acts first or enters a contested cell. Ordering, shared-state planning, conflict handling, and controller integration are separate effects; implementing them together would require the Developer to design several cooperating classes before any result could be accepted.
 
-**Current behavior:** The accepted turn core supplies execution/planning hooks and authoritative occupancy. M3.7 is still planned and owns the single-enemy model, planner, executor, and cadence. This card describes a follow-up batch path over those APIs, not existing production enemy behavior.
+**Current behavior:** The accepted turn core supplies execution/planning hooks and authoritative occupancy. M3.7 now provides the accepted single-enemy model, planner, executor, and cadence. This card describes a follow-up batch path over those APIs, not existing production enemy behavior.
 
 **Expected outcome:** All enemies plan from the same board state without advancing cadence. Locked intents execute serially in stable initiative order; the first legal move into a contested free cell succeeds, later contenders wait, swaps are forbidden, and invalid actions never replan. Ordered events and final board/run/enemy state are identical for every permutation of the same input actors.
 
@@ -2569,7 +2569,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.8.1` - Stable initiative ordering
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09 after the focused Unity EditMode test passed (1/1; all 120 input permutations) and independent Reviewer `PASS`; direct Lead implementation.
 **Priority:** P0
 **Related contract:** section 11.2.
 
@@ -2599,7 +2599,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.8.2` - Shared-state batch planning
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09 after the focused Unity EditMode test passed (1/1; all 24 input permutations) and independent Reviewer `PASS`; direct Lead implementation.
 **Priority:** P0
 **Related contract:** sections 10.2, 11.1, and 11.2.
 
@@ -2629,7 +2629,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.8.3` - Serial execution of nonconflicting intents
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09 after focused Unity EditMode validation (3/3; 2/3/5 actor permutations) and independent Reviewer `PASS`; direct Lead implementation.
 **Priority:** P0
 **Related contract:** sections 10.2 and 11.2.
 
@@ -2659,7 +2659,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.8.4` - One winner for a contested destination
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09 after focused Unity EditMode validation (6/6; 2-4 contenders, invalid earlier candidate, all input permutations, fresh next phase) and independent Reviewer `PASS`; no executor changes were needed.
 **Priority:** P0
 **Related contract:** section 11.2.
 
@@ -2689,7 +2689,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.8.5` - Explicit swap prevention
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09 after focused Unity EditMode validation (4/4; both initiative assignments and input orders) and independent Reviewer `PASS`; no executor changes were needed.
 **Priority:** P0
 **Related contract:** section 11.2.
 
@@ -2719,7 +2719,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.8.6` - Approved occupancy policy for movement chains
 
-**Status:** `Planned`
+**Status:** `Blocked` - owner decision required, 2026-10-09. Section 11.2 still does not choose phase-start versus live sequential occupancy. M3.8.5 is accepted; no chain behavior has been accepted or wired into production. Record the selected policy and expected outcomes for both initiative orders in the contract or an accepted ADR before implementation.
 **Priority:** P0
 **Related contract:** section 11.2 and the owner-approved chain occupancy decision required by the umbrella.
 
