@@ -14,6 +14,95 @@ namespace HallowBlaze.Tests.EditMode
     public class EnemyBatchTests
     {
         /// <summary>
+        /// A source removed after retaining a move or attack has no effects or reservations,
+        /// while live actors execute once in initiative order for every input permutation.
+        /// </summary>
+        [TestCase(EnemyIntentKind.Move)]
+        [TestCase(EnemyIntentKind.Attack)]
+        public void RemovedActor_DoesNotActOrReserve(EnemyIntentKind removedAction)
+        {
+            var playerId = new EntityId(-100);
+            var removedId = new EntityId(-5);
+            var contenderId = new EntityId(0);
+            var unrelatedId = new EntityId(7);
+            var destination = new GridPosition(3, 3);
+            var playerPosition = new GridPosition(3, 4);
+            GridPosition removedSource = removedAction == EnemyIntentKind.Move
+                ? new GridPosition(2, 3) : new GridPosition(2, 4);
+            GridPosition removedTarget = removedAction == EnemyIntentKind.Move ? destination : playerPosition;
+            var contenderSource = new GridPosition(4, 3);
+            var unrelatedSource = new GridPosition(6, 5);
+            var unrelatedTarget = new GridPosition(6, 6);
+            ShamblerState[] templates = { new ShamblerState(removedId, new ShamblerDefinition(20)),
+                new ShamblerState(contenderId, new ShamblerDefinition(10)),
+                new ShamblerState(unrelatedId, new ShamblerDefinition(10)) };
+            var executor = new EnemyBatchExecutor();
+
+            foreach (ShamblerState[] permutation in Permutations(templates))
+            {
+                BoardState board = CreateBoard(playerId, playerPosition);
+                RunState run = CreateRun();
+                ShamblerState[] enemies = permutation.Select(enemy =>
+                    new ShamblerState(enemy.ActorId, enemy.Definition)).ToArray();
+                ShamblerState[] inputBefore = enemies.ToArray();
+                Add(board, removedId.Value, BoardLayer.Actor, EntityKind.Enemy, removedSource);
+                Add(board, contenderId.Value, BoardLayer.Actor, EntityKind.Enemy, contenderSource);
+                Add(board, unrelatedId.Value, BoardLayer.Actor, EntityKind.Enemy, unrelatedSource);
+                ShamblerState removed = enemies.Single(enemy => enemy.ActorId.Equals(removedId));
+                var removedIntent = new EnemyIntent(removedId, removedAction, removedTarget,
+                    playerId, removedAction == EnemyIntentKind.Move);
+                removed.LockIntent(removedIntent);
+                enemies.Single(enemy => enemy.ActorId.Equals(contenderId)).LockIntent(
+                    new EnemyIntent(contenderId, EnemyIntentKind.Move, destination, playerId, true));
+                enemies.Single(enemy => enemy.ActorId.Equals(unrelatedId)).LockIntent(
+                    new EnemyIntent(unrelatedId, EnemyIntentKind.Move, unrelatedTarget, playerId, true));
+                Assert.That(board.TryRemove(removedId), Is.True);
+                Assert.That(board.TryGetEntity(BoardLayer.Actor, destination, out _), Is.False);
+                var unchanged = board.GetEntities().Where(entity =>
+                    !entity.Id.Equals(contenderId) && !entity.Id.Equals(unrelatedId)).ToArray();
+                int count = board.Count;
+                var events = new List<GameEvent>();
+
+                executor.Execute(board, run, enemies, events);
+
+                Assert.That(board.Count, Is.EqualTo(count));
+                CollectionAssert.AreEqual(unchanged, board.GetEntities().Where(entity =>
+                    !entity.Id.Equals(contenderId) && !entity.Id.Equals(unrelatedId)).ToArray());
+                Assert.That(board.TryGetEntity(removedId, out _), Is.False);
+                Assert.That(board.TryGetEntity(BoardLayer.Actor, removedSource, out _), Is.False);
+                Assert.That(events.Count, Is.EqualTo(2));
+                EntityId[] expectedIds = { contenderId, unrelatedId };
+                GridPosition[] expectedSources = { contenderSource, unrelatedSource };
+                GridPosition[] expectedTargets = { destination, unrelatedTarget };
+                for (int index = 0; index < expectedIds.Length; index++)
+                {
+                    Assert.That(events[index], Is.TypeOf<EntityMovedEvent>());
+                    var movement = (EntityMovedEvent)events[index];
+                    Assert.That(movement.EntityId, Is.EqualTo(expectedIds[index]));
+                    Assert.That(movement.From, Is.EqualTo(expectedSources[index]));
+                    Assert.That(movement.To, Is.EqualTo(expectedTargets[index]));
+                    Assert.That(board.TryGetEntity(expectedIds[index], out BoardEntityState actor), Is.True);
+                    Assert.That(actor.Position, Is.EqualTo(expectedTargets[index]));
+                    Assert.That(board.TryGetEntity(BoardLayer.Actor, actor.Position,
+                        out BoardEntityState occupant), Is.True);
+                    Assert.That(occupant, Is.SameAs(actor));
+                    Assert.That(board.TryGetEntity(BoardLayer.Actor, expectedSources[index], out _), Is.False);
+                }
+                Assert.That(enemies.All(enemy => enemy.LockedIntent == null && enemy.Phase == ShamblerPhase.Rest), Is.True);
+                Assert.That(removedIntent.Kind, Is.EqualTo(removedAction));
+                Assert.That(removedIntent.TargetPosition, Is.EqualTo(removedTarget));
+                Assert.That(run.Health, Is.EqualTo(100));
+                Assert.That(run.Food, Is.EqualTo(25));
+                CollectionAssert.AreEqual(inputBefore, enemies);
+                var after = board.GetEntities();
+                Assert.Throws<InvalidOperationException>(() => executor.Execute(board, run, enemies, events));
+                CollectionAssert.AreEqual(after, board.GetEntities());
+                Assert.That(events.Count, Is.EqualTo(2));
+                Assert.That(enemies.All(enemy => enemy.Phase == ShamblerPhase.Rest), Is.True);
+            }
+        }
+
+        /// <summary>
         /// Explicit 2-3 actor chains use live sequential occupancy for both initiative orders and all inputs.
         /// A blocked leader prevents following, and an earlier blocked follower is never retried.
         /// </summary>
