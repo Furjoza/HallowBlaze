@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1-4 accepted; M3.9.5 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1-5 accepted; M3.9.6 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -3027,7 +3027,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.5` - Publish one detached locked-intent display batch
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09; publication PlayMode 9/9 passed, independent review PASS. Explicit publication borrows BoardState and retained Shambler states only to copy source cells/intents, reuses EnemyInitiativeOrder, and prepares a hidden complete batch before replacement. Owned markers and detached projections do not poll domain state or plan.
 **Priority:** P0
 **Related contract:** sections 10.2, 11.1, and 18.
 

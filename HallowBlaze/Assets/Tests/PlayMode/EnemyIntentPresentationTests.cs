@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Linq;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
+using HallowBlaze.Core.Turns.Contracts;
+using HallowBlaze.Core.Turns.Resolution;
 using HallowBlaze.Presentation.Runtime;
 using NUnit.Framework;
 using UnityEngine;
@@ -278,6 +280,148 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(retained.transform.Find("Glyph").localPosition, Is.EqualTo(Vector3.zero));
             Assert.That(retained.transform.Find("Glyph").localScale, Is.EqualTo(Vector3.one));
             TestContext.WriteLine("Contenders=" + contenderCount + "; permutations=" + permutationCount);
+        }
+
+        /// <summary>Only complete explicit publications replace the display; malformed batches preserve every previous marker.</summary>
+        [TestCase("initial")]
+        [TestCase("replacement")]
+        [TestCase("duplicate")]
+        [TestCase("unplanned")]
+        [TestCase("missing-source")]
+        [TestCase("null-entry")]
+        [TestCase("invalid-shared")]
+        [TestCase("null-input")]
+        public void Publication_ReplacesOnlyCompleteDetachedBatch(string scenario)
+        {
+            EnemyIntentPresenter presenter = CreatePublisherFixture(out BoardState board, out ShamblerState[] enemies);
+            var input = enemies.Reverse().ToList();
+            var entitiesBefore = board.GetEntities();
+            EnemyIntent[] intentsBefore = enemies.Select(enemy => enemy.LockedIntent).ToArray();
+
+            presenter.Publish(board, input);
+
+            CollectionAssert.AreEqual(entitiesBefore, board.GetEntities());
+            CollectionAssert.AreEqual(intentsBefore, enemies.Select(enemy => enemy.LockedIntent));
+            Assert.That(enemies.All(enemy => enemy.Phase == ShamblerPhase.Active), Is.True);
+            CollectionAssert.AreEqual(new[] { new EntityId(-5), new EntityId(0), new EntityId(7) }, presenter.Projections.Select(item => item.SourceId));
+            Assert.That(presenter.Views.Count, Is.EqualTo(3));
+            Assert.That(presenter.GetComponentsInChildren<EnemyIntentView>().Length, Is.EqualTo(3));
+            IReadOnlyList<EnemyIntentProjection> previousProjections = presenter.Projections;
+            IReadOnlyDictionary<EntityId, EnemyIntentView> previousViews = presenter.Views;
+            foreach (EnemyIntentProjection projection in previousProjections)
+            {
+                Assert.That(previousViews[projection.SourceId].Projection, Is.SameAs(projection));
+                Assert.That(previousViews[projection.SourceId].gameObject.activeInHierarchy, Is.True);
+                if (projection.Symbol == EnemyIntentSymbol.ConditionalMove)
+                {
+                    Assert.That(projection.TargetPosition, Is.EqualTo(new GridPosition(3, 3)));
+                    Assert.That(projection.AttackOnPlayerEntry, Is.True);
+                }
+            }
+            input.Clear();
+            enemies[0].ConsumeIntent();
+            enemies[0].LockIntent(new EnemyIntent(enemies[0].ActorId, EnemyIntentKind.Wait));
+            Assert.That(board.TryMove(enemies[0].ActorId, new GridPosition(2, 4)), Is.True);
+            Assert.That(presenter.Projections, Is.SameAs(previousProjections));
+            Assert.That(previousProjections[0].SourcePosition, Is.EqualTo(new GridPosition(2, 3)));
+            Assert.That(previousViews[enemies[0].ActorId].Projection.Symbol, Is.EqualTo(EnemyIntentSymbol.ConditionalMove));
+            if (scenario == "initial")
+                return;
+            if (scenario == "replacement")
+            {
+                var beforeReplacement = board.GetEntities();
+                ShamblerPhase[] phases = enemies.Select(enemy => enemy.Phase).ToArray();
+                EnemyIntent[] locks = enemies.Select(enemy => enemy.LockedIntent).ToArray();
+
+                presenter.Publish(board, enemies);
+
+                Assert.That(presenter.Projections, Is.Not.SameAs(previousProjections));
+                Assert.That(presenter.Projections[0].SourcePosition, Is.EqualTo(new GridPosition(2, 4)));
+                Assert.That(presenter.Projections[0].Symbol, Is.EqualTo(EnemyIntentSymbol.Wait));
+                Assert.That(presenter.Views.Count, Is.EqualTo(3));
+                Assert.That(presenter.GetComponentsInChildren<EnemyIntentView>().Length, Is.EqualTo(3));
+                Assert.That(previousViews.Values.All(view => !view.gameObject.activeInHierarchy), Is.True);
+                Assert.That(previousProjections[0].Symbol, Is.EqualTo(EnemyIntentSymbol.ConditionalMove));
+                CollectionAssert.AreEqual(beforeReplacement, board.GetEntities());
+                CollectionAssert.AreEqual(phases, enemies.Select(enemy => enemy.Phase));
+                CollectionAssert.AreEqual(locks, enemies.Select(enemy => enemy.LockedIntent));
+                return;
+            }
+            IEnumerable<ShamblerState> malformed = enemies;
+            switch (scenario)
+            {
+                case "duplicate": malformed = enemies.Concat(new[] { enemies[0] }); break;
+                case "unplanned": enemies[1].ConsumeIntent(); break;
+                case "missing-source": Assert.That(board.TryRemove(enemies[1].ActorId), Is.True); break;
+                case "null-entry": malformed = enemies.Concat(new ShamblerState[] { null }); break;
+                case "invalid-shared":
+                    Assert.That(board.TryMove(enemies[0].ActorId, new GridPosition(6, 4)), Is.True);
+                    enemies[0].ConsumeIntent();
+                    enemies[0].LockIntent(new EnemyIntent(enemies[0].ActorId, EnemyIntentKind.Move, new GridPosition(3, 3), new EntityId(-100), true));
+                    break;
+                case "null-input": malformed = null; break;
+                default: throw new ArgumentOutOfRangeException(nameof(scenario));
+            }
+            var invalidBefore = board.GetEntities();
+            EnemyIntent[] invalidLocks = enemies.Select(enemy => enemy.LockedIntent).ToArray();
+            ShamblerPhase[] invalidPhases = enemies.Select(enemy => enemy.Phase).ToArray();
+            Assert.That(() => presenter.Publish(board, malformed), Throws.InstanceOf<ArgumentException>());
+            Assert.That(presenter.Projections, Is.SameAs(previousProjections));
+            Assert.That(presenter.Views, Is.SameAs(previousViews));
+            Assert.That(previousViews.Values.All(view => view.gameObject.activeInHierarchy), Is.True);
+            Assert.That(presenter.GetComponentsInChildren<EnemyIntentView>().Length, Is.EqualTo(3));
+            CollectionAssert.AreEqual(invalidBefore, board.GetEntities());
+            CollectionAssert.AreEqual(invalidLocks, enemies.Select(enemy => enemy.LockedIntent));
+            CollectionAssert.AreEqual(invalidPhases, enemies.Select(enemy => enemy.Phase));
+            Assert.Throws<ArgumentNullException>(() => presenter.Publish(null, enemies));
+            Assert.That(presenter.Projections, Is.SameAs(previousProjections));
+        }
+
+        /// <summary>Failed preparation after a hidden glyph was created releases its material without touching the previous display.</summary>
+        [UnityTest]
+        public IEnumerator Publication_ReplacesOnlyCompleteDetachedBatch_AfterPartialGeometryFailure()
+        {
+            EnemyIntentPresenter presenter = CreatePublisherFixture(out BoardState board, out ShamblerState[] enemies);
+            presenter.Publish(board, enemies);
+            IReadOnlyDictionary<EntityId, EnemyIntentView> previousViews = presenter.Views;
+            var previousMaterials = new HashSet<Material>(Resources.FindObjectsOfTypeAll<Material>());
+            Material[] borrowedDisplayMaterials = previousViews.Values.Select(view =>
+                ActiveGlyphLines(view)[0].sharedMaterial).ToArray();
+            Assert.That(board.TryMove(enemies[1].ActorId, new GridPosition(6, 5)), Is.True);
+
+            Assert.Throws<ArgumentException>(() => presenter.Publish(board, enemies));
+
+            Material[] preparedMaterials = Resources.FindObjectsOfTypeAll<Material>()
+                .Where(material => material.name == "Intent glyph material" && !previousMaterials.Contains(material)).ToArray();
+            Assert.That(preparedMaterials.Length, Is.EqualTo(1));
+            Assert.That(presenter.Views, Is.SameAs(previousViews));
+            Assert.That(previousViews.Values.All(view => view.gameObject.activeInHierarchy), Is.True);
+
+            yield return null;
+            yield return null;
+
+            Assert.That(preparedMaterials.All(material => material == null), Is.True);
+            Assert.That(borrowedDisplayMaterials.All(material => material != null), Is.True);
+            Assert.That(presenter.GetComponentsInChildren<EnemyIntentView>().Length, Is.EqualTo(3));
+        }
+
+        private EnemyIntentPresenter CreatePublisherFixture(out BoardState board, out ShamblerState[] enemies)
+        {
+            board = new BoardState();
+            var definition = new BoardEntityDefinition(BoardLayer.Actor, EntityKind.Enemy, "publisher.enemy", BoardEntityTraits.Default);
+            var cells = new[] { new GridPosition(2, 3), new GridPosition(4, 3), new GridPosition(6, 6) };
+            var ids = new[] { new EntityId(-5), new EntityId(0), new EntityId(7) };
+            enemies = new ShamblerState[3];
+            for (int index = 0; index < enemies.Length; index++)
+            {
+                enemies[index] = new ShamblerState(ids[index], new ShamblerDefinition(10));
+                Assert.That(board.TryAdd(new BoardEntityState(ids[index], definition, cells[index])), Is.True);
+                enemies[index].LockIntent(index == 2 ? new EnemyIntent(ids[index], EnemyIntentKind.Wait) :
+                    new EnemyIntent(ids[index], EnemyIntentKind.Move, new GridPosition(3, 3), new EntityId(-100), true));
+            }
+            var instance = new GameObject("Intent publisher fixture");
+            objects.Add(instance);
+            return instance.AddComponent<EnemyIntentPresenter>();
         }
 
         private static IEnumerable<EnemyIntentProjection[]> ProjectionPermutations(EnemyIntentProjection[] projections)
