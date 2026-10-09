@@ -12,6 +12,7 @@ using HallowBlaze.Presentation.Runtime;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 using EntityId = HallowBlaze.Core.Board.Primitives.EntityId;
 
 namespace HallowBlaze.Tests.PlayMode
@@ -21,11 +22,15 @@ namespace HallowBlaze.Tests.PlayMode
     {
         private readonly List<GameObject> objects = new List<GameObject>();
         private readonly List<BoardRuntime> runtimes = new List<BoardRuntime>();
+        private readonly List<EnemyIntentLegend> legends = new List<EnemyIntentLegend>();
 
         /// <summary>Releases all transient views and their owned materials after each isolated fixture.</summary>
         [TearDown]
         public void TearDown()
         {
+            foreach (EnemyIntentLegend legend in legends)
+                legend.Dispose();
+            legends.Clear();
             foreach (BoardRuntime runtime in runtimes)
                 runtime.Dispose();
             runtimes.Clear();
@@ -501,6 +506,90 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(enemy.LockedIntent, Is.SameAs(locked));
             Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Active));
             Assert.That(newEnemy.Phase, Is.EqualTo(ShamblerPhase.Active));
+        }
+
+        /// <summary>Desktop/narrow legends retain actual renderer meshes and readable labels without covering inspected cells or submitting commands.</summary>
+        [UnityTest]
+        public IEnumerator Legend_MatchesSymbolsWithoutSubmittingCommands()
+        {
+            BoardRuntime runtime = CreateIntentRuntime(out ShamblerState enemy);
+            var before = runtime.BoardState.GetEntities();
+            EnemyIntent locked = enemy.LockedIntent;
+            var owner = new GameObject("Legend lifetime owner");
+            objects.Add(owner);
+            foreach (Vector2 size in new[] { new Vector2(1280, 720), new Vector2(360, 640) })
+            {
+                Rect inspected = size.x > 800 ? new Rect(20, 20, 860, 680) : new Rect(12, 480, 336, 148);
+                var legend = new EnemyIntentLegend(owner.transform, size, inspected);
+                legends.Add(legend);
+                Assert.That(legend.IsVisible, Is.False);
+                Assert.That(legend.Control.interactable && legend.Control.gameObject.activeInHierarchy, Is.True);
+                Assert.That(legend.Control.GetComponentInChildren<Text>().text, Is.EqualTo("Enemy intents"));
+                Assert.That(legend.Control.navigation.mode, Is.Not.EqualTo(Navigation.Mode.None));
+                legend.Control.onClick.Invoke();
+                legend.Show();
+                legend.Resize(new Vector2(320, 640), new Rect(12, 480, 296, 148));
+                legend.Resize(size, inspected);
+                Canvas.ForceUpdateCanvases();
+                Assert.That(legend.IsVisible, Is.True);
+                Assert.That(legend.PanelBounds.Overlaps(inspected) || legend.ControlBounds.Overlaps(inspected), Is.False);
+                Assert.That(legend.PanelBounds.xMin, Is.GreaterThanOrEqualTo(0));
+                Assert.That(legend.PanelBounds.yMax, Is.LessThanOrEqualTo(size.y));
+                Assert.That(legend.PanelBounds.xMax, Is.LessThanOrEqualTo(size.x));
+                var signatures = new HashSet<string>();
+                foreach (var glyph in legend.Glyphs)
+                {
+                    Mesh mesh = glyph.Value.GlyphMesh;
+                    Assert.That(glyph.Value.gameObject.activeInHierarchy, Is.True);
+                    Assert.That(mesh.vertexCount, Is.GreaterThan(0));
+                    Assert.That(mesh.triangles.Length, Is.GreaterThan(0));
+                    Assert.That(signatures.Add(string.Join(";", mesh.vertices.Select(vertex => vertex.ToString("F4")))), Is.True);
+                    foreach (Vector3 vertex in mesh.vertices)
+                    {
+                        Assert.That(Mathf.Abs(vertex.x), Is.LessThanOrEqualTo(24));
+                        Assert.That(Mathf.Abs(vertex.y), Is.LessThanOrEqualTo(24));
+                    }
+                }
+                Assert.That(signatures.Count, Is.EqualTo(5));
+                foreach (Text text in legend.Root.GetComponentsInChildren<Text>())
+                {
+                    var rect = (RectTransform)text.transform;
+                    Assert.That(text.preferredHeight, Is.LessThanOrEqualTo(rect.rect.height + 0.1f), text.text);
+                    var wordLayout = new TextGenerator();
+                    TextGenerationSettings settings = text.GetGenerationSettings(Vector2.zero);
+                    Assert.That(text.text.Split(new[] { ' ', '\n' }, StringSplitOptions.RemoveEmptyEntries).Max(word =>
+                        wordLayout.GetPreferredWidth(word, settings) / text.pixelsPerUnit),
+                        Is.LessThanOrEqualTo(rect.rect.width + 0.1f), text.text);
+                    var corners = new Vector3[4];
+                    rect.GetWorldCorners(corners);
+                    var parentRect = (RectTransform)rect.parent;
+                    foreach (Vector3 corner in corners)
+                    {
+                        Vector3 localCorner = parentRect.InverseTransformPoint(corner);
+                        Assert.That(localCorner.x, Is.InRange(parentRect.rect.xMin - 0.1f, parentRect.rect.xMax + 0.1f));
+                        Assert.That(localCorner.y, Is.InRange(parentRect.rect.yMin - 0.1f, parentRect.rect.yMax + 0.1f));
+                    }
+                }
+                legend.Hide();
+                legend.Hide();
+                legend.Control.onClick.Invoke();
+                Assert.That(legend.IsVisible, Is.True);
+                Assert.That(runtime.RunState.Health, Is.EqualTo(100));
+                Assert.That(runtime.RunState.Food, Is.EqualTo(25));
+                Assert.That(enemy.LockedIntent, Is.SameAs(locked));
+                Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Active));
+                CollectionAssert.AreEqual(before, runtime.BoardState.GetEntities());
+                GameObject root = legend.Root;
+                Mesh[] meshes = legend.Glyphs.Values.Select(glyph => glyph.GlyphMesh).ToArray();
+                legend.Dispose();
+                legend.Dispose();
+                Assert.Throws<ObjectDisposedException>(() => legend.Show());
+                yield return null;
+                yield return null;
+                Assert.That(root == null && meshes.All(mesh => mesh == null), Is.True);
+                Assert.That(owner != null && !runtime.IsDisposed, Is.True);
+                TestContext.WriteLine("Viewport=" + size + "; glyphs=5; protected=" + inspected);
+            }
         }
 
         private BoardRuntime CreateIntentRuntime(out ShamblerState enemy)
