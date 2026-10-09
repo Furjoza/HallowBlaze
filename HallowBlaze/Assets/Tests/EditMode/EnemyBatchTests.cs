@@ -14,6 +14,131 @@ namespace HallowBlaze.Tests.EditMode
     public class EnemyBatchTests
     {
         /// <summary>
+        /// Batch dispatch preserves fixed-cell hits, misses, conditional hits, enemy blockers,
+        /// and rest for both damage variants without reserving attack cells or adding costs.
+        /// </summary>
+        [TestCase(10, "hit")]
+        [TestCase(20, "hit")]
+        [TestCase(10, "miss")]
+        [TestCase(20, "miss")]
+        [TestCase(10, "conditional-hit")]
+        [TestCase(20, "conditional-hit")]
+        [TestCase(10, "enemy-blocked")]
+        [TestCase(20, "enemy-blocked")]
+        [TestCase(10, "rest")]
+        [TestCase(20, "rest")]
+        public void BatchAttacks_PreserveLockedOutcomes(int damage, string outcome)
+        {
+            var playerId = new EntityId(-100);
+            var target = new GridPosition(3, 3);
+            var escapedPosition = new GridPosition(4, 3);
+            long[] identities = { -5, 0, 7 };
+            GridPosition[] attackSources = { new GridPosition(2, 3), new GridPosition(3, 2) };
+            bool isMiss = outcome == "miss";
+            bool isHit = outcome == "hit" || outcome == "conditional-hit";
+            bool isRest = outcome == "rest";
+            bool isConditional = outcome == "conditional-hit" || outcome == "enemy-blocked";
+            GridPosition moverSource = isMiss ? new GridPosition(3, 4) : new GridPosition(6, 5);
+            GridPosition moverTarget = isMiss ? target : new GridPosition(6, 6);
+            ShamblerState[] templates = identities.Select(id =>
+                new ShamblerState(new EntityId(id), new ShamblerDefinition(damage))).ToArray();
+            var executor = new EnemyBatchExecutor();
+
+            foreach (ShamblerState[] permutation in Permutations(templates))
+            {
+                BoardState board = CreateBoard(playerId, isConditional ? escapedPosition : target);
+                RunState run = CreateRun();
+                ShamblerState[] enemies = permutation.Select(enemy =>
+                    new ShamblerState(enemy.ActorId, enemy.Definition)).ToArray();
+                ShamblerState[] inputBefore = enemies.ToArray();
+                for (int index = 0; index < attackSources.Length; index++)
+                {
+                    var actorId = new EntityId(identities[index]);
+                    Add(board, actorId.Value, BoardLayer.Actor, EntityKind.Enemy, attackSources[index]);
+                    ShamblerState enemy = enemies.Single(state => state.ActorId.Equals(actorId));
+                    if (isRest)
+                    {
+                        enemy.LockIntent(new EnemyIntent(actorId, EnemyIntentKind.Wait));
+                        enemy.ConsumeIntent();
+                        enemy.LockIntent(new EnemyIntent(actorId, EnemyIntentKind.Wait));
+                    }
+                    else
+                        enemy.LockIntent(new EnemyIntent(actorId,
+                            isConditional ? EnemyIntentKind.Move : EnemyIntentKind.Attack,
+                            target, playerId, isConditional));
+                }
+                var moverId = new EntityId(7);
+                Add(board, moverId.Value, BoardLayer.Actor, EntityKind.Enemy, moverSource);
+                enemies.Single(enemy => enemy.ActorId.Equals(moverId)).LockIntent(
+                    new EnemyIntent(moverId, EnemyIntentKind.Move, moverTarget, playerId, true));
+                if (isMiss)
+                    Assert.That(board.TryMove(playerId, escapedPosition), Is.True);
+                if (outcome == "conditional-hit")
+                    Assert.That(board.TryMove(playerId, target), Is.True);
+                if (outcome == "enemy-blocked")
+                    Add(board, 42, BoardLayer.Actor, EntityKind.Enemy, target);
+                var retained = enemies.ToDictionary(enemy => enemy.ActorId, enemy => enemy.LockedIntent);
+                var unchanged = board.GetEntities().Where(entity => !entity.Id.Equals(moverId)).ToArray();
+                int count = board.Count;
+                var events = new List<GameEvent>();
+
+                executor.Execute(board, run, enemies, events);
+
+                Assert.That(board.Count, Is.EqualTo(count));
+                CollectionAssert.AreEqual(unchanged,
+                    board.GetEntities().Where(entity => !entity.Id.Equals(moverId)).ToArray());
+                Assert.That(events.Count, Is.EqualTo(3));
+                for (int index = 0; index < attackSources.Length; index++)
+                {
+                    var actorId = new EntityId(identities[index]);
+                    Assert.That(board.TryGetEntity(actorId, out BoardEntityState actor), Is.True);
+                    Assert.That(actor.Position, Is.EqualTo(attackSources[index]));
+                    Assert.That(board.TryGetEntity(BoardLayer.Actor, actor.Position,
+                        out BoardEntityState occupant), Is.True);
+                    Assert.That(occupant, Is.SameAs(actor));
+                    if (isHit || isMiss)
+                    {
+                        Assert.That(events[index], Is.TypeOf<EnemyAttackResolvedEvent>());
+                        var attack = (EnemyAttackResolvedEvent)events[index];
+                        Assert.That(attack.AttackerId, Is.EqualTo(actorId));
+                        Assert.That(attack.TargetPosition, Is.EqualTo(target));
+                        Assert.That(attack.IsHit, Is.EqualTo(isHit));
+                        Assert.That(attack.AffectedTargetId, Is.EqualTo(isHit ? (EntityId?)playerId : null));
+                        Assert.That(attack.HealthChange, Is.EqualTo(isHit ? -damage : 0));
+                    }
+                    else
+                    {
+                        Assert.That(events[index], Is.TypeOf<EntityWaitedEvent>());
+                        Assert.That(((EntityWaitedEvent)events[index]).EntityId, Is.EqualTo(actorId));
+                    }
+                    ShamblerState enemy = enemies.Single(state => state.ActorId.Equals(actorId));
+                    Assert.That(enemy.LockedIntent, Is.Null);
+                    Assert.That(enemy.Phase, Is.EqualTo(isRest ? ShamblerPhase.Active : ShamblerPhase.Rest));
+                    Assert.That(retained[actorId].Kind,
+                        Is.EqualTo(isRest ? EnemyIntentKind.Wait : isConditional ? EnemyIntentKind.Move : EnemyIntentKind.Attack));
+                    Assert.That(retained[actorId].TargetPosition, Is.EqualTo(isRest ? (GridPosition?)null : target));
+                    Assert.That(retained[actorId].AttackOnPlayerEntry, Is.EqualTo(isConditional));
+                }
+                Assert.That(events[2], Is.TypeOf<EntityMovedEvent>());
+                var movement = (EntityMovedEvent)events[2];
+                Assert.That(movement.EntityId, Is.EqualTo(moverId));
+                Assert.That(movement.From, Is.EqualTo(moverSource));
+                Assert.That(movement.To, Is.EqualTo(moverTarget));
+                Assert.That(board.TryGetEntity(moverId, out BoardEntityState mover), Is.True);
+                Assert.That(mover.Position, Is.EqualTo(moverTarget));
+                Assert.That(board.TryGetEntity(BoardLayer.Actor, moverTarget, out BoardEntityState destinationOccupant), Is.True);
+                Assert.That(destinationOccupant, Is.SameAs(mover));
+                Assert.That(board.TryGetEntity(BoardLayer.Actor, moverSource, out _), Is.False);
+                Assert.That(enemies.Single(enemy => enemy.ActorId.Equals(moverId)).Phase, Is.EqualTo(ShamblerPhase.Rest));
+                Assert.That(enemies.All(enemy => enemy.LockedIntent == null), Is.True);
+                Assert.That(run.Health, Is.EqualTo(isHit ? 100 - 2 * damage : 100));
+                Assert.That(run.Food, Is.EqualTo(25));
+                Assert.That(run.Status, Is.EqualTo(RunStatus.Active));
+                CollectionAssert.AreEqual(inputBefore, enemies);
+            }
+        }
+
+        /// <summary>
         /// A source removed after retaining a move or attack has no effects or reservations,
         /// while live actors execute once in initiative order for every input permutation.
         /// </summary>
