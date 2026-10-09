@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1 accepted; M3.9.2 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8, M3.9.1 and M3.9.2 accepted; M3.9.3 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -2937,7 +2937,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.2` - Draw distinct persistent action symbols
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09; focused PlayMode gate 1/1 passed, independent review PASS. Prototype sheet: arrow for move; arrow with a persistent cross badge for conditional move; cross for attack; magnifier for investigate; parallel pause bars for wait. Fixed 0.6 x 0.6 unit-grid footprint, 0.04 stroke width, Default sorting layer/order 20. Runtime-created geometry only; human readability remains the M3.9.14 gate.
 **Priority:** P0
 **Related contract:** sections 11.3.1 and 18.
 
