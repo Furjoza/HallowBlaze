@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1-3 accepted; M3.9.4 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1-4 accepted; M3.9.5 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -2997,7 +2997,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.4` - Preserve source identity at a shared target
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09; shared-target PlayMode 3/3 passed across 150 input permutations, full presentation fixture 14/14 passed, independent review PASS. Shared-target prototype: two to four sources around (3,3), plus an unrelated source at (6,6) targeting (6,7). Source North/East/South/West maps to fixed NE/SE/SW/NW glyph slots at +/-0.23 within the recorded cell, using constant 0.5 glyph scale. Links retain source identity without initiative prediction; the root always stays at the exact target.
 **Priority:** P0
 **Related contract:** sections 11.2 and 18.
 

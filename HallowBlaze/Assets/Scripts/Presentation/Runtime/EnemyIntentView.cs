@@ -18,6 +18,10 @@ namespace HallowBlaze.Presentation.Runtime
         public const int GlyphSortingOrder = 20;
         /// <summary>Presentation-owned world Z in front of board sprites at Z zero.</summary>
         public const float MarkerDepth = -0.1f;
+        /// <summary>Fixed cosmetic scale for glyphs explicitly sharing a destination, independent of group size or action.</summary>
+        public const float SharedGlyphScale = 0.5f;
+        /// <summary>Quadrant offset inside the exact target cell; it is never a gameplay destination.</summary>
+        public const float SharedSlotOffset = 0.23f;
 
         private readonly Dictionary<EnemyIntentSymbol, GameObject> shapes = new Dictionary<EnemyIntentSymbol, GameObject>();
         private Material material;
@@ -40,8 +44,25 @@ namespace HallowBlaze.Presentation.Runtime
         /// <exception cref="InvalidOperationException">The built-in sprite shader is unavailable.</exception>
         public void Show(EnemyIntentProjection projection)
         {
+            Show(projection, false);
+        }
+
+        /// <summary>
+        /// Draws the exact copied target with an optional compact shared-cell layout.
+        /// Shared glyphs use fixed clockwise quadrant slots from their orthogonally adjacent source,
+        /// never collection order or initiative. Root placement remains the exact recorded cell.
+        /// </summary>
+        /// <param name="projection">Immutable display data; no gameplay state is queried or changed.</param>
+        /// <param name="sharedTarget">True only when the publisher supplies multiple adjacent sources at this target.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="projection"/> is null.</exception>
+        /// <exception cref="ArgumentException">Shared placement has no target or the source is not orthogonally adjacent.</exception>
+        /// <exception cref="InvalidOperationException">The built-in sprite shader is unavailable.</exception>
+        public void Show(EnemyIntentProjection projection, bool sharedTarget)
+        {
             if (projection == null)
                 throw new ArgumentNullException(nameof(projection));
+            Vector3 glyphOffset = sharedTarget ? SharedOffset(projection) : Vector3.zero;
+            float glyphScale = sharedTarget ? SharedGlyphScale : 1f;
             InitializeGeometry();
             foreach (var shape in shapes)
                 shape.Value.SetActive(shape.Key == projection.Symbol);
@@ -53,10 +74,29 @@ namespace HallowBlaze.Presentation.Runtime
             sourceCue.enabled = projection.TargetPosition.HasValue;
             sourceLink.enabled = projection.TargetPosition.HasValue;
             sourceLink.SetPosition(0, sourceOffset);
-            sourceLink.SetPosition(1, sourceOffset.normalized * (MarkerSize / 2f + StrokeWidth));
+            sourceLink.SetPosition(1, glyphOffset + (sourceOffset - glyphOffset).normalized * (MarkerSize * glyphScale / 2f + StrokeWidth));
+            glyph.localPosition = glyphOffset;
+            glyph.localScale = Vector3.one * glyphScale;
             glyph.localRotation = projection.Symbol == EnemyIntentSymbol.Move || projection.Symbol == EnemyIntentSymbol.ConditionalMove
                 ? Quaternion.FromToRotation(Vector3.up, target - source) : Quaternion.identity;
             Projection = projection;
+        }
+
+        private static Vector3 SharedOffset(EnemyIntentProjection projection)
+        {
+            if (!projection.TargetPosition.HasValue)
+                throw new ArgumentException("Shared-cell layout requires a recorded target.", nameof(projection));
+            long deltaX = (long)projection.SourcePosition.X - projection.TargetPosition.Value.X;
+            long deltaY = (long)projection.SourcePosition.Y - projection.TargetPosition.Value.Y;
+            if (Math.Abs(deltaX) + Math.Abs(deltaY) != 1)
+                throw new ArgumentException("Shared-cell sources must be orthogonally adjacent to the target.", nameof(projection));
+            if (deltaY == 1)
+                return new Vector3(SharedSlotOffset, SharedSlotOffset, 0);
+            if (deltaX == 1)
+                return new Vector3(SharedSlotOffset, -SharedSlotOffset, 0);
+            if (deltaY == -1)
+                return new Vector3(-SharedSlotOffset, -SharedSlotOffset, 0);
+            return new Vector3(-SharedSlotOffset, SharedSlotOffset, 0);
         }
 
         private void InitializeGeometry()

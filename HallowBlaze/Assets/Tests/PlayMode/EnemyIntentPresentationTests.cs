@@ -189,6 +189,113 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(actor.Position, Is.EqualTo(source));
         }
 
+        /// <summary>Adjacent contenders keep disjoint glyphs and exact source links across every input permutation.</summary>
+        [TestCase(2)]
+        [TestCase(3)]
+        [TestCase(4)]
+        public void SharedTarget_PreservesSourceAssociations(int contenderCount)
+        {
+            var target = new GridPosition(3, 3);
+            var sourceCells = new[] { new GridPosition(3, 4), new GridPosition(4, 3), new GridPosition(3, 2), new GridPosition(2, 3) };
+            var ids = new[] { new EntityId(7), new EntityId(-5), new EntityId(0), new EntityId(11) };
+            var offsets = new[] { new Vector3(0.23f, 0.23f), new Vector3(0.23f, -0.23f),
+                new Vector3(-0.23f, -0.23f), new Vector3(-0.23f, 0.23f) };
+            var projections = Enumerable.Range(0, contenderCount).Select(index => EnemyIntentProjection.CreateExample(
+                ids[index], sourceCells[index], EnemyIntentSymbol.ConditionalMove, target, new EntityId(-100))).ToList();
+            EnemyIntentProjection unrelated = EnemyIntentProjection.CreateExample(new EntityId(9), new GridPosition(6, 6),
+                EnemyIntentSymbol.Move, new GridPosition(6, 7));
+            projections.Add(unrelated);
+            var views = new Dictionary<EntityId, EnemyIntentView>();
+            var recordedGeometry = new Dictionary<EntityId, Vector3[]>();
+            foreach (EnemyIntentProjection projection in projections)
+            {
+                var instance = new GameObject("Source association " + projection.SourceId);
+                objects.Add(instance);
+                views.Add(projection.SourceId, instance.AddComponent<EnemyIntentView>());
+            }
+            int permutationCount = 0;
+            foreach (EnemyIntentProjection[] permutation in ProjectionPermutations(projections.ToArray()))
+            {
+                string context = "Contenders=" + contenderCount + "; IDs=[" + string.Join(",", permutation.Select(item => item.SourceId)) + "]";
+                foreach (EnemyIntentProjection projection in permutation)
+                    views[projection.SourceId].Show(projection, !ReferenceEquals(projection, unrelated));
+
+                var occupiedBounds = new List<Bounds>();
+                foreach (EnemyIntentProjection projection in projections)
+                {
+                    EnemyIntentView view = views[projection.SourceId];
+                    bool shared = !ReferenceEquals(projection, unrelated);
+                    GridPosition cell = projection.TargetPosition.Value;
+                    Assert.That(view.Projection, Is.SameAs(projection), context);
+                    Assert.That(view.transform.position, Is.EqualTo(new Vector3(cell.X, cell.Y, EnemyIntentView.MarkerDepth)), context);
+                    Transform glyph = view.transform.Find("Glyph");
+                    int sourceIndex = Array.IndexOf(ids, projection.SourceId);
+                    Assert.That(glyph.localPosition, Is.EqualTo(shared ? offsets[sourceIndex] : Vector3.zero), context);
+                    Assert.That(glyph.localScale, Is.EqualTo(Vector3.one * (shared ? 0.5f : 1)), context);
+                    Assert.That(view.LocalBounds.size, Is.EqualTo(new Vector3(0.6f, 0.6f, 0.1f)), context);
+                    Vector3 expectedSource = new Vector3(projection.SourcePosition.X, projection.SourcePosition.Y, EnemyIntentView.MarkerDepth);
+                    Assert.That(view.transform.Find("SourceCue").position, Is.EqualTo(expectedSource), context);
+                    LineRenderer link = view.transform.Find("SourceLink").GetComponent<LineRenderer>();
+                    Assert.That(link.enabled, Is.True, context);
+                    Assert.That(link.transform.TransformPoint(link.GetPosition(0)), Is.EqualTo(expectedSource), context);
+                    Assert.That(Vector3.Distance(link.transform.TransformPoint(link.GetPosition(1)), glyph.position),
+                        Is.EqualTo(shared ? 0.19f : 0.34f).Within(0.0001f), context);
+                    LineRenderer[] lines = ActiveGlyphLines(view);
+                    Assert.That(lines.Length, Is.EqualTo(shared ? 4 : 2), context);
+                    Assert.That(lines.All(line => line.enabled && line.gameObject.activeInHierarchy &&
+                        line.startColor == Color.white && line.endColor == Color.white), Is.True, context);
+                    Vector3[] points = lines.SelectMany(line => Enumerable.Range(0, line.positionCount)
+                        .Select(index => line.transform.TransformPoint(line.GetPosition(index)))).ToArray();
+                    var bounds = new Bounds(points[0], Vector3.zero);
+                    foreach (Vector3 point in points)
+                        bounds.Encapsulate(point);
+                    bounds.Expand(EnemyIntentView.StrokeWidth);
+                    Assert.That(bounds.min.x, Is.GreaterThan(cell.X - 0.5f), context);
+                    Assert.That(bounds.max.x, Is.LessThan(cell.X + 0.5f), context);
+                    Assert.That(bounds.min.y, Is.GreaterThan(cell.Y - 0.5f), context);
+                    Assert.That(bounds.max.y, Is.LessThan(cell.Y + 0.5f), context);
+                    Assert.That(occupiedBounds.All(previous => !previous.Intersects(bounds)), Is.True, context);
+                    occupiedBounds.Add(bounds);
+                    if (recordedGeometry.TryGetValue(projection.SourceId, out Vector3[] previousPoints))
+                        CollectionAssert.AreEqual(previousPoints, points, context);
+                    else
+                        recordedGeometry.Add(projection.SourceId, points);
+                }
+                permutationCount++;
+            }
+            Assert.That(permutationCount, Is.EqualTo(contenderCount == 2 ? 6 : contenderCount == 3 ? 24 : 120));
+            EnemyIntentView retained = views[ids[0]];
+            EnemyIntentProjection previousProjection = retained.Projection;
+            Vector3 previousPosition = retained.transform.position;
+            string previousGeometry = GeometrySignature(retained);
+            Assert.Throws<ArgumentException>(() => retained.Show(EnemyIntentProjection.CreateExample(ids[0], sourceCells[0], EnemyIntentSymbol.Wait), true));
+            Assert.Throws<ArgumentException>(() => retained.Show(EnemyIntentProjection.CreateExample(ids[0], new GridPosition(4, 4),
+                EnemyIntentSymbol.Move, target), true));
+            Assert.That(retained.Projection, Is.SameAs(previousProjection));
+            Assert.That(retained.transform.position, Is.EqualTo(previousPosition));
+            Assert.That(GeometrySignature(retained), Is.EqualTo(previousGeometry));
+            retained.Show(previousProjection);
+            Assert.That(retained.transform.Find("Glyph").localPosition, Is.EqualTo(Vector3.zero));
+            Assert.That(retained.transform.Find("Glyph").localScale, Is.EqualTo(Vector3.one));
+            TestContext.WriteLine("Contenders=" + contenderCount + "; permutations=" + permutationCount);
+        }
+
+        private static IEnumerable<EnemyIntentProjection[]> ProjectionPermutations(EnemyIntentProjection[] projections)
+        {
+            if (projections.Length == 0)
+            {
+                yield return Array.Empty<EnemyIntentProjection>();
+                yield break;
+            }
+            for (int index = 0; index < projections.Length; index++)
+            {
+                EnemyIntentProjection selected = projections[index];
+                EnemyIntentProjection[] remaining = projections.Where((item, itemIndex) => itemIndex != index).ToArray();
+                foreach (EnemyIntentProjection[] suffix in ProjectionPermutations(remaining))
+                    yield return new[] { selected }.Concat(suffix).ToArray();
+            }
+        }
+
         private static LineRenderer[] ActiveGlyphLines(EnemyIntentView view)
         {
             return view.transform.Find("Glyph").GetComponentsInChildren<LineRenderer>();
