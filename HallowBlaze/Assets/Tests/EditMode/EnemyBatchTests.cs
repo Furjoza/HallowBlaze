@@ -14,6 +14,193 @@ namespace HallowBlaze.Tests.EditMode
     public class EnemyBatchTests
     {
         /// <summary>
+        /// All permutations of four explicit 2-5 actor fixtures preserve authoritative state and
+        /// ordered typed event payloads for contested cells, swaps, live chains, and removed sources.
+        /// </summary>
+        [TestCase(2)]
+        [TestCase(3)]
+        [TestCase(4)]
+        [TestCase(5)]
+        public void InputPermutations_PreserveOutcomesAndOrderedEvents(int actorCount)
+        {
+            var playerId = new EntityId(-100);
+            var playerPosition = new GridPosition(5, 5);
+            EntityId[] identities = { new EntityId(-5), new EntityId(0), new EntityId(7),
+                new EntityId(9), new EntityId(11) };
+            GridPosition[] sources;
+            GridPosition?[] targets;
+            GridPosition?[] expectedPositions;
+            EnemyIntentKind[] kinds;
+            ShamblerPhase[] expectedPhases;
+            GameEvent[] expectedEvents;
+            int expectedHealth = 100;
+            int expectedPermutations;
+            switch (actorCount)
+            {
+                case 2:
+                    sources = new[] { new GridPosition(2, 3), new GridPosition(4, 3) };
+                    targets = new GridPosition?[] { new GridPosition(3, 3), new GridPosition(3, 3) };
+                    expectedPositions = new GridPosition?[] { new GridPosition(3, 3), new GridPosition(4, 3) };
+                    kinds = new[] { EnemyIntentKind.Move, EnemyIntentKind.Move };
+                    expectedPhases = new[] { ShamblerPhase.Rest, ShamblerPhase.Rest };
+                    expectedEvents = new GameEvent[] {
+                        new EntityMovedEvent(identities[0], new GridPosition(2, 3), new GridPosition(3, 3)),
+                        new EntityWaitedEvent(identities[1]) };
+                    expectedPermutations = 2;
+                    break;
+                case 3:
+                    sources = new[] { new GridPosition(2, 3), new GridPosition(3, 3), new GridPosition(6, 5) };
+                    targets = new GridPosition?[] { new GridPosition(3, 3), new GridPosition(2, 3), new GridPosition(6, 6) };
+                    expectedPositions = new GridPosition?[] { new GridPosition(2, 3), new GridPosition(3, 3), new GridPosition(6, 6) };
+                    kinds = new[] { EnemyIntentKind.Move, EnemyIntentKind.Move, EnemyIntentKind.Move };
+                    expectedPhases = new[] { ShamblerPhase.Rest, ShamblerPhase.Rest, ShamblerPhase.Rest };
+                    expectedEvents = new GameEvent[] { new EntityWaitedEvent(identities[0]),
+                        new EntityWaitedEvent(identities[1]),
+                        new EntityMovedEvent(identities[2], new GridPosition(6, 5), new GridPosition(6, 6)) };
+                    expectedPermutations = 6;
+                    break;
+                case 4:
+                    sources = new[] { new GridPosition(3, 1), new GridPosition(2, 1),
+                        new GridPosition(1, 1), new GridPosition(6, 5) };
+                    targets = new GridPosition?[] { new GridPosition(4, 1), new GridPosition(3, 1),
+                        new GridPosition(2, 1), null };
+                    expectedPositions = new GridPosition?[] { new GridPosition(4, 1), new GridPosition(3, 1),
+                        new GridPosition(2, 1), new GridPosition(6, 5) };
+                    kinds = new[] { EnemyIntentKind.Move, EnemyIntentKind.Move, EnemyIntentKind.Move, EnemyIntentKind.Wait };
+                    expectedPhases = new[] { ShamblerPhase.Rest, ShamblerPhase.Rest, ShamblerPhase.Rest, ShamblerPhase.Active };
+                    expectedEvents = new GameEvent[] {
+                        new EntityMovedEvent(identities[0], new GridPosition(3, 1), new GridPosition(4, 1)),
+                        new EntityMovedEvent(identities[1], new GridPosition(2, 1), new GridPosition(3, 1)),
+                        new EntityMovedEvent(identities[2], new GridPosition(1, 1), new GridPosition(2, 1)),
+                        new EntityWaitedEvent(identities[3]) };
+                    expectedPermutations = 24;
+                    break;
+                case 5:
+                    sources = new[] { new GridPosition(2, 3), new GridPosition(4, 3), new GridPosition(3, 2),
+                        new GridPosition(5, 6), new GridPosition(6, 5) };
+                    targets = new GridPosition?[] { new GridPosition(3, 3), new GridPosition(3, 3),
+                        new GridPosition(3, 3), playerPosition, null };
+                    expectedPositions = new GridPosition?[] { null, new GridPosition(3, 3), new GridPosition(3, 2),
+                        new GridPosition(5, 6), new GridPosition(6, 5) };
+                    kinds = new[] { EnemyIntentKind.Move, EnemyIntentKind.Move, EnemyIntentKind.Move,
+                        EnemyIntentKind.Attack, EnemyIntentKind.Wait };
+                    expectedPhases = new[] { ShamblerPhase.Rest, ShamblerPhase.Rest, ShamblerPhase.Rest,
+                        ShamblerPhase.Rest, ShamblerPhase.Active };
+                    expectedEvents = new GameEvent[] {
+                        new EntityMovedEvent(identities[1], new GridPosition(4, 3), new GridPosition(3, 3)),
+                        new EntityWaitedEvent(identities[2]),
+                        new EnemyAttackResolvedEvent(identities[3], playerPosition, true, playerId, -20),
+                        new EntityWaitedEvent(identities[4]) };
+                    expectedHealth = 80;
+                    expectedPermutations = 120;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(actorCount));
+            }
+            ShamblerState[] templates = identities.Take(actorCount).Select(id =>
+                new ShamblerState(id, new ShamblerDefinition(20))).ToArray();
+            var executor = new EnemyBatchExecutor();
+            int permutationCount = 0;
+
+            foreach (ShamblerState[] permutation in Permutations(templates))
+            {
+                string context = $"Actors={actorCount}; IDs=[{string.Join(",", permutation.Select(enemy => enemy.ActorId.Value))}]";
+                TestContext.WriteLine(context);
+                BoardState board = CreateBoard(playerId, playerPosition);
+                RunState run = CreateRun();
+                ShamblerState[] enemies = permutation.Select(enemy =>
+                    new ShamblerState(enemy.ActorId, enemy.Definition)).ToArray();
+                ShamblerState[] inputBefore = enemies.ToArray();
+                for (int index = 0; index < actorCount; index++)
+                {
+                    EntityId actorId = identities[index];
+                    Add(board, actorId.Value, BoardLayer.Actor, EntityKind.Enemy, sources[index]);
+                    ShamblerState enemy = enemies.Single(state => state.ActorId.Equals(actorId));
+                    if (actorCount >= 4 && index == actorCount - 1)
+                    {
+                        enemy.LockIntent(new EnemyIntent(actorId, EnemyIntentKind.Wait));
+                        enemy.ConsumeIntent();
+                    }
+                    enemy.LockIntent(kinds[index] == EnemyIntentKind.Wait
+                        ? new EnemyIntent(actorId, EnemyIntentKind.Wait)
+                        : new EnemyIntent(actorId, kinds[index], targets[index].Value, playerId,
+                            kinds[index] == EnemyIntentKind.Move));
+                }
+                var retained = enemies.ToDictionary(enemy => enemy.ActorId, enemy => enemy.LockedIntent);
+                if (actorCount == 5)
+                    Assert.That(board.TryRemove(identities[0]), Is.True, context);
+                var unchanged = board.GetEntities().Where(entity =>
+                    entity.Definition.Layer != BoardLayer.Actor || entity.Id.Equals(playerId)).ToArray();
+                int count = board.Count;
+                var events = new List<GameEvent>();
+
+                Assert.DoesNotThrow(() => executor.Execute(board, run, enemies, events), context);
+
+                Assert.That(board.Count, Is.EqualTo(count), context);
+                CollectionAssert.AreEqual(unchanged, board.GetEntities().Where(entity =>
+                    entity.Definition.Layer != BoardLayer.Actor || entity.Id.Equals(playerId)).ToArray(), context);
+                for (int index = 0; index < actorCount; index++)
+                {
+                    EntityId actorId = identities[index];
+                    Assert.That(board.TryGetEntity(actorId, out BoardEntityState actor),
+                        Is.EqualTo(expectedPositions[index].HasValue), context);
+                    if (expectedPositions[index].HasValue)
+                    {
+                        Assert.That(actor.Position, Is.EqualTo(expectedPositions[index].Value), context);
+                        Assert.That(board.TryGetEntity(BoardLayer.Actor, actor.Position,
+                            out BoardEntityState occupant), Is.True, context);
+                        Assert.That(occupant, Is.SameAs(actor), context);
+                    }
+                    ShamblerState enemy = enemies.Single(state => state.ActorId.Equals(actorId));
+                    Assert.That(enemy.LockedIntent, Is.Null, context);
+                    Assert.That(enemy.Phase, Is.EqualTo(expectedPhases[index]), context);
+                    Assert.That(retained[actorId].Kind, Is.EqualTo(kinds[index]), context);
+                    Assert.That(retained[actorId].TargetPosition, Is.EqualTo(targets[index]), context);
+                }
+                foreach (GridPosition cell in sources.Concat(targets.Where(target => target.HasValue)
+                    .Select(target => target.Value)).Distinct())
+                {
+                    int index = Array.IndexOf(expectedPositions, (GridPosition?)cell);
+                    bool occupied = board.TryGetEntity(BoardLayer.Actor, cell, out BoardEntityState occupant);
+                    Assert.That(occupied, Is.EqualTo(index >= 0 || cell.Equals(playerPosition)), context);
+                    if (occupied)
+                        Assert.That(occupant.Id, Is.EqualTo(cell.Equals(playerPosition) ? playerId : identities[index]), context);
+                }
+                Assert.That(events.Count, Is.EqualTo(expectedEvents.Length), context);
+                for (int index = 0; index < expectedEvents.Length; index++)
+                {
+                    GameEvent expected = expectedEvents[index];
+                    Assert.That(events[index].GetType(), Is.EqualTo(expected.GetType()), context);
+                    if (expected is EntityMovedEvent expectedMove)
+                    {
+                        var actual = (EntityMovedEvent)events[index];
+                        Assert.That(actual.EntityId, Is.EqualTo(expectedMove.EntityId), context);
+                        Assert.That(actual.From, Is.EqualTo(expectedMove.From), context);
+                        Assert.That(actual.To, Is.EqualTo(expectedMove.To), context);
+                    }
+                    else if (expected is EntityWaitedEvent expectedWait)
+                        Assert.That(((EntityWaitedEvent)events[index]).EntityId, Is.EqualTo(expectedWait.EntityId), context);
+                    else
+                    {
+                        var expectedAttack = (EnemyAttackResolvedEvent)expected;
+                        var actual = (EnemyAttackResolvedEvent)events[index];
+                        Assert.That(actual.AttackerId, Is.EqualTo(expectedAttack.AttackerId), context);
+                        Assert.That(actual.TargetPosition, Is.EqualTo(expectedAttack.TargetPosition), context);
+                        Assert.That(actual.IsHit, Is.EqualTo(expectedAttack.IsHit), context);
+                        Assert.That(actual.AffectedTargetId, Is.EqualTo(expectedAttack.AffectedTargetId), context);
+                        Assert.That(actual.HealthChange, Is.EqualTo(expectedAttack.HealthChange), context);
+                    }
+                }
+                Assert.That(run.Health, Is.EqualTo(expectedHealth), context);
+                Assert.That(run.Food, Is.EqualTo(25), context);
+                Assert.That(run.Status, Is.EqualTo(RunStatus.Active), context);
+                CollectionAssert.AreEqual(inputBefore, enemies, context);
+                permutationCount++;
+            }
+            Assert.That(permutationCount, Is.EqualTo(expectedPermutations), $"Actors={actorCount}");
+        }
+
+        /// <summary>
         /// Batch dispatch preserves fixed-cell hits, misses, conditional hits, enemy blockers,
         /// and rest for both damage variants without reserving attack cells or adding costs.
         /// </summary>
