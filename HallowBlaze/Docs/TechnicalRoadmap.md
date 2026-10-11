@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7 and M3.8.1-M3.8.9 accepted; M3.8.10 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7 and M3.8 accepted; M3.9.1 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -2520,7 +2520,7 @@ Only the existing `ConsumeIntent()` transition advances to the next row, includi
 
 ## `M3.8` - Intent conflicts and stable initiative (tracking umbrella)
 
-**Status:** `Planned` - tracking umbrella; it becomes `Done` only after `M3.8.1` through `M3.8.10` are independently accepted.
+**Status:** `Done` - accepted 2026-10-09 after all ten children passed their focused Unity validation and independent review. Live sequential occupancy follows the accepted section 11.2 decision. The batch adapter remains isolated; production composition and intent presentation are not delivered by this umbrella.
 **Priority:** P0
 **Related contract:** sections 10.2, 11.2, and the accepted Shambler condition in 11.3.1.
 
@@ -2839,7 +2839,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.8.10` - Input permutation regression
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09 after focused Unity EditMode validation (4/4; all 152 permutations of the 2-5 actor fixtures) and independent Reviewer `PASS`; direct Lead test-only implementation.
 **Priority:** P0
 **Related contract:** section 11.2.
 
