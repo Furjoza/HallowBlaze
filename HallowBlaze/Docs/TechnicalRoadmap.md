@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8, M3.9.1-10 and M3.9.P1 accepted; M3.9.11 ready; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8, M3.9.1-11 and M3.9.P1 accepted; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-11
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -3235,7 +3235,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.11` - Bind publication to setup and replay completion
 
-**Status:** `Ready` - readiness checked 2026-10-11. Production prerequisite `M3.9.P1` is separately accepted with composition 16/16, startup 6/6, legacy authority 12/12 and independent Reviewer PASS. `BoardRuntime.Enemies` supplies retained states, and its sole controller uses the accepted batch adapter with initial plans before publication. No controller replacement or additional resolver is required.
+**Status:** `Done` - accepted 2026-10-11 after direct Lead implementation without Developer. Focused replay-boundary PlayMode check passed 1/1 across success, cancellation, unknown-event recovery, terminal and disposal; full intent presentation 26/26 and ordered presentation 16/16 passed, with compilation, scope and diff checks passing. Independent Reviewer PASS completed after the invocation blocker was resolved; the reviewed code matches the mechanically validated candidate. Optional setup/recovery/completion publication preserves the displayed batch during replay, deduplicates unchanged retained plans and closes terminal/disposed display lifetimes. Production prerequisite `M3.9.P1` is separately accepted; `BoardRuntime.Enemies` supplies retained states and its sole controller uses the accepted batch adapter with initial plans before publication. No controller replacement, additional resolver or agent-configuration change was introduced.
 **Priority:** P0
 **Related contract:** sections 10.2, 11.1, 11.3.1, and 18.
 
