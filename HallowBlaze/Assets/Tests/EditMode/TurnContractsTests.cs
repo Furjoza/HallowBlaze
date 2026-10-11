@@ -12,6 +12,85 @@ namespace HallowBlaze.Tests.EditMode
     public class TurnContractsTests
     {
         /// <summary>
+        /// Hits expose actual signed HP effects, including clamped or zero effects, without recalculation.
+        /// </summary>
+        [TestCase(-10)]
+        [TestCase(-20)]
+        [TestCase(-3)]
+        [TestCase(0)]
+        public void AttackHitPreservesActualEffect(int healthChange)
+        {
+            var attackerId = new EntityId(0);
+            var playerId = new EntityId(-1);
+            var cell = new GridPosition(0, 0);
+            var resolved = new EnemyAttackResolvedEvent(attackerId, cell, true, playerId, healthChange);
+
+            Assert.That(resolved.EventType, Is.EqualTo("EnemyAttackResolved"));
+            Assert.That(resolved.AttackerId, Is.EqualTo(attackerId));
+            Assert.That(resolved.TargetPosition, Is.EqualTo(cell));
+            Assert.That(resolved.IsHit, Is.True);
+            Assert.That(resolved.AffectedTargetId, Is.EqualTo(playerId));
+            Assert.That(resolved.HealthChange, Is.EqualTo(healthChange));
+        }
+
+        /// <summary>
+        /// A miss keeps the announced cell without inventing a target or health effect.
+        /// </summary>
+        [Test]
+        public void AttackMissPreservesFixedCellAndZeroEffect()
+        {
+            var attacker = new EntityId(long.MinValue);
+            var cell = new GridPosition(int.MinValue, int.MaxValue);
+            var resolved = new EnemyAttackResolvedEvent(attacker, cell, false, null, 0);
+
+            Assert.That(resolved.AttackerId, Is.EqualTo(attacker));
+            Assert.That(resolved.TargetPosition, Is.EqualTo(cell));
+            Assert.That(resolved.IsHit, Is.False);
+            Assert.That(resolved.AffectedTargetId, Is.Null);
+            Assert.That(resolved.HealthChange, Is.Zero);
+        }
+
+        /// <summary>
+        /// Contradictory hit, target, healing, and miss-damage payloads cannot become event facts.
+        /// </summary>
+        [Test]
+        public void AttackEventRejectsContradictoryPayloads()
+        {
+            var attacker = new EntityId(0);
+            var player = new EntityId(-1);
+            var cell = new GridPosition(0, 0);
+
+            Assert.Throws<ArgumentException>(() => new EnemyAttackResolvedEvent(attacker, cell, true, null, -10));
+            Assert.Throws<ArgumentException>(() => new EnemyAttackResolvedEvent(attacker, cell, true, attacker, -10));
+            Assert.Throws<ArgumentException>(() => new EnemyAttackResolvedEvent(attacker, cell, false, player, 0));
+            Assert.Throws<ArgumentException>(() => new EnemyAttackResolvedEvent(attacker, cell, false, null, -10));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new EnemyAttackResolvedEvent(attacker, cell, true, player, 10));
+        }
+
+        /// <summary>
+        /// Caller value changes cannot alter an event, whose payload is sealed and getter-only.
+        /// </summary>
+        [Test]
+        public void AttackEventOwnsImmutablePayload()
+        {
+            var attacker = new EntityId(0);
+            var player = new EntityId(-1);
+            var cell = new GridPosition(0, 0);
+            var resolved = new EnemyAttackResolvedEvent(attacker, cell, true, player, -20);
+            attacker = new EntityId(10);
+            player = new EntityId(11);
+            cell = new GridPosition(5, 5);
+
+            Assert.That(resolved.AttackerId, Is.EqualTo(new EntityId(0)));
+            Assert.That(resolved.AffectedTargetId, Is.EqualTo(new EntityId(-1)));
+            Assert.That(resolved.TargetPosition, Is.EqualTo(new GridPosition(0, 0)));
+            Assert.That(resolved.HealthChange, Is.EqualTo(-20));
+            Assert.That(typeof(EnemyAttackResolvedEvent).IsSealed, Is.True);
+            foreach (var property in typeof(EnemyAttackResolvedEvent).GetProperties())
+                Assert.That(property.CanWrite, Is.False, property.Name);
+        }
+
+        /// <summary>
         /// Commands retain their discriminators and payloads while invalid movement intent is rejected.
         /// </summary>
         [Test]

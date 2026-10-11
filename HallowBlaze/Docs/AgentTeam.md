@@ -10,7 +10,7 @@
 
 `codex-lead` is the user-facing coordinator. `developer` and `reviewer` are internal native subagent roles and run sequentially. Their names identify responsibilities, not model vendors.
 
-The Developer uses `read`, `search`, `edit`, and `execute`, and retains its configured local model. The Reviewer uses only `read` and `search`. The intended default reviewer provider is GitHub Copilot; the owner explicitly selects a local reviewer when the Copilot allowance is exhausted. A routing failure is not evidence of exhausted allowance and must not silently change the provider.
+The Developer uses `read`, `search`, `edit`, and `execute`, and retains its configured local model. The Reviewer uses only `read` and `search`. The intended default reviewer provider is GitHub Copilot; the owner explicitly selects a local reviewer when the Copilot allowance is exhausted. Missing routing metadata does not block acceptance. An invocation failure is not evidence of exhausted allowance and must not silently change the configured provider.
 
 The roles were renamed from `qwen-developer` and `qwen-reviewer` on 2026-10-08. Historical roadmap handoffs and validation reports retain their original agent names and model attribution; the rename does not turn past local reviews into Copilot reviews. If the agent picker or subagent catalog still exposes the old identifiers, reload VS Code or start a fresh session rather than invoking obsolete names.
 
@@ -20,7 +20,7 @@ The roles were renamed from `qwen-developer` and `qwen-reviewer` on 2026-10-08. 
 
 For native VS Code subagents, model selection prioritizes an explicit invocation override, then the selected agent's `model`, then Auto when the workspace preference and availability conditions permit it, and finally the main conversation model. The Lead must not supply a model override unless the user explicitly requests one.
 
-Auto selection for subagents is experimental. It does not override an agent's configured model. If Auto is unavailable, the main model is used; subagents of a BYOK model continue using that model unless another is explicitly selected. An SDK adapter may implement different routing. This preference is therefore not a guarantee of Copilot execution when the Lead uses another provider. Verify actual routing when the harness exposes it, and report a blocker instead of attributing an unverified fallback to Copilot. See the [VS Code subagent model-selection documentation](https://code.visualstudio.com/docs/copilot/agents/subagents).
+Auto selection for subagents is experimental. It does not override an agent's configured model. If Auto is unavailable, the main model is used; subagents of a BYOK model continue using that model unless another is explicitly selected. An SDK adapter may implement different routing. The Lead does not require confirmation of the actual reviewer model/provider and does not inspect session logs solely to establish routing. Acceptance depends on scope, validation, and independent semantic review, not on routing metadata. Report a provider only when known; otherwise report the review result without provider attribution. See the [VS Code subagent model-selection documentation](https://code.visualstudio.com/docs/copilot/agents/subagents).
 
 Use the qualified model names offered by VS Code completion in agent frontmatter. Runtime SDK identifiers are a different layer and must be resolved to the correct provider, not substituted blindly into the agent files.
 

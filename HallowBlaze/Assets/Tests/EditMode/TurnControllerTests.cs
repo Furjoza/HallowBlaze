@@ -19,6 +19,248 @@ namespace HallowBlaze.Tests.EditMode
         private static readonly GridPosition Start = new GridPosition(1, 1);
         private static readonly GridPosition Destination = new GridPosition(2, 1);
 
+        /// <summary>
+        /// The controller executes the pre-input fixed-cell attack as a miss instead of replacing
+        /// it with the pursuit movement that fresh active planning would choose after player movement.
+        /// </summary>
+        [Test]
+        public void LockedShamblerAttack_PlayerLeavesTarget_MissesWithoutReplanning()
+        {
+            BoardState board = CreateShamblerBoard(Destination);
+            RunState run = CreateRun();
+            var enemy = new ShamblerState(new EntityId(2), new ShamblerDefinition(10));
+            var adapter = new ShamblerTurnPhases(enemy);
+            adapter.PlanInitialIntent(board, PlayerId);
+            EnemyIntent initial = enemy.LockedIntent;
+            Assert.That(initial.Kind, Is.EqualTo(EnemyIntentKind.Attack));
+            Assert.That(initial.TargetPosition, Is.EqualTo(Start));
+            Assert.That(initial.TargetId, Is.EqualTo(PlayerId));
+            var trace = new List<string>();
+            int planningCalls = 0;
+            var phases = new TurnPhaseHandlers(
+                (boardState, runState, playerId, events) =>
+                {
+                    trace.Add("ExecuteLockedIntents");
+                    Assert.That(runState.Food, Is.EqualTo(4));
+                    Assert.That(boardState.TryGetEntity(playerId, out BoardEntityState player), Is.True);
+                    Assert.That(player.Position, Is.EqualTo(new GridPosition(1, 2)));
+                    Assert.That(enemy.LockedIntent, Is.SameAs(initial));
+                    var freshActive = new ShamblerState(enemy.ActorId, enemy.Definition);
+                    EnemyIntent hypothetical = new ShamblerPlanner().Plan(boardState, freshActive, playerId);
+                    Assert.That(hypothetical.Kind, Is.EqualTo(EnemyIntentKind.Move));
+                    Assert.That(hypothetical.TargetPosition, Is.EqualTo(new GridPosition(2, 2)));
+                    adapter.Handlers.ExecuteLockedIntents(boardState, runState, playerId, events);
+                },
+                (boardState, runState, playerId, events) =>
+                {
+                    trace.Add("Environment");
+                    Assert.That(enemy.LockedIntent, Is.Null);
+                    Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
+                },
+                (boardState, runState, playerId, events) =>
+                {
+                    trace.Add("PlanNextIntents");
+                    planningCalls++;
+                    Assert.That(enemy.LockedIntent, Is.Null);
+                    adapter.Handlers.PlanNextIntents(boardState, runState, playerId, events);
+                });
+            var controller = new TurnController(board, run, PlayerId, phases: phases);
+
+            TurnResult result = controller.Resolve(new MoveCommand(Direction.North));
+
+            Assert.That(result.Accepted && result.ConsumesTurn, Is.True);
+            AssertEvents(result, "EntityMoved", "ActionCostApplied", "EnemyAttackResolved");
+            Assert.That(result.Events.OfType<ActionCostAppliedEvent>().Single().CostAmount, Is.EqualTo(1));
+            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.Health, Is.EqualTo(10));
+            Assert.That(board.TryGetEntity(enemy.ActorId, out BoardEntityState actor), Is.True);
+            Assert.That(actor.Position, Is.EqualTo(Destination));
+            var miss = result.Events.OfType<EnemyAttackResolvedEvent>().Single();
+            Assert.That(miss.AttackerId, Is.EqualTo(enemy.ActorId));
+            Assert.That(miss.TargetPosition, Is.EqualTo(Start));
+            Assert.That(miss.IsHit, Is.False);
+            Assert.That(miss.AffectedTargetId, Is.Null);
+            Assert.That(miss.HealthChange, Is.Zero);
+            Assert.That(initial.TargetPosition, Is.EqualTo(Start));
+            Assert.That(trace, Is.EqualTo(new[] { "ExecuteLockedIntents", "Environment", "PlanNextIntents" }));
+            Assert.That(planningCalls, Is.EqualTo(1));
+            Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
+            Assert.That(enemy.LockedIntent.Kind, Is.EqualTo(EnemyIntentKind.Wait));
+            Assert.That(enemy.LockedIntent, Is.Not.SameAs(initial));
+            Assert.That(controller.IsTerminal || controller.IsResolving, Is.False);
+        }
+
+        /// <summary>
+        /// Initial planning precedes input without board/run mutation or cadence advancement.
+        /// </summary>
+        [Test]
+        public void ShamblerInitialPlanningRetainsOneActiveIntent()
+        {
+            BoardState board = CreateShamblerBoard(new GridPosition(3, 1));
+            RunState run = CreateRun();
+            var enemy = new ShamblerState(new EntityId(2), new ShamblerDefinition(10));
+            var adapter = new ShamblerTurnPhases(enemy);
+            string before = Snapshot(board, run);
+            Assert.That(enemy.LockedIntent, Is.Null);
+
+            adapter.PlanInitialIntent(board, PlayerId);
+
+            EnemyIntent initial = enemy.LockedIntent;
+            Assert.That(initial.Kind, Is.EqualTo(EnemyIntentKind.Move));
+            Assert.That(initial.TargetPosition, Is.EqualTo(Destination));
+            Assert.That(initial.AttackOnPlayerEntry, Is.True);
+            Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Active));
+            Assert.That(Snapshot(board, run), Is.EqualTo(before));
+            Assert.Throws<InvalidOperationException>(() => adapter.PlanInitialIntent(board, PlayerId));
+            Assert.That(enemy.LockedIntent, Is.SameAs(initial));
+            Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Active));
+        }
+
+        /// <summary>
+        /// Each active outcome executes before environment and is followed by one adjacent-safe rest turn.
+        /// </summary>
+        [TestCase("move")]
+        [TestCase("blocked")]
+        [TestCase("miss")]
+        [TestCase("conditional-hit")]
+        public void ShamblerPhasesExecuteLockedOutcomeThenPlanRest(string outcome)
+        {
+            GridPosition enemyPosition = outcome == "miss" ? Destination : new GridPosition(3, 1);
+            BoardState board = CreateShamblerBoard(enemyPosition);
+            RunState run = CreateRun();
+            run.RestoreHealth(90);
+            var enemy = new ShamblerState(new EntityId(2), new ShamblerDefinition(10));
+            int environmentCalls = 0;
+            var adapter = new ShamblerTurnPhases(enemy, (boardState, runState, playerId, events) =>
+            {
+                environmentCalls++;
+                Assert.That(enemy.LockedIntent, Is.Null, "Execution consumed the old intent before environment.");
+                Assert.That(enemy.Phase, Is.EqualTo(environmentCalls == 1 ? ShamblerPhase.Rest : ShamblerPhase.Active));
+                events.Add(new MarkerEvent("Environment"));
+            });
+            adapter.PlanInitialIntent(board, PlayerId);
+            EnemyIntent initial = enemy.LockedIntent;
+            if (outcome == "blocked")
+                Add(board, 300, BoardLayer.Obstacle, EntityKind.Obstacle, Destination, BoardEntityTraits.Default);
+            PlayerCommand command = outcome == "conditional-hit" ? (PlayerCommand)new MoveCommand(Direction.East) :
+                outcome == "miss" ? new MoveCommand(Direction.North) : new WaitCommand();
+            var controller = new TurnController(board, run, PlayerId, phases: adapter.Handlers);
+
+            TurnResult first = controller.Resolve(command);
+
+            string enemyEvent = outcome == "move" ? "EntityMoved" : outcome == "blocked" ? "EntityWaited" : "EnemyAttackResolved";
+            AssertEvents(first, command is WaitCommand ? "EntityWaited" : "EntityMoved", "ActionCostApplied", enemyEvent, "Environment");
+            Assert.That(first.Accepted && first.ConsumesTurn, Is.True);
+            Assert.That(first.Events.OfType<ActionCostAppliedEvent>().Count(), Is.EqualTo(1));
+            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.Health, Is.EqualTo(outcome == "conditional-hit" ? 90 : 100));
+            Assert.That(environmentCalls, Is.EqualTo(1));
+            Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
+            Assert.That(enemy.LockedIntent.Kind, Is.EqualTo(EnemyIntentKind.Wait));
+            Assert.That(enemy.LockedIntent, Is.Not.SameAs(initial));
+            Assert.That(board.TryGetEntity(enemy.ActorId, out BoardEntityState actor), Is.True);
+            Assert.That(actor.Position, Is.EqualTo(outcome == "move" ? Destination : enemyPosition));
+            if (outcome == "miss" || outcome == "conditional-hit")
+            {
+                var attack = first.Events.OfType<EnemyAttackResolvedEvent>().Single();
+                Assert.That(attack.TargetPosition, Is.EqualTo(outcome == "miss" ? Start : Destination));
+                Assert.That(attack.IsHit, Is.EqualTo(outcome == "conditional-hit"));
+                Assert.That(attack.HealthChange, Is.EqualTo(outcome == "conditional-hit" ? -10 : 0));
+            }
+            var beforeRest = board.GetEntities();
+
+            TurnResult rest = controller.Resolve(new WaitCommand());
+
+            AssertEvents(rest, "EntityWaited", "ActionCostApplied", "EntityWaited", "Environment");
+            Assert.That(run.Food, Is.EqualTo(3));
+            Assert.That(run.Health, Is.EqualTo(outcome == "conditional-hit" ? 90 : 100));
+            Assert.That(environmentCalls, Is.EqualTo(2));
+            Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Active));
+            Assert.That(enemy.LockedIntent, Is.Not.Null);
+            CollectionAssert.AreEqual(beforeRest, board.GetEntities());
+            Assert.That(controller.IsTerminal || controller.IsResolving, Is.False);
+        }
+
+        /// <summary>
+        /// Rejection leaves the exact initial intent and cadence intact and produces no enemy effects.
+        /// </summary>
+        [Test]
+        public void RejectedCommandPreservesShamblerIntentAndCadence()
+        {
+            BoardState board = CreateShamblerBoard(new GridPosition(3, 1));
+            RunState run = CreateRun();
+            var enemy = new ShamblerState(new EntityId(2), new ShamblerDefinition(10));
+            var adapter = new ShamblerTurnPhases(enemy, FailPhase);
+            adapter.PlanInitialIntent(board, PlayerId);
+            EnemyIntent initial = enemy.LockedIntent;
+            string before = Snapshot(board, run);
+            var controller = new TurnController(board, run, PlayerId, phases: adapter.Handlers);
+
+            AssertRejected(controller.Resolve(new MoveCommand(Direction.West)), CommandRejectionCode.Blocked);
+
+            Assert.That(Snapshot(board, run), Is.EqualTo(before));
+            Assert.That(enemy.LockedIntent, Is.SameAs(initial));
+            Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Active));
+            Assert.That(controller.IsResolving || controller.IsTerminal, Is.False);
+        }
+
+        /// <summary>
+        /// Phase 4 starvation or a live exit skips enemy execution and preserves its old intent.
+        /// </summary>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ImmediateTerminalOutcomePreservesShamblerIntent(bool exit)
+        {
+            BoardState board = CreateShamblerBoard(new GridPosition(3, 1), exit);
+            RunState run = CreateRun(exit ? 5 : 1);
+            var enemy = new ShamblerState(new EntityId(2), new ShamblerDefinition(20));
+            var adapter = new ShamblerTurnPhases(enemy, FailPhase);
+            adapter.PlanInitialIntent(board, PlayerId);
+            EnemyIntent initial = enemy.LockedIntent;
+            var controller = new TurnController(board, run, PlayerId, phases: adapter.Handlers);
+
+            TurnResult result = controller.Resolve(exit ? (PlayerCommand)new MoveCommand(Direction.East) : new WaitCommand());
+
+            AssertEvents(result, exit ? "EntityMoved" : "EntityWaited", "ActionCostApplied", exit ? "ExitReached" : "PlayerStarved");
+            Assert.That(enemy.LockedIntent, Is.SameAs(initial));
+            Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Active));
+            Assert.That(run.Health, Is.EqualTo(10));
+            Assert.That(controller.IsTerminal, Is.True);
+            AssertRejected(controller.Resolve(new WaitCommand()), CommandRejectionCode.InvalidState);
+        }
+
+        /// <summary>
+        /// Lethal enemy or environment damage reaches phase 7 and skips the next planning boundary.
+        /// </summary>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void LateTerminalOutcomeConsumesShamblerButDoesNotPlanAgain(bool environmentDeath)
+        {
+            BoardState board = CreateShamblerBoard(environmentDeath ? new GridPosition(3, 1) : Destination);
+            RunState run = CreateRun();
+            var enemy = new ShamblerState(new EntityId(2), new ShamblerDefinition(20));
+            var adapter = new ShamblerTurnPhases(enemy, (boardState, runState, playerId, events) =>
+            {
+                Assert.That(enemy.LockedIntent, Is.Null);
+                if (environmentDeath)
+                    runState.TakeDamage(runState.Health);
+                events.Add(new MarkerEvent("Environment"));
+            });
+            adapter.PlanInitialIntent(board, PlayerId);
+            var controller = new TurnController(board, run, PlayerId, phases: adapter.Handlers);
+
+            TurnResult result = controller.Resolve(new WaitCommand());
+
+            AssertEvents(result, "EntityWaited", "ActionCostApplied", environmentDeath ? "EntityMoved" : "EnemyAttackResolved", "Environment", "PlayerDied");
+            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.Health, Is.Zero);
+            Assert.That(run.Status, Is.EqualTo(RunStatus.Active), "Run lifecycle is not owned by the adapter.");
+            Assert.That(enemy.LockedIntent, Is.Null);
+            Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
+            Assert.That(controller.IsTerminal, Is.True);
+            Assert.That(controller.IsResolving, Is.False);
+        }
+
         /// <summary>Player effects and one cost precede locked intents, environment, planning, and unlock.</summary>
         [Test]
         public void AcceptedTurnOrdersEveryPhaseAndChargesOnce()
@@ -357,6 +599,18 @@ namespace HallowBlaze.Tests.EditMode
                 events.Add(new MarkerEvent(name));
             };
             return new TurnPhaseHandlers(Record("LockedIntents"), Record("Environment"), Record("NextIntents"));
+        }
+
+        private static BoardState CreateShamblerBoard(GridPosition enemyPosition, bool exit = false)
+        {
+            BoardState board = CreateBoard(exit);
+            var extraFloor = new[] { new GridPosition(3, 1), new GridPosition(1, 2),
+                new GridPosition(2, 2), new GridPosition(3, 2) };
+            for (int index = 0; index < extraFloor.Length; index++)
+                Add(board, 102 + index, BoardLayer.Terrain, new EntityKind("terrain"), extraFloor[index],
+                    new BoardEntityTraits(true, false, false));
+            Add(board, 2, BoardLayer.Actor, EntityKind.Enemy, enemyPosition, BoardEntityTraits.Default);
+            return board;
         }
 
         private static BoardState CreateBoard(bool exit = false, int reward = 0)
