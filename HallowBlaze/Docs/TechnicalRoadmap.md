@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7 and M3.8.1-M3.8.5 accepted; M3.8.6 blocked on the owner occupancy decision; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7 and M3.8.1-M3.8.6 accepted; M3.8.7 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -2530,7 +2530,7 @@ Only the existing `ConsumeIntent()` transition advances to the next row, includi
 
 **Expected outcome:** All enemies plan from the same board state without advancing cadence. Locked intents execute serially in stable initiative order; the first legal move into a contested free cell succeeds, later contenders wait, swaps are forbidden, and invalid actions never replan. Ordered events and final board/run/enemy state are identical for every permutation of the same input actors.
 
-**Scope:** Deterministic ordering, batch planning, serial execution, same-destination conflicts, swap prevention, chain blocking, stale actors, reuse of Shambler hits/misses/conditional attacks, and isolated binding to existing turn phases.
+**Scope:** Deterministic ordering, batch planning, serial execution, same-destination conflicts, swap prevention, live sequential chain occupancy, stale actors, reuse of Shambler hits/misses/conditional attacks, and isolated binding to existing turn phases.
 
 **Non-goals:** No new AI, group strategy, chain reactions, opportunity attacks, knockback, parallel execution, UI, replay/hash framework, production runtime/input cutover, legacy migration, scene/prefab changes, new assembly, or persistence change. Do not change `Enemy.cs`, `GameManager`, `BoardManager`, `BoardState`, `EntityId`, `TurnController`, packages, or settings.
 
@@ -2540,7 +2540,7 @@ Only the existing `ConsumeIntent()` transition advances to the next row, includi
 
 **Readiness gate (Lead-owned):** Before assignment, read the actual accepted M3.7 APIs and seal a compact packet with the one requested effect, exact allowlist, implementation/test references, a few explicit input -> outcome examples, and the child filter. Confirm reusable operations for retaining plans, executing one intent, and consuming a conflict as `Wait` exactly once without replacing the locked target. Proposed filenames are not permission to duplicate equivalent accepted APIs. If a required operation is absent or needs changes outside the child, stop and define a separate bounded prerequisite; do not ask the Developer to redesign neighboring classes inside this assignment.
 
-**Remaining owner decision:** Section 11.2 forbids swaps but does not say whether an enemy may enter a cell vacated by an earlier enemy during the same phase. Before M3.8.6 becomes `Ready`, record the chosen occupancy policy in the contract or an accepted ADR, with examples for both initiative orders. Neither a phase-start snapshot policy nor live sequential occupancy is accepted by this decomposition. Basic nonconflicting and initially-free contested-cell cases can be specified without choosing that behavior; M3.8.5/M3.8.6 and final integration must preserve the separately approved rule.
+**Accepted owner decision:** Section 11.2, "Accepted sequential occupancy - owner decision 2026-10-09", chooses live sequential occupancy. A later actor may enter an earlier actor's vacated source; an actor blocked before its predecessor moves waits without a retry. The contract seals 2-3 actor examples for both initiative orders and blocked leaders. M3.8.5/M3.8.6 and final integration must preserve that policy and the existing no-swap rule.
 
 Run the children in order as separate delegations. Foundation children are validated in isolation and must not be wired into production or treated as a complete batch implementation. The final adapter is assigned only after the planner, executor, and every conflict branch have passed their own gates.
 
@@ -2719,13 +2719,13 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.8.6` - Approved occupancy policy for movement chains
 
-**Status:** `Blocked` - owner decision required, 2026-10-09. Section 11.2 still does not choose phase-start versus live sequential occupancy. M3.8.5 is accepted; no chain behavior has been accepted or wired into production. Record the selected policy and expected outcomes for both initiative orders in the contract or an accepted ADR before implementation.
+**Status:** `Done` - accepted 2026-10-09 after focused Unity EditMode validation (8/8; 32 chain executions across all input permutations), batch regression validation (23/23), and independent Reviewer `PASS`. Section 11.2 records the owner-approved live sequential occupancy policy. No executor algorithm changes, production binding, or planner changes were needed.
 **Priority:** P0
 **Related contract:** section 11.2 and the owner-approved chain occupancy decision required by the umbrella.
 
 **Rationale:** The Developer must not infer whether following into a freshly vacated cell is legal from whichever data structure is easiest to implement.
 
-**Current behavior:** Single destinations and swaps are covered; the contract has not yet selected phase-start versus live occupancy for following chains.
+**Current behavior:** Single destinations and swaps are covered. The contract now selects live sequential occupancy, and the existing serial executor needs explicit chain acceptance tests.
 
 **Expected outcome:** A short chain uses exactly the separately approved occupancy policy in both initiative orders, with no implicit cascade or replanning.
 
@@ -2733,7 +2733,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Non-goals:** No owner decision inside implementation, group pathfinding, chain reaction, parallel commit, hidden replan, or modification of `BoardState`/the single-enemy planner.
 
-**Dependencies:** `M3.8.5`; accepted owner decision recorded before this child becomes `Ready`.
+**Dependencies:** `M3.8.5`; the accepted sequential occupancy owner decision in contract section 11.2, recorded 2026-10-09.
 
 **Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/EnemyBatchExecutor.cs`; existing `Assets/Tests/EditMode/EnemyBatchTests.cs`.
 
