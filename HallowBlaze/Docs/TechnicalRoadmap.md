@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7 and M3.8 accepted; M3.9.1 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1-8 accepted; M3.9.9 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -2907,7 +2907,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.1` - Project a retained intent without computing behavior
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09 after focused Unity EditMode validation (6/6; retained actions, presentation-only examples, and invalid inputs) and independent Reviewer `PASS`. Ordinary move and investigate examples do not expand the domain intent contract.
 **Priority:** P0
 **Related contract:** sections 11.1, 11.3.1, 18, and 21.2.
 
@@ -2937,7 +2937,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.2` - Draw distinct persistent action symbols
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09; focused PlayMode gate 1/1 passed, independent review PASS. Prototype sheet: arrow for move; arrow with a persistent cross badge for conditional move; cross for attack; magnifier for investigate; parallel pause bars for wait. Fixed 0.6 x 0.6 unit-grid footprint, 0.04 stroke width, Default sorting layer/order 20. Runtime-created geometry only; human readability remains the M3.9.14 gate.
 **Priority:** P0
 **Related contract:** sections 11.3.1 and 18.
 
@@ -2967,7 +2967,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.3` - Anchor one symbol to its recorded grid target
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09; focused target placement 10/10 passed, fresh PlayMode fixture 11/11 passed, independent review PASS. Unit grid X/Y maps directly to world X/Y, as in BoardEventPresenter. Marker Z is -0.1; glyph/source/connector use Default sorting layer/order 20. Source cue and connector use copied cells; wait remains at its source.
 **Priority:** P0
 **Related contract:** sections 11.1, 11.3.1, and 18.
 
@@ -2997,7 +2997,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.4` - Preserve source identity at a shared target
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09; shared-target PlayMode 3/3 passed across 150 input permutations, full presentation fixture 14/14 passed, independent review PASS. Shared-target prototype: two to four sources around (3,3), plus an unrelated source at (6,6) targeting (6,7). Source North/East/South/West maps to fixed NE/SE/SW/NW glyph slots at +/-0.23 within the recorded cell, using constant 0.5 glyph scale. Links retain source identity without initiative prediction; the root always stays at the exact target.
 **Priority:** P0
 **Related contract:** sections 11.2 and 18.
 
@@ -3027,7 +3027,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.5` - Publish one detached locked-intent display batch
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09; publication PlayMode 9/9 passed, independent review PASS. Explicit publication borrows BoardState and retained Shambler states only to copy source cells/intents, reuses EnemyInitiativeOrder, and prepares a hidden complete batch before replacement. Owned markers and detached projections do not poll domain state or plan.
 **Priority:** P0
 **Related contract:** sections 10.2, 11.1, and 18.
 
@@ -3057,7 +3057,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.6` - Clear markers at the owning board lifetime boundary
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09; lifetime PlayMode 1/1 passed, full presentation fixture 24/24 passed, independent review PASS. One-time Bind uses exact BoardState identity and an explicit active-board provider. Clear permits a fresh publication only during the same lifetime; Dispose and stale publication permanently close the owner. Markers/materials are owned, while runtime, domain state, and source views remain borrowed.
 **Priority:** P0
 **Related contract:** sections 11.1, 18, and 21.2.
 
@@ -3087,7 +3087,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.7` - Replay one fixed-cell attack outcome
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09; focused PlayMode 1/1 passed across 14 hit/miss/failure traces, independent review PASS. Prototype hit/miss feedback uses a white cross or empty ring at the exact event cell, with an authoritative-source link. Pulse animation affects time/scale only; outcome geometry persists without animation. The helper forwards the original event and current HUD values, never health deltas.
 **Priority:** P0
 **Related contract:** sections 11.3.1, 18, and 21.2.
 
@@ -3117,7 +3117,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.8` - Register accepted attack replay in the board presenter
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09; focused registration PlayMode 1/1 passed, full ordered presentation fixture 16/16 passed, independent review PASS. BoardEventPresenter owns one accepted EnemyAttackPresenter and one exact-type event registration, forwarding animation settings and current HUD/feedback. Domain enemy composition and activation remain separate prerequisites.
 **Priority:** P0
 **Related contract:** sections 10.2 and 21.2.
 
