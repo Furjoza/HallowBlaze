@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7 and M3.8.1-M3.8.6 accepted; M3.8.7 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7 and M3.8.1-M3.8.7 accepted; M3.8.8 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -2749,7 +2749,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.8.7` - Removed actors do not participate
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09 after focused Unity EditMode validation (2/2; removed move and attack sources, all six input permutations each) and independent Reviewer `PASS`; no executor changes were needed.
 **Priority:** P0
 **Related contract:** sections 11.1, 11.2, and 11.3.1.
 
