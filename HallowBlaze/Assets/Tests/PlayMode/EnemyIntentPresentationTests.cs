@@ -707,6 +707,192 @@ namespace HallowBlaze.Tests.PlayMode
             }
         }
 
+        /// <summary>Six fresh announced-outcome scenarios retain fixed targets and identical authoritative results in both animation modes.</summary>
+        [UnityTest]
+        public IEnumerator AnnouncedConditionalOutcomes_HaveAnimationParity([Values(false, true)] bool animationsEnabled)
+        {
+            foreach (string scenario in new[] { "empty", "same-cell", "different-cell", "fixed-miss", "adjacent-rest", "shared" })
+            {
+                BoardRuntime runtime = CreateParityRuntime(scenario);
+                var owner = new GameObject("Parity " + scenario + " " + animationsEnabled);
+                objects.Add(owner);
+                EnemyIntentPresenter display = owner.AddComponent<EnemyIntentPresenter>();
+                var sinks = new IntentSinks();
+                var diagnostics = new List<PresentationDiagnostic>();
+                using (var presenter = new BoardEventPresenter(runtime, sinks, sinks, sinks, diagnostics.Add,
+                    moveDuration: 0.2f, intents: display))
+                {
+                    presenter.AnimationsEnabled = false;
+                    presenter.SynchronizeFromState();
+                    presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Setup, false);
+                    if (scenario == "adjacent-rest")
+                    {
+                        CommandSubmission preparation = presenter.Coordinator.SubmitAsync(new WaitCommand()).Result;
+                        Assert.That(preparation.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                        Assert.That(runtime.RunState.Health, Is.EqualTo(90));
+                        Assert.That(runtime.Enemies.Single().Phase, Is.EqualTo(ShamblerPhase.Rest));
+                    }
+                    presenter.AnimationsEnabled = animationsEnabled;
+                    sinks.Events.Clear();
+                    string context = "scenario=" + scenario + "; animation=" + animationsEnabled +
+                        "; sources=" + string.Join(",", runtime.Enemies.Select(enemy => enemy.ActorId));
+                    var announced = display.Projections.ToArray();
+                    var markers = runtime.Enemies.Select(enemy => display.Views[enemy.ActorId]).ToArray();
+                    var locked = runtime.Enemies.Select(enemy => enemy.LockedIntent).ToArray();
+                    int health = runtime.RunState.Health;
+                    int food = runtime.RunState.Food;
+                    int resolutions = presenter.Coordinator.ResolutionCount;
+                    GridPosition? target = scenario == "adjacent-rest" ? (GridPosition?)null : new GridPosition(1, 1);
+                    EnemyIntentSymbol symbol = scenario == "adjacent-rest" ? EnemyIntentSymbol.Wait :
+                        scenario == "fixed-miss" ? EnemyIntentSymbol.Attack : EnemyIntentSymbol.ConditionalMove;
+                    for (int index = 0; index < announced.Length; index++)
+                    {
+                        Assert.That(announced[index].Symbol, Is.EqualTo(symbol), context);
+                        Assert.That(announced[index].TargetPosition, Is.EqualTo(target), context);
+                        Assert.That(announced[index].TargetId, Is.EqualTo(target.HasValue ? (EntityId?)runtime.PlayerId : null), context);
+                        Assert.That(announced[index].AttackOnPlayerEntry, Is.EqualTo(symbol == EnemyIntentSymbol.ConditionalMove), context);
+                        Assert.That(announced[index].SourceId, Is.EqualTo(runtime.Enemies[index].ActorId), context);
+                        GridPosition source = scenario == "shared" && index == 0 ? new GridPosition(0, 1) : new GridPosition(2, 1);
+                        Assert.That(announced[index].SourcePosition, Is.EqualTo(source), context);
+                        GridPosition cell = target ?? source;
+                        Assert.That(markers[index].transform.position.x, Is.EqualTo(cell.X), context);
+                        Assert.That(markers[index].transform.position.y, Is.EqualTo(cell.Y), context);
+                        Assert.That(ActiveGlyphLines(markers[index]).Length, Is.GreaterThan(0), context);
+                        Assert.That(markers[index].gameObject.activeInHierarchy, Is.True, context);
+                    }
+                    CommandSubmission rejected = presenter.Coordinator.SubmitAsync(new InteractCommand(new EntityId(long.MinValue))).Result;
+                    Assert.That(rejected.Status, Is.EqualTo(CommandSubmissionStatus.Rejected), context);
+                    Assert.That(rejected.Result.Events, Is.Empty, context);
+                    Assert.That(runtime.RunState.Health, Is.EqualTo(health), context);
+                    Assert.That(runtime.RunState.Food, Is.EqualTo(food), context);
+                    for (int index = 0; index < announced.Length; index++)
+                    {
+                        Assert.That(runtime.Enemies[index].LockedIntent, Is.SameAs(locked[index]), context);
+                        Assert.That(display.Views[announced[index].SourceId], Is.SameAs(markers[index]), context);
+                    }
+                    Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(resolutions + 1), context);
+                    Direction direction = scenario == "same-cell" || scenario == "different-cell" || scenario == "shared"
+                        ? Direction.East : Direction.North;
+                    Task<CommandSubmission> pending = presenter.Coordinator.SubmitAsync(new MoveCommand(direction));
+                    if (animationsEnabled)
+                    {
+                        Assert.That(pending.IsCompleted, Is.False, context);
+                        Assert.That(presenter.Coordinator.Gate.State, Is.EqualTo(PresentationGateState.Presenting), context);
+                        CollectionAssert.AreEqual(announced, display.Projections, context);
+                        yield return null;
+                        CollectionAssert.AreEqual(announced, display.Projections, context);
+                        for (int index = 0; index < announced.Length; index++)
+                            Assert.That(display.Views[announced[index].SourceId], Is.SameAs(markers[index]), context);
+                    }
+                    while (!pending.IsCompleted)
+                        yield return null;
+                    Assert.That(pending.IsFaulted, Is.False, context);
+                    CommandSubmission submitted = pending.Result;
+                    Assert.That(submitted.Status, Is.EqualTo(CommandSubmissionStatus.Presented), context);
+                    Assert.That(submitted.Result.Accepted, Is.True, context);
+                    Assert.That(diagnostics, Is.Empty, context);
+                    Assert.That(runtime.RunState.Food, Is.EqualTo(food - 1), context);
+                    Assert.That(runtime.RunState.Health, Is.EqualTo(scenario == "same-cell" ? 90 : health), context);
+                    Assert.That(sinks.Health, Is.EqualTo(runtime.RunState.Health), context);
+                    Assert.That(sinks.Food, Is.EqualTo(runtime.RunState.Food), context);
+                    Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(resolutions + 2), context);
+                    GameEvent[] events = submitted.Result.Events.ToArray();
+                    string action = scenario == "same-cell" || scenario == "fixed-miss" ? "EnemyAttackResolved" :
+                        scenario == "adjacent-rest" ? "EntityWaited" : "EntityMoved";
+                    var order = new List<string> { "EntityMoved", "ActionCostApplied", action };
+                    if (scenario == "shared")
+                        order.Add("EntityWaited");
+                    CollectionAssert.AreEqual(order, events.Select(gameEvent => gameEvent.EventType), context);
+                    ActionCostAppliedEvent cost = events.OfType<ActionCostAppliedEvent>().Single();
+                    Assert.That(cost.EntityId, Is.EqualTo(runtime.PlayerId), context);
+                    Assert.That(cost.CostAmount, Is.EqualTo(1), context);
+                    CollectionAssert.AreEqual(events.Where(gameEvent => !(gameEvent is ActionCostAppliedEvent)), sinks.Events, context);
+                    EntityMovedEvent playerMove = (EntityMovedEvent)events[0];
+                    GridPosition playerSource = scenario == "same-cell" ? new GridPosition(0, 1) :
+                        scenario == "different-cell" || scenario == "shared" ? new GridPosition(1, 0) :
+                        scenario == "fixed-miss" || scenario == "adjacent-rest" ? new GridPosition(1, 1) : new GridPosition(0, 0);
+                    Assert.That(playerMove.EntityId, Is.EqualTo(runtime.PlayerId), context);
+                    Assert.That(playerMove.From, Is.EqualTo(playerSource), context);
+                    Assert.That(playerMove.To, Is.EqualTo(playerSource.Move(direction)), context);
+                    for (int index = 0; index < announced.Length; index++)
+                    {
+                        EntityId sourceId = announced[index].SourceId;
+                        GameEvent actual = events[2 + index];
+                        GridPosition expectedSource = announced[index].SourcePosition;
+                        if (scenario == "same-cell" || scenario == "fixed-miss")
+                        {
+                            var attack = (EnemyAttackResolvedEvent)actual;
+                            bool hit = scenario == "same-cell";
+                            Assert.That(attack.AttackerId, Is.EqualTo(sourceId), context);
+                            Assert.That(attack.TargetPosition, Is.EqualTo(target.Value), context);
+                            Assert.That(attack.IsHit, Is.EqualTo(hit), context);
+                            Assert.That(attack.AffectedTargetId, Is.EqualTo(hit ? (EntityId?)runtime.PlayerId : null), context);
+                            Assert.That(attack.HealthChange, Is.EqualTo(hit ? -10 : 0), context);
+                        }
+                        else if (scenario == "adjacent-rest" || scenario == "shared" && index == 1)
+                        {
+                            Assert.That(((EntityWaitedEvent)actual).EntityId, Is.EqualTo(sourceId), context);
+                        }
+                        else
+                        {
+                            var move = (EntityMovedEvent)actual;
+                            Assert.That(move.EntityId, Is.EqualTo(sourceId), context);
+                            Assert.That(move.From, Is.EqualTo(announced[index].SourcePosition), context);
+                            Assert.That(move.To, Is.EqualTo(target.Value), context);
+                            expectedSource = target.Value;
+                        }
+                        Assert.That(runtime.BoardState.GetEntities().Single(entity => entity.Id.Equals(sourceId)).Position,
+                            Is.EqualTo(expectedSource), context);
+                        Assert.That(runtime.Enemies[index].Phase, Is.EqualTo(scenario == "adjacent-rest"
+                            ? ShamblerPhase.Active : ShamblerPhase.Rest), context);
+                        EnemyIntentProjection next = display.Projections[index];
+                        Assert.That(next.SourceId, Is.EqualTo(sourceId), context);
+                        Assert.That(next.SourcePosition, Is.EqualTo(expectedSource), context);
+                        Assert.That(next.Symbol, Is.EqualTo(scenario == "adjacent-rest"
+                            ? EnemyIntentSymbol.ConditionalMove : EnemyIntentSymbol.Wait), context);
+                        Assert.That(next.TargetPosition, Is.EqualTo(scenario == "adjacent-rest"
+                            ? (GridPosition?)new GridPosition(2, 2) : null), context);
+                        Assert.That(next.AttackOnPlayerEntry, Is.EqualTo(scenario == "adjacent-rest"), context);
+                        Assert.That(display.Views[sourceId], Is.Not.SameAs(markers[index]), context);
+                    }
+                    foreach (var entity in runtime.BoardState.GetEntities())
+                    {
+                        Assert.That(runtime.Views[entity.Id].transform.position.x, Is.EqualTo(entity.Position.X), context);
+                        Assert.That(runtime.Views[entity.Id].transform.position.y, Is.EqualTo(entity.Position.Y), context);
+                    }
+                    Assert.That(presenter.Coordinator.CanSubmit, Is.True, context);
+                    TestContext.WriteLine(context + "; announced=" + symbol + "@" + target +
+                        "; outcome=" + string.Join(",", events.Select(gameEvent => gameEvent.EventType)) +
+                        "; HP=" + runtime.RunState.Health + "; food=" + runtime.RunState.Food +
+                        "; next=" + string.Join(",", display.Projections.Select(projection => projection.Symbol)));
+                }
+                yield return null;
+            }
+        }
+
+        private BoardRuntime CreateParityRuntime(string scenario)
+        {
+            var run = new RunState("intent-parity-" + runtimes.Count, 12345,
+                new RunStateConfiguration(100, 25, 0, "forest.start"));
+            var request = new BoardRequest(run.RunId, run.RunSeed, run.WorldNodeId, run.CurrentDay,
+                run.GetBoardSeed(), "forest", "temperate", 1);
+            var layout = new List<LegacyBoardView>();
+            for (int horizontal = 0; horizontal < 3; horizontal++)
+                for (int vertical = 0; vertical < 3; vertical++)
+                    AddReplayView(layout, LegacyBoardContentKind.Floor, horizontal, vertical);
+            GridPosition player = scenario == "same-cell" ? new GridPosition(0, 1) :
+                scenario == "different-cell" || scenario == "shared" ? new GridPosition(1, 0) :
+                scenario == "fixed-miss" || scenario == "adjacent-rest" ? new GridPosition(1, 1) : new GridPosition(0, 0);
+            AddReplayView(layout, LegacyBoardContentKind.Player, player.X, player.Y);
+            AddReplayView(layout, LegacyBoardContentKind.Exit, 0, 2);
+            AddReplayView(layout, LegacyBoardContentKind.Enemy, 2, 1, 10);
+            if (scenario == "shared")
+                AddReplayView(layout, LegacyBoardContentKind.Enemy, 0, 1, 10);
+            BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(request, run, new GridBounds(0, 0, 2, 2), layout);
+            runtimes.Add(runtime);
+            return runtime;
+        }
+
         private BoardRuntime CreateReplayRuntime(int food = 25)
         {
             var run = new RunState("intent-replay-" + runtimes.Count, 12345,
@@ -737,9 +923,16 @@ namespace HallowBlaze.Tests.PlayMode
         private sealed class IntentSinks : IRunHud, ITurnFeedback, IBoardOutcomeSink
         {
             public int Outcomes;
-            public void Refresh(int health, int food) { }
+            public int Health;
+            public int Food;
+            public readonly List<GameEvent> Events = new List<GameEvent>();
+            public void Refresh(int health, int food)
+            {
+                Health = health;
+                Food = food;
+            }
             public void ShowRejection(CommandRejectionCode reason) { }
-            public void ShowEvent(GameEvent gameEvent) { }
+            public void ShowEvent(GameEvent gameEvent) => Events.Add(gameEvent);
             public bool TryNotify(BoardRequest request, GameEvent outcome)
             {
                 Outcomes++;

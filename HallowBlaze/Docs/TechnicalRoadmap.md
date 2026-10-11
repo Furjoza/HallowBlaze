@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8, M3.9.1-12 and M3.9.P1 accepted; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8, M3.9.1-13 and M3.9.P1 accepted; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-11
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -3295,7 +3295,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.13` - Conditional-intent and animation-parity regression
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-11 after direct Lead test-only implementation without Developer and independent Reviewer PASS. Focused animation parity passed 2/2 parameterized cases with all twelve scenario/mode traces; the shared intent fixture passed 28/28 with compilation and scope checks. Fresh production-composed states cover empty target movement, same-cell conditional hit, different-cell no-retarget movement, fixed-cell miss, adjacent rest and shared-target blocking. Both modes assert explicit visible targets/conditions, ordered payloads, one accepted cost, free rejection, health/food/HUD, source positions, cadence and next display; animated replay retains the old markers. No production repair or new fixture was introduced. Manual production/readability evidence remains `M3.9.14`.
 **Priority:** P0
 **Related contract:** sections 11.3.1, 18, and 22.
 
