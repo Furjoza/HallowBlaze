@@ -115,12 +115,16 @@ namespace HallowBlaze.Presentation.Runtime
         /// <param name="view">The generated or scene-owned Unity view.</param>
         /// <param name="kind">The accepted legacy content category.</param>
         /// <param name="position">The board-local grid position represented by the view.</param>
+        /// <param name="enemyDamage">Explicit 10/20 HP variant data for enemies; null for other content.
+        /// Composition rejects enemies with missing or unsupported damage.</param>
         /// <exception cref="ArgumentNullException"><paramref name="view"/> is null.</exception>
-        public LegacyBoardView(GameObject view, LegacyBoardContentKind kind, GridPosition position)
+        public LegacyBoardView(GameObject view, LegacyBoardContentKind kind, GridPosition position,
+            int? enemyDamage = null)
         {
             View = view != null ? view : throw new ArgumentNullException(nameof(view));
             Kind = kind;
             Position = position;
+            EnemyDamage = enemyDamage;
         }
 
         /// <summary>Gets the generated or scene-owned Unity view.</summary>
@@ -131,6 +135,9 @@ namespace HallowBlaze.Presentation.Runtime
 
         /// <summary>Gets the board-local grid position captured during generation.</summary>
         public GridPosition Position { get; }
+
+        /// <summary>Gets explicit enemy variant damage in HP, or null for non-enemy content.</summary>
+        public int? EnemyDamage { get; }
     }
 
     /// <summary>Defines how one legacy category maps to domain content or presentation-only state.</summary>

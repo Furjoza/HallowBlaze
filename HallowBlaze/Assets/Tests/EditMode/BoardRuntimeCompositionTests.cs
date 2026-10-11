@@ -7,6 +7,7 @@ using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
 using HallowBlaze.Core.Turns.Contracts;
+using HallowBlaze.Core.Turns.Resolution;
 using HallowBlaze.Presentation.Runtime;
 using NUnit.Framework;
 using UnityEngine;
@@ -114,6 +115,108 @@ namespace HallowBlaze.Tests.EditMode
 
             Assert.That(secondIds, Is.EquivalentTo(firstIds));
             second.Dispose();
+        }
+
+        [Test]
+        public void Compose_EnemyBatchHasStableIdsInitialPlansAndOneController()
+        {
+            RunState run = CreateRun();
+            var layout = new List<LegacyBoardView>();
+            for (int column = 0; column < 3; column++)
+                for (int row = 0; row < 3; row++)
+                    layout.Add(Descriptor("Floor", LegacyBoardContentKind.Floor, column, row));
+            layout.Add(Descriptor("Player", LegacyBoardContentKind.Player, 1, 1));
+            layout.Add(Descriptor("Exit", LegacyBoardContentKind.Exit, 2, 2));
+            layout.Add(new LegacyBoardView(CreateView("Enemy20", 0, 1), LegacyBoardContentKind.Enemy,
+                new GridPosition(0, 1), 20));
+            layout.Add(new LegacyBoardView(CreateView("Enemy10", 2, 1), LegacyBoardContentKind.Enemy,
+                new GridPosition(2, 1), 10));
+
+            Dictionary<GameObject, long> firstIds;
+            using (BoardRuntime initial = LegacyBoardRuntimeComposer.Compose(CreateRequest(run), run,
+                new GridBounds(0, 0, 2, 2), layout))
+            {
+                firstIds = initial.Views.ToDictionary(pair => pair.Value, pair => pair.Key.Value);
+                Assert.That(initial.Enemies.Select(enemy => enemy.Definition.Damage), Is.EquivalentTo(new[] { 10, 20 }));
+                Assert.That(initial.Enemies.Select(enemy => enemy.ActorId.Value), Is.Ordered.Ascending);
+                Assert.That(initial.Enemies.All(enemy => enemy.Phase == ShamblerPhase.Active &&
+                    enemy.LockedIntent.Kind == EnemyIntentKind.Attack), Is.True);
+                Assert.That(run.Health, Is.EqualTo(100));
+                Assert.That(run.Food, Is.EqualTo(100));
+            }
+
+            layout.Reverse();
+            BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(CreateRequest(run), run,
+                new GridBounds(0, 0, 2, 2), layout);
+            try
+            {
+                Assert.That(runtime.Views.ToDictionary(pair => pair.Value, pair => pair.Key.Value), Is.EquivalentTo(firstIds));
+                IReadOnlyList<ShamblerState> roster = runtime.Enemies;
+                var structuralView = (IList<ShamblerState>)roster;
+                Assert.Throws<NotSupportedException>(() => structuralView.Clear());
+                EnemyIntent[] initialPlans = roster.Select(enemy => enemy.LockedIntent).ToArray();
+                TurnController soleController = runtime.Controller;
+                Assert.That(soleController.Resolve(new MoveCommand(Direction.West)).Accepted, Is.False);
+                CollectionAssert.AreEqual(initialPlans, roster.Select(enemy => enemy.LockedIntent));
+                Assert.That(run.Food, Is.EqualTo(100));
+                Assert.That(run.Health, Is.EqualTo(100));
+
+                TurnResult active = soleController.Resolve(new WaitCommand());
+                Assert.That(active.Accepted, Is.True);
+                Assert.That(active.Events.OfType<ActionCostAppliedEvent>().Count(), Is.EqualTo(1));
+                EnemyAttackResolvedEvent[] attacks = active.Events.OfType<EnemyAttackResolvedEvent>().ToArray();
+                Assert.That(attacks, Has.Length.EqualTo(2));
+                CollectionAssert.AreEqual(roster.Select(enemy => enemy.ActorId), attacks.Select(attack => attack.AttackerId));
+                Assert.That(run.Health, Is.EqualTo(70));
+                Assert.That(run.Food, Is.EqualTo(99));
+                Assert.That(roster.All(enemy => enemy.Phase == ShamblerPhase.Rest &&
+                    enemy.LockedIntent.Kind == EnemyIntentKind.Wait), Is.True);
+
+                TurnResult rest = soleController.Resolve(new WaitCommand());
+                Assert.That(rest.Events.OfType<EnemyAttackResolvedEvent>(), Is.Empty);
+                Assert.That(run.Health, Is.EqualTo(70));
+                Assert.That(run.Food, Is.EqualTo(98));
+                Assert.That(roster.All(enemy => enemy.Phase == ShamblerPhase.Active &&
+                    enemy.LockedIntent.Kind == EnemyIntentKind.Attack), Is.True);
+
+                TurnResult escaped = soleController.Resolve(new MoveCommand(Direction.North));
+                Assert.That(escaped.Events.OfType<EnemyAttackResolvedEvent>().Count(), Is.EqualTo(2));
+                Assert.That(run.Health, Is.EqualTo(70));
+                EnemyIntent[] terminalPlans = roster.Select(enemy => enemy.LockedIntent).ToArray();
+                TurnResult exit = soleController.Resolve(new MoveCommand(Direction.East));
+                Assert.That(exit.Events.Last(), Is.TypeOf<ExitReachedEvent>());
+                Assert.That(soleController.IsTerminal, Is.True);
+                CollectionAssert.AreEqual(terminalPlans, roster.Select(enemy => enemy.LockedIntent));
+                Assert.That(runtime.Controller, Is.SameAs(soleController));
+                Assert.That(soleController.Resolve(new WaitCommand()).Accepted, Is.False);
+                Assert.That(run.Food, Is.EqualTo(96));
+                runtime.Dispose();
+                runtime.Dispose();
+                Assert.That(roster, Is.Empty);
+                Assert.That(layout.All(descriptor => descriptor.View != null), Is.True);
+                Assert.Throws<ObjectDisposedException>(() => { object ignored = runtime.Enemies; });
+            }
+            finally
+            {
+                runtime.Dispose();
+            }
+        }
+
+        [TestCase(null)]
+        [TestCase(0)]
+        [TestCase(15)]
+        public void Compose_MissingOrUnsupportedEnemyDamageHasStableDiagnostic(int? damage)
+        {
+            RunState run = CreateRun();
+            List<LegacyBoardView> layout = CreateValidLayout();
+            layout.Add(new LegacyBoardView(CreateView("Invalid Enemy", 0, 1), LegacyBoardContentKind.Enemy,
+                new GridPosition(0, 1), damage));
+            BoardRuntimeCompositionException diagnostic = Assert.Throws<BoardRuntimeCompositionException>(() =>
+                LegacyBoardRuntimeComposer.Compose(CreateRequest(run), run, new GridBounds(0, 0, 1, 1), layout));
+            Assert.That(diagnostic.Code, Is.EqualTo(BoardRuntimeDiagnosticCode.InvalidInput));
+            Assert.That(diagnostic.Context, Does.StartWith("enemy-damage:"));
+            Assert.That(run.Health, Is.EqualTo(100));
+            Assert.That(run.Food, Is.EqualTo(100));
         }
 
         [Test]

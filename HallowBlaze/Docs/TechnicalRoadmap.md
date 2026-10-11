@@ -1,7 +1,7 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1-10 accepted; production composition prerequisite blocks M3.9.11; route-leg amendments accepted; M9 deferred**
-> Data ostatniej weryfikacji: 2026-10-09
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8, M3.9.1-10 and M3.9.P1 accepted; M3.9.11 ready; route-leg amendments accepted; M9 deferred**
+> Data ostatniej weryfikacji: 2026-10-11
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
 > Zasady pracy agentów: [`../AGENTS.md`](../AGENTS.md)
@@ -3205,9 +3205,37 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ---
 
+## `M3.9.P1` - Compose production Shambler states on the sole runtime controller
+
+**Status:** `Done` - accepted 2026-10-11 after direct Lead implementation without a Developer agent. Focused composition and production startup each passed 1/1; composition regression 16/16, startup 6/6, legacy authority 12/12 passed. Scope and compilation gates passed; independent Reviewer PASS. The production runtime has explicit 10/20 HP states, initial retained plans and accepted batch phases on its sole controller, plus a structurally read-only roster.
+**Priority:** P0
+**Related contract:** sections 10.2, 11.1, 11.2, and 11.3.1.
+
+**Rationale:** The accepted batch adapter needs production-owned states and a retained-plan source before the intent UI can bind to real enemies.
+
+**Current behavior:** The legacy catalog maps enemy actors, but composition creates no Shambler states and constructs the runtime controller without enemy phase handlers. Legacy enemy artwork has no active AI.
+
+**Expected outcome:** Generated Enemy1/Enemy2 views have deterministic board-local IDs, explicit 10/20 HP definitions, fresh active states, and initial locked plans before input. One runtime controller executes the accepted batch phases; presentation can read retained states without a second resolver or planning call.
+
+**Scope:** Capture validated variant data in legacy descriptors, compose one state per mapped enemy, attach `EnemyBatchTurnPhases` to the runtime's sole controller, and initialize plans before runtime publication. Expose a read-only roster for the active runtime and release its ownership on disposal. Reuse existing generator identity sorting, accepted AI/cadence, and startup failure handling.
+
+**Non-goals:** No AI or initiative redesign, new archetype, phase-order change, second controller, reflection-based controller replacement, intent UI attachment, scene/prefab/settings/package changes, or save-format changes. Legacy `Enemy` remains inert artwork, never a parallel gameplay owner.
+
+**Dependencies:** `M3.6`, `M3.7`, `M3.8.9`; owner approval of the production prerequisite.
+
+**Allowed file area:** Existing `Assets/Scripts/Presentation/Runtime/LegacyBoardLayout.cs`, `Assets/Scripts/Presentation/Runtime/LegacyBoardRuntimeComposer.cs`, `Assets/Scripts/Presentation/Runtime/BoardRuntime.cs`, `Assets/Scripts/BoardManager.cs`, `Assets/Tests/EditMode/BoardRuntimeCompositionTests.cs`, and `Assets/Tests/PlayMode/BoardRuntimeStartupTests.cs`; the existing enemy-authority fixture in `Assets/Tests/PlayMode/PlayModeInfrastructureTests.cs` must supply explicit damage and expect the accepted domain conditional attack instead of no enemy phase. Lead-owned status/card edits remain in this roadmap. No new asset or metadata is required.
+
+**Acceptance criteria:** Both variants receive IDs independent of descriptor order and Unity instance identity; initiative is ascending ID, not a separate mutable queue. Initial planning changes neither run resources nor cadence and precedes input. Accepted commands execute one retained batch and one existing cost; rejected/terminal commands do not advance enemies. Missing/unsupported variant data fails startup with a stable diagnostic rather than silently choosing damage. The roster cannot be structurally modified by callers, and disposed/replaced runtimes release old ownership while borrowed views survive. Production startup uses the same composition boundary and no legacy enemy AI.
+
+**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.BoardRuntimeCompositionTests.Compose_EnemyBatchHasStableIdsInitialPlansAndOneController`; run the composition fixture regression and PlayMode filter `HallowBlaze.Tests.PlayMode.BoardRuntimeStartupTests.ProductionEnemyBatch_InitializesBeforeInputAndUsesSoleController` with isolated persistence.
+
+**Save and compatibility impact:** None; definitions, IDs, cadence, and retained plans are reconstructed for each board. Preserve enemy-free callers and existing run/profile formats.
+
+---
+
 ## `M3.9.11` - Bind publication to setup and replay completion
 
-**Status:** `Blocked` - readiness checked 2026-10-09. No separately accepted production enemy composition prerequisite is named. `BoardRuntime` still constructs its sole controller without enemy phase hooks and exposes no retained enemy-plan source. This child cannot provide those APIs or activate production enemies within its approved UI-only scope.
+**Status:** `Ready` - readiness checked 2026-10-11. Production prerequisite `M3.9.P1` is separately accepted with composition 16/16, startup 6/6, legacy authority 12/12 and independent Reviewer PASS. `BoardRuntime.Enemies` supplies retained states, and its sole controller uses the accepted batch adapter with initial plans before publication. No controller replacement or additional resolver is required.
 **Priority:** P0
 **Related contract:** sections 10.2, 11.1, 11.3.1, and 18.
 

@@ -293,7 +293,7 @@ namespace HallowBlaze.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator EnemyViewsRemainInertAndBlockTheirDomainCells()
+        public IEnumerator EnemyViewsRemainInertWhileDomainBatchActsAndBlocksCells()
         {
             GameObject playerObject = CreatePlayer("M1.9 Moving Enemy Target", 0.1f);
             playerObject.layer = 8;
@@ -307,7 +307,7 @@ namespace HallowBlaze.Tests.PlayMode
             Component enemy = CreateEnemy("M1.9 Blocking Enemy", new Vector2(2f, 0f), actionSound);
 
             ComposeRuntime(playerObject,
-                new LegacyBoardView(enemy.gameObject, LegacyBoardContentKind.Enemy, new GridPosition(2, 0)));
+                new LegacyBoardView(enemy.gameObject, LegacyBoardContentKind.Enemy, new GridPosition(2, 0), 10));
             Physics2D.SyncTransforms();
             yield return null;
             int startingHealth = session.ActiveRun.Health;
@@ -318,7 +318,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.True);
             Assert.That(playerObject.transform.position.x, Is.EqualTo(1f).Within(0.001f));
             Assert.That(enemy.transform.position.x, Is.EqualTo(2f).Within(0.001f));
-            Assert.That(session.ActiveRun.Health, Is.EqualTo(startingHealth));
+            Assert.That(session.ActiveRun.Health, Is.EqualTo(startingHealth - 10));
             Assert.That(playerObject.transform.position, Is.Not.EqualTo(enemy.transform.position));
 
             Assert.That(TrySubmit(player, new MoveCommand(Direction.East), out Task<CommandSubmission> blocked), Is.True);
@@ -331,7 +331,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.True);
             Assert.That(playerObject.transform.position, Is.EqualTo(new Vector3(1f, 1f, 0f)));
             Assert.That(enemy.transform.position, Is.EqualTo(new Vector3(2f, 0f, 0f)));
-            Assert.That(session.ActiveRun.Health, Is.EqualTo(startingHealth));
+            Assert.That(session.ActiveRun.Health, Is.EqualTo(startingHealth - 10));
         }
 
         [UnityTest]

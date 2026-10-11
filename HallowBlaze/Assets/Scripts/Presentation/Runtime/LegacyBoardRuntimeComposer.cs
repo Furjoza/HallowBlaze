@@ -4,6 +4,7 @@ using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
+using HallowBlaze.Core.Turns.Resolution;
 using UnityEngine;
 using EntityId = HallowBlaze.Core.Board.Primitives.EntityId;
 
@@ -15,7 +16,8 @@ namespace HallowBlaze.Presentation.Runtime
         /// <summary>
         /// Builds a complete runtime without mutating the run or publishing partial state on failure.
         /// Entity IDs are assigned after deterministic sorting and never depend on Unity instance IDs
-        /// or descriptor enumeration order.
+        /// or descriptor enumeration order. Enemy descriptors require explicit 10/20 HP variants;
+        /// their initial active intents are retained on the sole controller before publication.
         /// </summary>
         /// <param name="request">The stable request used to generate this board.</param>
         /// <param name="runState">The active run referenced by the request.</param>
@@ -59,6 +61,15 @@ namespace HallowBlaze.Presentation.Runtime
                 }
 
                 ValidateViewPosition(descriptor);
+                if (descriptor.Kind == LegacyBoardContentKind.Enemy)
+                {
+                    if (descriptor.EnemyDamage != 10 && descriptor.EnemyDamage != 20)
+                        throw Diagnostic(BoardRuntimeDiagnosticCode.InvalidInput,
+                            "enemy-damage:" + (descriptor.EnemyDamage.HasValue
+                                ? descriptor.EnemyDamage.Value.ToString() : "missing") + "@" + descriptor.Position);
+                }
+                else if (descriptor.EnemyDamage.HasValue)
+                    throw Diagnostic(BoardRuntimeDiagnosticCode.InvalidInput, "damage-without-enemy:" + descriptor.Kind);
                 if (content.Classification == LegacyBoardContentClassification.PresentationOnly)
                     continue;
                 if (content.Classification == LegacyBoardContentClassification.IntentionallyDisabled)
@@ -108,6 +119,7 @@ namespace HallowBlaze.Presentation.Runtime
             mapped.Sort(MappedView.Compare);
             var boardState = new BoardState(bounds);
             var registry = new Dictionary<EntityId, GameObject>(mapped.Count);
+            var enemies = new List<ShamblerState>();
             EntityId playerId = default(EntityId);
             for (int index = 0; index < mapped.Count; index++)
             {
@@ -134,9 +146,11 @@ namespace HallowBlaze.Presentation.Runtime
                 registry.Add(id, mappedView.Descriptor.View);
                 if (mappedView.Descriptor.Kind == LegacyBoardContentKind.Player)
                     playerId = id;
+                else if (mappedView.Descriptor.Kind == LegacyBoardContentKind.Enemy)
+                    enemies.Add(new ShamblerState(id, new ShamblerDefinition(mappedView.Descriptor.EnemyDamage.Value)));
             }
 
-            return new BoardRuntime(request, runState, boardState, playerId, registry);
+            return new BoardRuntime(request, runState, boardState, playerId, registry, enemies);
         }
 
         private static void ValidateIdentity(BoardRequest request, RunState runState)

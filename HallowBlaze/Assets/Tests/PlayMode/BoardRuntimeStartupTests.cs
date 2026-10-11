@@ -6,6 +6,8 @@ using System.Reflection;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
+using HallowBlaze.Core.Turns.Contracts;
+using HallowBlaze.Core.Turns.Resolution;
 using HallowBlaze.Presentation.Runtime;
 using NUnit.Framework;
 using UnityEngine;
@@ -62,6 +64,95 @@ namespace HallowBlaze.Tests.PlayMode
             }
 
             yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator ProductionEnemyBatch_InitializesBeforeInputAndUsesSoleController()
+        {
+            foreach (int damage in new[] { 10, 20 })
+            {
+                Component manager = CreateBoardManager();
+                SetField(manager, "columns", 4);
+                SetField(manager, "rows", 4);
+                GameObject prefab = CreateObject("Enemy " + damage + " Prefab", 0, 0);
+                Component artwork = prefab.AddComponent(boardManagerType.Assembly.GetType("Enemy", true));
+                SetField(artwork, "playerDamage", damage);
+                SetField(manager, "enemyTiles", new[] { prefab });
+                GameObject player = CreateObject("Player " + damage, 0, 0);
+                RunState run = CreateRun();
+                BoardRequest request = CreateRequest(run, 2);
+                BoardRuntime runtime = InvokeSetup(manager, request, run, player);
+                TurnController controller = runtime.Controller;
+                IReadOnlyList<ShamblerState> oldRoster = runtime.Enemies;
+                Assert.That(oldRoster, Has.Count.EqualTo(1));
+                ShamblerState enemy = oldRoster[0];
+                Assert.That(enemy.Definition.Damage, Is.EqualTo(damage));
+                Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Active));
+                Assert.That(enemy.LockedIntent.Kind, Is.EqualTo(EnemyIntentKind.Move));
+                Assert.That(enemy.LockedIntent.ActorId, Is.EqualTo(enemy.ActorId));
+                Assert.That(runtime.Views[enemy.ActorId].activeInHierarchy, Is.True);
+                GridPosition source = runtime.BoardState.GetEntities().Single(entity => entity.Id.Equals(enemy.ActorId)).Position;
+                GridPosition target = enemy.LockedIntent.TargetPosition.Value;
+                EnemyIntent initialPlan = enemy.LockedIntent;
+                yield return null;
+                Assert.That(enemy.LockedIntent, Is.SameAs(initialPlan));
+                Assert.That(run.Health, Is.EqualTo(100));
+                Assert.That(run.Food, Is.EqualTo(100));
+
+                Assert.That(controller.Resolve(new MoveCommand(Direction.West)).Accepted, Is.False);
+                Assert.That(enemy.LockedIntent, Is.SameAs(initialPlan));
+                TurnResult turn = controller.Resolve(new WaitCommand());
+                Assert.That(turn.Accepted, Is.True);
+                Assert.That(turn.Events.OfType<ActionCostAppliedEvent>().Count(), Is.EqualTo(1));
+                Assert.That(runtime.BoardState.GetEntities().Single(entity => entity.Id.Equals(enemy.ActorId)).Position,
+                    Is.EqualTo(target));
+                Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
+                Assert.That(enemy.LockedIntent.Kind, Is.EqualTo(EnemyIntentKind.Wait));
+                Assert.That(run.Food, Is.EqualTo(99));
+                Assert.That(runtime.Controller, Is.SameAs(controller));
+                Assert.That(runtime.Views[enemy.ActorId].transform.position,
+                    Is.EqualTo(new Vector3(source.X, source.Y, 0f)), "Legacy artwork must not execute its own movement.");
+
+                BoardRuntime replacement = InvokeSetup(manager, request, run, player);
+                Assert.That(runtime.IsDisposed, Is.True);
+                Assert.That(oldRoster, Is.Empty);
+                Assert.That(replacement.Controller, Is.Not.SameAs(controller));
+                Assert.That(replacement.Enemies[0], Is.Not.SameAs(enemy));
+                Assert.That(replacement.Enemies[0].ActorId, Is.EqualTo(enemy.ActorId));
+                Assert.That(replacement.Enemies[0].Phase, Is.EqualTo(ShamblerPhase.Active));
+                Assert.That(replacement.Enemies[0].LockedIntent, Is.Not.Null);
+                Assert.That(player, Is.Not.Null);
+                TestContext.WriteLine("Production enemy damage=" + damage + "; initial plan before input; one controller; fresh replacement.");
+                yield return null;
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator InvalidEnemyVariant_DoesNotPublishPartialRuntime()
+        {
+            foreach (bool missing in new[] { true, false })
+            {
+                Component manager = CreateBoardManager();
+                SetField(manager, "columns", 4);
+                SetField(manager, "rows", 4);
+                GameObject prefab = CreateObject("Invalid Enemy Prefab", 0, 0);
+                if (!missing)
+                    SetField(prefab.AddComponent(boardManagerType.Assembly.GetType("Enemy", true)), "playerDamage", 15);
+                SetField(manager, "enemyTiles", new[] { prefab });
+                RunState run = CreateRun();
+                GameObject player = CreateObject("Player", 0, 0);
+                TargetInvocationException invocation = Assert.Throws<TargetInvocationException>(() =>
+                    InvokeSetup(manager, CreateRequest(run, 2), run, player));
+                var diagnostic = invocation.InnerException as BoardRuntimeCompositionException;
+                Assert.That(diagnostic, Is.Not.Null);
+                Assert.That(diagnostic.Code, Is.EqualTo(BoardRuntimeDiagnosticCode.InvalidInput));
+                Assert.That(diagnostic.Context, Does.StartWith("prefab:Enemy:"));
+                Assert.That(GetProperty<BoardRuntime>(manager, "ActiveRuntime"), Is.Null);
+                Assert.That(GetProperty<BoardRequest>(manager, "ActiveRequest"), Is.Null);
+                Assert.That(run.Health, Is.EqualTo(100));
+                Assert.That(run.Food, Is.EqualTo(100));
+                yield return null;
+            }
         }
 
         [UnityTest]
@@ -211,7 +302,7 @@ namespace HallowBlaze.Tests.PlayMode
                 new RunStateConfiguration(100, 100, 0, "forest.start"));
         }
 
-        private static BoardRequest CreateRequest(RunState run)
+        private static BoardRequest CreateRequest(RunState run, int difficulty = 1)
         {
             return new BoardRequest(
                 run.RunId,
@@ -221,7 +312,7 @@ namespace HallowBlaze.Tests.PlayMode
                 run.GetBoardSeed(),
                 "forest",
                 "temperate",
-                1);
+                difficulty);
         }
     }
 }
