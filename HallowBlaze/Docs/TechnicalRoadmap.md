@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8, M3.9.1-13 and M3.9.P1 accepted; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8, M3.9.1-13 and M3.9.P1 accepted; M3.9 blocked on the manual readability gate; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-11
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -2869,7 +2869,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9` - Readable locked-intent presentation (tracking umbrella)
 
-**Status:** `Planned`
+**Status:** `Blocked` - 2026-10-11. All implementation/regression children `M3.9.1-13` and production prerequisite `M3.9.P1` are accepted. Manual `M3.9.14` lacks a reachable live Pipeline connection, production smoke/captures and human blind-prediction evidence. Automated passes do not establish readability or the majority-of-testers gate. See [readability evidence](Validation/M3.9IntentReadability.md); dependent `M3.10` remains gated.
 **Priority:** P0
 **Related contract:** sections 10.2, 11, 18, 21.2, and the intent gate in section 22; [accepted Shambler rule](GameDesignContract.md#1131-accepted-shambler-rule).
 
@@ -3325,7 +3325,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.14` - Lead-owned intent readability gate
 
-**Status:** `Planned`
+**Status:** `Blocked` - 2026-10-11 after accepted `M3.9.13`. Unity CLI discovery found the active project but zero reachable Pipeline servers; `unity command` exited 1 with `No Unity Editor instances found with reachable Pipeline servers.` Production smoke, grayscale/animation-disabled captures and human predictions are not available. The [Lead-owned report](Validation/M3.9IntentReadability.md) records zero participants, unevaluable percentages and explicit resume criteria; no manual PASS or umbrella acceptance is claimed.
 **Priority:** P0
 **Related contract:** sections 18 and the intent gate in section 22.
 
