@@ -23,7 +23,7 @@ New-Item -ItemType Directory -Path $codexDir -Force | Out-Null
 $generatedCatalog = Join-Path $codexDir 'model.json'
 $generatedProfile = Join-Path $codexDir 'ollama-launch.config.toml'
 $developerCatalog = Join-Path $codexDir 'hallowblaze-devstral-model.json'
-$reviewerCatalog = Join-Path $codexDir 'hallowblaze-qwen-reviewer-model.json'
+$reviewerCatalog = Join-Path $codexDir 'hallowblaze-reviewer-model.json'
 $profileBackup = Join-Path $codexDir 'ollama-launch.config.toml.pre-hallowblaze.bak'
 $catalogBackup = Join-Path $codexDir 'model.json.pre-hallowblaze.bak'
 

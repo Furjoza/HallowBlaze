@@ -1,8 +1,7 @@
 ---
-name: qwen-reviewer
-description: Independent adversarial code reviewer running on a separate local Qwen model. Reviews a mechanically validated candidate against requirements and actively searches for bugs, regressions, broken assumptions, and incomplete behavior.
+name: reviewer
+description: Independent adversarial code reviewer. Reviews a mechanically validated candidate against requirements and actively searches for bugs, regressions, broken assumptions, and incomplete behavior.
 argument-hint: A task specification, acceptance criteria, Lead validation summary, baseline evidence, diff, and changed files to independently review.
-model: Auto (copilot)
 tools: ['read', 'search']
 user-invocable: false
 disable-model-invocation: false
