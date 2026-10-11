@@ -20,6 +20,203 @@ namespace HallowBlaze.Tests.EditMode
         private static readonly GridPosition Destination = new GridPosition(2, 1);
 
         /// <summary>
+        /// The batch adapter retains initial plans, executes only permitted old batches, and plans
+        /// once after environment only for nonterminal accepted turns, including the subsequent rest.
+        /// </summary>
+        [TestCase("accepted")]
+        [TestCase("rejected")]
+        [TestCase("exit")]
+        [TestCase("starvation")]
+        [TestCase("enemy-death")]
+        [TestCase("environment-death")]
+        public void EnemyBatchPhases_RespectControllerBoundaries(string scenario)
+        {
+            bool enemyDeath = scenario == "enemy-death";
+            bool earlyTerminal = scenario == "exit" || scenario == "starvation";
+            bool lateTerminal = enemyDeath || scenario == "environment-death";
+            GridPosition firstSource = enemyDeath ? Destination : new GridPosition(3, 1);
+            GridPosition secondSource = enemyDeath ? new GridPosition(1, 2) : new GridPosition(3, 2);
+            BoardState board = CreateShamblerBoard(firstSource, scenario == "exit");
+            Add(board, 3, BoardLayer.Actor, EntityKind.Enemy, secondSource, BoardEntityTraits.Default);
+            RunState run = CreateRun(scenario == "starvation" ? 1 : 5);
+            if (!enemyDeath)
+                run.RestoreHealth(90);
+            var first = new ShamblerState(new EntityId(2), new ShamblerDefinition(20));
+            var second = new ShamblerState(new EntityId(3), new ShamblerDefinition(10));
+            ShamblerState[] enemies = { first, second };
+            var input = new List<ShamblerState> { second, first };
+            var trace = new List<string>();
+            int executionCalls = 0;
+            int environmentCalls = 0;
+            int planningCalls = 0;
+            string before = Snapshot(board, run);
+            var adapter = new EnemyBatchTurnPhases(input, (boardState, runState, playerId, events) =>
+            {
+                trace.Add("Environment");
+                environmentCalls++;
+                Assert.That(enemies.All(enemy => enemy.LockedIntent == null), Is.True);
+                Assert.That(enemies.All(enemy => enemy.Phase ==
+                    (environmentCalls == 1 ? ShamblerPhase.Rest : ShamblerPhase.Active)), Is.True);
+                if (scenario == "environment-death")
+                    runState.TakeDamage(runState.Health);
+                events.Add(new MarkerEvent("Environment"));
+            });
+            Assert.That(Snapshot(board, run), Is.EqualTo(before));
+            Assert.That(enemies.All(enemy => enemy.LockedIntent == null && enemy.Phase == ShamblerPhase.Active), Is.True);
+            CollectionAssert.AreEqual(new[] { second, first }, input);
+            input.Clear();
+
+            adapter.PlanInitialIntents(board, PlayerId);
+
+            EnemyIntent[] initial = enemies.Select(enemy => enemy.LockedIntent).ToArray();
+            Assert.That(Snapshot(board, run), Is.EqualTo(before));
+            Assert.That(initial.Select(intent => intent.Kind), Is.EqualTo(new[] {
+                enemyDeath ? EnemyIntentKind.Attack : EnemyIntentKind.Move,
+                enemyDeath ? EnemyIntentKind.Attack : EnemyIntentKind.Move }));
+            Assert.That(initial[0].TargetPosition, Is.EqualTo(enemyDeath ? Start : Destination));
+            Assert.That(initial[1].TargetPosition, Is.EqualTo(enemyDeath ? Start : new GridPosition(2, 2)));
+            Assert.That(initial.All(intent => intent.TargetId.Equals(PlayerId)), Is.True);
+            Assert.That(enemies.All(enemy => enemy.Phase == ShamblerPhase.Active), Is.True);
+            Assert.Throws<InvalidOperationException>(() => adapter.PlanInitialIntents(board, PlayerId));
+            for (int index = 0; index < enemies.Length; index++)
+                Assert.That(enemies[index].LockedIntent, Is.SameAs(initial[index]));
+            EnemyIntent[] expectedLocked = initial;
+            var phases = new TurnPhaseHandlers(
+                (boardState, runState, playerId, events) =>
+                {
+                    trace.Add("ExecuteLockedIntents");
+                    executionCalls++;
+                    Assert.That(runState.Food, Is.EqualTo(5 - executionCalls));
+                    for (int index = 0; index < enemies.Length; index++)
+                        Assert.That(enemies[index].LockedIntent, Is.SameAs(expectedLocked[index]));
+                    adapter.Handlers.ExecuteLockedIntents(boardState, runState, playerId, events);
+                },
+                adapter.Handlers.ApplyEnvironment,
+                (boardState, runState, playerId, events) =>
+                {
+                    trace.Add("PlanNextIntents");
+                    planningCalls++;
+                    Assert.That(enemies.All(enemy => enemy.LockedIntent == null), Is.True);
+                    adapter.Handlers.PlanNextIntents(boardState, runState, playerId, events);
+                    Assert.That(enemies.All(enemy => enemy.LockedIntent != null), Is.True);
+                    events.Add(new MarkerEvent("NextIntents"));
+                });
+            var controller = new TurnController(board, run, PlayerId, phases: phases);
+            PlayerCommand command = scenario == "rejected" ? (PlayerCommand)new MoveCommand(Direction.West) :
+                scenario == "exit" ? new MoveCommand(Direction.East) : new WaitCommand();
+
+            TurnResult result = controller.Resolve(command);
+
+            Assert.That(controller.IsResolving, Is.False);
+            if (scenario == "rejected")
+            {
+                AssertRejected(result, CommandRejectionCode.Blocked);
+                Assert.That(Snapshot(board, run), Is.EqualTo(before));
+                Assert.That(trace, Is.Empty);
+                Assert.That(executionCalls + environmentCalls + planningCalls, Is.Zero);
+                Assert.That(controller.IsTerminal, Is.False);
+                for (int index = 0; index < enemies.Length; index++)
+                {
+                    Assert.That(enemies[index].LockedIntent, Is.SameAs(initial[index]));
+                    Assert.That(enemies[index].Phase, Is.EqualTo(ShamblerPhase.Active));
+                }
+                return;
+            }
+            Assert.That(result.Accepted && result.ConsumesTurn, Is.True);
+            Assert.That(result.Events.OfType<ActionCostAppliedEvent>().Single().CostAmount, Is.EqualTo(1));
+            Assert.That(run.Food, Is.EqualTo(scenario == "starvation" ? 0 : 4));
+            if (earlyTerminal)
+            {
+                AssertEvents(result, scenario == "exit" ? "EntityMoved" : "EntityWaited", "ActionCostApplied",
+                    scenario == "exit" ? "ExitReached" : "PlayerStarved");
+                Assert.That(trace, Is.Empty);
+                Assert.That(executionCalls + environmentCalls + planningCalls, Is.Zero);
+                Assert.That(run.Health, Is.EqualTo(100));
+                for (int index = 0; index < enemies.Length; index++)
+                {
+                    Assert.That(enemies[index].LockedIntent, Is.SameAs(initial[index]));
+                    Assert.That(enemies[index].Phase, Is.EqualTo(ShamblerPhase.Active));
+                }
+            }
+            else
+            {
+                Assert.That(executionCalls, Is.EqualTo(1));
+                Assert.That(environmentCalls, Is.EqualTo(1));
+                Assert.That(planningCalls, Is.EqualTo(lateTerminal ? 0 : 1));
+                Assert.That(trace, Is.EqualTo(lateTerminal
+                    ? new[] { "ExecuteLockedIntents", "Environment" }
+                    : new[] { "ExecuteLockedIntents", "Environment", "PlanNextIntents" }));
+                AssertEvents(result, "EntityWaited", "ActionCostApplied",
+                    enemyDeath ? "EnemyAttackResolved" : "EntityMoved",
+                    enemyDeath ? "EnemyAttackResolved" : "EntityMoved", "Environment",
+                    lateTerminal ? "PlayerDied" : "NextIntents");
+                for (int index = 0; index < enemies.Length; index++)
+                {
+                    Assert.That(enemies[index].Phase, Is.EqualTo(ShamblerPhase.Rest));
+                    if (lateTerminal)
+                        Assert.That(enemies[index].LockedIntent, Is.Null);
+                    else
+                    {
+                        Assert.That(enemies[index].LockedIntent.Kind, Is.EqualTo(EnemyIntentKind.Wait));
+                        Assert.That(enemies[index].LockedIntent, Is.Not.SameAs(initial[index]));
+                    }
+                    if (enemyDeath)
+                    {
+                        var attack = (EnemyAttackResolvedEvent)result.Events[index + 2];
+                        Assert.That(attack.AttackerId, Is.EqualTo(enemies[index].ActorId));
+                        Assert.That(attack.TargetPosition, Is.EqualTo(Start));
+                        Assert.That(attack.IsHit, Is.True);
+                        Assert.That(attack.AffectedTargetId, Is.EqualTo(PlayerId));
+                        Assert.That(attack.HealthChange, Is.EqualTo(index == 0 ? -10 : 0));
+                    }
+                    else
+                    {
+                        var movement = (EntityMovedEvent)result.Events[index + 2];
+                        Assert.That(movement.EntityId, Is.EqualTo(enemies[index].ActorId));
+                        Assert.That(movement.From, Is.EqualTo(index == 0 ? firstSource : secondSource));
+                        Assert.That(movement.To, Is.EqualTo(index == 0 ? Destination : new GridPosition(2, 2)));
+                    }
+                }
+                Assert.That(run.Health, Is.EqualTo(lateTerminal ? 0 : 100));
+            }
+            Assert.That(controller.IsTerminal, Is.EqualTo(earlyTerminal || lateTerminal));
+            Assert.That(run.Status, Is.EqualTo(RunStatus.Active));
+            if (earlyTerminal || lateTerminal)
+            {
+                string terminalSnapshot = Snapshot(board, run);
+                string[] terminalTrace = trace.ToArray();
+                AssertRejected(controller.Resolve(new WaitCommand()), CommandRejectionCode.InvalidState);
+                Assert.That(Snapshot(board, run), Is.EqualTo(terminalSnapshot));
+                CollectionAssert.AreEqual(terminalTrace, trace);
+                return;
+            }
+            expectedLocked = enemies.Select(enemy => enemy.LockedIntent).ToArray();
+            var beforeRest = board.GetEntities();
+
+            TurnResult rest = controller.Resolve(new WaitCommand());
+
+            AssertEvents(rest, "EntityWaited", "ActionCostApplied", "EntityWaited", "EntityWaited", "Environment", "NextIntents");
+            Assert.That(rest.Events.OfType<EntityWaitedEvent>().Select(wait => wait.EntityId),
+                Is.EqualTo(new[] { PlayerId, first.ActorId, second.ActorId }));
+            Assert.That(rest.Events.OfType<ActionCostAppliedEvent>().Single().CostAmount, Is.EqualTo(1));
+            Assert.That(rest.Accepted && rest.ConsumesTurn, Is.True);
+            CollectionAssert.AreEqual(beforeRest, board.GetEntities());
+            Assert.That(run.Food, Is.EqualTo(3));
+            Assert.That(run.Health, Is.EqualTo(100));
+            Assert.That(executionCalls, Is.EqualTo(2));
+            Assert.That(environmentCalls, Is.EqualTo(2));
+            Assert.That(planningCalls, Is.EqualTo(2));
+            Assert.That(trace, Is.EqualTo(new[] { "ExecuteLockedIntents", "Environment", "PlanNextIntents",
+                "ExecuteLockedIntents", "Environment", "PlanNextIntents" }));
+            Assert.That(enemies.All(enemy => enemy.Phase == ShamblerPhase.Active && enemy.LockedIntent != null), Is.True);
+            Assert.That(first.LockedIntent.Kind, Is.EqualTo(EnemyIntentKind.Attack));
+            Assert.That(first.LockedIntent.TargetPosition, Is.EqualTo(Start));
+            Assert.That(second.LockedIntent.Kind, Is.EqualTo(EnemyIntentKind.Move));
+            Assert.That(second.LockedIntent.TargetPosition, Is.EqualTo(new GridPosition(1, 2)));
+            Assert.That(controller.IsTerminal || controller.IsResolving, Is.False);
+        }
+
+        /// <summary>
         /// The controller executes the pre-input fixed-cell attack as a miss instead of replacing
         /// it with the pursuit movement that fresh active planning would choose after player movement.
         /// </summary>

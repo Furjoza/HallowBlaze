@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7 and M3.8.1-M3.8.8 accepted; M3.8.9 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7 and M3.8.1-M3.8.9 accepted; M3.8.10 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -2809,7 +2809,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.8.9` - Bind accepted batches to existing turn phases
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09 after focused Unity EditMode validation (6/6; accepted/rest, rejected, exit, starvation, enemy death, and environment death) and controller regression validation (42/42), with independent Reviewer `PASS`. The adapter is composed in tests only; production enemy composition and intent presentation remain pending.
 **Priority:** P0
 **Related contract:** sections 10.2 and 11.2.
 
