@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8, M3.9.1-11 and M3.9.P1 accepted; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8, M3.9.1-12 and M3.9.P1 accepted; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-11
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -3265,7 +3265,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.12` - Attach accepted intent UI to the production board owner
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-11 after direct Lead implementation without Developer and independent Reviewer PASS. Production prerequisite `M3.9.P1` and replay-boundary `M3.9.11` are separately accepted. `GameManager` attaches one intent display and legend before Setup release using the existing retained-plan source and sole coordinator, clears disabled UI, republishes unchanged plans on resume, and disposes UI/listeners before terminal or replacement publication. Unsupported/overlapping legend layouts preserve diagnostics and block input. Focused production startup 1/1, full startup 7/7, command-path 12/12 and pause 11/11 passed with isolated persistence, compilation and scope checks. No domain runtime, generator, scene, prefab, input-source or save-format changes were introduced; manual readability remains `M3.9.14`.
 **Priority:** P0
 **Related contract:** sections 11.1, 11.3.1, 18, and 21.5.
 
