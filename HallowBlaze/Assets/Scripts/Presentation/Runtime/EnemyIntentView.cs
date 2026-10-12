@@ -14,7 +14,9 @@ namespace HallowBlaze.Presentation.Runtime
         public const float MarkerSize = 0.6f;
         /// <summary>Fixed line thickness in world units for every shape and conditional badge.</summary>
         public const float StrokeWidth = 0.04f;
-        /// <summary>Default-layer sorting order above ordinary board sprites for prototype glyphs.</summary>
+        /// <summary>Existing production sorting layer shared with actors, above floor and item artwork.</summary>
+        public const string GlyphSortingLayer = "Units";
+        /// <summary>Sorting order above ordinary actor sprites within the production Units layer.</summary>
         public const int GlyphSortingOrder = 20;
         /// <summary>Presentation-owned world Z in front of board sprites at Z zero.</summary>
         public const float MarkerDepth = -0.1f;
@@ -173,6 +175,7 @@ namespace HallowBlaze.Presentation.Runtime
             line.numCornerVertices = 3;
             line.startColor = Color.white;
             line.endColor = Color.white;
+            line.sortingLayerName = GlyphSortingLayer;
             line.sortingOrder = GlyphSortingOrder;
             return line;
         }
