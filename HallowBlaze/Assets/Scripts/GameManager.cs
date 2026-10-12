@@ -12,7 +12,10 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-/// <summary>Composes the active board's single command/presentation path and guarded session lifecycle.</summary>
+/// <summary>
+/// Composes the active board's single command/presentation path and guarded session lifecycle.
+/// Borrows camera framing for intent UI when needed and restores it when the UI lifetime ends.
+/// </summary>
 public class GameManager : MonoBehaviour, IBoardOutcomeSink
 {
     private const int InitialHealth = 100;
@@ -65,6 +68,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     private EnemyIntentPresenter activeIntents;
     private EnemyIntentLegend activeIntentLegend;
     private Vector2 intentViewport;
+    private Camera intentLayoutCamera;
+    private Rect originalIntentCameraRect;
+    private float originalIntentCameraSize;
     private PlayerScript activePlayerView;
     private bool handlingBoardOutcome;
     private bool boardOutcomeHandled;
@@ -480,8 +486,44 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         activeBoardPresenter.AnimationsEnabled = activePlayerView.animationsEnabled;
         activeBoardPresenter.SynchronizeFromState();
         intentViewport = new Vector2(Screen.width, Screen.height);
-        activeIntentLegend = new EnemyIntentLegend(activeIntentOwner.transform, intentViewport, InspectedBoardArea());
+        activeIntentLegend = CreateIntentLegend();
         UpdatePresentationBlocks();
+    }
+
+    private EnemyIntentLegend CreateIntentLegend()
+    {
+        try
+        {
+            return new EnemyIntentLegend(activeIntentOwner.transform, intentViewport, InspectedBoardArea());
+        }
+        catch (ArgumentException exception) when (exception.ParamName == "inspectedArea" &&
+            Camera.main != null && Camera.main.orthographic && intentLayoutCamera == null)
+        {
+            BorrowIntentLayoutCamera();
+            ReserveIntentCameraMargin(intentViewport);
+            return new EnemyIntentLegend(activeIntentOwner.transform, intentViewport, InspectedBoardArea());
+        }
+    }
+
+    private void BorrowIntentLayoutCamera()
+    {
+        intentLayoutCamera = Camera.main;
+        originalIntentCameraRect = intentLayoutCamera.rect;
+        originalIntentCameraSize = intentLayoutCamera.orthographicSize;
+    }
+
+    private void ReserveIntentCameraMargin(Vector2 size)
+    {
+        if (intentLayoutCamera == null)
+            return;
+        intentLayoutCamera.rect = size.x >= 800
+            ? new Rect(0, 0, (size.x - 224) / size.x, 1)
+            : new Rect(0, 160 / size.y, 1, (size.y - 160) / size.y);
+        var bounds = activeBoardRuntime.BoardState.Bounds;
+        float width = (float)bounds.MaxX - bounds.MinX + 1;
+        float height = (float)bounds.MaxY - bounds.MinY + 1;
+        intentLayoutCamera.orthographicSize = Mathf.Max(originalIntentCameraSize,
+            height / 2, width / (2 * intentLayoutCamera.aspect));
     }
 
     private Rect InspectedBoardArea()
@@ -514,7 +556,18 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             return;
         try
         {
-            activeIntentLegend.Resize(size, InspectedBoardArea());
+            ReserveIntentCameraMargin(size);
+            try
+            {
+                activeIntentLegend.Resize(size, InspectedBoardArea());
+            }
+            catch (ArgumentException exception) when (exception.ParamName == "inspectedArea" &&
+                Camera.main != null && Camera.main.orthographic && intentLayoutCamera == null)
+            {
+                BorrowIntentLayoutCamera();
+                ReserveIntentCameraMargin(size);
+                activeIntentLegend.Resize(size, InspectedBoardArea());
+            }
             intentViewport = size;
         }
         catch (Exception exception)
@@ -532,6 +585,12 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         activeIntents = null;
         activeIntentLegend?.Dispose();
         activeIntentLegend = null;
+        if (intentLayoutCamera != null)
+        {
+            intentLayoutCamera.rect = originalIntentCameraRect;
+            intentLayoutCamera.orthographicSize = originalIntentCameraSize;
+        }
+        intentLayoutCamera = null;
         if (activeIntentOwner != null)
         {
             activeIntentOwner.SetActive(false);

@@ -16,6 +16,9 @@ namespace HallowBlaze.Presentation.Runtime
         private readonly List<RectTransform> rowTexts = new List<RectTransform>();
         private readonly RectTransform viewport;
         private readonly RectTransform panel;
+        private readonly RectTransform scrollViewport;
+        private readonly RectTransform content;
+        private readonly ScrollRect scroll;
         private bool disposed;
 
         /// <summary>Gets the owned transient canvas; no scene, runtime, or input source is owned.</summary>
@@ -38,7 +41,7 @@ namespace HallowBlaze.Presentation.Runtime
         /// </summary>
         /// <param name="parent">Borrowed UI owner, or null for a standalone canvas.</param>
         /// <param name="viewportSize">Finite viewport dimensions, at least 320 by 480 pixels.</param>
-        /// <param name="inspectedArea">Board pixels that the panel and control must not cover.</param>
+        /// <param name="inspectedArea">Board pixels kept clear by selecting a free side, top or bottom margin.</param>
         public EnemyIntentLegend(Transform parent, Vector2 viewportSize, Rect inspectedArea)
         {
             Root = new GameObject("Enemy intent legend", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster)) { hideFlags = HideFlags.DontSave };
@@ -50,6 +53,17 @@ namespace HallowBlaze.Presentation.Runtime
             panel = Rect("Intent meanings", viewport, Vector2.zero, Vector2.zero, Vector2.zero);
             Image background = panel.gameObject.AddComponent<Image>();
             background.color = new Color32(28, 41, 35, 250);
+            scrollViewport = Rect("Legend scroll viewport", panel, Vector2.zero, Vector2.zero, Vector2.zero);
+            Image pointerTarget = scrollViewport.gameObject.AddComponent<Image>();
+            pointerTarget.color = Color.clear;
+            scrollViewport.gameObject.AddComponent<RectMask2D>();
+            content = Rect("Legend content", scrollViewport, Vector2.zero, Vector2.zero, Vector2.zero);
+            scroll = panel.gameObject.AddComponent<ScrollRect>();
+            scroll.viewport = scrollViewport;
+            scroll.content = content;
+            scroll.horizontal = false;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = 24;
             RectTransform controlRect = Rect("Enemy intents", viewport, Vector2.zero, Vector2.zero, Vector2.zero);
             Image controlImage = controlRect.gameObject.AddComponent<Image>();
             controlImage.color = new Color32(45, 62, 52, 255);
@@ -85,28 +99,50 @@ namespace HallowBlaze.Presentation.Runtime
             panel.gameObject.SetActive(false);
         }
 
-        /// <summary>Relayouts fixed-height rows in the supplied viewport, rejecting layouts covering inspected board pixels.</summary>
+        /// <summary>
+        /// Selects a free margin for the control and panel without covering inspected board pixels.
+        /// Rows grow for wrapped labels; a shorter panel scrolls rather than clipping inaccessible meanings.
+        /// Rejects unsupported viewports or a board leaving no usable margin, preserving the previous layout.
+        /// </summary>
         /// <param name="size">Finite viewport pixels, at least 320 by 480.</param>
         /// <param name="inspectedArea">Required visible board pixels in the same bottom-left coordinate system.</param>
-        /// <exception cref="ArgumentException">Dimensions are unsupported or UI would cover the inspected area.</exception>
+        /// <exception cref="ArgumentException">Dimensions are unsupported or no free margin fits a readable panel and control.</exception>
         /// <exception cref="ObjectDisposedException">This legend has been disposed.</exception>
         public void Resize(Vector2 size, Rect inspectedArea)
         {
             EnsureOpen();
             if (!float.IsFinite(size.x) || !float.IsFinite(size.y) || size.x < 320 || size.y < 480)
                 throw new ArgumentException("Legend viewport must be at least 320 by 480 pixels.", nameof(size));
-            float width = Mathf.Min(344, size.x - 16);
-            var nextPanel = new Rect(size.x - width - 8, 56, width, 394);
-            var nextControl = new Rect(size.x - 180, 8, 172, 40);
-            if (nextPanel.Overlaps(inspectedArea) || nextControl.Overlaps(inspectedArea))
+            Rect usable = new Rect(8, 8, size.x - 16, size.y - 16);
+            var margins = new[]
+            {
+                UnityEngine.Rect.MinMaxRect(Mathf.Max(usable.xMin, inspectedArea.xMax + 8), usable.yMin, usable.xMax, usable.yMax),
+                UnityEngine.Rect.MinMaxRect(usable.xMin, usable.yMin, Mathf.Min(usable.xMax, inspectedArea.xMin - 8), usable.yMax),
+                UnityEngine.Rect.MinMaxRect(usable.xMin, Mathf.Max(usable.yMin, inspectedArea.yMax + 8), usable.xMax, usable.yMax),
+                UnityEngine.Rect.MinMaxRect(usable.xMin, usable.yMin, usable.xMax, Mathf.Min(usable.yMax, inspectedArea.yMin - 8))
+            };
+            Rect? available = null;
+            foreach (Rect margin in margins)
+            {
+                if (margin.width >= 196 && margin.height >= 132)
+                {
+                    available = margin;
+                    break;
+                }
+            }
+            if (!available.HasValue)
                 throw new ArgumentException("Legend must leave the supplied inspected board area visible.", nameof(inspectedArea));
+            Rect area = available.Value;
+            float width = Mathf.Min(344, area.width);
+            var nextPanel = new Rect(area.xMax - width, area.yMin + 48, width, Mathf.Min(394, area.height - 48));
+            var nextControl = new Rect(area.xMax - 172, area.yMin, 172, 40);
             PanelBounds = nextPanel;
             ControlBounds = nextControl;
             viewport.sizeDelta = size;
             panel.anchoredPosition = nextPanel.position;
             panel.sizeDelta = nextPanel.size;
-            foreach (RectTransform rowText in rowTexts)
-                rowText.sizeDelta = new Vector2(nextPanel.width - 84, 70);
+            scrollViewport.sizeDelta = nextPanel.size;
+            LayoutRows();
             var control = (RectTransform)Control.transform;
             control.anchoredPosition = nextControl.position;
             control.sizeDelta = nextControl.size;
@@ -172,14 +208,16 @@ namespace HallowBlaze.Presentation.Runtime
                         Release(piece.mesh);
                     meshes.Add(mesh);
                     float rowBottom = 12 + (4 - index) * 74;
-                    RectTransform icon = Rect(symbol + " glyph", panel, new Vector2(12, rowBottom + 12), new Vector2(48, 48), new Vector2(0.5f, 0.5f));
+                    RectTransform icon = Rect(symbol + " glyph", content, new Vector2(12, rowBottom + 12), new Vector2(48, 48), new Vector2(0.5f, 0.5f));
                     icon.anchoredPosition += new Vector2(24, 24);
+                    icon.gameObject.AddComponent<CanvasRenderer>();
                     EnemyIntentLegendGlyph graphic = icon.gameObject.AddComponent<EnemyIntentLegendGlyph>();
                     graphic.GlyphMesh = mesh;
                     graphic.raycastTarget = false;
                     glyphs.Add(symbol, graphic);
-                    rowTexts.Add(Text(symbol + " meaning", panel, meanings[index], new Vector2(72, rowBottom), new Vector2(PanelBounds.width - 84, 70)));
+                    rowTexts.Add(Text(symbol + " meaning", content, meanings[index], new Vector2(72, rowBottom), new Vector2(PanelBounds.width - 84, 70)));
                 }
+                LayoutRows();
             }
             finally
             {
@@ -187,6 +225,26 @@ namespace HallowBlaze.Presentation.Runtime
                 Release(prototype);
                 Release(cameraObject);
             }
+        }
+
+        private void LayoutRows()
+        {
+            float bottom = 12;
+            for (int index = rowTexts.Count - 1; index >= 0; index--)
+            {
+                RectTransform row = rowTexts[index];
+                row.sizeDelta = new Vector2(PanelBounds.width - 84, 70);
+                float height = Mathf.Max(70, Mathf.Ceil(row.GetComponent<UnityEngine.UI.Text>().preferredHeight));
+                row.sizeDelta = new Vector2(row.sizeDelta.x, height);
+                row.anchoredPosition = new Vector2(72, bottom);
+                var icon = (RectTransform)glyphs[(EnemyIntentSymbol)(index + 1)].transform;
+                icon.anchoredPosition = new Vector2(36, bottom + height / 2);
+                bottom += height + 4;
+            }
+            content.sizeDelta = new Vector2(PanelBounds.width, bottom + 12);
+            content.anchoredPosition = new Vector2(0, Mathf.Min(0, PanelBounds.height - content.sizeDelta.y));
+            scroll.vertical = content.sizeDelta.y > PanelBounds.height;
+            scroll.verticalNormalizedPosition = 1;
         }
 
         private static RectTransform Rect(string name, Transform parent, Vector2 position, Vector2 size, Vector2 pivot)

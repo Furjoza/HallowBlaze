@@ -13,6 +13,7 @@ using HallowBlaze.Core.Turns.Resolution;
 using HallowBlaze.Presentation.Runtime;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 using EntityId = HallowBlaze.Core.Board.Primitives.EntityId;
@@ -592,6 +593,80 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(owner != null && !runtime.IsDisposed, Is.True);
                 TestContext.WriteLine("Viewport=" + size + "; glyphs=5; protected=" + inspected);
             }
+        }
+
+        /// <summary>Centered production boards leave a readable legend in a free margin instead of aborting startup.</summary>
+        [UnityTest]
+        public IEnumerator Legend_CenteredBoardFitsAvailableMargins()
+        {
+            var owner = new GameObject("Centered board legend");
+            objects.Add(owner);
+            foreach (Vector2 size in new[] { new Vector2(1142, 684), new Vector2(1280, 720), new Vector2(1920, 1080) })
+            {
+                var board = new Rect((size.x - size.y) / 2, 0, size.y, size.y);
+                var legend = new EnemyIntentLegend(owner.transform, size, board);
+                legends.Add(legend);
+                legend.Show();
+                Canvas.ForceUpdateCanvases();
+                Assert.That(legend.PanelBounds.Overlaps(board) || legend.ControlBounds.Overlaps(board), Is.False, size.ToString());
+                Assert.That(legend.PanelBounds.xMin, Is.GreaterThanOrEqualTo(8));
+                Assert.That(legend.PanelBounds.xMax, Is.LessThanOrEqualTo(size.x - 8));
+                Assert.That(legend.PanelBounds.yMin, Is.GreaterThanOrEqualTo(8));
+                Assert.That(legend.PanelBounds.yMax, Is.LessThanOrEqualTo(size.y - 8));
+                foreach (Text text in legend.Root.GetComponentsInChildren<Text>())
+                {
+                    RectTransform rect = (RectTransform)text.transform;
+                    Assert.That(text.preferredHeight, Is.LessThanOrEqualTo(rect.rect.height + 0.1f), text.text);
+                    var generator = new TextGenerator();
+                    TextGenerationSettings settings = text.GetGenerationSettings(Vector2.zero);
+                    Assert.That(text.text.Split(new[] { ' ', '\n' }, StringSplitOptions.RemoveEmptyEntries).Max(word =>
+                        generator.GetPreferredWidth(word, settings) / text.pixelsPerUnit),
+                        Is.LessThanOrEqualTo(rect.rect.width + 0.1f), text.text);
+                }
+                legend.Resize(size, new Rect(0, 0, size.x, size.y - 180));
+                Assert.That(legend.PanelBounds.yMin, Is.GreaterThanOrEqualTo(size.y - 180));
+                Assert.That(legend.PanelBounds.height, Is.LessThan(394));
+                Assert.Throws<ArgumentException>(() => legend.Resize(size, new Rect(0, 0, size.x, size.y)));
+                legend.Dispose();
+                TestContext.WriteLine("Centered production viewport=" + size + "; nonoverlapping readable margin and scrollable top strip.");
+                yield return null;
+            }
+            var eventOwner = new GameObject("Legend pointer test", typeof(EventSystem));
+            objects.Add(eventOwner);
+            EventSystem eventSystem = eventOwner.GetComponent<EventSystem>();
+            var shortLegend = new EnemyIntentLegend(owner.transform, new Vector2(Screen.width, Screen.height),
+                new Rect(0, 0, Screen.width, Screen.height - 180));
+            legends.Add(shortLegend);
+            shortLegend.Show();
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+            ScrollRect scroll = shortLegend.Root.GetComponentInChildren<ScrollRect>();
+            Assert.That(scroll.vertical, Is.True);
+            Assert.That(scroll.verticalNormalizedPosition, Is.EqualTo(1).Within(0.001f));
+            Vector3 pointerPosition = scroll.viewport.TransformPoint(scroll.viewport.rect.center);
+            var pointer = new PointerEventData(eventSystem)
+            {
+                position = new Vector2(pointerPosition.x, pointerPosition.y),
+                button = PointerEventData.InputButton.Left,
+                scrollDelta = new Vector2(0, -1)
+            };
+            var hits = new List<RaycastResult>();
+            eventSystem.RaycastAll(pointer, hits);
+            Assert.That(hits.Any(hit => hit.gameObject == scroll.viewport.gameObject &&
+                ExecuteEvents.GetEventHandler<IScrollHandler>(hit.gameObject) == scroll.gameObject), Is.True,
+                "The viewport must receive pointer hits and route them to its parent ScrollRect.");
+            ExecuteEvents.ExecuteHierarchy(scroll.viewport.gameObject, pointer, ExecuteEvents.scrollHandler);
+            Assert.That(scroll.verticalNormalizedPosition, Is.LessThan(1));
+            ExecuteEvents.Execute(scroll.gameObject, pointer, ExecuteEvents.beginDragHandler);
+            pointer.position += new Vector2(0, scroll.content.rect.height * 2);
+            ExecuteEvents.Execute(scroll.gameObject, pointer, ExecuteEvents.dragHandler);
+            ExecuteEvents.Execute(scroll.gameObject, pointer, ExecuteEvents.endDragHandler);
+            Assert.That(scroll.verticalNormalizedPosition, Is.EqualTo(0).Within(0.001f));
+            Vector3 waitCenter = scroll.viewport.InverseTransformPoint(shortLegend.Glyphs[EnemyIntentSymbol.Wait].transform.position);
+            Assert.That(scroll.viewport.rect.Contains(new Vector2(waitCenter.x, waitCenter.y)), Is.True,
+                "Pointer scrolling must expose the last symbol, not merely change a property.");
+            shortLegend.Dispose();
+            TestContext.WriteLine("Actual viewport raycast, wheel and drag expose Wait in the short clipped legend; initial scroll position is top.");
         }
 
         /// <summary>Production-owned retained plans stay hidden until replay/recovery completes, without extra turns or duplicate refreshes.</summary>
