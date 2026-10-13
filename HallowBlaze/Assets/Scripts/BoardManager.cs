@@ -112,6 +112,8 @@ public class BoardManager : MonoBehaviour
         {
             Vector3 randomPosition = RandomPosition();
             GameObject tileChoice = tileArray[gameplayRandom.Next(0, tileArray.Length)];
+            int? enemyDamage = contentKind == LegacyBoardContentKind.Enemy
+                ? ReadEnemyDamage(tileChoice) : (int?)null;
             GameObject instance = Instantiate(
                 tileChoice,
                 randomPosition,
@@ -120,7 +122,8 @@ public class BoardManager : MonoBehaviour
             layout.Add(new LegacyBoardView(
                 instance,
                 ResolveContentKind(tileChoice, contentKind),
-                new GridPosition((int)randomPosition.x, (int)randomPosition.y)));
+                new GridPosition((int)randomPosition.x, (int)randomPosition.y),
+                enemyDamage));
 
             if (contentKind == LegacyBoardContentKind.Wall &&
                 gameplayRandom.Next(0, 100) > 90)
@@ -145,9 +148,19 @@ public class BoardManager : MonoBehaviour
         }
     }
 
+    private static int ReadEnemyDamage(GameObject prefab)
+    {
+        Enemy enemy = prefab.GetComponent<Enemy>();
+        if (enemy == null || (enemy.playerDamage != 10 && enemy.playerDamage != 20))
+            throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput,
+                "prefab:Enemy:missing-or-unsupported-damage:" + prefab.name);
+        return enemy.playerDamage;
+    }
+
     /// <summary>
     /// Creates and validates the complete legacy layout before publishing one authoritative runtime.
     /// A failed setup destroys its staged views and leaves no active request or runtime.
+    /// Enemy variants come from their prefab's explicit 10/20 HP data; initial domain plans exist before activation.
     /// </summary>
     /// <param name="request">The immutable run, node, and generation inputs for this board.</param>
     /// <param name="runState">The active run referenced by <paramref name="request"/>.</param>

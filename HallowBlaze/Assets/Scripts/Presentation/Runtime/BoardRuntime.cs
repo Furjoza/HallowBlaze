@@ -19,6 +19,8 @@ namespace HallowBlaze.Presentation.Runtime
     {
         private readonly Dictionary<EntityId, GameObject> mutableViews;
         private readonly ReadOnlyDictionary<EntityId, GameObject> readOnlyViews;
+        private readonly List<ShamblerState> mutableEnemies;
+        private readonly ReadOnlyCollection<ShamblerState> readOnlyEnemies;
         private BoardRequest request;
         private RunState runState;
         private BoardState boardState;
@@ -30,15 +32,20 @@ namespace HallowBlaze.Presentation.Runtime
             RunState runState,
             BoardState boardState,
             EntityId playerId,
-            Dictionary<EntityId, GameObject> views)
+            Dictionary<EntityId, GameObject> views,
+            IEnumerable<ShamblerState> enemies)
         {
             this.request = request ?? throw new ArgumentNullException(nameof(request));
             this.runState = runState ?? throw new ArgumentNullException(nameof(runState));
             this.boardState = boardState ?? throw new ArgumentNullException(nameof(boardState));
             mutableViews = views ?? throw new ArgumentNullException(nameof(views));
             readOnlyViews = new ReadOnlyDictionary<EntityId, GameObject>(mutableViews);
+            mutableEnemies = new List<ShamblerState>(EnemyInitiativeOrder.Create(enemies));
+            readOnlyEnemies = mutableEnemies.AsReadOnly();
             PlayerId = playerId;
-            controller = new TurnController(boardState, runState, playerId);
+            var enemyPhases = new EnemyBatchTurnPhases(readOnlyEnemies);
+            enemyPhases.PlanInitialIntents(boardState, playerId);
+            controller = new TurnController(boardState, runState, playerId, phases: enemyPhases.Handlers);
         }
 
         /// <summary>Gets whether this runtime has released its controller and view bindings.</summary>
@@ -102,7 +109,22 @@ namespace HallowBlaze.Presentation.Runtime
             }
         }
 
-        /// <summary>Releases resolver ownership and removes every Unity view reference from the registry.</summary>
+        /// <summary>
+        /// Gets the structurally read-only roster in ascending initiative order. States remain owned
+        /// by the controller; presentation may read retained plans but must not consume, lock, or reset them.
+        /// Initial plans already exist before this runtime is published. Disposal empties captured rosters.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The board runtime has been disposed.</exception>
+        public IReadOnlyList<ShamblerState> Enemies
+        {
+            get
+            {
+                EnsureActive();
+                return readOnlyEnemies;
+            }
+        }
+
+        /// <summary>Releases resolver and enemy roster ownership and clears borrowed view references without destroying views.</summary>
         public void Dispose()
         {
             if (isDisposed)
@@ -110,6 +132,7 @@ namespace HallowBlaze.Presentation.Runtime
 
             isDisposed = true;
             mutableViews.Clear();
+            mutableEnemies.Clear();
             controller = null;
             boardState = null;
             runState = null;
