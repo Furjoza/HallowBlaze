@@ -1,8 +1,11 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
@@ -19,7 +22,14 @@ namespace HallowBlaze.Tests.PlayMode
     internal sealed class BoardRuntimeStartupTests
     {
         private readonly List<GameObject> createdObjects = new List<GameObject>();
+        private readonly List<UnityEngine.Object> createdAssets = new List<UnityEngine.Object>();
         private Type boardManagerType;
+        private Type gameManagerType;
+        private object previousPersistenceRoot;
+        private string persistenceRoot;
+        private float previousTimeScale;
+        private bool hadHighScore;
+        private int previousHighScore;
 
         [SetUp]
         public void SetUp()
@@ -27,6 +37,11 @@ namespace HallowBlaze.Tests.PlayMode
             Assembly gameAssembly = AppDomain.CurrentDomain.GetAssemblies().Single(
                 assembly => assembly.GetName().Name == "Assembly-CSharp");
             boardManagerType = gameAssembly.GetType("BoardManager", true);
+            gameManagerType = gameAssembly.GetType("GameManager", true);
+            previousPersistenceRoot = gameManagerType.GetField("PersistenceRootOverride", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
+            previousTimeScale = Time.timeScale;
+            hadHighScore = PlayerPrefs.HasKey("HighScore");
+            previousHighScore = PlayerPrefs.GetInt("HighScore");
         }
 
         [TearDown]
@@ -38,6 +53,19 @@ namespace HallowBlaze.Tests.PlayMode
                     UnityEngine.Object.DestroyImmediate(createdObjects[index]);
             }
             createdObjects.Clear();
+            foreach (UnityEngine.Object asset in createdAssets)
+                if (asset != null)
+                    UnityEngine.Object.DestroyImmediate(asset);
+            createdAssets.Clear();
+            gameManagerType.GetField("PersistenceRootOverride", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, previousPersistenceRoot);
+            if (persistenceRoot != null && Directory.Exists(persistenceRoot))
+                Directory.Delete(persistenceRoot, true);
+            persistenceRoot = null;
+            Time.timeScale = previousTimeScale;
+            if (hadHighScore)
+                PlayerPrefs.SetInt("HighScore", previousHighScore);
+            else
+                PlayerPrefs.DeleteKey("HighScore");
         }
 
         [UnityTest]
@@ -216,6 +244,161 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(property, Is.Not.Null);
             Assert.That(property.PropertyType, Is.EqualTo(typeof(BoardRuntime)));
             Assert.That(property.CanWrite, Is.False);
+        }
+
+        /// <summary>Production setup publishes retained intent UI before input and preserves one command path across UI and board lifetimes.</summary>
+        [UnityTest]
+        public IEnumerator ProductionIntents_AppearBeforeInputAndRespectBoardLifetime()
+        {
+            persistenceRoot = Path.Combine(Path.GetTempPath(), "HB-M3912-" + Guid.NewGuid().ToString("N"));
+            gameManagerType.GetField("PersistenceRootOverride", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, persistenceRoot);
+            Time.timeScale = 1;
+            Component board = CreateBoardManager();
+            SetField(board, "columns", 4);
+            SetField(board, "rows", 4);
+            GameObject enemyPrefab = CreateObject("Production Enemy Prefab", 0, 0);
+            SetField(enemyPrefab.AddComponent(boardManagerType.Assembly.GetType("Enemy", true)), "playerDamage", 10);
+            SetField(board, "enemyTiles", new[] { enemyPrefab });
+            Component manager = board.gameObject.AddComponent(gameManagerType);
+            var world = new TextAsset(File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json")));
+            createdAssets.Add(world);
+            SetField(manager, "worldDefinitionJson", world);
+            SetField(manager, "levelStartDelay", 100f);
+            Assert.That((bool)InvokeManager(manager, "TryEnsureWorldMap"), Is.True);
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            session.StartNewRun("production-intents", 54321, new RunStateConfiguration(100, 100, 2, "forest.start"));
+            GameObject playerObject = CreateObject("Production Player", 0, 0);
+            playerObject.tag = "Player";
+            Component player = playerObject.AddComponent(boardManagerType.Assembly.GetType("PlayerScript", true));
+            SetField(player, "animationsEnabled", false);
+            InvokeManager(manager, "InitGame");
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            Assert.That(runtime, Is.Not.Null);
+            BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
+            EnemyIntentPresenter display = manager.GetComponentInChildren<EnemyIntentPresenter>();
+            EnemyIntentLegend legend = GetManagerField<EnemyIntentLegend>(manager, "activeIntentLegend");
+            Assert.That(display.Views.Count, Is.EqualTo(runtime.Enemies.Count).And.EqualTo(1));
+            ShamblerState enemy = runtime.Enemies.Single();
+            EnemyIntent initial = enemy.LockedIntent;
+            EnemyIntentView marker = display.Views[enemy.ActorId];
+            Assert.That(marker.gameObject.activeInHierarchy, Is.True);
+            Assert.That(display.Projections.Single(), Is.EqualTo(EnemyIntentProjection.FromRetainedIntent(initial,
+                runtime.BoardState.GetEntities().Single(entity => entity.Id.Equals(enemy.ActorId)).Position)));
+            Assert.That(display.Projections.Single().AttackOnPlayerEntry, Is.True);
+            Assert.That(presenter.Coordinator.Gate.Blocks.HasFlag(PresentationInputBlock.Setup), Is.True);
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
+            Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+            InvokeManager(manager, "HideLevelImage");
+            yield return null;
+            Assert.That(TrySubmit(manager, new MoveCommand(Direction.West), out Task<CommandSubmission> rejected), Is.True);
+            Assert.That(rejected.Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+            Assert.That(display.Views[enemy.ActorId], Is.SameAs(marker));
+            int count = presenter.Coordinator.ResolutionCount;
+            legend.Control.onClick.Invoke();
+            Assert.That(legend.IsVisible, Is.True);
+            legend.Control.onClick.Invoke();
+            Assert.That(legend.IsVisible, Is.False);
+            InvokeManager(manager, "SetGameplayInputBlocked", true);
+            Time.timeScale = 0;
+            yield return null;
+            Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+            Assert.That(enemy.LockedIntent, Is.SameAs(initial));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(count));
+            Time.timeScale = 1;
+            InvokeManager(manager, "SetGameplayInputBlocked", false);
+            yield return null;
+            Assert.That(TrySubmit(manager, new WaitCommand(), out Task<CommandSubmission> accepted), Is.True);
+            while (!accepted.IsCompleted)
+                yield return null;
+            Assert.That(accepted.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(99));
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(count + 1));
+            Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter"), Is.SameAs(presenter));
+            Assert.That(display.Projections.Single().Symbol, Is.EqualTo(EnemyIntentSymbol.Wait));
+            EnemyIntent rest = enemy.LockedIntent;
+            ((Behaviour)manager).enabled = false;
+            Assert.That(display.Views, Is.Empty);
+            Assert.That(legend.Root.activeInHierarchy, Is.False);
+            ((Behaviour)manager).enabled = true;
+            Assert.That(enemy.LockedIntent, Is.SameAs(rest));
+            Assert.That(display.Views.Count, Is.EqualTo(1));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(99));
+
+            EntityId oldId = enemy.ActorId;
+            var oldControl = legend.Control;
+            GameObject oldOwner = display.gameObject;
+            InvokeManager(manager, "BlockBoardStartup");
+            Assert.That(runtime.IsDisposed, Is.True);
+            Assert.That(display.IsDisposed, Is.True);
+            Assert.That(display.Views, Is.Empty);
+            Assert.That(oldOwner.activeSelf, Is.False);
+            oldControl.onClick.Invoke();
+            Assert.That(legend.IsVisible, Is.False);
+            InvokeManager(manager, "InitGame");
+            BoardRuntime replacement = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            Assert.That(replacement.Enemies.Single().ActorId, Is.EqualTo(oldId));
+            Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter"), Is.Not.SameAs(presenter));
+            EnemyIntentPresenter nextDisplay = manager.GetComponentInChildren<EnemyIntentPresenter>();
+            EnemyIntentLegend nextLegend = GetManagerField<EnemyIntentLegend>(manager, "activeIntentLegend");
+            Assert.That(nextDisplay.Views.Count, Is.EqualTo(1));
+            Assert.That(nextDisplay, Is.Not.SameAs(display));
+            InvokeManager(manager, "HideLevelImage");
+            yield return null;
+            Assert.That(oldOwner == null, Is.True);
+            session.ConsumeFood(session.ActiveRun.Food - 1);
+            var terminalControl = nextLegend.Control;
+            Assert.That(TrySubmit(manager, new WaitCommand(), out Task<CommandSubmission> terminal), Is.True);
+            while (!terminal.IsCompleted)
+                yield return null;
+            Assert.That(terminal.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(nextDisplay.IsDisposed, Is.True);
+            Assert.That(nextDisplay.Views, Is.Empty);
+            Assert.That(nextLegend.Root.activeSelf, Is.False);
+            terminalControl.onClick.Invoke();
+            Assert.That(nextLegend.IsVisible, Is.False);
+            Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+            Assert.That(Directory.Exists(persistenceRoot), Is.True, "Terminal checkpoint must stay in the isolated root.");
+
+            ((Behaviour)manager).enabled = true;
+            session.StartNewRun("production-intent-failure", 54321, new RunStateConfiguration(100, 100, 2, "forest.start"));
+            Camera camera = CreateObject("Intent overlap camera", 0, 0).AddComponent<Camera>();
+            camera.gameObject.tag = "MainCamera";
+            camera.transform.position = new Vector3(1.5f, 1.5f, -10);
+            camera.orthographic = true;
+            camera.orthographicSize = 4;
+            camera.pixelRect = new Rect(Screen.width - 180, 8, 172, 40);
+            LogAssert.Expect(LogType.Error, new Regex("Board startup failed: Legend must leave the supplied inspected board area visible"));
+            InvokeManager(manager, "InitGame");
+            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Null);
+            Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter"), Is.Null);
+            Assert.That(GetProperty<BoardRuntime>(board, "ActiveRuntime"), Is.Null);
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
+            InvokeManager(manager, "HideLevelImage");
+            yield return null;
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
+            Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+            TestContext.WriteLine("P1 production roster; initial before Setup release; one coordinator; free reject/pause/legend; disable/resume; reused-ID replacement; terminal cleanup; failed UI blocks startup; isolated save root.");
+        }
+
+        private static object InvokeManager(Component manager, string name, params object[] arguments)
+        {
+            return manager.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .Invoke(manager, arguments);
+        }
+
+        private static T GetManagerField<T>(Component manager, string name)
+        {
+            return (T)manager.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(manager);
+        }
+
+        private static bool TrySubmit(Component manager, PlayerCommand command, out Task<CommandSubmission> submission)
+        {
+            object[] arguments = { command, null };
+            bool admitted = (bool)InvokeManager(manager, "TrySubmitCommand", arguments);
+            submission = (Task<CommandSubmission>)arguments[1];
+            return admitted;
         }
 
         private Component CreateBoardManager()

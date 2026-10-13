@@ -61,6 +61,10 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     private BoardRequest activeBoardRequest;
     private BoardRuntime activeBoardRuntime;
     private BoardEventPresenter activeBoardPresenter;
+    private GameObject activeIntentOwner;
+    private EnemyIntentPresenter activeIntents;
+    private EnemyIntentLegend activeIntentLegend;
+    private Vector2 intentViewport;
     private PlayerScript activePlayerView;
     private bool handlingBoardOutcome;
     private bool boardOutcomeHandled;
@@ -300,6 +304,17 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             session.OnRunStarted += OnRunStarted;
             session.OnRunAbandoned += OnRunAbandoned;
         }
+        if (activeIntentOwner != null)
+        {
+            activeIntentOwner.SetActive(true);
+            try { activeBoardPresenter.SynchronizeFromState(); }
+            catch (Exception exception)
+            {
+                gameplayInputBlocked = true;
+                DisposeIntentUi();
+                Debug.LogError("Intent UI resume failed: " + exception.Message);
+            }
+        }
         UpdatePresentationBlocks();
     }
 
@@ -312,6 +327,12 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             session.OnRunStarted -= OnRunStarted;
             session.OnRunAbandoned -= OnRunAbandoned;
         }
+        if (activeIntents != null && !activeIntents.IsDisposed)
+            activeIntents.Clear();
+        if (activeIntentLegend != null)
+            activeIntentLegend.Hide();
+        if (activeIntentOwner != null)
+            activeIntentOwner.SetActive(false);
         UpdatePresentationBlocks();
     }
 
@@ -441,16 +462,82 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void PublishBoardRuntime(BoardRuntime runtime)
     {
+        if (activeBoardPresenter != null)
+            activeBoardPresenter.Dispose();
+        DisposeIntentUi();
+        if (activeBoardRuntime != null && !ReferenceEquals(activeBoardRuntime, runtime))
+            activeBoardRuntime.Dispose();
         activeBoardRuntime = runtime;
         activeBoardRequest = runtime.Request;
         activePlayerView = runtime.Views[runtime.PlayerId].GetComponent<PlayerScript>();
         if (activePlayerView == null)
             throw new InvalidOperationException("The registered player has no production input/view adapter.");
+        activeIntentOwner = new GameObject("Board intent UI") { hideFlags = HideFlags.DontSave };
+        activeIntentOwner.transform.SetParent(transform, false);
+        activeIntents = activeIntentOwner.AddComponent<EnemyIntentPresenter>();
         activeBoardPresenter = new BoardEventPresenter(runtime, activePlayerView, activePlayerView,
-            this, ReportPresentationDiagnostic, activePlayerView.moveTime);
+            this, ReportPresentationDiagnostic, activePlayerView.moveTime, activeIntents);
         activeBoardPresenter.AnimationsEnabled = activePlayerView.animationsEnabled;
         activeBoardPresenter.SynchronizeFromState();
+        intentViewport = new Vector2(Screen.width, Screen.height);
+        activeIntentLegend = new EnemyIntentLegend(activeIntentOwner.transform, intentViewport, InspectedBoardArea());
         UpdatePresentationBlocks();
+    }
+
+    private Rect InspectedBoardArea()
+    {
+        Camera camera = Camera.main;
+        if (camera == null)
+            return default;
+        Vector2 minimum = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
+        Vector2 maximum = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
+        foreach (var entity in activeBoardRuntime.BoardState.GetEntities())
+        {
+            foreach (Vector2 offset in new[] { new Vector2(-0.5f, -0.5f), new Vector2(-0.5f, 0.5f),
+                new Vector2(0.5f, -0.5f), new Vector2(0.5f, 0.5f) })
+            {
+                Vector3 point = camera.WorldToScreenPoint(new Vector3(entity.Position.X + offset.x,
+                    entity.Position.Y + offset.y, 0));
+                minimum = Vector2.Min(minimum, point);
+                maximum = Vector2.Max(maximum, point);
+            }
+        }
+        return Rect.MinMaxRect(minimum.x, minimum.y, maximum.x, maximum.y);
+    }
+
+    private void LateUpdate()
+    {
+        if (activeIntentLegend == null || activeBoardRuntime == null || activeBoardRuntime.IsDisposed)
+            return;
+        Vector2 size = new Vector2(Screen.width, Screen.height);
+        if (size == intentViewport)
+            return;
+        try
+        {
+            activeIntentLegend.Resize(size, InspectedBoardArea());
+            intentViewport = size;
+        }
+        catch (Exception exception)
+        {
+            SetGameplayInputBlocked(true);
+            DisposeIntentUi();
+            Debug.LogError("Intent UI layout failed: " + exception.Message);
+        }
+    }
+
+    private void DisposeIntentUi()
+    {
+        if (activeIntents != null)
+            activeIntents.Dispose();
+        activeIntents = null;
+        activeIntentLegend?.Dispose();
+        activeIntentLegend = null;
+        if (activeIntentOwner != null)
+        {
+            activeIntentOwner.SetActive(false);
+            Destroy(activeIntentOwner);
+        }
+        activeIntentOwner = null;
     }
 
     private void ReportPresentationDiagnostic(PresentationDiagnostic diagnostic)
@@ -511,6 +598,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             return false;
         }
 
+        if (outcome.Type == BoardOutcomeType.ExitReached || outcome.Type == BoardOutcomeType.PlayerDied)
+            DisposeIntentUi();
         switch (outcome.Type)
         {
             case BoardOutcomeType.ExitReached:
@@ -729,6 +818,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (activeBoardPresenter != null)
             activeBoardPresenter.Dispose();
         activeBoardPresenter = null;
+        DisposeIntentUi();
         activePlayerView = null;
         if (activeBoardRuntime != null)
             activeBoardRuntime.Dispose();
