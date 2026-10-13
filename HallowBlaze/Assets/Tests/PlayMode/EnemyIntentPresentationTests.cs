@@ -2,6 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Session;
@@ -590,6 +592,164 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(owner != null && !runtime.IsDisposed, Is.True);
                 TestContext.WriteLine("Viewport=" + size + "; glyphs=5; protected=" + inspected);
             }
+        }
+
+        /// <summary>Production-owned retained plans stay hidden until replay/recovery completes, without extra turns or duplicate refreshes.</summary>
+        [UnityTest]
+        public IEnumerator ReplayBoundary_PreservesLockedDisplayUntilNextPublication()
+        {
+            foreach (string scenario in new[] { "success", "cancel", "unknown", "terminal", "disposed" })
+            {
+                BoardRuntime runtime = CreateReplayRuntime(scenario == "terminal" ? 1 : 25);
+                var owner = new GameObject("Replay boundary " + scenario);
+                objects.Add(owner);
+                EnemyIntentPresenter display = owner.AddComponent<EnemyIntentPresenter>();
+                var sinks = new IntentSinks();
+                var diagnostics = new List<PresentationDiagnostic>();
+                using (var presenter = new BoardEventPresenter(runtime, sinks, sinks, sinks, diagnostics.Add,
+                    moveDuration: 0.2f, intents: display))
+                using (var cancellation = new CancellationTokenSource())
+                {
+                    presenter.SynchronizeFromState();
+                    Assert.That(presenter.Coordinator.CanSubmit, Is.False);
+                    ShamblerState enemy = runtime.Enemies.Single();
+                    EnemyIntent locked = enemy.LockedIntent;
+                    EnemyIntentView oldMarker = display.Views[enemy.ActorId];
+                    EnemyIntentProjection announced = display.Projections.Single();
+                    Assert.That(announced.Symbol, Is.EqualTo(EnemyIntentSymbol.ConditionalMove));
+                    Assert.That(announced.AttackOnPlayerEntry, Is.True);
+                    Assert.That(announced.TargetPosition, Is.EqualTo(new GridPosition(1, 1)));
+                    presenter.SynchronizeFromState();
+                    Assert.That(display.Views[enemy.ActorId], Is.SameAs(oldMarker));
+                    presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Setup, false);
+                    CommandSubmission rejected = presenter.Coordinator.SubmitAsync(new MoveCommand(Direction.West)).Result;
+                    Assert.That(rejected.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+                    Assert.That(enemy.LockedIntent, Is.SameAs(locked));
+                    Assert.That(display.Views[enemy.ActorId], Is.SameAs(oldMarker));
+                    int resolutions = presenter.Coordinator.ResolutionCount;
+                    int food = runtime.RunState.Food;
+                    presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Modal, true);
+                    Assert.That(presenter.Coordinator.SubmitAsync(new WaitCommand()).Result.Status,
+                        Is.EqualTo(CommandSubmissionStatus.Blocked));
+                    yield return null;
+                    Assert.That(enemy.LockedIntent, Is.SameAs(locked));
+                    Assert.That(runtime.RunState.Food, Is.EqualTo(food));
+                    presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Modal, false);
+                    Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(resolutions));
+
+                    if (scenario == "unknown")
+                    {
+                        Assert.That(runtime.Controller.Resolve(new MoveCommand(Direction.North)).Accepted, Is.True);
+                        Assert.That(display.Views[enemy.ActorId], Is.SameAs(oldMarker));
+                        Task<PresentationDiagnostic> recovery = presenter.Dispatcher.ReplayAsync(new GameEvent[] { new UnknownIntentEvent() });
+                        while (!recovery.IsCompleted)
+                            yield return null;
+                        Assert.That(recovery.Result.Code, Is.EqualTo(PresentationDiagnosticCode.UnknownEvent));
+                        Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(resolutions));
+                    }
+                    else
+                    {
+                        Task<CommandSubmission> pending = presenter.Coordinator.SubmitAsync(new MoveCommand(Direction.North), cancellation.Token);
+                        Assert.That(pending.IsCompleted, Is.False);
+                        Assert.That(presenter.Coordinator.Gate.State, Is.EqualTo(PresentationGateState.Presenting));
+                        Assert.That(display.Projections.Single(), Is.EqualTo(announced));
+                        Assert.That(display.Views[enemy.ActorId], Is.SameAs(oldMarker));
+                        if (scenario != "terminal")
+                        {
+                            Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
+                            Assert.That(enemy.LockedIntent.Kind, Is.EqualTo(EnemyIntentKind.Wait));
+                        }
+                        yield return null;
+                        Assert.That(display.Projections.Single(), Is.EqualTo(announced));
+                        if (scenario == "cancel")
+                            cancellation.Cancel();
+                        if (scenario == "disposed")
+                            presenter.Dispose();
+                        while (!pending.IsCompleted)
+                            yield return null;
+                        Assert.That(pending.IsFaulted, Is.False);
+                        Assert.That(pending.Result.Status, Is.EqualTo(scenario == "cancel" || scenario == "disposed"
+                            ? CommandSubmissionStatus.PresentationFailed : CommandSubmissionStatus.Presented));
+                        Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(resolutions + 1));
+                        Assert.That(presenter.Coordinator.Gate.State, Is.EqualTo(PresentationGateState.Idle));
+                    }
+
+                    Assert.That(runtime.RunState.Food, Is.EqualTo(food - 1));
+                    Assert.That(runtime.RunState.Health, Is.EqualTo(100));
+                    Assert.That(runtime.IsDisposed, Is.False);
+                    if (scenario == "terminal" || scenario == "disposed")
+                    {
+                        Assert.That(display.IsDisposed, Is.True);
+                        Assert.That(display.Views, Is.Empty);
+                        Assert.That(sinks.Outcomes, Is.EqualTo(scenario == "terminal" ? 1 : 0));
+                    }
+                    else
+                    {
+                        Assert.That(display.Projections.Single().Symbol, Is.EqualTo(EnemyIntentSymbol.Wait));
+                        Assert.That(display.Projections.Single().SourcePosition, Is.EqualTo(new GridPosition(1, 1)));
+                        EnemyIntentView currentMarker = display.Views[enemy.ActorId];
+                        Assert.That(currentMarker, Is.Not.SameAs(oldMarker));
+                        Assert.That(owner.transform.childCount, Is.LessThanOrEqualTo(2), "Recovery and completion must not publish twice.");
+                        presenter.SynchronizeFromState();
+                        Assert.That(display.Views[enemy.ActorId], Is.SameAs(currentMarker));
+                        foreach (var entity in runtime.BoardState.GetEntities())
+                        {
+                            Vector3 position = runtime.Views[entity.Id].transform.position;
+                            Assert.That(position.x, Is.EqualTo(entity.Position.X));
+                            Assert.That(position.y, Is.EqualTo(entity.Position.Y));
+                        }
+                    }
+                    Assert.That(diagnostics.Count, Is.EqualTo(scenario == "cancel" || scenario == "unknown" || scenario == "disposed" ? 1 : 0));
+                    TestContext.WriteLine("Replay boundary scenario=" + scenario + "; retained display until boundary; no extra resolution.");
+                }
+                Assert.That(display.IsDisposed, Is.True);
+                yield return null;
+            }
+        }
+
+        private BoardRuntime CreateReplayRuntime(int food = 25)
+        {
+            var run = new RunState("intent-replay-" + runtimes.Count, 12345,
+                new RunStateConfiguration(100, food, 0, "forest.start"));
+            var request = new BoardRequest(run.RunId, run.RunSeed, run.WorldNodeId, run.CurrentDay,
+                run.GetBoardSeed(), "forest", "temperate", 1);
+            var layout = new List<LegacyBoardView>();
+            for (int horizontal = 0; horizontal < 3; horizontal++)
+                for (int vertical = 0; vertical < 3; vertical++)
+                    AddReplayView(layout, LegacyBoardContentKind.Floor, horizontal, vertical);
+            AddReplayView(layout, LegacyBoardContentKind.Player, 0, 0);
+            AddReplayView(layout, LegacyBoardContentKind.Exit, 2, 2);
+            AddReplayView(layout, LegacyBoardContentKind.Enemy, 2, 1, 10);
+            BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(request, run, new GridBounds(0, 0, 2, 2), layout);
+            runtimes.Add(runtime);
+            return runtime;
+        }
+
+        private void AddReplayView(List<LegacyBoardView> layout, LegacyBoardContentKind kind,
+            int horizontal, int vertical, int? damage = null)
+        {
+            var view = new GameObject("Replay " + kind);
+            view.transform.position = new Vector3(horizontal, vertical, 0);
+            objects.Add(view);
+            layout.Add(new LegacyBoardView(view, kind, new GridPosition(horizontal, vertical), damage));
+        }
+
+        private sealed class IntentSinks : IRunHud, ITurnFeedback, IBoardOutcomeSink
+        {
+            public int Outcomes;
+            public void Refresh(int health, int food) { }
+            public void ShowRejection(CommandRejectionCode reason) { }
+            public void ShowEvent(GameEvent gameEvent) { }
+            public bool TryNotify(BoardRequest request, GameEvent outcome)
+            {
+                Outcomes++;
+                return true;
+            }
+        }
+
+        private sealed class UnknownIntentEvent : GameEvent
+        {
+            public override string EventType => "Test.UnknownIntent";
         }
 
         private BoardRuntime CreateIntentRuntime(out ShamblerState enemy)

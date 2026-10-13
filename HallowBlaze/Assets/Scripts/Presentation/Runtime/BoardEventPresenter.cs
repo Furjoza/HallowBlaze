@@ -6,6 +6,7 @@ using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.Turns.Contracts;
+using HallowBlaze.Core.Turns.Resolution;
 using UnityEngine;
 using EntityId = HallowBlaze.Core.Board.Primitives.EntityId;
 
@@ -53,6 +54,10 @@ namespace HallowBlaze.Presentation.Runtime
         private readonly ITurnFeedback feedback;
         private readonly IBoardOutcomeSink outcomes;
         private readonly EnemyAttackPresenter attacks;
+        private readonly EnemyIntentPresenter intents;
+        private readonly Dictionary<EntityId, (EnemyIntent Plan, GridPosition Source)> published =
+            new Dictionary<EntityId, (EnemyIntent, GridPosition)>();
+        private bool disposed;
 
         /// <summary>Composes isolated presentation; the caller synchronizes and releases Setup when ready.</summary>
         /// <param name="runtime">The active runtime; this presenter borrows rather than disposes it.</param>
@@ -61,19 +66,27 @@ namespace HallowBlaze.Presentation.Runtime
         /// <param name="outcomes">Guarded lifecycle sink for the active board.</param>
         /// <param name="diagnostic">Mandatory failure sink for unknown events and controlled faults.</param>
         /// <param name="moveDuration">Finite nonnegative movement duration in unscaled seconds.</param>
+        /// <param name="intents">Optional unbound board-owned display. This presenter binds and closes its
+        /// display lifetime, publishing at setup, recovery and completion without planning. Its GameObject is borrowed.</param>
         public BoardEventPresenter(BoardRuntime runtime, IRunHud hud, ITurnFeedback feedback,
-            IBoardOutcomeSink outcomes, Action<PresentationDiagnostic> diagnostic, float moveDuration = 0.1f)
+            IBoardOutcomeSink outcomes, Action<PresentationDiagnostic> diagnostic, float moveDuration = 0.1f,
+            EnemyIntentPresenter intents = null)
         {
             this.runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             this.hud = hud ?? throw new ArgumentNullException(nameof(hud));
             this.feedback = feedback ?? throw new ArgumentNullException(nameof(feedback));
             this.outcomes = outcomes ?? throw new ArgumentNullException(nameof(outcomes));
+            this.intents = intents;
             if (float.IsNaN(moveDuration) || float.IsInfinity(moveDuration) || moveDuration < 0f)
                 throw new ArgumentOutOfRangeException(nameof(moveDuration));
             MoveDuration = moveDuration;
             attacks = new EnemyAttackPresenter(runtime, hud, feedback, moveDuration);
             Dispatcher = new OrderedEventDispatcher(diagnostic, SynchronizeFromState);
-            Coordinator = new CommandPresentationCoordinator(runtime, new PresentationGate(), Dispatcher, feedback.ShowRejection);
+            Coordinator = new CommandPresentationCoordinator(runtime, new PresentationGate(), Dispatcher,
+                feedback.ShowRejection, result => RefreshIntents());
+            if (intents != null)
+                intents.Bind(runtime.BoardState, () => disposed || runtime.IsDisposed || runtime.Controller.IsTerminal
+                    ? null : runtime.BoardState);
             Dispatcher.Register<EntityMovedEvent>(MoveAsync);
             Dispatcher.Register<EntityWaitedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<InteractionPerformedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
@@ -102,12 +115,17 @@ namespace HallowBlaze.Presentation.Runtime
         /// <summary>
         /// Resynchronizes all surviving registered views and HUD from authoritative state without replaying outcomes.
         /// Removed entities are hidden, existing entities are snapped and activated, and Z is presentation-owned.
-        /// A disposed runtime is not read. Missing views are reported after other views and the HUD are recovered.
+        /// Publishes retained plans without planning; recovery and completion deduplicate the same batch.
+        /// Terminal/disposed lifetimes clear intents, and a disposed runtime is not read.
+        /// Missing views are reported after other views, HUD and intents are recovered.
         /// </summary>
         public void SynchronizeFromState()
         {
-            if (runtime.IsDisposed)
+            if (disposed || runtime.IsDisposed)
+            {
+                CloseIntents();
                 return;
+            }
             var errors = new List<Exception>();
             foreach (var binding in runtime.Views)
             {
@@ -123,8 +141,50 @@ namespace HallowBlaze.Presentation.Runtime
             }
             try { RefreshHud(); }
             catch (Exception error) { errors.Add(error); }
+            try { RefreshIntents(); }
+            catch (Exception error) { errors.Add(error); }
             if (errors.Count != 0)
                 throw new AggregateException("Registered views or HUD could not be fully synchronized.", errors);
+        }
+
+        private void RefreshIntents()
+        {
+            if (ReferenceEquals(intents, null))
+                return;
+            if (disposed || runtime.IsDisposed || runtime.Controller.IsTerminal)
+            {
+                CloseIntents();
+                return;
+            }
+            if (intents == null || intents.IsDisposed)
+                throw new InvalidOperationException("The active board's required intent display is unavailable.");
+            var live = new List<ShamblerState>();
+            var next = new Dictionary<EntityId, (EnemyIntent Plan, GridPosition Source)>();
+            bool unchanged = true;
+            foreach (ShamblerState enemy in runtime.Enemies)
+            {
+                if (!runtime.BoardState.TryGetEntity(enemy.ActorId, out BoardEntityState entity))
+                    continue;
+                live.Add(enemy);
+                next.Add(enemy.ActorId, (enemy.LockedIntent, entity.Position));
+                unchanged &= published.TryGetValue(enemy.ActorId, out var previous) &&
+                    ReferenceEquals(previous.Plan, enemy.LockedIntent) && previous.Source.Equals(entity.Position) &&
+                    intents.Views.TryGetValue(enemy.ActorId, out EnemyIntentView view) &&
+                    view != null && view.gameObject.activeInHierarchy;
+            }
+            if (unchanged && published.Count == next.Count && intents.Views.Count == next.Count)
+                return;
+            intents.Publish(runtime.BoardState, live);
+            published.Clear();
+            foreach (var entry in next)
+                published.Add(entry.Key, entry.Value);
+        }
+
+        private void CloseIntents()
+        {
+            if (intents != null)
+                intents.Dispose();
+            published.Clear();
         }
 
         private async Task MoveAsync(EntityMovedEvent gameEvent, CancellationToken token)
@@ -184,6 +244,7 @@ namespace HallowBlaze.Presentation.Runtime
 
         private Task NotifyOutcome(GameEvent gameEvent)
         {
+            CloseIntents();
             outcomes.TryNotify(runtime.Request, gameEvent);
             return Task.CompletedTask;
         }
@@ -197,11 +258,15 @@ namespace HallowBlaze.Presentation.Runtime
 
         private static Vector3 Position(GridPosition position, float depth) => new Vector3(position.X, position.Y, depth);
 
-        /// <summary>Cancels replay and releases owned attack feedback without destroying the borrowed runtime or its views.</summary>
+        /// <summary>Cancels replay and closes owned attack/intent display lifetimes without destroying the borrowed runtime or views.</summary>
         public void Dispose()
         {
+            if (disposed)
+                return;
+            disposed = true;
             Coordinator.Dispose();
             attacks.Dispose();
+            CloseIntents();
         }
     }
 }
