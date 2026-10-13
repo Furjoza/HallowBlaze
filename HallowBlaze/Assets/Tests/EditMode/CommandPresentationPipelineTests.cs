@@ -90,6 +90,109 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(coordinator.CanSubmit, Is.True);
         }
 
+        [UnityTest]
+        public IEnumerator CompletionHook_RunsOnceAfterReplayBeforeGateRelease()
+        {
+            foreach (string scenario in new[] { "success", "recovery", "callback-failure", "recovery-callback-failure", "cancel-replay", "disposed" })
+            {
+                coordinator.Dispose();
+                trace.Clear();
+                recoveryCount = 0;
+                diagnostic = null;
+                int completions = 0;
+                TurnResult observed = null;
+                bool callbackFails = scenario.Contains("callback-failure");
+                var held = new TaskCompletionSource<bool>();
+                dispatcher = new OrderedEventDispatcher(value => { diagnostic = value; trace.Add("Diagnostic"); },
+                    () => { recoveryCount++; trace.Add("Recover"); });
+                dispatcher.Register<EntityWaitedEvent>((gameEvent, token) => { trace.Add(gameEvent.EventType); return held.Task; });
+                if (scenario != "recovery" && scenario != "recovery-callback-failure")
+                    dispatcher.Register<ActionCostAppliedEvent>((gameEvent, token) => Record(gameEvent));
+                coordinator = new CommandPresentationCoordinator(runtime, gate, dispatcher, value => rejection = value, result =>
+                {
+                    completions++;
+                    observed = result;
+                    Assert.That(gate.State, Is.EqualTo(PresentationGateState.Presenting), scenario);
+                    Assert.That(coordinator.CanSubmit, Is.False, scenario);
+                    Assert.That(coordinator.SubmitAsync(new WaitCommand()).Result.Status, Is.EqualTo(CommandSubmissionStatus.Blocked), scenario);
+                    if (scenario == "recovery" || scenario == "recovery-callback-failure" || scenario == "cancel-replay")
+                        Assert.That(recoveryCount, Is.EqualTo(1), scenario);
+                    trace.Add("Complete");
+                    if (callbackFails)
+                        throw new InvalidOperationException("completion fault");
+                });
+                int beforeFood = runtime.RunState.Food;
+                Assert.That(coordinator.SubmitAsync(null).Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+                Assert.That(coordinator.SubmitAsync(new MoveCommand(Direction.West)).Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+                gate.SetBlocked(PresentationInputBlock.Modal, true);
+                Assert.That(coordinator.SubmitAsync(new WaitCommand()).Result.Status, Is.EqualTo(CommandSubmissionStatus.Blocked));
+                gate.SetBlocked(PresentationInputBlock.Modal, false);
+                using (var canceled = new CancellationTokenSource())
+                {
+                    canceled.Cancel();
+                    Assert.That(coordinator.SubmitAsync(new WaitCommand(), canceled.Token).Result.Status, Is.EqualTo(CommandSubmissionStatus.Canceled));
+                }
+                Assert.That(completions, Is.Zero);
+                Assert.That(runtime.RunState.Food, Is.EqualTo(beforeFood));
+                int resolutionsBefore = coordinator.ResolutionCount;
+                using (var replayCancellation = new CancellationTokenSource())
+                {
+                    Task<CommandSubmission> submission = coordinator.SubmitAsync(new WaitCommand(), replayCancellation.Token);
+                    Assert.That(submission.IsCompleted, Is.False, scenario);
+                    Assert.That(completions, Is.Zero, scenario);
+                    Assert.That(gate.State, Is.EqualTo(PresentationGateState.Presenting), scenario);
+                    CollectionAssert.AreEqual(new[] { "EntityWaited" }, trace, scenario);
+                    if (scenario == "cancel-replay")
+                        replayCancellation.Cancel();
+                    if (scenario == "disposed")
+                        coordinator.Dispose();
+
+                    held.SetResult(true);
+                    while (!submission.IsCompleted)
+                        yield return null;
+
+                    Assert.That(submission.Result.Result.Accepted, Is.True, scenario);
+                    Assert.That(completions, Is.EqualTo(scenario == "disposed" ? 0 : 1), scenario);
+                    if (scenario != "disposed")
+                        Assert.That(observed, Is.SameAs(submission.Result.Result), scenario);
+                    Assert.That(coordinator.ResolutionCount, Is.EqualTo(resolutionsBefore + 1), scenario);
+                    Assert.That(runtime.RunState.Food, Is.EqualTo(beforeFood - 1), scenario);
+                    Assert.That(gate.State, Is.EqualTo(PresentationGateState.Idle), scenario);
+                    Assert.That(coordinator.CanSubmit, Is.EqualTo(scenario != "disposed"), scenario);
+                    if (scenario == "success")
+                    {
+                        Assert.That(submission.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                        CollectionAssert.AreEqual(new[] { "EntityWaited", "ActionCostApplied", "Complete" }, trace);
+                        Assert.That(recoveryCount, Is.Zero);
+                    }
+                    else
+                    {
+                        Assert.That(submission.Result.Status, Is.EqualTo(CommandSubmissionStatus.PresentationFailed), scenario);
+                        Assert.That(submission.Result.Diagnostic, Is.SameAs(diagnostic), scenario);
+                        Assert.That(recoveryCount, Is.EqualTo(scenario == "recovery-callback-failure" ? 2 : 1), scenario);
+                        if (scenario == "callback-failure")
+                        {
+                            Assert.That(diagnostic.Code, Is.EqualTo(PresentationDiagnosticCode.HandlerFailed));
+                            CollectionAssert.AreEqual(new[] { "EntityWaited", "ActionCostApplied", "Complete", "Diagnostic", "Recover" }, trace);
+                        }
+                        else if (scenario == "recovery-callback-failure")
+                        {
+                            Assert.That(diagnostic.Code, Is.EqualTo(PresentationDiagnosticCode.UnknownEvent));
+                            Assert.That(diagnostic.RecoveryErrors, Has.Count.EqualTo(1));
+                            CollectionAssert.AreEqual(new[] { "EntityWaited", "Diagnostic", "Recover", "Complete", "Diagnostic", "Recover" }, trace);
+                        }
+                        else
+                        {
+                            Assert.That(diagnostic.Code, Is.EqualTo(scenario == "recovery" ? PresentationDiagnosticCode.UnknownEvent : PresentationDiagnosticCode.Canceled));
+                            CollectionAssert.AreEqual(scenario == "disposed" ? new[] { "EntityWaited", "Diagnostic", "Recover" } :
+                                new[] { "EntityWaited", "Diagnostic", "Recover", "Complete" }, trace);
+                        }
+                    }
+                }
+                TestContext.WriteLine("Completion scenario=" + scenario + "; callbacks=" + completions + "; recoveries=" + recoveryCount);
+            }
+        }
+
         [TestCase(PresentationInputBlock.Setup)]
         [TestCase(PresentationInputBlock.Modal)]
         [TestCase(PresentationInputBlock.Disabled)]

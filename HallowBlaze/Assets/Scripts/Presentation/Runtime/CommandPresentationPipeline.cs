@@ -244,17 +244,28 @@ namespace HallowBlaze.Presentation.Runtime
         private readonly BoardRuntime runtime;
         private readonly OrderedEventDispatcher dispatcher;
         private readonly Action<CommandRejectionCode> rejected;
+        private readonly Action<TurnResult> completed;
         private readonly CancellationTokenSource lifetime = new CancellationTokenSource();
         private bool disposed;
 
-        /// <summary>Composes the existing runtime/controller with its gate and one event dispatcher.</summary>
+        /// <summary>Composes the existing runtime/controller with its gate, dispatcher, and optional post-replay notification.</summary>
+        /// <param name="runtime">Borrowed sole board runtime and resolver.</param>
+        /// <param name="gate">Submission ownership and independent external input blocks.</param>
+        /// <param name="dispatcher">Ordered replay and controlled recovery owner.</param>
+        /// <param name="rejected">Cost-free domain rejection feedback.</param>
+        /// <param name="completed">
+        /// Optional main-thread callback, once per accepted result after replay or recovery while the gate remains held.
+        /// Receives the exact original result. Rejected/admission/pre-resolution canceled paths and disposed owners do not notify.
+        /// Callback failure diagnoses and recovers without resolving again; the gate is still released in finally.
+        /// </param>
         public CommandPresentationCoordinator(BoardRuntime runtime, PresentationGate gate,
-            OrderedEventDispatcher dispatcher, Action<CommandRejectionCode> rejected)
+            OrderedEventDispatcher dispatcher, Action<CommandRejectionCode> rejected, Action<TurnResult> completed = null)
         {
             this.runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             Gate = gate ?? throw new ArgumentNullException(nameof(gate));
             this.dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
             this.rejected = rejected ?? throw new ArgumentNullException(nameof(rejected));
+            this.completed = completed;
         }
 
         /// <summary>Gets this path's presentation and external-input ownership.</summary>
@@ -322,6 +333,24 @@ namespace HallowBlaze.Presentation.Runtime
                 using (var replayCancellation = CancellationTokenSource.CreateLinkedTokenSource(token, lifetime.Token))
                 {
                     PresentationDiagnostic diagnostic = await dispatcher.ReplayAsync(result.Events, replayCancellation.Token);
+                    if (!disposed && !runtime.IsDisposed && completed != null)
+                    {
+                        try
+                        {
+                            completed(result);
+                        }
+                        catch (Exception error)
+                        {
+                            if (diagnostic == null)
+                                diagnostic = dispatcher.Recover(new PresentationDiagnostic(
+                                    PresentationDiagnosticCode.HandlerFailed, -1, null, error));
+                            else
+                            {
+                                diagnostic.AddRecoveryError(error);
+                                dispatcher.Recover(diagnostic);
+                            }
+                        }
+                    }
                     return new CommandSubmission(diagnostic == null ? CommandSubmissionStatus.Presented :
                         CommandSubmissionStatus.PresentationFailed, result, diagnostic);
                 }
