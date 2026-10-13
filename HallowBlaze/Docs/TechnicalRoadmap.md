@@ -1,6 +1,6 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1-8 accepted; M3.9.9 next; route-leg amendments accepted; M9 deferred**
+> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8 and M3.9.1-9 accepted; M3.9.10 next; route-leg amendments accepted; M9 deferred**
 > Data ostatniej weryfikacji: 2026-10-09
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
@@ -3147,7 +3147,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9.9` - Provide a matching accessible intent legend
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-09; legend PlayMode 1/1 passed for desktop/narrow and explicit resize, independent review PASS. English prototype labels follow the existing atlas UI. Legend glyphs bake the accepted renderer geometry into Canvas meshes; the labeled Enemy intents control only toggles visibility. Desktop fixture 1280x720 protects (20,20,860,680); narrow fixture 360x640 protects (12,480,336,148). Fixed 74-pixel rows, 48-pixel glyphs, wrapped 14-point text; no production attachment.
 **Priority:** P0
 **Related contract:** sections 11.3.1 and 18.
 
