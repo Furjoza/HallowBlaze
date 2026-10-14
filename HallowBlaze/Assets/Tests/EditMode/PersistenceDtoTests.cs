@@ -6,6 +6,9 @@ using HallowBlaze.Core.Persistence.Dto;
 using HallowBlaze.Core.Persistence.Mapping;
 using HallowBlaze.Core.State;
 using HallowBlaze.Core.Session;
+using HallowBlaze.Core.Random;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine.TestTools;
 
@@ -88,10 +91,10 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
-        public void TravelRunWriter_EmitsCompleteV2StableState()
+        public void TravelRunWriter_EmitsCompleteV3StableState()
         {
             string json = PersistenceJsonSerializer.SerializeTravelRun(TravelBoundary("pending"));
-            Assert.That(json, Does.Contain("\"schemaVersion\": 2").And.Contain("\"introState\": \"pending\""));
+            Assert.That(json, Does.Contain("\"schemaVersion\": 3").And.Contain("\"introState\": \"pending\""));
             Assert.That(json, Does.Not.Contain("\"route\":").And.Not.Contain("\"boardSeed\":").And.Not.Contain("\"currentDay\":"));
             AssertTravelEquals(TravelBoundary("pending"), PersistenceJsonSerializer.DeserializeTravelRun(json));
             Assert.That(RunStateDto.CurrentSchemaVersion, Is.EqualTo(1));
@@ -134,18 +137,74 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
-        public void DefaultRunSchema_UsesAcceptedV2WithoutProfileChange()
+        public void DefaultRunSchema_UsesV3RngIdentityWithoutProfileChange()
         {
             ProfileState profile = new ProfileState("profile", "world.test", 1);
             profile.AdvanceNodeDiscovery("a", NodeDiscoveryState.Visited);
             string profileJson = PersistenceJsonSerializer.SerializeProfile(profile);
             RunState run = TravelBoundary("intermediate");
             string runJson = PersistenceJsonSerializer.SerializeRun(run);
-            Assert.That(runJson, Does.Contain("\"schemaVersion\": 2"));
+            Assert.That(runJson, Does.Contain("\"schemaVersion\": 3"));
             AssertTravelEquals(run, PersistenceJsonSerializer.DeserializeRun(runJson));
             Assert.That(PersistenceJsonSerializer.SerializeProfile(profile), Is.EqualTo(profileJson));
             Assert.That(ProfileStateDto.CurrentSchemaVersion, Is.EqualTo(2));
             Assert.That(RunStateDto.CurrentSchemaVersion, Is.EqualTo(1));
+        }
+
+        [TestCase("checkpoint")]
+        [TestCase("pending")]
+        [TestCase("consumed")]
+        [TestCase("intermediate")]
+        [TestCase("complete")]
+        [TestCase("dead")]
+        [TestCase("won")]
+        public void RunV3RoundTripAndV2MigrationPreserveTheExplicitRngIdentity(string boundary)
+        {
+            RunState original = TravelBoundary(boundary);
+            RunState current = PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(original));
+            AssertTravelEquals(original, current);
+            Assert.That(current.RandomAlgorithmId, Is.EqualTo(RandomStreamProvider.AlgorithmId));
+            Assert.That(current.RandomAlgorithmVersion, Is.EqualTo(RandomStreamProvider.AlgorithmVersion));
+            string oldJson = JsonConvert.SerializeObject(RunStateV2Mapper.ToDto(original));
+            RunState migrated = PersistenceJsonSerializer.DeserializeRun(oldJson);
+            AssertTravelEquals(original, migrated);
+            Assert.That(migrated.RandomAlgorithmId, Is.EqualTo(RunState.LegacyRandomAlgorithmId));
+            Assert.That(migrated.RandomAlgorithmVersion, Is.EqualTo(RunState.LegacyRandomAlgorithmVersion));
+            RunState savedAgain = PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(migrated));
+            Assert.That(savedAgain.RandomAlgorithmId, Is.EqualTo(migrated.RandomAlgorithmId));
+            Assert.That(savedAgain.RandomAlgorithmVersion, Is.EqualTo(migrated.RandomAlgorithmVersion));
+            AssertTravelEquals(migrated, savedAgain);
+            migrated.Reset("fresh", 4, new RunStateConfiguration(100, 100, 0, "a"));
+            Assert.That(migrated.RandomAlgorithmId, Is.EqualTo(RandomStreamProvider.AlgorithmId));
+            Assert.That(migrated.RandomAlgorithmVersion, Is.EqualTo(RandomStreamProvider.AlgorithmVersion));
+        }
+
+        [Test]
+        public void RunV3RejectsMissingCoercedAndUnsupportedRngMetadata()
+        {
+            JObject document = JObject.Parse(PersistenceJsonSerializer.SerializeRun(TravelBoundary("pending")));
+            foreach (string field in new[] { "randomAlgorithmId", "randomAlgorithmVersion" })
+            {
+                JObject missing = (JObject)document.DeepClone();
+                missing.Remove(field);
+                Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeRun(missing.ToString()));
+                missing[field] = JValue.CreateNull();
+                Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeRun(missing.ToString()));
+            }
+            foreach (JToken invalid in new JToken[] { new JValue(0), new JValue(-1), new JValue(2), new JValue("1"), new JValue(1.25) })
+            {
+                JObject changed = (JObject)document.DeepClone();
+                changed["randomAlgorithmVersion"] = invalid;
+                Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeRun(changed.ToString()));
+            }
+            foreach (JToken invalid in new JToken[] { new JValue("unknown"), new JValue(""), new JValue(1) })
+            {
+                JObject changed = (JObject)document.DeepClone();
+                changed["randomAlgorithmId"] = invalid;
+                Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeRun(changed.ToString()));
+            }
+            Assert.That(RunStateV2Dto.CurrentSchemaVersion, Is.EqualTo(2));
+            Assert.That(RunStateV3Dto.CurrentSchemaVersion, Is.EqualTo(3));
         }
 
         [TestCase("runId", "\"run.test\"", "123")]
@@ -477,7 +536,7 @@ namespace HallowBlaze.Tests.EditMode
         {
             string futureDocument = profile
                 ? "{\"schemaVersion\":3}"
-                : "{\"schemaVersion\":3}";
+                : "{\"schemaVersion\":4}";
 
             PersistenceDataException exception = Assert.Throws<PersistenceDataException>(() =>
             {

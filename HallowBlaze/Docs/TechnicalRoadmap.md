@@ -4565,13 +4565,13 @@ M3 is complete when each input creates at most one command, rejected actions are
 
 ## `M4.1` — Niezależne strumienie deterministycznego RNG
 
-**Status:** `Planned`  
+**Status:** `Done` - accepted 2026-10-14 with owner-authorized Lead-only implementation, validation, and self-review. No independent Reviewer verdict is claimed.
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcja 16.
 
 **Rationale:** Globalny `UnityEngine.Random` sprawia, że dodatkowy efekt kosmetyczny może zmienić układ następnej planszy. Nazwane strumienie izolują świat, run, planszę, puzzle i kosmetykę.
 
-**Obecne zachowanie:** Gameplay i generacja korzystają z globalnego RNG Unity.
+**Obecne zachowanie:** New runs use versioned PCG32 layout streams and separately addressed board cosmetics. Schema v1/v2 runs retain their original seeded layout adapter through explicit migration. Sound variation remains cosmetic-only global Unity RNG.
 
 **Oczekiwany rezultat:** Czysty provider tworzy powtarzalne strumienie z root seed oraz stabilnego stream ID; logika domenowa nie wywołuje `UnityEngine.Random`. Gameplay streams include stable-addressed `route-supply`, `board-layout(edgeId, segmentId)`, and authored feature/source placement; cosmetic randomness remains isolated.
 
@@ -4590,6 +4590,48 @@ M3 is complete when each input creates at most one command, rejected actions are
 **Wpływ na save i kompatybilność:** Run DTO przechowuje root seed oraz identyfikatory/wersję algorytmu niezbędne do odtworzenia granicy planszy.
 
 **Wymagany handoff:** Schemat derivation oraz repo-wide lista pozostałych dozwolonych wywołań `UnityEngine.Random`.
+
+### Acceptance (2026-10-14)
+
+The owner explicitly assigned this task to the Lead alone because Developer and Reviewer were unavailable. Implementation, validation, and final self-review use that task-specific authorization; it does not waive review for future tasks. Clean baseline: Git root `D:/Repos/HallowBlaze`, branch `M3/12JourneyIsTheWay`, `HEAD` `75eadf0ca0106b5b7ed9845bdf541cbfec385c7e`. No branch, staging, commit, or push was performed.
+
+`HallowBlaze.Core.Random` is an engine-free assembly. `RandomStreamProvider` creates caller-owned cursors; recreating the same ID restarts rather than sharing mutable state. Algorithm `hallowblaze.pcg32`, version `1`, freezes PCG32 XSH-RR, initialization, stream encoding, and seed derivation. `DebugLabel`, `State`, `Increment`, and raw `DrawCount` expose diagnostics without introducing mid-board persistence or portable replay.
+
+Derivation is frozen as follows:
+
+```text
+StreamId = concatenate UTF-8-byte-length ":" stable-part for purpose and each ordered identity part
+seed     = FNV-1a64(frame("hallowblaze.random.seed.v1"), frame(algorithm ID), Int32(version), Int32(root), frame(StreamId))
+sequence = FNV-1a64(frame("hallowblaze.random.sequence.v1"), frame(algorithm ID), Int32(version), Int32(root), frame(StreamId))
+increment = (sequence << 1) | 1
+PCG initialization: state = 0; step; state += seed; step
+```
+
+`frame` uses an Int32 UTF-8 byte length followed by the bytes. Binary Int32 fields are little-endian; identity numbers use invariant decimal formatting; hash and PCG arithmetic wrap at 64 bits. FNV-1a64 uses offset `14695981039346656037` and prime `1099511628211`; PCG uses multiplier `6364136223846793005`. Initialization draws are excluded from `DrawCount`. Independent BigInteger reference vectors freeze positive and negative root-seed cases.
+
+| Stream responsibility | Stable identity |
+| --- | --- |
+| `board-layout` / `cosmetic-board` | purpose, segment mode, run, leg, edge, segment, day, configuration ID/version, frozen M3 board seed |
+| Checkpoint compatibility | purpose, checkpoint mode, run, reached node, day, frozen checkpoint seed |
+| `route-supply` | purpose, run, leg, edge; intentionally leg-wide, not a node/day or segment-index key |
+| `authored-placement` | purpose, full layout ID, authored feature ID, source ID |
+| World/profile, run, puzzle | separately framed purpose and stable owner/content IDs through the same provider |
+
+Route supply and authored placement have tested identity APIs; their content/allocation algorithms remain in later M4 cards. Different segments remain distinct even when node/day and the 32-bit board seed match. Existing M3 FNV-1a32 address/checkpoint seed encodings and fixed vectors are unchanged.
+
+`NextInt` uses `[minimum, maximum)`; `NextIntInclusive` includes both bounds and supports the complete Int32 range. Rejection sampling removes modulo bias. Invalid ranges do not consume a draw. `NextUnitDouble` returns a 53-bit value in `[0, 1)` with two raw draws. These contracts are documented at the owning APIs.
+
+Run schema `3` persists the root seed plus `randomAlgorithmId` and `randomAlgorithmVersion`, together with existing stable travel inputs. Readers accept v1/v2/v3; v1/v2 import `hallowblaze.legacy-system-random`, version `1`, and preserve the original `System.Random(BoardSeed)` layout draw order after re-saving as v3. Reset/new run selects current PCG32. Missing, coerced, and unknown algorithm metadata is rejected; future run schemas cannot downgrade through an older backup. Loading does not rewrite old files, and profile schema/data is unchanged.
+
+Remaining permitted global Unity RNG use in project-authored C#:
+
+- `Assets/Scripts/SoundManager.cs:82-83`: cosmetic clip/pitch selection only; neither result enters domain or generation.
+- `Assets/Tests/PlayMode/BoardRuntimeStartupTests.cs`: the RNG regression saves/restores global state, seeds it, and consumes extra draws to prove production generation is unaffected.
+- `Assets/Tests/PlayMode/M1OwnershipPersistenceContractPlayModeTests.cs`: existing isolation/Continue tests save/restore global state and vary it between board recreations.
+
+Production `BoardManager` and domain code contain no global Unity RNG calls. Its independent board-cosmetic stream also makes full view layout repeatable while cosmetic prefab changes leave authoritative entities unchanged.
+
+Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-enabled PlayMode **111/111**, with zero failed, skipped, or inconclusive cases. Coverage includes fixed vectors, unbiased boundary/rejection checks, independent stream scopes, all stable-boundary migrations/resets/corruption checks, M3 explicit command scenarios, production layout/cosmetic isolation, preserved legacy placement, real Main-scene lifecycle, and repeated Continue. XML/logs remain outside the project. Automated scene smoke passed; no user-run manual smoke or independent review is claimed. Scenes, prefabs, packages, settings, and protected agent configuration are unchanged.
 
 ---
 
@@ -6053,7 +6095,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. start M4 with `M4.1` as a separately assigned task from a clean committed baseline, then follow the existing dependency order; the M3.12 review waiver does not extend to later tasks;
+1. continue M4 with `M4.2` after the accepted M4.1 changes are committed and a new clean baseline is established, then follow the existing dependency order; the M3.12 and M4.1 review authorizations do not extend to later tasks;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6062,6 +6104,8 @@ The next safe sequence is:
 ### Rationale - why M4 can begin
 
 Accepted M3.6 establishes one production gameplay authority, M3.7/M3.8 provide deterministic retained enemy behavior, M3.9 is owner-approved for PoC, and reduced M3.10 protects concrete turn scenarios. Accepted M3.11 supplies stable traversal/segment identity and compatible save state. Accepted M3.12 activates multi-board travel with the durable intro contract, providing the production address boundaries that M4 consumes. Its missing independent review is explicitly waived for this task only. Deferred portable replay is not a prerequisite.
+
+M4.1 is accepted on 2026-10-14 with versioned independent RNG, compatible run schema v3, and full EditMode `657/657` / graphics PlayMode `111/111`. The owner authorized Lead-only implementation and acceptance for M4.1; no independent review is claimed. M4.2 is the next planned task, not part of this implementation.
 
 # Zasada aktualizacji roadmapy
 

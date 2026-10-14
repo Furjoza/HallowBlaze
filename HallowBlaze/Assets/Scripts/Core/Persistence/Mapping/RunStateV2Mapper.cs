@@ -58,13 +58,20 @@ namespace HallowBlaze.Core.Persistence.Mapping
             return dto;
         }
 
-        /// <summary>Validates before publishing an independent run; malformed fields return controlled diagnostics.</summary>
+        /// <summary>Reads historical v2 travel with its original layout RNG and controlled corruption diagnostics.</summary>
         /// <exception cref="PersistenceDataException">A field or cross-owner travel invariant is invalid.</exception>
         public static RunState FromDto(RunStateV2Dto dto)
         {
+            return FromDto(dto, RunStateV2Dto.CurrentSchemaVersion,
+                RunState.LegacyRandomAlgorithmId, RunState.LegacyRandomAlgorithmVersion);
+        }
+
+        internal static RunState FromDto(RunStateV2Dto dto, int schemaVersion,
+            string randomAlgorithmId, int randomAlgorithmVersion)
+        {
             if (dto == null)
                 throw new ArgumentNullException(nameof(dto));
-            DtoValidation.RequireCurrentSchemaVersion(dto.SchemaVersion, RunStateV2Dto.CurrentSchemaVersion);
+            DtoValidation.RequireCurrentSchemaVersion(dto.SchemaVersion, schemaVersion);
             DtoValidation.RequireNonNegative(dto.CompletedDayCount, "completedDayCount");
             DtoValidation.RequireNonNegative(dto.TraversalSequence, "traversalSequence");
             DtoValidation.RequireStableId(dto.ReachedCheckpointNodeId, "reachedCheckpointNodeId");
@@ -73,7 +80,7 @@ namespace HallowBlaze.Core.Persistence.Mapping
                 RunId = dto.RunId, RunSeed = dto.RunSeed, Health = dto.Health, Food = dto.Food, Status = dto.Status,
                 ToolSlots = dto.ToolSlots, CurrentDay = dto.CompletedDayCount, WorldNodeId = dto.ReachedCheckpointNodeId,
                 Route = Array.Empty<string>()
-            });
+            }, randomAlgorithmId, randomAlgorithmVersion);
             var history = new List<TravelHistoryEntry>();
             TravelHistoryDto[] entries = DtoValidation.RequireArray(dto.TravelHistory, "travelHistory");
             for (int index = 0; index < entries.Length; index++)

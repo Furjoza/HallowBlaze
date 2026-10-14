@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text;
+using HallowBlaze.Core.Random;
 
 namespace HallowBlaze.Core.State
 {
@@ -13,9 +14,15 @@ namespace HallowBlaze.Core.State
         Won
     }
 
+    /// <summary>Owns one run's resources, travel and persisted RNG identity, independently of profile knowledge.</summary>
     public sealed class RunState
     {
         public const int ToolSlotCount = 2;
+
+        /// <summary>Identifies the seeded System.Random layout used by schema v1/v2 saves.</summary>
+        public const string LegacyRandomAlgorithmId = "hallowblaze.legacy-system-random";
+        /// <summary>Gets the legacy adapter version; migration never silently upgrades an existing layout.</summary>
+        public const int LegacyRandomAlgorithmVersion = 1;
 
         private const string BoardSeedDomain = "hallowblaze.board-layout.v1";
         private const uint FnvOffsetBasis = 2166136261;
@@ -26,15 +33,33 @@ namespace HallowBlaze.Core.State
         private readonly ToolSlotState[] toolSlots = new ToolSlotState[ToolSlotCount];
         private readonly ReadOnlyCollection<ToolSlotState> toolSlotsView;
 
-        public RunState(string runId, int runSeed, RunStateConfiguration configuration)
+        /// <summary>Creates a run; new runs use PCG32 while old saves may explicitly retain legacy generation.</summary>
+        /// <param name="runId">The stable run identity.</param>
+        /// <param name="runSeed">The persisted root seed.</param>
+        /// <param name="configuration">Initial resources and reached checkpoint.</param>
+        /// <param name="randomAlgorithmId">The supported layout RNG identifier, never inferred from a board seed.</param>
+        /// <param name="randomAlgorithmVersion">The supported generator/derivation version.</param>
+        /// <exception cref="ArgumentException">The algorithm identity or run ID is unsupported.</exception>
+        public RunState(string runId, int runSeed, RunStateConfiguration configuration,
+            string randomAlgorithmId = RandomStreamProvider.AlgorithmId,
+            int randomAlgorithmVersion = RandomStreamProvider.AlgorithmVersion)
         {
+            if (!RandomStreamProvider.IsSupported(randomAlgorithmId, randomAlgorithmVersion) &&
+                !(randomAlgorithmId == LegacyRandomAlgorithmId && randomAlgorithmVersion == LegacyRandomAlgorithmVersion))
+                throw new ArgumentException("Unsupported run random algorithm identity.", nameof(randomAlgorithmId));
             historyView = travelHistory.AsReadOnly();
             toolSlotsView = Array.AsReadOnly(toolSlots);
             Reset(runId, runSeed, configuration);
+            RandomAlgorithmId = randomAlgorithmId;
+            RandomAlgorithmVersion = randomAlgorithmVersion;
         }
 
         public string RunId { get; private set; }
         public int RunSeed { get; private set; }
+        /// <summary>Gets the persisted layout algorithm; legacy saves retain their original adapter.</summary>
+        public string RandomAlgorithmId { get; private set; }
+        /// <summary>Gets the persisted derivation and generator version needed to recreate a board boundary.</summary>
+        public int RandomAlgorithmVersion { get; private set; }
         /// <summary>Gets the legacy checkpoint day, or the active leg's one-based displayed day.</summary>
         public int CurrentDay => ActiveLeg?.DayNumber ?? CompletedDayCount;
         /// <summary>Gets completed days; intermediate segments never increment it.</summary>
@@ -56,7 +81,7 @@ namespace HallowBlaze.Core.State
         /// <summary>Gets a detached node-only compatibility projection of structured history.</summary>
         public IReadOnlyList<string> Route => travelHistory.ConvertAll(entry => entry.ToNodeId).AsReadOnly();
 
-        /// <summary>Resets run-owned resources, tools and travel without touching profile knowledge.</summary>
+        /// <summary>Starts a fresh run with current RNG, resources, tools and travel without touching profile knowledge.</summary>
         public void Reset(string runId, int runSeed, RunStateConfiguration configuration)
         {
             ValidateStableId(runId, nameof(runId));
@@ -65,6 +90,8 @@ namespace HallowBlaze.Core.State
 
             RunId = runId;
             RunSeed = runSeed;
+            RandomAlgorithmId = RandomStreamProvider.AlgorithmId;
+            RandomAlgorithmVersion = RandomStreamProvider.AlgorithmVersion;
             CompletedDayCount = configuration.InitialDay;
             ActiveLeg = null;
             TraversalSequence = 0;

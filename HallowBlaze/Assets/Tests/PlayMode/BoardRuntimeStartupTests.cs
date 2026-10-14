@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 using HallowBlaze.Core.Board.Primitives;
+using HallowBlaze.Core.Persistence;
 using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
@@ -93,6 +94,101 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(viewPosition.y, Is.EqualTo(entity.Position.Y));
             }
 
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator AddressedRngRecreatesFullLayoutAfterCosmeticDrawsAndSavedContinue()
+        {
+            UnityEngine.Random.State previousRandom = UnityEngine.Random.state;
+            try
+            {
+                Component manager = CreateBoardManager();
+                SetField(manager, "columns", 8);
+                SetField(manager, "rows", 8);
+                SetCount(manager, "wallCount", 5, 9);
+                SetCount(manager, "foodCount", 1, 5);
+                SetCount(manager, "buriedCount", 0, 1);
+                SetCount(manager, "aidCount", 0, 1);
+                SetField(manager, "floorTiles", new[] { CreateObject("Floor A", 0, 0), CreateObject("Floor B", 0, 0) });
+                SetField(manager, "outerWallTiles", new[] { CreateObject("Outer A", 0, 0), CreateObject("Outer B", 0, 0) });
+                RunState run = CreateRun();
+                run.StartLeg("edge", run.WorldNodeId, "destination", new[]
+                {
+                    new RouteSegmentState("segment.1", "legacy.board.v1", 1),
+                    new RouteSegmentState("segment.2", "legacy.board.v1", 1)
+                });
+                run.TryConsumeIntro(run.ActiveLeg.LegId);
+                var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed,
+                    run.WorldNodeId, "forest", "temperate", 1);
+                GameObject player = CreateObject("RNG Player", 0, 0);
+                UnityEngine.Random.InitState(101);
+                UnityEngine.Random.State beforeSetup = UnityEngine.Random.state;
+                BoardRuntime first = InvokeSetup(manager, request, run, player);
+                Assert.That(UnityEngine.Random.state, Is.EqualTo(beforeSetup), "Generation must not consume global RNG.");
+                string[] baseline = GeneratedLayout(manager);
+                string[] authoritative = GameplayLayout(first);
+                for (int draw = 0; draw < 200; draw++)
+                    UnityEngine.Random.Range(0, 1000);
+                BoardRuntime second = InvokeSetup(manager, request, run, player);
+                Assert.That(GeneratedLayout(manager), Is.EqualTo(baseline));
+                Assert.That(GameplayLayout(second), Is.EqualTo(authoritative));
+                SetField(manager, "floorTiles", new[] { CreateObject("Additional Cosmetic Variant", 0, 0) });
+                BoardRuntime alteredCosmetics = InvokeSetup(manager, request, run, player);
+                Assert.That(GameplayLayout(alteredCosmetics), Is.EqualTo(authoritative),
+                    "Changing floor choices must not consume the gameplay stream.");
+                SetField(manager, "floorTiles", new[] { CreateObject("Floor A", 0, 0), CreateObject("Floor B", 0, 0) });
+                RunState restored = PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(run));
+                var continued = new BoardRequest(BoardAddressFactory.CreateFromState(restored), restored.RunSeed,
+                    restored.WorldNodeId, "forest", "temperate", 1);
+                Assert.That(continued.Address, Is.EqualTo(request.Address));
+                BoardRuntime resumed = InvokeSetup(manager, continued, restored, player);
+                Assert.That(GeneratedLayout(manager), Is.EqualTo(baseline));
+                Assert.That(GameplayLayout(resumed), Is.EqualTo(authoritative));
+                yield return null;
+            }
+            finally
+            {
+                UnityEngine.Random.state = previousRandom;
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator LegacyRngPreservesSeededPlacementAfterV3RoundTrip()
+        {
+            Component manager = CreateBoardManager();
+            SetField(manager, "columns", 8);
+            SetField(manager, "rows", 8);
+            SetCount(manager, "foodCount", 3, 3);
+            SetField(manager, "groundFoodTiles", new[] { CreateObject("Legacy Food", 0, 0) });
+            RunState run = new RunState("legacy-layout", 54321,
+                new RunStateConfiguration(100, 100, 0, "forest.start"),
+                RunState.LegacyRandomAlgorithmId, RunState.LegacyRandomAlgorithmVersion);
+            BoardRequest request = CreateRequest(run);
+            var reference = new System.Random(request.BoardSeed);
+            var available = new List<GridPosition>();
+            for (int column = 1; column < 7; column++)
+                for (int row = 1; row < 7; row++)
+                    available.Add(new GridPosition(column, row));
+            reference.Next(0, 1);
+            reference.Next(3, 4);
+            var expected = new List<GridPosition>();
+            for (int index = 0; index < 3; index++)
+            {
+                int selected = reference.Next(0, available.Count);
+                expected.Add(available[selected]);
+                available.RemoveAt(selected);
+                reference.Next(0, 1);
+            }
+            GameObject player = CreateObject("Legacy Player", 0, 0);
+            foreach (RunState boundary in new[] { run,
+                PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(run)) })
+            {
+                BoardRuntime runtime = InvokeSetup(manager, request, boundary, player);
+                Assert.That(runtime.BoardState.GetEntities()
+                    .Where(entity => runtime.Views[entity.Id].name.StartsWith("Legacy Food", StringComparison.Ordinal))
+                    .Select(entity => entity.Position), Is.EquivalentTo(expected));
+            }
             yield return null;
         }
 
@@ -901,6 +997,20 @@ namespace HallowBlaze.Tests.PlayMode
             SetField(manager, "enemyTiles", new[] { unused });
             SetField(manager, "exit", exit);
             return manager;
+        }
+
+        private string[] GeneratedLayout(Component manager)
+        {
+            Transform holder = (Transform)boardManagerType.GetField("boardHolder",
+                BindingFlags.Instance | BindingFlags.NonPublic).GetValue(manager);
+            return holder.Cast<Transform>().Select(view => view.name + ":" + (int)view.position.x + ":" + (int)view.position.y)
+                .OrderBy(value => value, StringComparer.Ordinal).ToArray();
+        }
+
+        private static string[] GameplayLayout(BoardRuntime runtime)
+        {
+            return runtime.BoardState.GetEntities().Select(entity => entity.Id + ":" + entity.Definition.Layer + ":" + entity.Position)
+                .OrderBy(value => value, StringComparer.Ordinal).ToArray();
         }
 
         private BoardRuntime InvokeSetup(

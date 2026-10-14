@@ -2,6 +2,7 @@
     "name": "HallowBlaze.Core.Persistence",
     "rootNamespace": "HallowBlaze.Core.Persistence",
     "references": [
+        "HallowBlaze.Core.Random",
         "HallowBlaze.Core.State",
         "Unity.Newtonsoft.Json"
     ],
