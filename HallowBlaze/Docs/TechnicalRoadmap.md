@@ -3339,9 +3339,25 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ---
 
+## `M3.9.R2` - Render intent markers above production board layers
+
+**Status:** `Done` - accepted 2026-10-12 after direct Lead implementation without Developer and independent Reviewer PASS. All intent geometry uses the existing Units sorting layer with order 20, above production floor and ordinary actor sprites. The reviewed code matches the graphics-validated candidate; no gameplay or project-layer configuration was changed.
+
+**Scope:** Assign all intent glyph, badge, source cue and source link renderers to the existing `Units` sorting layer with order 20, above ordinary actor sprites. Add a real camera-pixel regression to the existing intent fixture; preserve action geometry, publication timing and gameplay state.
+
+**Allowed file area:** `Assets/Scripts/Presentation/Runtime/EnemyIntentView.cs`, existing `Assets/Tests/PlayMode/EnemyIntentPresentationTests.cs`; Lead status and the existing readability report only.
+
+**Acceptance criteria:** Every supported symbol, the conditional badge and source associations produce visible pixels over opaque artwork using the production Floor/Units layers. A board-only control must not satisfy the pixel check. No scene, prefab, layer configuration, planner, resolver, save or legend changes.
+
+**Validation:** `Markers_RenderAboveProductionBoardLayers` first failed with zero visible Move pixels, then passed 1/1 after the sorting-layer repair. Graphics-enabled Unity validation verifies all five distinct rendered glyphs, the conditional badge and source cue, with a negative board-only control. Full intent fixture 30/30 and startup fixture 8/8 passed; independent Reviewer PASS completed. This test requires a graphics device and must not run with `-nographics`.
+
+**Readability impact:** Pixel visibility is mechanical evidence, not human comprehension. `M3.9.14` remains blocked pending fresh production smoke and recorded human predictions.
+
+---
+
 ## `M3.9.14` - Lead-owned intent readability gate
 
-**Status:** `Blocked` - updated 2026-10-12. Pipeline connectivity was restored; the owner's production smoke found a legend-layout exception leaving `New Game` on `Day: 1`, now covered by separately accepted repair `M3.9.R1`. A fresh production smoke, grayscale/animation-disabled captures and human predictions remain required. The [Lead-owned report](Validation/M3.9IntentReadability.md) records the observed failure, mechanical repair evidence, zero recorded prediction participants and explicit resume criteria; no manual PASS or umbrella acceptance is claimed.
+**Status:** `Blocked` - updated 2026-10-12. Startup layout repair `M3.9.R1` and marker sorting-layer repair `M3.9.R2` are separately accepted. A fresh production smoke, grayscale/animation-disabled captures and human predictions remain required. The [Lead-owned report](Validation/M3.9IntentReadability.md) separates the observed failures from mechanical repair evidence and records zero prediction participants; no manual PASS or umbrella acceptance is claimed.
 **Priority:** P0
 **Related contract:** sections 18 and the intent gate in section 22.
 

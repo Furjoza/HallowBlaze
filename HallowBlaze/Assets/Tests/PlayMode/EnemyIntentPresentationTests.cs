@@ -84,6 +84,7 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(line.startColor, Is.EqualTo(Color.white));
                     Assert.That(line.endColor, Is.EqualTo(Color.white));
                     Assert.That(line.widthMultiplier, Is.EqualTo(EnemyIntentView.StrokeWidth));
+                    Assert.That(line.sortingLayerName, Is.EqualTo(EnemyIntentView.GlyphSortingLayer));
                     Assert.That(line.sortingOrder, Is.EqualTo(EnemyIntentView.GlyphSortingOrder));
                     Assert.That(line.positionCount, Is.GreaterThanOrEqualTo(2));
                     for (int index = 0; index < line.positionCount; index++)
@@ -118,6 +119,109 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(view.Projection, Is.SameAs(previous));
             Assert.That(GeometrySignature(view), Is.EqualTo(previousGeometry));
             Assert.That(signatures.Count, Is.EqualTo(5));
+        }
+
+        /// <summary>Actual camera pixels expose every glyph, conditional badge and source cue above opaque production board layers.</summary>
+        [Test]
+        public void Markers_RenderAboveProductionBoardLayers()
+        {
+            Assert.That(SystemInfo.graphicsDeviceType, Is.Not.EqualTo(UnityEngine.Rendering.GraphicsDeviceType.Null),
+                "This visibility regression requires a graphics device, not -nographics.");
+            var cameraObject = new GameObject("Intent pixel camera");
+            var floorObject = new GameObject("Opaque production floor");
+            var unitObject = new GameObject("Opaque production unit");
+            var instance = new GameObject("Intent pixel marker");
+            objects.AddRange(new[] { cameraObject, floorObject, unitObject, instance });
+            Camera camera = cameraObject.AddComponent<Camera>();
+            camera.enabled = false;
+            camera.orthographic = true;
+            camera.orthographicSize = 1.5f;
+            camera.aspect = 1;
+            camera.transform.position = new Vector3(0, -0.5f, -10);
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
+            camera.cullingMask = 1 << 31;
+            Sprite sprite = Sprite.Create(Texture2D.whiteTexture,
+                new Rect(0, 0, Texture2D.whiteTexture.width, Texture2D.whiteTexture.height),
+                new Vector2(0.5f, 0.5f), Texture2D.whiteTexture.width);
+            var target = new RenderTexture(384, 384, 24, RenderTextureFormat.ARGB32);
+            var pixels = new Texture2D(384, 384, TextureFormat.RGBA32, false);
+            RenderTexture previousTarget = RenderTexture.active;
+            try
+            {
+                foreach (GameObject background in new[] { floorObject, unitObject })
+                {
+                    background.layer = 31;
+                    background.transform.position = new Vector3(0, -0.5f, 0);
+                    background.transform.localScale = new Vector3(3, 3, 1);
+                    SpriteRenderer renderer = background.AddComponent<SpriteRenderer>();
+                    renderer.sprite = sprite;
+                    renderer.sortingLayerName = background == floorObject ? "Floor" : "Units";
+                    renderer.color = background == floorObject ? new Color32(20, 40, 60, 255) : new Color32(90, 25, 25, 255);
+                }
+                camera.targetTexture = target;
+                target.Create();
+                EnemyIntentView view = instance.AddComponent<EnemyIntentView>();
+                var signatures = new HashSet<string>();
+                foreach (EnemyIntentSymbol symbol in Enum.GetValues(typeof(EnemyIntentSymbol)))
+                {
+                    var source = symbol == EnemyIntentSymbol.Wait ? new GridPosition(0, 0) : new GridPosition(0, -1);
+                    view.Show(EnemyIntentProjection.CreateExample(new EntityId(1), source, symbol,
+                        symbol == EnemyIntentSymbol.Wait ? (GridPosition?)null : new GridPosition(0, 0),
+                        symbol == EnemyIntentSymbol.ConditionalMove || symbol == EnemyIntentSymbol.Attack ? (EntityId?)new EntityId(2) : null));
+                    foreach (Transform child in instance.GetComponentsInChildren<Transform>(true))
+                        child.gameObject.layer = 31;
+                    camera.Render();
+                    RenderTexture.active = target;
+                    pixels.ReadPixels(new Rect(0, 0, 384, 384), 0, 0);
+                    pixels.Apply();
+                    Color32[] image = pixels.GetPixels32();
+                    var visible = new List<int>();
+                    for (int vertical = 216; vertical < 296; vertical++)
+                        for (int horizontal = 152; horizontal < 232; horizontal++)
+                        {
+                            Color32 pixel = image[vertical * 384 + horizontal];
+                            if (pixel.r > 200 && pixel.g > 200 && pixel.b > 200)
+                                visible.Add(vertical * 384 + horizontal);
+                        }
+                    Assert.That(visible.Count, Is.GreaterThan(20), symbol + " must be visible above Floor and Units, not just enabled.");
+                    Assert.That(signatures.Add(string.Join(",", visible)), Is.True, "Rendered pixels must distinguish " + symbol);
+                    if (symbol == EnemyIntentSymbol.ConditionalMove)
+                    {
+                        int badgePixels = visible.Count(index => index % 384 >= 207 && index % 384 <= 223 &&
+                            index / 384 >= 230 && index / 384 <= 247);
+                        Assert.That(badgePixels, Is.GreaterThan(5), "The attack-on-entry badge must remain visible over the board.");
+                    }
+                    if (symbol != EnemyIntentSymbol.Wait)
+                    {
+                        int cuePixels = 0;
+                        for (int vertical = 115; vertical < 141; vertical++)
+                            for (int horizontal = 179; horizontal < 205; horizontal++)
+                            {
+                                Color32 pixel = image[vertical * 384 + horizontal];
+                                if (pixel.r > 200 && pixel.g > 200 && pixel.b > 200)
+                                    cuePixels++;
+                            }
+                        Assert.That(cuePixels, Is.GreaterThan(5), "The source association must remain visible for " + symbol);
+                    }
+                    TestContext.WriteLine("Rendered symbol=" + symbol + "; visible glyph pixels=" + visible.Count + "; board layers=Floor,Units.");
+                }
+                instance.SetActive(false);
+                camera.Render();
+                pixels.ReadPixels(new Rect(0, 0, 384, 384), 0, 0);
+                pixels.Apply();
+                Assert.That(pixels.GetPixels32().Count(pixel => pixel.r > 200 && pixel.g > 200 && pixel.b > 200), Is.Zero,
+                    "The opaque board alone must not satisfy the glyph pixel check.");
+            }
+            finally
+            {
+                camera.targetTexture = null;
+                RenderTexture.active = previousTarget;
+                target.Release();
+                UnityEngine.Object.DestroyImmediate(target);
+                UnityEngine.Object.DestroyImmediate(pixels);
+                UnityEngine.Object.DestroyImmediate(sprite);
+            }
         }
 
         /// <summary>Recorded cardinal/edge targets and source-only wait stay fixed despite unrelated visual or player movement.</summary>
