@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
+using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.State;
 
 namespace HallowBlaze.Core.Generation
@@ -32,31 +33,13 @@ namespace HallowBlaze.Core.Generation
             Config = config ?? throw new ArgumentNullException(nameof(config));
             if (entities == null) throw new ArgumentNullException(nameof(entities));
             if (items == null) throw new ArgumentNullException(nameof(items));
-            if (address.GenerationConfigurationId != config.Id || address.GenerationVersion != config.Version)
-                throw new ArgumentException("Address and configuration identity/version must agree.", nameof(config));
-
-            var initialState = new BoardState(Bounds);
-            BoardEntityState player = null;
-            var exitPositions = new SortedSet<GridPosition>();
-            foreach (BoardEntityState entity in entities)
-            {
-                if (!initialState.TryAdd(entity))
-                    throw new ArgumentException("Entities must have unique IDs and in-bounds, unoccupied layer cells.", nameof(entities));
-                if (entity.Definition.Kind.Equals(EntityKind.Player))
-                {
-                    if (player != null || entity.Definition.Layer != BoardLayer.Actor)
-                        throw new ArgumentException("Exactly one player actor is required.", nameof(entities));
-                    player = entity;
-                }
-                if (entity.Definition.Traits.IsExit)
-                    exitPositions.Add(entity.Position);
-            }
-            if (player == null || exitPositions.Count == 0 || exitPositions.Contains(player.Position))
-                throw new ArgumentException("One player start and at least one distinct exit are required.", nameof(entities));
-            Start = player.Position;
-            Exits = new List<GridPosition>(exitPositions).AsReadOnly();
-            Entities = initialState.GetEntities();
-            Items = CopyItems(items, initialState);
+            var errors = new List<BoardValidationError>();
+            BoardStructureValidation structure = BoardStructureValidation.Inspect(address, config, entities, items, errors);
+            if (errors.Count > 0) throw new ArgumentException(errors[0].Message);
+            Start = structure.Player.Position;
+            Exits = structure.Exits;
+            Entities = structure.State.GetEntities();
+            Items = structure.Items;
             InitialResources = BuildManifest(Items);
             canonicalData = EncodeCanonicalData();
             using (SHA256 algorithm = SHA256.Create())
@@ -146,31 +129,6 @@ namespace HallowBlaze.Core.Generation
 
         /// <summary>Returns the first four SHA-256 bytes as a deterministic little-endian signed dictionary hash.</summary>
         public override int GetHashCode() => deterministicHashCode;
-
-        private static IReadOnlyList<BoardItemSpawn> CopyItems(IEnumerable<BoardItemSpawn> items, BoardState state)
-        {
-            var ordered = new SortedDictionary<string, BoardItemSpawn>(StringComparer.Ordinal);
-            var entityIds = new HashSet<EntityId>();
-            var sourceIds = new HashSet<string>(StringComparer.Ordinal);
-            var familiesByDefinition = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (BoardItemSpawn item in items)
-            {
-                if (item == null || ordered.ContainsKey(item.InstanceId) || !entityIds.Add(item.EntityId) ||
-                    !state.TryGetEntity(item.EntityId, out BoardEntityState entity) ||
-                    entity.Definition.Layer != BoardLayer.Item || entity.Definition.Traits.IsExit ||
-                    entity.Definition.ContentId != item.ItemDefinitionId ||
-                    item.SourceId != null && !sourceIds.Add(item.SourceId))
-                    throw new ArgumentException("Each item needs one unique spawn, matching item entity/definition, and unique optional source.", nameof(items));
-                if (familiesByDefinition.TryGetValue(item.ItemDefinitionId, out string family) && family != item.ResourceFamilyId)
-                    throw new ArgumentException("An item definition cannot belong to multiple resource families.", nameof(items));
-                familiesByDefinition[item.ItemDefinitionId] = item.ResourceFamilyId;
-                ordered.Add(item.InstanceId, item);
-            }
-            foreach (BoardEntityState entity in state.GetEntities())
-                if (entity.Definition.Layer == BoardLayer.Item && !entity.Definition.Traits.IsExit && !entityIds.Contains(entity.Id))
-                    throw new ArgumentException("Every item-layer entity requires generic spawn metadata.", nameof(items));
-            return new List<BoardItemSpawn>(ordered.Values).AsReadOnly();
-        }
 
         private static IReadOnlyList<InitialResourceManifestEntry> BuildManifest(IReadOnlyList<BoardItemSpawn> items)
         {

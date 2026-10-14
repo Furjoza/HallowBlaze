@@ -4669,9 +4669,9 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 ## `M4.3` — Walidator lokalnej planszy
 
-**Status:** `Planned`  
+**Status:** `Done` - accepted 2026-10-14 with owner-authorized combined Lead, Developer, and Reviewer implementation, validation, and self-review. No independent Reviewer verdict is claimed.
 **Priorytet:** P0  
-**Powiązany kontrakt:** sekcje 8, 14, 16 i 17.
+**Powiązany kontrakt:** sections 9, 14, 16, and 17.
 
 **Rationale:** Losowa plansza musi gwarantować legalny start i osiągalne wyjście zanim gracz straci run. Walidator jest niezależny od algorytmu, aby sprawdzać też ręczne i landmarkowe blueprinty.
 
@@ -4694,6 +4694,8 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 **Wpływ na save i kompatybilność:** Brak.
 
 **Wymagany handoff:** Katalog reguł walidacji i znane ograniczenia względem przyszłego dynamicznego AI.
+
+**Accepted scope (2026-10-14):** Engine-free ordinary-board validation for constructed blueprints and raw candidates, sharing structural rules with blueprint construction. Reports aggregate reproducible address/seed/config errors and detached cardinal path/branch/resource/opening metrics. An explicit immutable catalog resolves entity/item/fixed-source identities and current Shambler rules. Checks cover every required executable exit without optional loot/tools, critical inclusive budgets, legal spawns, initial locked-intent safety, and the legacy fully walkable perimeter. The [rule catalog and limitations](BoardGeneration.md#validation-rule-catalog) distinguish static reachability and initial threats from future dynamic-AI/landmark solving. Focused EditMode **138/138** (validator **78**, blueprint regression **60**), full EditMode **795/795**, and graphics-enabled PlayMode **111/111** passed with zero failed, skipped, or inconclusive cases. Lead self-review passed under this task's explicit combined-role authorization; no independent review is claimed. Generation/presentation integration remains M4.4; saves, gameplay, RNG algorithms, scenes, prefabs, packages, settings, and protected agent configuration are unchanged.
 
 ---
 
@@ -6097,7 +6099,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. continue M4 with `M4.3` after the accepted M4.2 changes are committed and a new clean baseline is established, then follow the existing dependency order; the M3.12, M4.1, and M4.2 review authorizations do not extend to later tasks;
+1. continue M4 with `M4.4` after the accepted M4.3 changes are committed and a new clean baseline is established, then follow the existing dependency order; the M3.12, M4.1, M4.2, and M4.3 review authorizations do not extend to later tasks;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6109,7 +6111,9 @@ Accepted M3.6 establishes one production gameplay authority, M3.7/M3.8 provide d
 
 M4.1 is accepted on 2026-10-14 with versioned independent RNG, compatible run schema v3, and full EditMode `657/657` / graphics PlayMode `111/111`. The owner authorized Lead-only implementation and acceptance for M4.1; no independent review is claimed.
 
-M4.2 is accepted on 2026-10-14 with the immutable blueprint/configuration contract, generic item/source metadata, derived initial supply, and transitional state export. The owner separately authorized Lead-only implementation, validation, and self-review for M4.2; no independent review is claimed. M4.3 is the next planned task.
+M4.2 is accepted on 2026-10-14 with the immutable blueprint/configuration contract, generic item/source metadata, derived initial supply, and transitional state export. The owner separately authorized Lead-only implementation, validation, and self-review for M4.2; no independent review is claimed.
+
+M4.3 is accepted on 2026-10-14 with a pure local-board validator, shared structural checks, explicit item/source catalog resolution, static topology/budget metrics, and current initial-intent safety checks. Focused EditMode `138/138`, full EditMode `795/795`, and graphics-enabled PlayMode `111/111` passed. The owner authorized combined Lead/Developer/Reviewer work for M4.3 only; this was self-review, not an independent verdict. M4.4 is the next planned task.
 
 # Zasada aktualizacji roadmapy
 

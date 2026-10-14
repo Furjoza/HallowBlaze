@@ -1,8 +1,9 @@
 # Board generation data contract
 
-M4.2 defines initial data, not a new generator or final balance preset. The engine-free
-`HallowBlaze.Core.Generation` assembly depends on the existing board primitives, board
-state, and stable travel identity. Production generation and presentation are unchanged.
+M4.2 defines initial data; M4.3 adds an independent ordinary-board validator, not a new
+generator or final balance preset. The engine-free `HallowBlaze.Core.Generation` assembly
+uses board primitives/state, stable travel identity, and the existing turn contracts and
+Shambler planner for opening measurements. Production generation and presentation are unchanged.
 
 ## Ownership and construction
 
@@ -26,7 +27,9 @@ Construction rejects null inputs, unsupported bounds, duplicate entity IDs, laye
 conflicts, missing/duplicate player actors, missing exits, start/exit overlap, invalid
 item bindings, and mismatched configuration identity. It deliberately does not prove
 reachability, tactical fairness, catalog resolution, or compliance with budget targets.
-Those checks belong to M4.3; generation and view construction belong to M4.4.
+M4.3 validates static reachability, catalogs, budgets, and the supported opening rules;
+generation and view construction belong to M4.4. Construction and raw-candidate validation
+share one structural rule implementation rather than competing checks.
 
 ## Generic items and initial supply
 
@@ -51,8 +54,9 @@ collects items nor writes resource observations, taken-source state, or profile 
 
 ## Budget dimensions
 
-All `GenerationRange` bounds are inclusive, nonnegative targets. Their joint feasibility
-and the resulting board's compliance require the future validator/generator.
+All `GenerationRange` bounds are inclusive, nonnegative targets. Construction alone does
+not prove joint feasibility; M4.3 checks a candidate's measured compliance. M4.4 will
+generate candidates against these targets.
 
 | Field | Unit / contract | Intended pressure |
 | --- | --- | --- |
@@ -65,14 +69,16 @@ and the resulting board's compliance require the future validator/generator.
 | `AllowedContentIds` | Non-empty unique set of stable entity/item-definition IDs | Which terrain, obstacles, items, and enemy content may be combined |
 | `ResourceBudgets` | One initial item-count range per stable family; each `0..64` | Available supply independent of its use-effect magnitude |
 
-The dimensions have no automatic combined difficulty score. Exact balance values,
-threat-metric implementation, catalog checks, and generator enforcement are not added
-by M4.2. A candidate can be structurally valid while missing a target or being unreachable.
+The dimensions have no automatic combined difficulty score or final balance preset.
+M4.3 measures threats only in the initial intent phase, not throughout future play.
+A candidate can be structurally valid while missing a target or being unreachable.
 
 ## Example
 
-This small construction example is not a registered content preset or accepted balance
-configuration. IDs are illustrative. A later generator must validate its own output.
+This small construction/export example is not a registered content preset, a traversable
+validated board, or an accepted balance configuration. IDs are illustrative. It omits
+ordinary terrain cells and therefore fails semantic validation. A later generator must
+validate its own complete output.
 
 ```csharp
 var config = new BoardGenerationConfig(
@@ -110,6 +116,97 @@ BoardBlueprint exported = BoardBlueprint.FromState(address, config, state, items
 bool sameInitialLayout = blueprint.Equals(exported);
 ```
 
+## M4.3 validation API and ownership
+
+`HallowBlaze.Core.Generation.Validation.BoardValidator` has two entry points:
+
+- `Validate(blueprint, catalog)` checks an already constructed immutable layout. Passing
+  a null blueprint is API misuse and throws `ArgumentNullException`.
+- `Validate(address, config, entities, items, catalog)` inspects a raw candidate before
+  construction. Missing inputs and structural violations become report entries rather
+  than first-error exceptions. It also collects catalog failures that remain meaningful.
+  Topology and opening metrics are null if structural defects prevent their calculation.
+
+Both return `BoardValidationReport`: `IsValid`, an immutable error list, the supplied
+address/config, and detached metrics. Errors have stable textual `Code`, optional
+`Position`, and `Message` with full run/leg/edge/segment/day/seed/address-config/config
+context when supplied. Missing metadata is explicit. Messages are sorted ordinally.
+Validation uses no RNG, scene objects, physics, saves, inventory or profile mutations.
+It never repairs a candidate. Its raw entry point consumes input enumerations once.
+
+`BoardValidationCatalog` is an explicit detached input, not a global content registry
+or a catalog inferred from the candidate. The caller supplies:
+
+- authoritative `BoardEntityDefinition` values, unique by layer and content ID;
+- item-definition to resource-family mappings for known non-exit item definitions;
+- board-local authored fixed-source to item-definition mappings;
+- enemy content to `ShamblerDefinition` mappings for the currently supported rule.
+
+All candidate definitions must match catalog kind, layer, traits and compatibility food
+reward exactly. `AllowedContentIds` is an allowlist, not proof that an ID exists. Source
+IDs are optional for ordinary random items, but any supplied ID must resolve to the same
+item definition. The catalog copies its inputs and rejects duplicate or dangling
+registrations. M4.4 owns connecting generation to the actual content catalog and validator.
+
+## Validation rule catalog
+
+Every error code below has focused executable coverage in
+[BoardValidatorTests](../Assets/Tests/EditMode/BoardValidatorTests.cs).
+
+| Codes | Rejected condition |
+| --- | --- |
+| `MissingAddress`, `MissingConfiguration`, `MissingEntities`, `MissingItems`, `MissingCatalog` | A required candidate/catalog input is absent; empty collections are distinct from missing collections |
+| `ConfigurationMismatch` | Address configuration ID or version differs from the supplied config |
+| `NullEntity`, `OutOfBounds`, `DuplicateEntity`, `LayerConflict` | Null entities, coordinates outside inclusive `0..7`, repeated entity IDs, or shared same-layer cells |
+| `InvalidPlayerLayer`, `MissingStart`, `MultipleStarts`, `MissingExit`, `StartExitOverlap` | Invalid markers; terrain/item exit layers at one cell remain one logical exit |
+| `NullItem`, `DuplicateItemInstance`, `DuplicateItemEntity`, `DuplicateSource` | Null or repeated generic instance/entity/source identities |
+| `InvalidItemBinding`, `MissingItemSpawn`, `ItemFamilyConflict` | Orphan, wrong-layer, exit-as-item or mismatched-definition binding, missing metadata, or conflicting families for one definition |
+| `UnknownAllowedContent`, `DisallowedContent`, `UnknownContent`, `ContentDefinitionMismatch` | Unknown config content, forbidden placed content, unresolved layer/ID, or altered authoritative definition |
+| `UnknownItemDefinition`, `ItemResourceFamilyMismatch`, `UnknownSource`, `SourceDefinitionMismatch` | Unresolved or incorrectly associated item/family/fixed-source identities |
+| `UnknownResourceFamily`, `UnbudgetedResource`, `ResourceBudget` | Unknown budget family, placed family without a budget, or initial counts outside its inclusive range |
+| `BlockedStart`, `BlockedEnemySpawn` | Player/enemy spawn lacks walkable terrain or shares a blocking obstacle |
+| `NonExecutableExit`, `UnreachableExit` | Exit lacks the terrain marker used by the resolver, or has no static cardinal path from the start |
+| `PathLengthBudget`, `BranchPointBudget`, `ObstacleBudget`, `EnemyBudget` | A measured static dimension is outside its inclusive range; each logical exit's distance is checked separately |
+| `UnbrokenPerimeter` | All 28 perimeter cells form a walkable static bypass, ignoring actors |
+| `UnsupportedActor`, `UnsupportedEnemyRule` | An actor is neither player nor enemy, or a spawned enemy has no supported registered rule |
+| `UnsafeEnemyStart`, `SafeStartMovesBudget`, `ConcurrentThreatBudget` | Enemy starts in orthogonal attack range, too few non-threatened legal first moves exist, or initial intent overlap exceeds its maximum |
+
+## Metrics and known limits
+
+- Static passability exactly follows the movement resolver's terrain/obstacle test: an
+  explicit walkable terrain entry is required and an obstacle must be absent or walkable.
+  Item traits and optional loot/tools never open a route. Interactable blockers are not
+  assumed removable; future mechanics need explicit validation support.
+- Breadth-first search ignores actors. Every distinct logical exit is required, with
+  its own shortest cardinal distance (`-1` when unreachable). This is not a turn solver.
+  Optional loot may remain inaccessible without invalidating an otherwise valid board.
+- `ReachableCells` counts the start-connected passable component. `BranchPoints` counts
+  all passable cells with at least three passable cardinal neighbors, including disconnected
+  components, matching the configuration's definition. Obstacles include walkable entries.
+- `MinimumEnemyStartDistance` is the nearest enemy's Manhattan distance, or null without
+  enemies. Current registered Shambler attack range is one; adjacent starts are rejected.
+- Each enemy uses a fresh active `ShamblerState` and the actual `ShamblerPlanner` against
+  the initial board. `InitialThreatsByCell` counts distinct non-wait intents targeting a
+  cell, including move's declared attack-on-player-entry condition. Conflict resolution
+  does not remove these declared threats. `MaximumConcurrentThreats` is the maximum count.
+- `SafeStartMoves` counts passable, unoccupied cardinal destinations not targeted by those
+  initial intents. This is a conservative non-threatened-cell metric: it does not simulate
+  terminal exit handling, damage, food, items, environment or later intent phases. Unknown
+  actor/enemy rules reject the board and make the two opening budget metrics null, rather
+  than reporting falsely safe zero-threat measurements.
+- Resource counts use all initial generic instances, including hidden ones, not food
+  restoration amounts or atlas observations. An absent budgeted family counts as zero.
+- The perimeter rule prevents the legacy fully walkable ring; it does not score fun,
+  ensure multiple meaningful tactical solutions, or prove fairness beyond these rules.
+- Landmark state-space solving, later AI types, full-run resource solvability, retries,
+  automatic repairs, fallback selection and large seed sweeps remain outside M4.3.
+
+The canonical passing test board has terrain on all 64 cells, a player at `(0,0)`, terrain
+exit at `(7,7)`, and one blocking obstacle at `(7,0)`. It measures path length `14`,
+`63` reachable cells, `58` branch points, two safe opening moves and no threats.
+The tests also contain disconnected exits, optional tool loot, multiple exits, hidden
+supply, overlapping initial intents, null/duplicate IDs and coordinate extremes.
+
 ## Comparison and transitional export
 
 Entity order is signed numeric ID order. Exit positions use X-then-Y order. Item instances,
@@ -136,4 +233,5 @@ It rejects non-8x8 bounds. It does not scrape a scene or alter the production ge
 Normal between-board saves still store their existing seed/configuration boundary rather
 than a blueprint. Save schemas, RNG algorithms, generation behavior, and carried inventory
 are unchanged. Focused executable coverage is in
-[BoardBlueprintTests](../Assets/Tests/EditMode/BoardBlueprintTests.cs).
+[BoardBlueprintTests](../Assets/Tests/EditMode/BoardBlueprintTests.cs) and
+[BoardValidatorTests](../Assets/Tests/EditMode/BoardValidatorTests.cs).
