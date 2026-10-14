@@ -3355,15 +3355,31 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ---
 
+## `M3.9.R3` - Hide intent UI during the day transition
+
+**Status:** `Done` - accepted 2026-10-12 after direct Lead implementation without Developer and independent Reviewer PASS. The whole intent UI stays hidden during the day transition while initial retained projections remain prepared. The regression covers re-enable during setup, automatic no-enemy Day 1 release and board replacement without additional command or resource effects.
+
+**Scope:** Keep the entire intent UI owner inactive during board setup/day transition. Prepare initial retained plans and glyphs while hidden, reveal markers and legend when the existing transition releases Setup, and preserve hidden state when the manager is re-enabled during setup. Keep ordinary pause visibility and all existing command, cadence, publication and cost semantics.
+
+**Allowed file area:** `Assets/Scripts/GameManager.cs`, existing `Assets/Tests/PlayMode/BoardRuntimeStartupTests.cs`; Lead status in this roadmap and qualitative owner feedback/repair evidence in `Docs/Validation/M3.9IntentReadability.md` only.
+
+**Acceptance criteria:** Legend canvas, control and world markers are hidden while the day transition is active. Initial retained projections remain prepared, no hidden setup action consumes a turn/resource or advances cadence, and UI is visible before gameplay input is admitted. Re-enable during setup and board replacement cannot expose it early. Automatic Day 1 transition release works even with no enemies. No planner, renderer geometry, scene, prefab, package, save or art changes.
+
+**Validation:** The focused production startup regression first failed with visible markers during setup, then passed 1/1 after the owner-visibility repair and fixture lookups that distinguish the current owner from deferred-destruction children. Full startup fixture 8/8 includes automatic Day 1 release and hidden/revealed enemy markers; pause fixture 11/11 passed. Tests use isolated persistence roots and fresh Unity XML. Independent Reviewer PASS completed without findings.
+
+**Readability impact:** The owner's qualitative assessment establishes functional PoC sufficiency for the two observed symbols, not a blind-prediction/grayscale PASS. Visual redesign is deferred to the final graphical phase; `M3.9.14` remains blocked.
+
+---
+
 ## `M3.9.14` - Lead-owned intent readability gate
 
-**Status:** `Blocked` - updated 2026-10-12. Startup layout repair `M3.9.R1` and marker sorting-layer repair `M3.9.R2` are separately accepted. A fresh production smoke, grayscale/animation-disabled captures and human predictions remain required. The [Lead-owned report](Validation/M3.9IntentReadability.md) separates the observed failures from mechanical repair evidence and records zero prediction participants; no manual PASS or umbrella acceptance is claimed.
+**Status:** `Blocked` - updated 2026-10-12. Repairs `M3.9.R1`, `M3.9.R2` and `M3.9.R3` are separately accepted. The owner confirmed clear, visible Conditional Move and Wait markers that are functionally adequate for PoC; R3 mechanically covers hiding the UI over the day transition. Full production lifecycle smoke, grayscale/animation-disabled captures and recorded human predictions remain required. The [Lead-owned report](Validation/M3.9IntentReadability.md) distinguishes qualitative owner feedback from zero formal prediction participants; no manual PASS or umbrella acceptance is claimed.
 **Priority:** P0
 **Related contract:** sections 18 and the intent gate in section 22.
 
 **Rationale:** Automated geometry and event assertions cannot establish that players understand the information before acting.
 
-**Current behavior:** M3.9.13 supplies mechanical evidence; production smoke and blind-prediction evidence are still absent.
+**Current behavior:** M3.9.13 supplies mechanical evidence. The owner's partial production smoke confirms visibility and qualitative PoC readability of Conditional Move and Wait, but is not a complete lifecycle smoke or a recorded blind-prediction sheet. Final graphical polish is deferred at the owner's request.
 
 **Expected outcome:** The Lead records whether production intent UI is readable without animation/color and whether a majority of testers correctly predict known Shambler behavior.
 

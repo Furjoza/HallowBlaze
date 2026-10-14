@@ -246,7 +246,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(property.CanWrite, Is.False);
         }
 
-        /// <summary>Production setup publishes retained intent UI before input and preserves one command path across UI and board lifetimes.</summary>
+        /// <summary>Production setup prepares hidden intents during the day transition, reveals them before input and preserves one command path.</summary>
         [UnityTest]
         public IEnumerator ProductionIntents_AppearBeforeInputAndRespectBoardLifetime()
         {
@@ -271,24 +271,49 @@ namespace HallowBlaze.Tests.PlayMode
             playerObject.tag = "Player";
             Component player = playerObject.AddComponent(boardManagerType.Assembly.GetType("PlayerScript", true));
             SetField(player, "animationsEnabled", false);
+            GameObject transition = CreateObject("LevelImage", 0, 0);
             InvokeManager(manager, "InitGame");
             BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
             Assert.That(runtime, Is.Not.Null);
             BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
-            EnemyIntentPresenter display = manager.GetComponentInChildren<EnemyIntentPresenter>();
+            EnemyIntentPresenter display = GetManagerField<EnemyIntentPresenter>(manager, "activeIntents");
             EnemyIntentLegend legend = GetManagerField<EnemyIntentLegend>(manager, "activeIntentLegend");
             Assert.That(display.Views.Count, Is.EqualTo(runtime.Enemies.Count).And.EqualTo(1));
             ShamblerState enemy = runtime.Enemies.Single();
             EnemyIntent initial = enemy.LockedIntent;
             EnemyIntentView marker = display.Views[enemy.ActorId];
-            Assert.That(marker.gameObject.activeInHierarchy, Is.True);
+            Assert.That(marker.gameObject.activeSelf, Is.True, "Retained markers must already be prepared during setup.");
+            Assert.That(marker.gameObject.activeInHierarchy, Is.False, "Day transition must hide all intent markers.");
+            Assert.That(legend.Root.activeInHierarchy, Is.False, "Day transition must hide the legend canvas.");
+            Assert.That(legend.Control.gameObject.activeInHierarchy, Is.False, "Day transition must hide the legend control.");
+            Assert.That(transition.activeSelf, Is.True);
             Assert.That(display.Projections.Single(), Is.EqualTo(EnemyIntentProjection.FromRetainedIntent(initial,
                 runtime.BoardState.GetEntities().Single(entity => entity.Id.Equals(enemy.ActorId)).Position)));
             Assert.That(display.Projections.Single().AttackOnPlayerEntry, Is.True);
             Assert.That(presenter.Coordinator.Gate.Blocks.HasFlag(PresentationInputBlock.Setup), Is.True);
             Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
             Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+            yield return null;
+            Assert.That(transition.activeSelf, Is.True);
+            Assert.That(display.gameObject.activeInHierarchy, Is.False);
+            Assert.That(enemy.LockedIntent, Is.SameAs(initial));
+            ((Behaviour)manager).enabled = false;
+            ((Behaviour)manager).enabled = true;
+            Assert.That(display.Views.Count, Is.EqualTo(1));
+            Assert.That(display.gameObject.activeInHierarchy, Is.False, "Enable during setup must not reveal the UI.");
+            Assert.That(legend.Root.activeInHierarchy, Is.False);
+            Assert.That(enemy.LockedIntent, Is.SameAs(initial));
+            Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Active));
+            Assert.That(session.ActiveRun.Health, Is.EqualTo(100));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.Zero);
+            marker = display.Views[enemy.ActorId];
             InvokeManager(manager, "HideLevelImage");
+            Assert.That(transition.activeSelf, Is.False);
+            Assert.That(marker.gameObject.activeInHierarchy, Is.True);
+            Assert.That(legend.Root.activeInHierarchy, Is.True);
+            Assert.That(legend.Control.gameObject.activeInHierarchy, Is.True);
+            Assert.That(enemy.LockedIntent, Is.SameAs(initial));
             yield return null;
             Assert.That(TrySubmit(manager, new MoveCommand(Direction.West), out Task<CommandSubmission> rejected), Is.True);
             Assert.That(rejected.Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
@@ -335,15 +360,21 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(oldOwner.activeSelf, Is.False);
             oldControl.onClick.Invoke();
             Assert.That(legend.IsVisible, Is.False);
+            transition.SetActive(true);
             InvokeManager(manager, "InitGame");
             BoardRuntime replacement = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
             Assert.That(replacement.Enemies.Single().ActorId, Is.EqualTo(oldId));
             Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter"), Is.Not.SameAs(presenter));
-            EnemyIntentPresenter nextDisplay = manager.GetComponentInChildren<EnemyIntentPresenter>();
+            EnemyIntentPresenter nextDisplay = GetManagerField<EnemyIntentPresenter>(manager, "activeIntents");
             EnemyIntentLegend nextLegend = GetManagerField<EnemyIntentLegend>(manager, "activeIntentLegend");
             Assert.That(nextDisplay.Views.Count, Is.EqualTo(1));
             Assert.That(nextDisplay, Is.Not.SameAs(display));
+            Assert.That(transition.activeSelf, Is.True);
+            Assert.That(nextDisplay.gameObject.activeInHierarchy, Is.False, "Replacement setup must hide the new board UI.");
+            Assert.That(nextLegend.Root.activeInHierarchy, Is.False);
             InvokeManager(manager, "HideLevelImage");
+            Assert.That(nextDisplay.Views.Values.All(view => view.gameObject.activeInHierarchy), Is.True);
+            Assert.That(nextLegend.Control.gameObject.activeInHierarchy, Is.True);
             yield return null;
             Assert.That(oldOwner == null, Is.True);
             session.ConsumeFood(session.ActiveRun.Food - 1);
@@ -380,7 +411,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
             Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
             Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
-            TestContext.WriteLine("P1 production roster; initial before Setup release; one coordinator; free reject/pause/legend; disable/resume; reused-ID replacement; terminal cleanup; failed UI blocks startup; isolated save root.");
+            TestContext.WriteLine("P1 production roster; markers/legend hidden during day transition including re-enable/replacement; prepared plans revealed before input without AI or cost; one coordinator; terminal/failure cleanup; isolated save root.");
         }
 
         /// <summary>Day-one startup with the production camera framing leaves the transition and enables the sole command path.</summary>
@@ -425,13 +456,17 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(dayText.text, Is.EqualTo("Day: 1"));
             Assert.That(transition.activeSelf, Is.True);
             Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
+            EnemyIntentLegend legend = GetManagerField<EnemyIntentLegend>(manager, "activeIntentLegend");
+            Assert.That(legend, Is.Not.Null);
+            Assert.That(legend.Root.activeInHierarchy, Is.False, "Day 1 must not show a legend over its loading overlay.");
+            Assert.That(legend.Control.gameObject.activeInHierarchy, Is.False);
             float deadline = Time.realtimeSinceStartup + 2;
             while (transition.activeSelf && Time.realtimeSinceStartup < deadline)
                 yield return null;
             Assert.That(transition.activeSelf, Is.False, "The completed board must release the Day: 1 overlay.");
             Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.True);
-            EnemyIntentLegend legend = GetManagerField<EnemyIntentLegend>(manager, "activeIntentLegend");
-            Assert.That(legend, Is.Not.Null);
+            Assert.That(legend.Root.activeInHierarchy, Is.True);
+            Assert.That(legend.Control.gameObject.activeInHierarchy, Is.True);
             var inspected = (Rect)InvokeManager(manager, "InspectedBoardArea");
             Assert.That(legend.PanelBounds.Overlaps(inspected) || legend.ControlBounds.Overlaps(inspected), Is.False);
             legend.Control.onClick.Invoke();

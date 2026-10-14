@@ -15,6 +15,7 @@ using UnityEngine.UI;
 /// <summary>
 /// Composes the active board's single command/presentation path and guarded session lifecycle.
 /// Borrows camera framing for intent UI when needed and restores it when the UI lifetime ends.
+/// Prepares intents during setup but reveals their markers and legend only after the day transition ends.
 /// </summary>
 public class GameManager : MonoBehaviour, IBoardOutcomeSink
 {
@@ -312,7 +313,6 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         }
         if (activeIntentOwner != null)
         {
-            activeIntentOwner.SetActive(true);
             try { activeBoardPresenter.SynchronizeFromState(); }
             catch (Exception exception)
             {
@@ -479,6 +479,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (activePlayerView == null)
             throw new InvalidOperationException("The registered player has no production input/view adapter.");
         activeIntentOwner = new GameObject("Board intent UI") { hideFlags = HideFlags.DontSave };
+        activeIntentOwner.SetActive(false);
         activeIntentOwner.transform.SetParent(transform, false);
         activeIntents = activeIntentOwner.AddComponent<EnemyIntentPresenter>();
         activeBoardPresenter = new BoardEventPresenter(runtime, activePlayerView, activePlayerView,
@@ -608,6 +609,10 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void UpdatePresentationBlocks()
     {
+        if (activeIntentOwner != null)
+            activeIntentOwner.SetActive(enabled && !doingSetup && !boardStartupInProgress &&
+                !boardOutcomeHandled && !terminalActionRequested &&
+                activeBoardRuntime != null && !activeBoardRuntime.IsDisposed);
         if (activeBoardPresenter == null)
             return;
         PresentationGate gate = activeBoardPresenter.Coordinator.Gate;
