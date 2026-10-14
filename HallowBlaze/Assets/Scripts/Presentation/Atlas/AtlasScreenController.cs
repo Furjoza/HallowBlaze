@@ -160,7 +160,7 @@ namespace HallowBlaze.Presentation.Atlas
 
             gameManager.OnRouteChoicesChanged += HandleRouteChoicesChanged;
             EnsureWorldMapService();
-            if (gameManager.IsRouteChoiceActive && gameManager.RouteChoices.Count > 0)
+            if (gameManager.IsRouteChoiceActive)
                 HandleRouteChoicesChanged(gameManager.RouteChoices);
         }
 
@@ -202,7 +202,7 @@ namespace HallowBlaze.Presentation.Atlas
         private void HandleRouteChoicesChanged(IReadOnlyList<WorldMapExitOption> choices)
         {
             ClearRouteButtons();
-            if (choices == null || choices.Count == 0 || gameManager == null || !gameManager.IsRouteChoiceActive)
+            if (choices == null || gameManager == null || !gameManager.IsRouteChoiceActive)
             {
                 SetOpen(false);
                 return;
@@ -217,8 +217,11 @@ namespace HallowBlaze.Presentation.Atlas
             SetOpen(true);
             Canvas.ForceUpdateCanvases();
             EnsureEventSystem();
-            routeButtons[0].Select();
-            EventSystem.current.SetSelectedGameObject(routeButtons[0].gameObject);
+            if (routeButtons.Count > 0)
+            {
+                routeButtons[0].Select();
+                EventSystem.current.SetSelectedGameObject(routeButtons[0].gameObject);
+            }
         }
 
         private void SubmitRoute(string edgeId)

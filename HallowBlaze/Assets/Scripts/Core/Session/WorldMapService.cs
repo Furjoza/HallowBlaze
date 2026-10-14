@@ -507,6 +507,7 @@ namespace HallowBlaze.Core.Session
         private readonly WorldDefinition world;
         private readonly GameSession session;
         private readonly ISaveStore saveStore;
+        private readonly RouteTravelService travel;
         private PendingDiscovery pendingDiscovery;
         private string selectionRunId;
         private string selectionNodeId;
@@ -535,6 +536,7 @@ namespace HallowBlaze.Core.Session
             this.saveStore = saveStore ?? throw new ArgumentNullException(nameof(saveStore));
 
             ValidateWorldBinding();
+            travel = new RouteTravelService(session, world, saveStore);
         }
 
         /// <summary>
@@ -549,6 +551,9 @@ namespace HallowBlaze.Core.Session
 
         /// <summary>Gets the current route choice lifecycle phase.</summary>
         public RouteChoiceState ChoiceState { get; private set; }
+
+        /// <summary>Gets the sole durable route-transition owner used by selection and board flow.</summary>
+        public RouteTravelService Travel => travel;
 
         /// <summary>
         /// Gets a read-only snapshot that omits every unknown node and edge.
@@ -604,6 +609,8 @@ namespace HallowBlaze.Core.Session
         /// <returns>A controlled result with detached, read-only exit options.</returns>
         public WorldMapExitQueryResult GetLegalExits()
         {
+            if (session.ActiveRun?.ActiveLeg != null)
+                return WorldMapExitQueryResult.Rejected("Route choices are available only at reached checkpoints.");
             if (!TryGetCurrentNode(out WorldNodeDefinition currentNode, out string errorMessage))
                 return WorldMapExitQueryResult.Rejected(errorMessage);
 
@@ -618,11 +625,13 @@ namespace HallowBlaze.Core.Session
         }
 
         /// <summary>
-        /// Observes the current board exits and opens an explicit route choice after the profile save succeeds.
+        /// Observes reached-checkpoint exits and opens route choice only when no leg is active.
         /// </summary>
         /// <returns>The underlying discovery result for the observed legal exits.</returns>
         public WorldMapCommandResult BeginRouteChoice()
         {
+            if (session.ActiveRun?.ActiveLeg != null)
+                return WorldMapCommandResult.Rejected("An active route must finish before another choice.");
             ResetChoiceIfRunChanged();
             if (ChoiceState == RouteChoiceState.RunSavePending)
             {
@@ -674,7 +683,7 @@ namespace HallowBlaze.Core.Session
         }
 
         /// <summary>
-        /// Commits one legal directed edge, then checkpoints the destination, day, and route in the active run.
+        /// Starts and checkpoints one legal route leg without recording arrival or traversal discovery.
         /// </summary>
         /// <param name="edgeId">The stable ID returned by <see cref="GetRouteChoices"/>.</param>
         /// <returns>A controlled result supporting identical retries after persistence failures.</returns>
@@ -719,19 +728,58 @@ namespace HallowBlaze.Core.Session
             }
 
             RunState run = session.GetCurrentRun();
-            if (run.CurrentDay == int.MaxValue)
+            if (run.ActiveLeg != null)
+                return RouteChoiceCommandResult.Rejected("Another route leg is already active.");
+            if (run.CompletedDayCount == int.MaxValue || run.TraversalSequence == int.MaxValue)
                 return RouteChoiceCommandResult.Rejected("The current day cannot be advanced.");
 
-            WorldMapCommandResult traversalResult = CompleteTraversal(edge.EdgeId);
-            if (!traversalResult.IsSuccess)
-                return FromTraversalFailure(traversalResult);
-
-            session.AdvanceToWorldNode(edge.ToNodeId);
             pendingRouteEdgeId = edge.EdgeId;
             pendingRouteDestinationNodeId = edge.ToNodeId;
-            pendingRouteDay = run.CurrentDay;
             ChoiceState = RouteChoiceState.RunSavePending;
             return PersistPendingRoute();
+        }
+
+        /// <summary>
+        /// Reconciles profile discovery from durable completed-traversal history after arrival or recovery.
+        /// A crash between run and profile saves cannot require replaying the final segment.
+        /// </summary>
+        /// <returns>An idempotent profile-save result; no run progress or route choice is changed.</returns>
+        public WorldMapCommandResult ReconcileCompletedTravel()
+        {
+            RunState run = session.ActiveRun;
+            if (run == null || run.Status != RunStatus.Active)
+                return WorldMapCommandResult.Rejected("No active run is available.");
+
+            List<WorldDiscoveryChange> changes = new List<WorldDiscoveryChange>();
+            HashSet<string> nodes = new HashSet<string>(StringComparer.Ordinal);
+            HashSet<string> edges = new HashSet<string>(StringComparer.Ordinal);
+            string operationId = null;
+            foreach (TravelHistoryEntry entry in run.TravelHistory)
+            {
+                if (entry.Kind != TravelHistoryKind.CompletedTraversal)
+                    continue;
+                if (!world.TryGetEdge(entry.EdgeId, out WorldEdgeDefinition edge) ||
+                    edge.FromNodeId != entry.FromNodeId || edge.ToNodeId != entry.ToNodeId ||
+                    edge.Segments.Count != entry.CompletedSegmentCount)
+                    return WorldMapCommandResult.Rejected("Completed travel does not match the authored world.");
+                operationId = edge.EdgeId;
+                if (session.Profile.GetEdgeDiscoveryState(edge.EdgeId) < EdgeDiscoveryState.Traversed && edges.Add(edge.EdgeId))
+                    changes.Add(WorldDiscoveryChange.ForEdge(edge.EdgeId, EdgeDiscoveryState.Traversed));
+                if (session.Profile.GetNodeDiscoveryState(edge.ToNodeId) < NodeDiscoveryState.Visited && nodes.Add(edge.ToNodeId))
+                    changes.Add(WorldDiscoveryChange.ForNode(edge.ToNodeId, NodeDiscoveryState.Visited));
+            }
+            if (operationId == null)
+                return WorldMapCommandResult.NoChange();
+            if (!TryResumePending(WorldDiscoveryOperation.TraversedEdge, operationId, out WorldMapCommandResult retry))
+                return retry;
+            if (retry != null)
+                return retry;
+            if (changes.Count == 0)
+                return WorldMapCommandResult.NoChange();
+            foreach (WorldDiscoveryChange change in changes)
+                Apply(change);
+            return Persist(new PendingDiscovery(WorldDiscoveryOperation.TraversedEdge, operationId,
+                CreateEvent(WorldDiscoveryOperation.TraversedEdge, operationId, changes)));
         }
 
         /// <summary>
@@ -935,7 +983,7 @@ namespace HallowBlaze.Core.Session
         private RouteChoiceCommandResult PersistPendingRoute()
         {
             RunState run = session.GetCurrentRun();
-            SaveStoreResult saveResult = saveStore.SaveRun(run);
+            SaveStoreResult saveResult = travel.StartRoute(pendingRouteEdgeId);
             if (saveResult.IsFailure)
             {
                 return RouteChoiceCommandResult.PersistenceFailed(
@@ -944,6 +992,7 @@ namespace HallowBlaze.Core.Session
                     saveResult.ErrorMessage);
             }
 
+            pendingRouteDay = run.CurrentDay;
             RouteChosenEvent routeEvent = new RouteChosenEvent(
                 run.RunId,
                 pendingRouteEdgeId,

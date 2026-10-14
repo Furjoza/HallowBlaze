@@ -177,10 +177,25 @@ namespace HallowBlaze.Tests.PlayMode
 
             Assert.That(GetProperty<string>(atlas, "SelectedRouteEdgeId"), Is.EqualTo(chosenEdgeId));
             Assert.That(run.CurrentDay, Is.EqualTo(1));
-            Assert.That(run.Route, Has.Count.EqualTo(1));
-            Assert.That(run.WorldNodeId, Is.EqualTo(run.Route[0]));
+            Assert.That(run.Route, Is.Empty);
+            Assert.That(run.WorldNodeId, Is.EqualTo("forest.start"));
+            Assert.That(run.ActiveLeg.EdgeId, Is.EqualTo(chosenEdgeId));
+            Assert.That(profile.GetEdgeDiscoveryState(chosenEdgeId), Is.EqualTo(EdgeDiscoveryState.Sighted));
             Assert.That(GetProperty<bool>(atlas, "IsOpen"), Is.False);
 
+            WorldMapService map = GetField<WorldMapService>(manager, "worldMap");
+            Assert.That(map.BeginRouteChoice().IsSuccess, Is.False);
+            Assert.That(map.Travel.ConsumeIntro(out _).IsSuccess, Is.True);
+            var world = GetField<HallowBlaze.Core.World.WorldDefinition>(manager, "worldDefinition");
+            while (run.ActiveLeg != null)
+            {
+                BoardRequest request = BoardRequest.CreateFromRun(run, world);
+                Assert.That(map.Travel.TryCompleteSegment(request, out var checkpoint, out _), Is.True);
+                Assert.That(checkpoint.IsSuccess, Is.True);
+            }
+            Assert.That(map.ReconcileCompletedTravel().IsSuccess, Is.True);
+            Assert.That(run.Route, Has.Count.EqualTo(1));
+            Assert.That(run.WorldNodeId, Is.EqualTo(run.Route[0]));
             Invoke(manager, "SetGameplayInputBlocked", false);
             Assert.That((bool)Invoke(manager, "TryEnterCurrentWorldNode"), Is.True);
             Assert.That((bool)Invoke(manager, "BeginRouteChoice"), Is.True);
@@ -206,6 +221,13 @@ namespace HallowBlaze.Tests.PlayMode
                 Is.EqualTo(NodeDiscoveryState.Visited));
             AssertNamedObjectCount(atlasObject, "AtlasEdge-Traversed-", 1);
             Assert.That(GetProperty<int>(atlas, "RenderedNodeCount"), Is.GreaterThanOrEqualTo(4));
+            session.StartNewRun("atlas-final-checkpoint", 7,
+                new RunStateConfiguration(100, 100, 5, "landmark.radio-tower"));
+            Assert.That((bool)Invoke(manager, "TryEnterCurrentWorldNode"), Is.True);
+            Assert.That((bool)Invoke(manager, "BeginRouteChoice"), Is.True);
+            yield return null;
+            Assert.That(GetProperty<bool>(atlas, "IsOpen"), Is.True, "Final arrival must show the atlas even without outgoing roads.");
+            Assert.That(GetProperty<int>(atlas, "RouteButtonCount"), Is.Zero);
         }
 
         private Component CreateManager(TextAsset worldDefinition)

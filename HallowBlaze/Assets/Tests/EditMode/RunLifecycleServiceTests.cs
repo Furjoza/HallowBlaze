@@ -82,6 +82,26 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
+        public void DeathDuringIntermediateSegmentDoesNotCountTheActiveDay()
+        {
+            FakeSaveStore store = new FakeSaveStore();
+            GameSession session = CreateSession();
+            RunLifecycleService lifecycle = new RunLifecycleService(session, store);
+            lifecycle.StartNewRun("run-partial-day", 7, new RunStateConfiguration(100, 100, 2, "forest.start"));
+            RunState run = session.ActiveRun;
+            run.StartLeg("edge", "forest.start", "destination", RouteLegTests.Segments(5));
+            run.TryConsumeIntro(run.ActiveLeg.LegId);
+            run.TryAdvanceSegment(run.ActiveLeg.LegId, "segment.1");
+            Assert.That(run.CurrentDay, Is.EqualTo(3));
+            Assert.That(lifecycle.MarkDead().IsSuccess, Is.True);
+            Assert.That(session.Profile.RunSummaries[0].DaysSurvived, Is.EqualTo(2));
+            Assert.That(run.ReachedCheckpointNodeId, Is.EqualTo("forest.start"));
+            Assert.That(run.TravelHistory, Is.Empty);
+            Assert.That(session.Profile.GetNodeDiscoveryState("destination"), Is.EqualTo(NodeDiscoveryState.Unknown));
+            Assert.That(session.ActiveRun, Is.Null);
+        }
+
+        [Test]
         public void ContinueRejectsTerminalOrAlreadySummarizedRun()
         {
             FakeSaveStore store = new FakeSaveStore();

@@ -357,7 +357,7 @@ namespace HallowBlaze.Core.State
     {
         /// <summary>Creates a validated terminal run summary.</summary>
         /// <param name="runId">The stable identity of the completed run.</param>
-        /// <param name="daysSurvived">The non-negative number of survived days.</param>
+        /// <param name="daysSurvived">The non-negative number of fully completed days; a partial active day is excluded.</param>
         /// <param name="status">The terminal <c>Dead</c> or <c>Won</c> outcome.</param>
         public ProfileRunSummary(string runId, int daysSurvived, RunStatus status)
         {
@@ -375,7 +375,7 @@ namespace HallowBlaze.Core.State
         /// <summary>Gets the stable identity of the completed run.</summary>
         public string RunId { get; }
 
-        /// <summary>Gets the non-negative number of survived days.</summary>
+        /// <summary>Gets fully completed days, excluding death partway through an active route leg.</summary>
         public int DaysSurvived { get; }
 
         /// <summary>Gets the terminal run outcome.</summary>

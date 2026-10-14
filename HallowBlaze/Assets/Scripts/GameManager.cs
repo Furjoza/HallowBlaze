@@ -75,6 +75,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     private PlayerScript activePlayerView;
     private bool handlingBoardOutcome;
     private bool boardOutcomeHandled;
+    private BoardOutcome pendingBoardOutcome;
+    private bool arrivalCheckpointCommitted;
+    private string pendingChosenEdgeId;
     private IReadOnlyList<WorldMapExitOption> routeChoices = NoRouteChoices;
     private bool terminalActionRequested;
     private Action<string> sceneLoader = SceneManager.LoadScene;
@@ -99,7 +102,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     /// <summary>Gets the sole presenter for the active board, including its transient gate and diagnostics.</summary>
     public BoardEventPresenter ActiveBoardPresenter => activeBoardPresenter;
 
-    /// <summary>Gets the legal options exposed by the current board exit.</summary>
+    /// <summary>Gets the legal options at the reached checkpoint, never an intermediate segment.</summary>
     public IReadOnlyList<WorldMapExitOption> RouteChoices
     {
         get { return routeChoices; }
@@ -111,7 +114,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         get
         {
             return worldMap != null
-                && worldMap.ChoiceState == RouteChoiceState.AwaitingChoice;
+                && (worldMap.ChoiceState == RouteChoiceState.AwaitingChoice ||
+                    worldMap.ChoiceState == RouteChoiceState.RunSavePending);
         }
     }
 
@@ -216,9 +220,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     }
 
     /// <summary>
-    /// Observes the active node's exits and blocks gameplay until one legal edge is chosen.
+    /// Observes reached-checkpoint exits and blocks gameplay until a legal route is chosen.
     /// </summary>
-    /// <returns><c>true</c> when at least one legal route is ready for presentation.</returns>
+    /// <returns>Whether the atlas is ready, including a terminal catalogue node with no outgoing road.</returns>
     public bool BeginRouteChoice()
     {
         if (IsRouteChoiceActive ||
@@ -244,18 +248,12 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             return false;
         }
 
-        if (choicesResult.Exits.Count == 0)
-        {
-            Debug.LogWarning("The current world node has no outgoing route choices.");
-            return false;
-        }
-
         SetRouteChoices(choicesResult.Exits);
         return true;
     }
 
     /// <summary>
-    /// Submits one displayed edge and loads the next board only after its run checkpoint is saved.
+    /// Starts one displayed route leg and loads its first segment only after the Pending checkpoint succeeds.
     /// </summary>
     /// <param name="edgeId">A stable edge ID from <see cref="RouteChoices"/>.</param>
     /// <returns><c>true</c> only when this call commits a new route and requests the next board.</returns>
@@ -264,6 +262,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (!IsRouteChoiceActive || !TryEnsureWorldMap())
             return false;
 
+        if (worldMap.ChoiceState != RouteChoiceState.RunSavePending)
+            pendingChosenEdgeId = edgeId;
         RouteChoiceCommandResult result = worldMap.ChooseRoute(edgeId);
         if (result.Status == RouteChoiceCommandStatus.PersistenceFailed)
         {
@@ -282,9 +282,29 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (result.Status != RouteChoiceCommandStatus.Applied)
             return false;
 
+        pendingChosenEdgeId = null;
+        SetGameplayInputBlocked(true);
         SetRouteChoices(NoRouteChoices);
         sceneLoader(SceneManager.GetActiveScene().name);
         return true;
+    }
+
+    /// <summary>Retries a blocked travel checkpoint without replaying a turn or committed arrival.</summary>
+    /// <returns>Whether the pending boundary is ready to continue.</returns>
+    public bool RetryTravelCheckpoint()
+    {
+        if (pendingBoardOutcome != null)
+            return HandleBoardOutcome(pendingBoardOutcome);
+        if (worldMap?.ChoiceState == RouteChoiceState.RunSavePending)
+            return ChooseRoute(pendingChosenEdgeId);
+        if (session?.ActiveRun?.ActiveLeg != null && activeBoardRuntime == null)
+        {
+            InitGame();
+            return activeBoardRuntime != null;
+        }
+        if (session?.ActiveRun != null && activeBoardRuntime == null && TryEnterCurrentWorldNode())
+            return BeginRouteChoice();
+        return false;
     }
 
     private void Awake()
@@ -387,7 +407,15 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (!TryEnterCurrentWorldNode())
             return;
 
-        InitGame();
+        if (session.ActiveRun.ActiveLeg != null)
+            InitGame();
+        else
+        {
+            PrepareSceneUi();
+            boardStartupInProgress = false;
+            doingSetup = false;
+            BeginRouteChoice();
+        }
     }
 
     private void BlockBoardStartup()
@@ -396,6 +424,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         doingSetup = true;
         DisposeActiveBoardRuntime();
         boardOutcomeHandled = false;
+        pendingBoardOutcome = null;
+        arrivalCheckpointCommitted = false;
         SetRouteChoices(NoRouteChoices);
         SetGameplayInputBlocked(true);
     }
@@ -406,33 +436,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         terminalActionRequested = false;
         SetRouteChoices(NoRouteChoices);
         SetGameplayInputBlocked(true);
-
-        levelImage = GameObject.Find("LevelImage");
-        if (levelImage != null)
-        {
-            levelImage.transform.SetAsFirstSibling();
-            levelImage.SetActive(true);
-        }
-
-        GameObject levelTextObject = GameObject.Find("LevelText");
-        if (levelTextObject != null)
-            levelText = levelTextObject.GetComponent<Text>();
-        if (levelText != null)
-            levelText.text = "Day: " + (session.GetCurrentRun().CurrentDay + 1);
-
-        restartButton = GameObject.Find("RestartBttn");
-        if (restartButton != null)
-            restartButton.SetActive(false);
-
-        menuButton = GameObject.Find("MenuBttn");
-        if (menuButton != null)
-            menuButton.SetActive(false);
-
-        GameObject scoreTextObject = GameObject.Find("ScoreText");
-        if (scoreTextObject != null)
-            scoreText = scoreTextObject.GetComponent<Text>();
-        if (scoreText != null)
-            scoreText.text = string.Empty;
+        CancelInvoke(nameof(HideLevelImage));
+        PrepareSceneUi();
 
         activeBoardRequest = null;
         activeBoardRuntime = null;
@@ -447,15 +452,38 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         try
         {
             RunState run = session.GetCurrentRun();
+            bool showIntro = run.ActiveLeg == null;
+            if (run.ActiveLeg != null)
+            {
+                if (!TryEnsureWorldMap())
+                    return;
+                SaveStoreResult introResult = worldMap.Travel.ConsumeIntro(out showIntro);
+                if (introResult.IsFailure)
+                {
+                    Debug.LogError("Day intro checkpoint failed: " + introResult.Type);
+                    return;
+                }
+            }
             BoardRequest request = BoardRequest.CreateFromRun(run, worldDefinition);
             GameObject playerView = GameObject.FindGameObjectWithTag("Player");
+            if (request.Address != null && playerView != null)
+                playerView.transform.position = new Vector3(0, 0, playerView.transform.position.z);
             BoardRuntime runtime = boardScript.SetupScene(request, run, playerView);
 
             PublishBoardRuntime(runtime);
             boardStartupInProgress = false;
             SetGameplayInputBlocked(false);
-            CancelInvoke(nameof(HideLevelImage));
-            Invoke(nameof(HideLevelImage), levelStartDelay);
+            if (showIntro)
+            {
+                if (levelText != null)
+                    levelText.text = "Day: " + Math.Max(1, run.CurrentDay);
+                if (levelImage != null)
+                    levelImage.SetActive(true);
+                activePlayerView.SetHudVisible(false);
+                Invoke(nameof(HideLevelImage), levelStartDelay);
+            }
+            else
+                HideLevelImage();
         }
         catch (Exception exception)
         {
@@ -464,6 +492,36 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             SetGameplayInputBlocked(true);
             Debug.LogError("Board startup failed: " + exception.Message);
         }
+    }
+
+    private void PrepareSceneUi()
+    {
+        levelImage = FindSceneObject("LevelImage");
+        levelText = FindSceneObject("LevelText")?.GetComponent<Text>();
+        restartButton = FindSceneObject("RestartBttn");
+        menuButton = FindSceneObject("MenuBttn");
+        scoreText = FindSceneObject("ScoreText")?.GetComponent<Text>();
+        if (levelImage != null)
+        {
+            levelImage.transform.SetAsFirstSibling();
+            levelImage.SetActive(false);
+        }
+        if (restartButton != null)
+            restartButton.SetActive(false);
+        if (menuButton != null)
+            menuButton.SetActive(false);
+        if (scoreText != null)
+            scoreText.text = string.Empty;
+        GameObject.FindGameObjectWithTag("Player")?.GetComponent<PlayerScript>()?.SetHudVisible(false);
+    }
+
+    private static GameObject FindSceneObject(string objectName)
+    {
+        foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects())
+            foreach (Transform candidate in root.GetComponentsInChildren<Transform>(true))
+                if (candidate.name == objectName)
+                    return candidate.gameObject;
+        return null;
     }
 
     private void PublishBoardRuntime(BoardRuntime runtime)
@@ -649,7 +707,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     /// <summary>
     /// Applies one result emitted by the currently active local board.
-    /// Full current-run identity is checked before effects. Active-leg completion awaits M3.12 orchestration.
+    /// Intermediate exits checkpoint the next segment; final arrival reconciles discovery before the atlas.
+    /// Failed boundaries stay blocked and may retry without another turn or a second arrival save.
     /// </summary>
     /// <param name="outcome">The board outcome to handle.</param>
     /// <returns><c>true</c> when the matching outcome was accepted; otherwise <c>false</c>.</returns>
@@ -658,8 +717,10 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (outcome == null
             || activeBoardRequest == null
             || boardOutcomeHandled
-            || !BoardOutcomeIdentityGuard.ValidateOutcome(outcome, activeBoardRequest, session?.ActiveRun, out _)
-            || session.ActiveRun.ActiveLeg != null)
+            || handlingBoardOutcome
+            || (arrivalCheckpointCommitted
+                ? !ReferenceEquals(outcome, pendingBoardOutcome)
+                : !BoardOutcomeIdentityGuard.ValidateOutcome(outcome, activeBoardRequest, session?.ActiveRun, out _)))
         {
             return false;
         }
@@ -669,6 +730,35 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         switch (outcome.Type)
         {
             case BoardOutcomeType.ExitReached:
+                if (!TryEnsureWorldMap())
+                    return false;
+                pendingBoardOutcome = outcome;
+                SetGameplayInputBlocked(true);
+                if (outcome.Request.Address != null && !arrivalCheckpointCommitted)
+                {
+                    if (!worldMap.Travel.TryCompleteSegment(outcome.Request, out SaveStoreResult checkpoint, out bool arrived))
+                        return false;
+                    if (checkpoint.IsFailure)
+                    {
+                        Debug.LogError("Segment checkpoint failed: " + checkpoint.Type);
+                        return false;
+                    }
+                    if (!arrived)
+                    {
+                        boardOutcomeHandled = true;
+                        pendingBoardOutcome = null;
+                        UpdatePresentationBlocks();
+                        sceneLoader(SceneManager.GetActiveScene().name);
+                        return true;
+                    }
+                    arrivalCheckpointCommitted = true;
+                }
+                WorldMapCommandResult discovery = worldMap.ReconcileCompletedTravel();
+                if (!discovery.IsSuccess)
+                {
+                    Debug.LogError("Arrival discovery checkpoint failed: " + discovery.ErrorMessage);
+                    return false;
+                }
                 if (!BeginRouteChoice())
                     return false;
                 break;
@@ -685,6 +775,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
                 return false;
         }
 
+        pendingBoardOutcome = null;
         boardOutcomeHandled = true;
         UpdatePresentationBlocks();
         return true;
@@ -692,16 +783,20 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void HideLevelImage()
     {
+        if (boardStartupInProgress || activeBoardRequest == null)
+            return;
+        if (session?.ActiveRun?.ActiveLeg?.IntroState == DayIntroState.Pending)
+            return;
         if (levelImage != null)
             levelImage.SetActive(false);
 
-        if (boardStartupInProgress || activeBoardRequest == null)
-            return;
-
         doingSetup = false;
+        activePlayerView?.SetHudVisible(true);
         UpdatePresentationBlocks();
     }
 
+    /// <summary>Closes the run and shows completed days separately from death during the active day.</summary>
+    /// <param name="isStarved">Whether the accepted terminal outcome was starvation.</param>
     public void GameOver(bool isStarved)
     {
         if (session == null || session.ActiveRun == null)
@@ -719,12 +814,13 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (levelText != null)
         {
             if (isStarved)
-                levelText.text = "After " + run.CurrentDay + " days, you've starved.";
+                levelText.text = "You've starved on Day " + Math.Max(1, run.CurrentDay) + ".\nCompleted days: " + run.CompletedDayCount;
             else
-                levelText.text = "After " + run.CurrentDay + " days, your brain has been eaten.";
+                levelText.text = "Your brain has been eaten on Day " + Math.Max(1, run.CurrentDay) + ".\nCompleted days: " + run.CompletedDayCount;
         }
 
-        int score = ManageScore(run.CurrentDay);
+        int score = ManageScore(run.CompletedDayCount);
+        activePlayerView?.SetHudVisible(false);
 
         if (levelImage != null)
             levelImage.SetActive(true);
@@ -755,6 +851,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         DisposeActiveBoardRuntime();
         worldMap = null;
         boardOutcomeHandled = false;
+        pendingBoardOutcome = null;
+        arrivalCheckpointCommitted = false;
+        pendingChosenEdgeId = null;
         if (!boardStartupInProgress)
         {
             doingSetup = false;
@@ -1003,6 +1102,12 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (!TryEnsureWorldMap())
             return false;
 
+        WorldMapCommandResult arrival = worldMap.ReconcileCompletedTravel();
+        if (!arrival.IsSuccess)
+        {
+            Debug.LogError("Arrival recovery failed: " + arrival.ErrorMessage);
+            return false;
+        }
         WorldMapCommandResult result = worldMap.EnterCurrentNode();
         if (result.IsSuccess)
             return true;

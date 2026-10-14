@@ -4469,22 +4469,22 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.12` — Multi-board route flow and immersive Day transition
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-14 after Lead implementation and mechanical validation; the owner explicitly waived independent review for this task after both native `reviewer` invocations returned no response. No independent Reviewer PASS is claimed.
 **Priority:** P0 architecture gate
 **Related contract:** sections 5, 7.3, 7.5, 8, 18, and 27.2.
 
 **Rationale:** A correct data model is not enough if route selection still teleports to the destination or every local exit reopens the atlas. One owner must advance segment, day, discovery, persistence, and presentation in the accepted order.
 
-**Current behavior:** `WorldMapService.ChooseRoute()` immediately advances `RunState` to the target node, marks the edge `Traversed`, increments day, and checkpoints. Any active board represents that reached node; its exit opens route choice.
+**Behavior at ticket entry:** `WorldMapService.ChooseRoute()` immediately advanced `RunState` to the target node, marked the edge `Traversed`, incremented day, and checkpointed. Any active board represented that reached node; its exit opened route choice. The accepted implementation below replaces that flow.
 
-**Expected outcome:** A dedicated travel service starts a persisted route leg with a `Pending` intro, shows `Day N` once while gameplay input is blocked, atomically persists `Presented` before enabling the first board input, enters each stable segment in order, and treats intermediate exits as continuation. Only the final exit reaches the destination, marks discovery, completes the travel entry, checkpoints the leg, and opens route choice.
+**Expected outcome:** A dedicated travel service starts a persisted route leg with a `Pending` intro, durably checkpoints `Consumed` before rendering `Day N` with gameplay input blocked and HUD hidden, enters each stable segment in order, and treats intermediate exits as continuation. Crash recovery has at-most-once intro semantics: an interrupted consumed intro may be skipped, never repeated. Only the final exit reaches the destination, marks discovery, completes the travel entry, checkpoints the leg, and opens route choice.
 
 **Required flow:**
 
 ```text
 Reached checkpoint + chosen edge
 → persist ActiveRouteLegState
-→ show Day N once with gameplay HUD hidden
+→ persist Consumed before rendering Day N with gameplay HUD hidden
 → load segment 1 ... segment N
 → intermediate ExitReached: checkpoint next segment, no atlas and no day increment
 → final ExitReached: complete leg, Traversed + Visited, persist, open atlas
@@ -4506,14 +4506,52 @@ Reached checkpoint + chosen edge
 - the last exit commits destination `Visited` and edge `Traversed` once, then opens route choice;
 - all boards in one leg show the same day number and the next leg increments it exactly once;
 - `Day 1` appears before the first leg, never `Day 0`, and the transition hides health/resource/tool HUD;
-- `Continue` with `Pending` shows the transition, while `Continue` with `Presented` restores the same segment without replaying it; no path enables gameplay input before `Presented` is durably checkpointed;
+- `Continue` with `Pending` consumes/checkpoints before showing the transition, while `Continue` with `Consumed` restores the same segment without replaying it; no path renders the intro or enables gameplay input before `Consumed` is durably checkpointed;
 - different edges may contain different positive segment counts without code changes.
 
-**Test plan:** EditMode state-machine and idempotency matrix; PlayMode two- and five-segment legs, death on an intermediate segment, final arrival, duplicate outcome, route choice, HUD-hidden Day transition, restart/`Continue` from both `Pending` and `Presented`, crash injection around the presentation checkpoint, and animations disabled; full lifecycle regression.
+**Test plan:** EditMode state-machine and idempotency matrix; PlayMode two- and five-segment legs, death on an intermediate segment, final arrival, duplicate outcome, route choice, HUD-hidden Day transition, restart/`Continue` from both `Pending` and `Consumed`, crash injection around the pre-render checkpoint, and animations disabled; full lifecycle regression.
 
 **Save and compatibility impact:** Uses the M3.11 run schema and writes only stable completed boundaries. Mid-board resume remains deferred; a restart of the current board must keep the same segment address and must not duplicate leg progress.
 
 **Required handoff:** Travel sequence diagram, checkpoint matrix for start/intermediate/final/death/continue, screenshots of Day transition with hidden HUD, and proof that atlas discovery changes only on final arrival.
+
+### Acceptance (2026-10-14)
+
+The owner assigned implementation and Lead validation to the same agent, initially retaining independent Reviewer acceptance. After both Reviewer invocations failed, the owner explicitly authorized acceptance without that review on 2026-10-14. This exception applies only to M3.12 and does not change the review policy for later tasks. Clean baseline: Git root `D:/Repos/HallowBlaze`, branch `M3/12JourneyIsTheWay`, `HEAD` `8a2594a9bf03625c8b5e5c28c8505f33fb57fcf8`. Branch and HEAD remain unchanged; no staging, commit, or push was performed.
+
+`RouteTravelService` uses the accepted M3.11 state transitions rather than a second travel ledger. The production owner starts at a reached checkpoint with the atlas, creates addressed boards only during an active leg, and routes intermediate exits to the next segment. Final arrival first saves run history, then reconciles profile discovery; that durable history also repairs a crash between the two saves. `RetryTravelCheckpoint` retries a blocked boundary without another turn or a duplicate arrival save. Failed run checkpoints restore the previous travel state. Restarted addressed boards use the same address/seed and their own start position. Run summaries and local scores count completed days, not death during an active day.
+
+```text
+Reached checkpoint / atlas
+   -> chosen edge -> save Pending leg
+   -> save Consumed -> show Day N with HUD/input hidden
+   -> addressed segment -> one guarded ExitReached
+          intermediate -> save next segment -> reload without intro/atlas/day change
+          final -> save arrival/history -> save Visited/Traversed -> atlas
+Continue -> restore exact boundary -> Pending consumes before render / Consumed skips intro
+```
+
+| Boundary | Run checkpoint | Profile / presentation | Failure and recovery |
+| --- | --- | --- | --- |
+| Route start | Pending leg, unique traversal ID, segment 1 | No destination arrival or traversal discovery | Failed save restores checkpoint/allocator; identical route retry |
+| Day intro | Consumed before rendering | Day 1 or later; HUD/input blocked until presentation completes | Failed save keeps Pending and no render/input; crash after Consumed skips intro |
+| Intermediate exit | Next stable segment, unchanged day/checkpoint/history | No atlas, Visited, or Traversed | Failed save restores current address; retry does not resolve another turn |
+| Final exit | Arrival, completed day and one history entry | Reconcile Visited/Traversed, then atlas, including a node with no outgoing road | Profile retry does not save arrival again; fresh-session recovery uses durable history |
+| Death during a leg | Existing lifecycle closes/removes run | One terminal profile summary with completed days only | No destination/traversal success; no route choice |
+| Continue / board restart | No mid-board snapshot or extra progress | Same address, seed and starting layout; Consumed intro not repeated | Unsaved board actions return to the same saved boundary |
+
+Final Lead-owned Unity `6000.3.21f1` validation on this source candidate:
+
+```powershell
+unity test "D:\Repos\HallowBlaze\HallowBlaze" --mode EditMode --output "$env:TEMP\HB-M312-final-editmode-20261014.xml" -- -nographics -logFile "$env:TEMP\HB-M312-final-editmode-20261014.log"
+unity test "D:\Repos\HallowBlaze\HallowBlaze" --mode PlayMode --output "$env:TEMP\HB-M312-final-playmode-20261014.xml" -- -logFile "$env:TEMP\HB-M312-final-playmode-20261014.log"
+```
+
+Fresh XML confirms **EditMode 640/640 Passed** and **graphics-enabled PlayMode 109/109 Passed**, with zero failed, skipped, or inconclusive cases. Coverage includes two/five-segment production travel on the sole controller/presenter, final-only discovery, duplicate/foreign outcomes, Pending/Consumed Continue, failed start/intro/segment/profile checkpoints, partial-day death, final run-before-profile crash recovery, real scene/menu lifecycle, and repeated Continue layout identity. The real Main-scene intro test verifies hidden Food/Health, durable Consumed, blocked input, nonblank camera/canvas pixels, and HUD release. Its external capture is `$env:TEMP/HB-M312-Day1-640x480.png`; actual runner size was 640x480, not a claimed larger viewport. No user-run manual smoke is claimed.
+
+`git diff --check` passed; editor diagnostics have no new errors and retain only the pre-existing `FindObjectsOfType` deprecation warning in a lifecycle helper. The only new asset is the travel service with Unity-generated metadata. Scenes, prefabs, packages, settings, save formats, AI rules, and protected agent configuration have no candidate changes. Future observation aggregation, generator, inventory, and portable replay remain outside this task.
+
+Both native invocations of the configured `reviewer`, without a model override or configuration edit, returned `Sorry, no response was returned`. There is **no independent review verdict**. The owner explicitly waived this acceptance blocker on 2026-10-14 and accepted the mechanically validated implementation; neither a Reviewer PASS nor an independently performed review is claimed. This documentation-only closeout changes no source or test behavior and does not require rerunning the recorded Unity gates. M3.12 is accepted; M4 may begin as a separately assigned task with its normal preflight and review requirements.
 
 ### Bramka M3
 
@@ -6011,19 +6049,19 @@ O-002, O-003, O-004, O-005, O-006, O-007, O-008, and O-009 are resolved in `Game
 
 # Kolejka wykonawcza
 
-M0, M1, and M2 are complete; M3.1-M3.11 are `Done`. The M3.6 umbrella and M3.6.3 were accepted on 2026-10-08 with owner-confirmed PC smoke and final independent review. M3.9.14 and M3.9 were accepted for PoC by the owner on 2026-10-13 without a measured prediction claim; reduced M3.10's automated scenario gates are complete. M3.11 and all thirty-two children were accepted on 2026-10-14 with full EditMode `635/635`, production-focused PlayMode `39/39`, and owner-authorized combined-role self-review; [evidence](Validation/M3.11RouteAddress.md). M3.12 planning alignment is next. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. M3.6.1 was implemented from the clean baseline `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. M3.6.2 was implemented from the clean baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e64f7ebaea81e015`. M3.6.3 uses `M3/ProductionCutover` at `af030818d5de705968e26907139c435bc26ecd86`. Every new ticket still begins with its normal clean-worktree preflight.
+M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3 were accepted on 2026-10-08 with owner-confirmed PC smoke and final independent review. M3.9.14 and M3.9 were accepted for PoC by the owner on 2026-10-13 without a measured prediction claim; reduced M3.10's automated scenario gates are complete. M3.11 and all thirty-two children were accepted on 2026-10-14 with full EditMode `635/635`, production-focused PlayMode `39/39`, and owner-authorized combined-role self-review; [evidence](Validation/M3.11RouteAddress.md). M3.12 passed full EditMode `640/640` and graphics-enabled PlayMode `109/109` on 2026-10-14 and was accepted by explicit owner waiver of independent review after two native Reviewer invocations returned no response; no independent verdict is claimed. See its acceptance section above. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. M3.6.1 was implemented from the clean baseline `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. M3.6.2 was implemented from the clean baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e64f7ebaea81e015`. M3.6.3 uses `M3/ProductionCutover` at `af030818d5de705968e26907139c435bc26ecd86`. Every new ticket still begins with its normal clean-worktree preflight.
 
 The next safe sequence is:
 
-1. align M3.12 planning with accepted section 27.2 Pending/Consumed and checkpoint-before-render semantics before making it Ready, then execute M3.12 before M4 so generation, future replay, atlas observations, and tool sources share stable route-segment identity;
+1. start M4 with `M4.1` as a separately assigned task from a clean committed baseline, then follow the existing dependency order; the M3.12 review waiver does not extend to later tasks;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
 `M0.9` remains deferred by owner decision. No implementation agent performs external history rewriting, exposes historical values, or runs BFG without a separate explicit request.
 
-### Rationale - why M3.12 is next
+### Rationale - why M4 can begin
 
-Accepted M3.6 establishes one production gameplay authority, M3.7/M3.8 provide deterministic retained enemy behavior, M3.9 is owner-approved for PoC, and reduced M3.10 protects concrete turn scenarios. Accepted M3.11 supplies stable traversal/segment identity and compatible save state. M3.12 must now align its planning with the accepted intro durability contract and activate multi-board travel before M4 consumes those addresses. Deferred portable replay is not a prerequisite.
+Accepted M3.6 establishes one production gameplay authority, M3.7/M3.8 provide deterministic retained enemy behavior, M3.9 is owner-approved for PoC, and reduced M3.10 protects concrete turn scenarios. Accepted M3.11 supplies stable traversal/segment identity and compatible save state. Accepted M3.12 activates multi-board travel with the durable intro contract, providing the production address boundaries that M4 consumes. Its missing independent review is explicitly waived for this task only. Deferred portable replay is not a prerequisite.
 
 # Zasada aktualizacji roadmapy
 
