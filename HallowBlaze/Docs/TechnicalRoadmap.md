@@ -1,7 +1,7 @@
 # HallowBlaze — Technical Roadmap
 
 > Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8, M3.9.1-13 and M3.9.P1 accepted; M3.9 blocked on the manual readability gate; route-leg amendments accepted; M9 deferred**
-> Data ostatniej weryfikacji: 2026-10-11
+> Data ostatniej weryfikacji: 2026-10-12
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
 > Zasady pracy agentów: [`../AGENTS.md`](../AGENTS.md)
@@ -2869,7 +2869,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9` - Readable locked-intent presentation (tracking umbrella)
 
-**Status:** `Blocked` - 2026-10-11. All implementation/regression children `M3.9.1-13` and production prerequisite `M3.9.P1` are accepted. Manual `M3.9.14` lacks a reachable live Pipeline connection, production smoke/captures and human blind-prediction evidence. Automated passes do not establish readability or the majority-of-testers gate. See [readability evidence](Validation/M3.9IntentReadability.md); dependent `M3.10` remains gated.
+**Status:** `Blocked` - updated 2026-10-12. All implementation/regression children `M3.9.1-13`, production prerequisite `M3.9.P1` and startup-layout repair `M3.9.R1` are accepted. Fresh production smoke/captures and human blind-prediction evidence remain required by `M3.9.14`. Automated passes do not establish readability or the majority-of-testers gate. See [readability evidence](Validation/M3.9IntentReadability.md); dependent `M3.10` remains gated.
 **Priority:** P0
 **Related contract:** sections 10.2, 11, 18, 21.2, and the intent gate in section 22; [accepted Shambler rule](GameDesignContract.md#1131-accepted-shambler-rule).
 
@@ -3323,9 +3323,25 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ---
 
+## `M3.9.R1` - Repair production legend startup layout
+
+**Status:** `Done` - accepted 2026-10-12 after direct Lead implementation without Developer and independent Reviewer PASS. The owner's `New Game` startup failure is covered by a regression: adaptive legend placement and temporary camera-space reservation release `Day: 1` without obscuring board pixels. Pointer/wheel/drag access and camera restoration are verified; manual readability remains blocked pending fresh evidence.
+
+**Scope:** Adapt `EnemyIntentLegend` to a free side/top/bottom margin with wrapped rows and scrollable content. When an orthographic board leaves no readable margin, `GameManager` temporarily reserves camera viewport space and fits all board bounds, restoring the borrowed camera on UI disposal. Apply the same fallback on viewport resize. Keep impossible layouts diagnostic and input-blocked; do not persist camera or scene changes.
+
+**Allowed file area:** `Assets/Scripts/Presentation/Runtime/EnemyIntentLegend.cs`, `Assets/Scripts/GameManager.cs`, existing `EnemyIntentPresentationTests.cs` and `BoardRuntimeStartupTests.cs`; Lead status and the existing readability report only.
+
+**Acceptance criteria:** Production camera framing releases the Day 1 overlay, initial input admits one command/cost, legend/control do not cover board pixels, wrapped meanings remain accessible and old camera settings return on disposal. Unsupported/impossible layouts still block startup. No gameplay, scene, prefab, package or save-format changes.
+
+**Validation:** The focused layout test first reproduced the exact overlap exception in the connected Editor. Repaired layout passed 1/1 at 1142x684, 1280x720 and 1920x1080, including actual EventSystem raycast, wheel/drag access to the last symbol and initial top position. Isolated Day 1 startup passed 1/1 at 640x480, including transition release and camera restoration. Final intent fixture 29/29, final startup fixture 8/8 and command path 12/12 passed. Independent Reviewer PASS followed correction of the pointer target; camera resize guards were independently rechecked. Live-runner initialization scenes were backed up with SHA-256 and removed with their metadata; ProjectSettings content was verified identical to HEAD, not restored.
+
+**Readability impact:** This repair does not establish human comprehension. Rerun production smoke and the human prediction gate in `M3.9.14` after acceptance.
+
+---
+
 ## `M3.9.14` - Lead-owned intent readability gate
 
-**Status:** `Blocked` - 2026-10-11 after accepted `M3.9.13`. Unity CLI discovery found the active project but zero reachable Pipeline servers; `unity command` exited 1 with `No Unity Editor instances found with reachable Pipeline servers.` Production smoke, grayscale/animation-disabled captures and human predictions are not available. The [Lead-owned report](Validation/M3.9IntentReadability.md) records zero participants, unevaluable percentages and explicit resume criteria; no manual PASS or umbrella acceptance is claimed.
+**Status:** `Blocked` - updated 2026-10-12. Pipeline connectivity was restored; the owner's production smoke found a legend-layout exception leaving `New Game` on `Day: 1`, now covered by separately accepted repair `M3.9.R1`. A fresh production smoke, grayscale/animation-disabled captures and human predictions remain required. The [Lead-owned report](Validation/M3.9IntentReadability.md) records the observed failure, mechanical repair evidence, zero recorded prediction participants and explicit resume criteria; no manual PASS or umbrella acceptance is claimed.
 **Priority:** P0
 **Related contract:** sections 18 and the intent gate in section 22.
 

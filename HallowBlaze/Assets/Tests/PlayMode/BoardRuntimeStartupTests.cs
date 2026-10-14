@@ -365,9 +365,10 @@ namespace HallowBlaze.Tests.PlayMode
             Camera camera = CreateObject("Intent overlap camera", 0, 0).AddComponent<Camera>();
             camera.gameObject.tag = "MainCamera";
             camera.transform.position = new Vector3(1.5f, 1.5f, -10);
-            camera.orthographic = true;
-            camera.orthographicSize = 4;
-            camera.pixelRect = new Rect(Screen.width - 180, 8, 172, 40);
+            camera.orthographic = false;
+            camera.orthographicSize = 1;
+            camera.fieldOfView = 1;
+            camera.pixelRect = new Rect(0, 0, Screen.width, Screen.height);
             LogAssert.Expect(LogType.Error, new Regex("Board startup failed: Legend must leave the supplied inspected board area visible"));
             InvokeManager(manager, "InitGame");
             Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Null);
@@ -380,6 +381,74 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
             Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
             TestContext.WriteLine("P1 production roster; initial before Setup release; one coordinator; free reject/pause/legend; disable/resume; reused-ID replacement; terminal cleanup; failed UI blocks startup; isolated save root.");
+        }
+
+        /// <summary>Day-one startup with the production camera framing leaves the transition and enables the sole command path.</summary>
+        [UnityTest]
+        public IEnumerator DayOneStartup_WithCenteredCameraReleasesTransition()
+        {
+            persistenceRoot = Path.Combine(Path.GetTempPath(), "HB-LegendStartup-" + Guid.NewGuid().ToString("N"));
+            gameManagerType.GetField("PersistenceRootOverride", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, persistenceRoot);
+            Time.timeScale = 1;
+            Component board = CreateBoardManager();
+            SetField(board, "columns", 8);
+            SetField(board, "rows", 8);
+            Component manager = board.gameObject.AddComponent(gameManagerType);
+            var world = new TextAsset(File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json")));
+            createdAssets.Add(world);
+            SetField(manager, "worldDefinitionJson", world);
+            SetField(manager, "levelStartDelay", 0.05f);
+            Assert.That((bool)InvokeManager(manager, "TryEnsureWorldMap"), Is.True);
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            session.StartNewRun("day-one-legend-regression", 54321, new RunStateConfiguration(100, 100, 0, "forest.start"));
+            Camera camera = CreateObject("Production camera framing", 0, 0).AddComponent<Camera>();
+            camera.gameObject.tag = "MainCamera";
+            camera.transform.position = new Vector3(3.5f, 3.5f, -10);
+            camera.orthographic = true;
+            camera.orthographicSize = 5;
+            GameObject playerObject = CreateObject("Day-one player", 0, 0);
+            playerObject.tag = "Player";
+            Component player = playerObject.AddComponent(boardManagerType.Assembly.GetType("PlayerScript", true));
+            SetField(player, "animationsEnabled", false);
+            GameObject transition = CreateObject("LevelImage", 0, 0);
+            GameObject textObject = CreateObject("LevelText", 0, 0);
+            textObject.transform.SetParent(transition.transform, false);
+            var dayText = textObject.AddComponent<UnityEngine.UI.Text>();
+
+            Rect originalRect = camera.rect;
+            float originalSize = camera.orthographicSize;
+            TestContext.WriteLine("Day-one test viewport=" + Screen.width + "x" + Screen.height);
+            InvokeManager(manager, "InitGame");
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            Assert.That(runtime, Is.Not.Null);
+            Assert.That(runtime.Enemies, Is.Empty);
+            Assert.That(dayText.text, Is.EqualTo("Day: 1"));
+            Assert.That(transition.activeSelf, Is.True);
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
+            float deadline = Time.realtimeSinceStartup + 2;
+            while (transition.activeSelf && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            Assert.That(transition.activeSelf, Is.False, "The completed board must release the Day: 1 overlay.");
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.True);
+            EnemyIntentLegend legend = GetManagerField<EnemyIntentLegend>(manager, "activeIntentLegend");
+            Assert.That(legend, Is.Not.Null);
+            var inspected = (Rect)InvokeManager(manager, "InspectedBoardArea");
+            Assert.That(legend.PanelBounds.Overlaps(inspected) || legend.ControlBounds.Overlaps(inspected), Is.False);
+            legend.Control.onClick.Invoke();
+            Assert.That(legend.IsVisible, Is.True);
+            legend.Control.onClick.Invoke();
+            Assert.That(legend.IsVisible, Is.False);
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(TrySubmit(manager, new WaitCommand(), out Task<CommandSubmission> pending), Is.True);
+            while (!pending.IsCompleted)
+                yield return null;
+            Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(99));
+            Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.EqualTo(1));
+            InvokeManager(manager, "BlockBoardStartup");
+            Assert.That(camera.rect, Is.EqualTo(originalRect));
+            Assert.That(camera.orthographicSize, Is.EqualTo(originalSize));
+            TestContext.WriteLine("Day: 1 released; production camera (3.5,3.5,-10), size5; viewport=" + Screen.width + "x" + Screen.height + "; nonoverlapping legend; one command/cost.");
         }
 
         private static object InvokeManager(Component manager, string name, params object[] arguments)
