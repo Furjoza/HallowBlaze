@@ -9,6 +9,29 @@ namespace HallowBlaze.Tests.EditMode
     public sealed class RunStateTests
     {
         [Test]
+        public void CheckpointTravelState_HasOneHistoryOwnerAndSafeReset()
+        {
+            RunState run = RouteLegTests.NewRun();
+            List<TravelHistoryEntry> source = new List<TravelHistoryEntry> { TravelHistoryEntry.LegacyCheckpoint("a") };
+            run.RestoreTravelState(3, "a", 0, source, null);
+            source.Clear();
+            Assert.That(run.Route, Is.EqualTo(new[] { "a" }));
+            Assert.That(run.CompletedDayCount, Is.EqualTo(3));
+            Assert.That(run.ActiveLeg, Is.Null);
+            Assert.Throws<NotSupportedException>(() => ((IList<TravelHistoryEntry>)run.TravelHistory).Clear());
+            Assert.Throws<ArgumentException>(() => run.RestoreTravelState(-1, "b", 0, source, null));
+            Assert.That(run.WorldNodeId, Is.EqualTo("a"));
+            Assert.That(run.CompletedDayCount, Is.EqualTo(3));
+            Assert.That(run.TravelHistory, Has.Count.EqualTo(1));
+            run.StartLeg("edge", "a", "b", RouteLegTests.Segments());
+            run.Reset("fresh", 7, new RunStateConfiguration(100, 100, 0, "a"));
+            Assert.That(run.TravelHistory, Is.Empty);
+            Assert.That(run.TraversalSequence, Is.Zero);
+            Assert.That(run.CompletedDayCount, Is.Zero);
+            Assert.That(run.ActiveLeg, Is.Null);
+        }
+
+        [Test]
         public void NewRunUsesConfiguredValuesAndCallerProvidedIdentity()
         {
             RunStateConfiguration configuration = CreateConfiguration(

@@ -12,6 +12,23 @@ namespace HallowBlaze.Tests.EditMode
     public sealed class WorldDefinitionTests
     {
         [Test]
+        public void RouteSegment_ValidatesStableGenerationIdentity()
+        {
+            RouteSegmentDefinition segment = new RouteSegmentDefinition("segment.test.entry", "legacy.board.v1", 1);
+            Assert.That(segment.SegmentId, Is.EqualTo("segment.test.entry"));
+            Assert.That(segment.GenerationConfigurationId, Is.EqualTo("legacy.board.v1"));
+            Assert.That(segment.GenerationVersion, Is.EqualTo(1));
+            foreach (string invalid in new[] { null, "", " ", " segment", "segment " })
+            {
+                Assert.Throws<ArgumentException>(() => new RouteSegmentDefinition(invalid, "config", 1));
+                Assert.Throws<ArgumentException>(() => new RouteSegmentDefinition("segment", invalid, 1));
+            }
+            foreach (int invalid in new[] { int.MinValue, -1, 0 })
+                Assert.Throws<ArgumentOutOfRangeException>(() => new RouteSegmentDefinition("segment", "config", invalid));
+            Assert.That(typeof(RouteSegmentDefinition).GetProperties().All(property => property.SetMethod == null), Is.True);
+        }
+
+        [Test]
         public void PrototypeFixtureIdentityMatchesCurrentProfileContract()
         {
             WorldDefinition world = LoadPrototypeWorld();
@@ -215,17 +232,129 @@ namespace HallowBlaze.Tests.EditMode
 
         private static WorldDefinition LoadPrototypeWorld()
         {
+            return WorldDefinitionJson.Deserialize(LoadPrototypeJson());
+        }
+
+        private static string LoadPrototypeJson()
+        {
             string path = Path.Combine(
                 Application.dataPath,
                 "GameData",
                 "World",
                 "prototype-world.json");
-            return WorldDefinitionJson.Deserialize(File.ReadAllText(path));
+            return File.ReadAllText(path);
+        }
+
+        [Test]
+        public void EdgeSegments_AreOrderedDetachedAndNonempty()
+        {
+            List<RouteSegmentDefinition> source = new List<RouteSegmentDefinition>
+            {
+                new RouteSegmentDefinition("second", "config", 1),
+                new RouteSegmentDefinition("first", "config", 1)
+            };
+            WorldEdgeDefinition edge = new WorldEdgeDefinition("edge", "a", "b", "north", "clue", source);
+            source.Clear();
+            Assert.That(edge.Segments.Select(segment => segment.SegmentId), Is.EqualTo(new[] { "second", "first" }));
+            Assert.That(edge.SegmentCount, Is.EqualTo(2));
+            Assert.Throws<NotSupportedException>(() => ((IList<RouteSegmentDefinition>)edge.Segments).Clear());
+            Assert.Throws<ArgumentNullException>(() => new WorldEdgeDefinition("edge", "a", "b", "north", "clue", null));
+            Assert.Throws<ArgumentException>(() => new WorldEdgeDefinition("edge", "a", "b", "north", "clue", source));
+            Assert.Throws<ArgumentException>(() => new WorldEdgeDefinition("edge", "a", "b", "north", "clue",
+                new[] { edge.Segments[0], edge.Segments[0] }));
+            Assert.Throws<ArgumentNullException>(() => new WorldEdgeDefinition("edge", "a", "b", "north", "clue",
+                new RouteSegmentDefinition[] { null }));
+            WorldEdgeDefinition legacy = new WorldEdgeDefinition("edge", "a", "b", "north", "clue");
+            Assert.That(legacy.Segments[0].SegmentId, Is.EqualTo("legacy.segment:edge"));
+            Assert.That(legacy.Segments[0].GenerationConfigurationId, Is.EqualTo("legacy.board.v1"));
+        }
+
+        [Test]
+        public void Catalogue_RejectsGlobalSegmentAliases()
+        {
+            WorldDefinition original = LoadPrototypeWorld();
+            WorldEdgeDefinition first = original.Edges[0];
+            WorldEdgeDefinition alias = new WorldEdgeDefinition("alias", first.FromNodeId, first.ToNodeId,
+                first.WorldDirection, first.ClueKey, first.Segments);
+            string message = Assert.Throws<ArgumentException>(() => new WorldDefinition("world-1", 1,
+                original.StartNodeId, original.GoalNodeId, original.Nodes, new[] { first, alias })).Message;
+            Assert.That(message, Does.Contain(first.Segments[0].SegmentId).And.Contain("alias").And.Contain(first.EdgeId));
+            WorldDefinition reversed = new WorldDefinition("world-1", 1, original.StartNodeId,
+                original.GoalNodeId, original.Nodes.Reverse(), original.Edges.Reverse());
+            foreach (WorldEdgeDefinition edge in original.Edges)
+                foreach (RouteSegmentDefinition expected in edge.Segments)
+                {
+                    Assert.That(reversed.TryGetSegment(expected.SegmentId, out RouteSegmentDefinition segment,
+                        out WorldEdgeDefinition owner), Is.True);
+                    Assert.That(segment, Is.SameAs(expected));
+                    Assert.That(owner.EdgeId, Is.EqualTo(edge.EdgeId));
+                }
+            Assert.That(reversed.TryGetSegment("missing", out _, out _), Is.False);
+        }
+
+        [Test]
+        public void WorldJson_ReadsExplicitSegmentsAndRejectsMalformedRows()
+        {
+            const string prefix = "{\"worldDefinitionId\":\"world-1\",\"version\":1,\"startNodeId\":\"a\",\"goalNodeId\":\"b\",\"nodes\":[],\"edges\":[{\"edgeId\":\"edge\",\"fromNodeId\":\"a\",\"toNodeId\":\"b\",\"direction\":\"north\",\"clueKey\":\"clue\"";
+            const string suffix = "}]}";
+            Assert.That(WorldDefinitionJson.Deserialize(prefix + suffix).TryGetEdge("edge",
+                out WorldEdgeDefinition legacy), Is.True);
+            Assert.That(legacy.Segments[0].SegmentId, Is.EqualTo("legacy.segment:" + legacy.EdgeId));
+            foreach (string bad in new[] { "null", "[]", "[null]", "[{}]",
+                "[{\"segmentId\":\"s\",\"generationConfigurationId\":\"c\",\"generationVersion\":0}]",
+                "[{\"segmentId\":\"s\",\"generationConfigurationId\":\"c\",\"generationVersion\":1,\"extra\":true}]" })
+            {
+                Assert.That(() => WorldDefinitionJson.Deserialize(prefix + ",\"segments\":" + bad + suffix), Throws.Exception, bad);
+            }
+            WorldDefinition explicitWorld = WorldDefinitionJson.Deserialize(prefix + ",\"segments\":[{\"segmentId\":\"s\",\"generationConfigurationId\":\"c\",\"generationVersion\":1}]" + suffix);
+            Assert.That(explicitWorld.TryGetSegment("s", out RouteSegmentDefinition segment, out _), Is.True);
+            Assert.That(segment.GenerationConfigurationId, Is.EqualTo("c"));
+            Assert.That(() => WorldDefinitionJson.Deserialize("{\"version\":1,\"version\":2}"), Throws.Exception);
+        }
+
+        [Test]
+        public void PrototypeWorld_HasFrozenExplicitSegmentRegistry()
+        {
+            WorldDefinition world = LoadPrototypeWorld();
+            string[] roads = { "east-creek-old-road", "east-quarry-ridge", "old-road-east-quarry",
+                "old-road-west-grove", "ridge-radio-tower", "start-east-creek", "start-west-trail",
+                "west-grove-ridge", "west-trail-old-road" };
+            string[] names = { "entry", "stretch", "clearing", "approach", "arrival" };
+            Assert.That(world.Edges.Select(edge => edge.EdgeId), Is.EqualTo(roads.Select(road => "road." + road)));
+            foreach (string road in roads)
+            {
+                Assert.That(world.TryGetEdge("road." + road, out WorldEdgeDefinition edge), Is.True);
+                Assert.That(edge.Segments.Select(segment => segment.SegmentId),
+                    Is.EqualTo(names.Select(name => "segment." + road + "." + name)));
+                Assert.That(edge.Segments.All(segment => segment.GenerationVersion == 1 &&
+                    segment.GenerationConfigurationId == "legacy.board.v1"), Is.True);
+            }
+            Assert.That(world.Edges.SelectMany(edge => edge.Segments).Select(segment => segment.SegmentId), Is.Unique);
+            Assert.That(world.WorldDefinitionId, Is.EqualTo("world-1"));
+            Assert.That(world.Version, Is.EqualTo(1));
+        }
+
+        [TestCase("123", "\"config\"", "1")]
+        [TestCase("\"segment\"", "123", "1")]
+        [TestCase("\"segment\"", "\"config\"", "1.25")]
+        public void WorldJson_RejectsCoercedSegmentTypes(string segment, string configuration, string version)
+        {
+            string json = "{\"worldDefinitionId\":\"world\",\"version\":1,\"startNodeId\":\"a\",\"goalNodeId\":\"b\",\"nodes\":[],\"edges\":[{\"edgeId\":\"edge\",\"fromNodeId\":\"a\",\"toNodeId\":\"b\",\"direction\":\"north\",\"clueKey\":\"clue\",\"segments\":[{\"segmentId\":" + segment +
+                ",\"generationConfigurationId\":" + configuration + ",\"generationVersion\":" + version + "}]}]}";
+            Assert.That(() => WorldDefinitionJson.Deserialize(json), Throws.Exception);
         }
 
         private static string EdgeSnapshot(WorldEdgeDefinition edge)
         {
             return $"{edge.EdgeId}|{edge.FromNodeId}|{edge.ToNodeId}|{edge.WorldDirection}";
+        }
+
+        [TestCase("segmentId", "SegmentId")]
+        [TestCase("segments", "Segments")]
+        public void WorldJson_RejectsCaseAliases(string field, string alias)
+        {
+            string json = LoadPrototypeJson().Replace("\"" + field + "\"", "\"" + alias + "\"");
+            Assert.That(() => WorldDefinitionJson.Deserialize(json), Throws.Exception);
         }
 
         private static string RouteSnapshot(IReadOnlyList<WorldEdgeDefinition> route)

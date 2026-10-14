@@ -3487,13 +3487,15 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11` - Route-leg state and stable board address (tracking umbrella)
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0 architecture gate
 **Related contract:** sections 4-8, 16, 21, and [accepted route-leg contract](GameDesignContract.md#272-route-legs-local-boards-and-days).
 
+**Completion (2026-10-14):** M3.11.1-M3.11.32 are accepted with full EditMode `635/635` and production-focused PlayMode `39/39`, zero failures/skips. The owner explicitly assigned Lead, Developer, and Reviewer to the same assistant for this task: final review is self-review, not independent review. [Acceptance and all child evidence](Validation/M3.11RouteAddress.md). Child starting-state descriptions and staged-cutover requirements below record the implementation sequence, not the final default schema.
+
 **Rationale:** Segment authoring, travel-state transitions, identity/seed derivation, stale-outcome guards, save migration, and scenario regression are separate acceptance surfaces. A single domain model assignment must not also change scenes, rewrite persistence, and convert route selection.
 
-**Current behavior:** `WorldEdgeDefinition` has no segments. `RunState` owns node/day and ordered node IDs; `WorldMapService.ChooseRoute()` immediately reaches the destination. `BoardFlowContracts` identifies a board by run/node/day/seed. Run schema is currently v1. M3.10 supplies explicit scenario coverage; portable replay does not yet exist and is deferred to M8.7.
+**Current behavior:** World edges expose authored stable segments; `RunState` owns checkpoint/day/history and optional immutable active-leg state. Session derives full segment addresses and validates runtime/outcome identity before effects. Normal run saves write v2 and read supported v1/v2; profile schema is unchanged. Production `WorldMapService.ChooseRoute()` deliberately retains the legacy checkpoint flow until M3.12. Multi-board orchestration and pre-render intro checkpointing are not active. Portable replay remains deferred to M8.7.
 
 **Expected outcome:** Edges expose ordered non-empty stable segment definitions. The run owns a reached checkpoint, completed-day count, structured history, and an optional persisted active leg with a unique run-local traversal ID. The leg has one 1-based displayed day, stable segment cursor/progress, and `Pending`/`Consumed` intro state. A `BoardAddress` identifies run, traversal, edge, segment, day, generation version/configuration, and deterministic seed. Separate child acceptance precedes production travel flow in M3.12.
 
@@ -3513,11 +3515,11 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Allowed file area:** Only each child's exact source/test paths and the single Lead-owned validation report. No blanket permission to edit Core, world assets, or production callers. Unity-generated metadata is inspected, not invented; existing GUIDs are preserved.
 
-**Execution order:** Accept M3.11.1 through M3.11.31 separately, then perform M3.11.32. The early v2 DTO/mapper/migrator are callable but do not change default save behavior until M3.11.25; the integrated round-trip gate precedes activation. Accept explicit scenario regression before final review. One writer at a time.
+**Execution order:** The owner authorized all children in one combined-role task with one writer. Implementation proceeded through focused validation slices, keeping v2 DTO/mapper/migration and explicit codec callable before the M3.11.25 default activation. The pre-activation integrated gate passed `41/41`; explicit scenario regression preceded final review and the fresh full integration gates. No subagents or separate independent reviewer were used.
 
 **Acceptance criteria:** Published edges/segments are valid and globally unique; unchanged stable identity has stable addressing/seed independent of catalogue enumeration. Different supported segment/traversal contexts do not alias through node/day-only derivation; equality always compares full identity, not a 32-bit seed. Repeated edge traversal has a new persisted leg ID. Day 1 starts from zero completed days; intermediate segment advancement changes neither day nor checkpoint. Intro consumption is idempotent and persisted. Parallel edges remain distinct in structured history. Foreign run/leg/edge/segment/day/config outcomes are rejected before effects. Old v1 run migration yields a reached checkpoint without fabricated edges/legs, preserving resources/tools/profile. New run/address state round-trips and matches explicit expected travel/turn outcomes. All thirty-two children and the full EditMode gate are accepted; no portable replay/hash implementation is required.
 
-**Test plan:** One focused EditMode method per implementation/test child, reusing existing World/RunState/Persistence fixtures and one `RouteLegTests` fixture. Production guard wiring uses existing startup tests. The Lead ends with fresh full EditMode and focused PlayMode guard evidence; filters below are planned, not checks already run.
+**Test plan:** Completed named child checks reuse existing World/RunState/Persistence fixtures and one `RouteLegTests` fixture. The final full EditMode gate passed `635/635`; startup/lifecycle/infrastructure PlayMode passed `39/39`, including the production foreign-address guard. The report maps every child to executed tests and records the combined-role review limitation.
 
 **Save and compatibility impact:** Explicit v1 -> v2 run migration; profile schema/data is unchanged. `completedDayCount = old currentDay`, last reached node is preserved, active leg is absent, and old route nodes become explicitly legacy checkpoint entries with no invented edge/traversal/day evidence. Unrecoverable run input fails with existing controlled recovery while profile remains usable. V2 stores traversal sequence/history and active segment/intro state at stable boundaries, not a mid-board snapshot.
 
@@ -3527,7 +3529,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.1` - Define one stable route segment
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -3557,7 +3559,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.2` - Give an edge an ordered segment list
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -3587,7 +3589,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.3` - Enforce published segment uniqueness
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.3 and 27.2.
 
@@ -3617,7 +3619,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.4` - Read explicit authored segments
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.3 and 27.2.
 
@@ -3647,7 +3649,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.5` - Author the prototype segment registry
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -3677,7 +3679,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.6` - Represent structured travel and legacy checkpoints
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 27.1 and 27.2.
 
@@ -3707,7 +3709,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.7` - Define one validated active leg
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -3737,7 +3739,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.8` - Add checkpoint and history ownership to the run
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 27.1 and 27.2.
 
@@ -3767,7 +3769,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.9` - Start one leg without arriving at its destination
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -3797,7 +3799,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.10` - Consume the intro idempotently in run state
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -3827,7 +3829,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.11` - Advance one intermediate segment
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -3857,7 +3859,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.12` - Complete the leg in run state once
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -3887,7 +3889,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.13` - Define complete board-address equality
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 7, 16, and 27.2.
 
@@ -3917,7 +3919,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.14` - Derive a stable segment address and seed
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 16 and 27.2.
 
@@ -3947,7 +3949,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.15` - Carry addresses through request and outcome contracts
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 7 and 27.2.
 
@@ -3977,7 +3979,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.16` - Reject foreign addressed outcomes before effects
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 7, 21.2, and 27.2.
 
@@ -4007,7 +4009,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.17` - Validate addressed runtime composition
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 7, 21.1, and 27.2.
 
@@ -4037,7 +4039,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.18` - Wire the guarded production outcome boundary
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 7, 21.5, and 27.2.
 
@@ -4067,7 +4069,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.19` - Define the independent v2 run document
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4, 27.1, and 27.2.
 
@@ -4097,7 +4099,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.20` - Map current travel state to v2 and back
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4 and 27.2.
 
@@ -4127,7 +4129,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.21` - Migrate one validated v1 run to a checkpoint
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.1 and the explicit M3.11 migration contract.
 
@@ -4157,7 +4159,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.22` - Read supported run schemas strictly
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4 and 27.1.
 
@@ -4187,7 +4189,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.23` - Write explicit v2 stable-boundary JSON
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4 and 27.2.
 
@@ -4217,7 +4219,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.24` - Integrated migration and corruption regression
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4, 27.1, and 27.2.
 
@@ -4247,7 +4249,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.25` - Activate the accepted run schema path
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4 and 27.1.
 
@@ -4277,7 +4279,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.26` - Verify isolated save-store recovery and profile preservation
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4 and 27.1.
 
@@ -4307,7 +4309,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.27` - Assert the complete route-leg transition sequence
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 16, 27.2, and 27.9.
 
@@ -4333,7 +4335,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.28` - Assert address identity across traversals and segments
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 16 and 27.2.
 
@@ -4357,7 +4359,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.29` - Assert save/load continuation at travel boundaries
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4, 27.2, and 27.9.
 
@@ -4381,7 +4383,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.30` - Assert free rejection of foreign or stale outcomes
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4 and 27.2.
 
@@ -4405,7 +4407,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.31` - Addressed save and local-turn scenario regression
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 16, 27.2, and 27.9.
 
@@ -4435,9 +4437,11 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.32` - Lead-owned route/address integration gate
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0 architecture gate
 **Related contract:** sections 21.4, 22, and 27.1-27.2.
+
+**Acceptance (2026-10-14):** Full EditMode `635/635`, production-focused PlayMode `39/39`, and final self-review passed. The owner's explicit combined-role instruction replaces this card's independent-review steps for this task only; no independent review is claimed. [Integration evidence and M3.12 prerequisites](Validation/M3.11RouteAddress.md).
 
 **Rationale:** Shared State/Session/Persistence compatibility changes require a final independent integration check after focused child acceptance.
 
@@ -6007,20 +6011,19 @@ O-002, O-003, O-004, O-005, O-006, O-007, O-008, and O-009 are resolved in `Game
 
 # Kolejka wykonawcza
 
-M0, M1, and M2 are complete; M3.1-M3.10 are `Done`. The M3.6 umbrella and M3.6.3 were accepted on 2026-10-08 with owner-confirmed PC smoke and final independent review. M3.9.14 and M3.9 were accepted for PoC by the owner on 2026-10-13 without a measured prediction claim; reduced M3.10's automated scenario gates are complete. M3.11 is the next planned task. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. M3.6.1 was implemented from the clean baseline `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. M3.6.2 was implemented from the clean baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e64f7ebaea81e015`. M3.6.3 uses `M3/ProductionCutover` at `af030818d5de705968e26907139c435bc26ecd86`. Every new child still begins with its normal clean-worktree preflight.
+M0, M1, and M2 are complete; M3.1-M3.11 are `Done`. The M3.6 umbrella and M3.6.3 were accepted on 2026-10-08 with owner-confirmed PC smoke and final independent review. M3.9.14 and M3.9 were accepted for PoC by the owner on 2026-10-13 without a measured prediction claim; reduced M3.10's automated scenario gates are complete. M3.11 and all thirty-two children were accepted on 2026-10-14 with full EditMode `635/635`, production-focused PlayMode `39/39`, and owner-authorized combined-role self-review; [evidence](Validation/M3.11RouteAddress.md). M3.12 planning alignment is next. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. M3.6.1 was implemented from the clean baseline `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. M3.6.2 was implemented from the clean baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e64f7ebaea81e015`. M3.6.3 uses `M3/ProductionCutover` at `af030818d5de705968e26907139c435bc26ecd86`. Every new ticket still begins with its normal clean-worktree preflight.
 
 The next safe sequence is:
 
-1. execute `M3.11.1` through `M3.11.31` separately, with integrated v2 round-trip acceptance before M3.11.25 default activation and explicit travel/save/turn scenarios in M3.11.27-31; accept M3.11.32 with full EditMode and focused PlayMode identity evidence;
-2. align M3.12 planning with accepted section 27.2 Pending/Consumed and checkpoint-before-render semantics before making it Ready, then execute M3.12 before M4 so generation, future replay, atlas observations, and tool sources share stable route-segment identity;
-3. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
-4. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
+1. align M3.12 planning with accepted section 27.2 Pending/Consumed and checkpoint-before-render semantics before making it Ready, then execute M3.12 before M4 so generation, future replay, atlas observations, and tool sources share stable route-segment identity;
+2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
+3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
 `M0.9` remains deferred by owner decision. No implementation agent performs external history rewriting, exposes historical values, or runs BFG without a separate explicit request.
 
-### Rationale - why M3.11 is next
+### Rationale - why M3.12 is next
 
-Accepted M3.6 establishes one production gameplay authority, M3.7/M3.8 provide deterministic retained enemy behavior, M3.9 is owner-approved for PoC, and reduced M3.10 protects concrete turn scenarios. M3.11 now supplies stable traversal/segment identity and compatible save state before M3.12 activates multi-board travel. Establishing those addresses before M4 prevents generator-era rework; deferred portable replay is not a prerequisite.
+Accepted M3.6 establishes one production gameplay authority, M3.7/M3.8 provide deterministic retained enemy behavior, M3.9 is owner-approved for PoC, and reduced M3.10 protects concrete turn scenarios. Accepted M3.11 supplies stable traversal/segment identity and compatible save state. M3.12 must now align its planning with the accepted intro durability contract and activate multi-board travel before M4 consumes those addresses. Deferred portable replay is not a prerequisite.
 
 # Zasada aktualizacji roadmapy
 
