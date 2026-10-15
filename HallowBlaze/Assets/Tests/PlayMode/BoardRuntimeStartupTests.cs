@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 using HallowBlaze.Core.Board.Primitives;
+using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Generation;
 using HallowBlaze.Core.Generation.Pipeline;
 using HallowBlaze.Core.Generation.Validation;
@@ -1056,6 +1057,40 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(command.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
                 yield return null;
             }
+        }
+
+        /// <summary>The production picker survives gate refreshes and consumes cancel without also opening pause.</summary>
+        [UnityTest]
+        public IEnumerator ProductionInteractionPicker_BlocksMovementAndPauseUntilCancelFrameEnds()
+        {
+            Component manager = CreateTravelManager(2, out GameSession session, out _, out _, out _);
+            Assert.That((bool)InvokeManager(manager, "BeginRouteChoice"), Is.True);
+            Assert.That((bool)InvokeManager(manager, "ChooseRoute", "road.start-east-creek"), Is.True);
+            InvokeManager(manager, "InitGame");
+            InvokeManager(manager, "HideLevelImage");
+            yield return null;
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
+            Assert.That(runtime.BoardState.TryGetEntity(runtime.PlayerId, out BoardEntityState player), Is.True);
+            var target = new BoardEntityState(new EntityId(50000),
+                new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, "test.interaction",
+                    new BoardEntityTraits(false, false, true)), player.Position);
+            Assert.That(runtime.BoardState.TryAdd(target), Is.True);
+            Assert.That(GetProperty<bool>(manager, "CanPauseGameplay"), Is.True);
+            Assert.That(presenter.InteractionDisplay.Open(), Is.True);
+            Assert.That(GetProperty<bool>(manager, "CanPauseGameplay"), Is.False);
+            Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+            Assert.That(presenter.InteractionDisplay.IsOpen, Is.True, "The production gate must not clear the picker owner's block.");
+            presenter.InteractionDisplay.Cancel();
+            Assert.That(GetProperty<bool>(manager, "CanPauseGameplay"), Is.False);
+            Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+            yield return null;
+            Assert.That(GetProperty<bool>(manager, "CanPauseGameplay"), Is.True);
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.True);
+            Assert.That(runtime.BoardState.TryGetEntity(target.Id, out BoardEntityState retained), Is.True);
+            Assert.That(retained, Is.SameAs(target));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.Zero);
         }
 
         private IEnumerator ExerciseProductionTravel(int count)

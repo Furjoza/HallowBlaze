@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -397,6 +398,181 @@ namespace HallowBlaze.Tests.PlayMode
                 fixture.Presenter.Dispose();
                 Assert.That(fixture.Runtime.IsDisposed, Is.False);
             }
+        }
+
+        [UnityTest]
+        public IEnumerator InteractionPreviewAndCancel_PreserveExactGroundInstanceAndOtherInputOwners()
+        {
+            Fixture fixture = CreateFixture(false);
+            var picker = fixture.Presenter.InteractionDisplay;
+            fixture.Runtime.BoardState.TryGetEntity(fixture.AidId, out BoardEntityState original);
+            Assert.That(picker.Open(), Is.True);
+            Assert.That(picker.SelectedIndex, Is.EqualTo(-1));
+            Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+            Assert.That(picker.Select(0), Is.True);
+            Assert.That(fixture.Presenter.Coordinator.SubmitAsync(new WaitCommand()).Result.Status,
+                Is.EqualTo(CommandSubmissionStatus.Blocked));
+            fixture.Presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Modal, true);
+            picker.Cancel();
+            Assert.That(picker.IsOpen, Is.False);
+            Assert.That(picker.Options, Is.Empty);
+            Assert.That(picker.GetComponentsInChildren<LineRenderer>(), Is.Empty);
+            fixture.Runtime.BoardState.TryGetEntity(fixture.AidId, out BoardEntityState retained);
+            Assert.That(retained, Is.SameAs(original));
+            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+            yield return null;
+            Assert.That(fixture.Presenter.Coordinator.Gate.Blocks, Is.EqualTo(PresentationInputBlock.Modal));
+            fixture.Presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Modal, false);
+            Assert.That(fixture.Presenter.Coordinator.CanSubmit, Is.True);
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void InteractionConfirm_CollectsSelectedInstanceOnceWithAnimationParity(bool animations)
+        {
+            Fixture fixture = CreateFixture(animations);
+            MakeInteractiveFood(fixture);
+            var picker = fixture.Presenter.InteractionDisplay;
+            Assert.That(picker.Open(), Is.True);
+            Assert.That(picker.Options.Count, Is.EqualTo(2));
+            int collectIndex = picker.Options.ToList().FindIndex(option => option.ActionId == "collect");
+            Assert.That(picker.Select(collectIndex), Is.True);
+            Assert.That(fixture.FoodView.activeSelf, Is.True);
+            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+            Assert.That(fixture.Presenter.Coordinator.SubmitAsync(new WaitCommand()).Result.Status,
+                Is.EqualTo(CommandSubmissionStatus.Blocked));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
+            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(109));
+            Assert.That(fixture.FoodView.activeSelf, Is.False);
+            Assert.That(fixture.Runtime.BoardState.TryGetEntity(fixture.AidId, out _), Is.True);
+            Assert.That(picker.GetComponentsInChildren<LineRenderer>(), Is.Empty);
+            CollectionAssert.AreEqual(new[] { "InteractionPerformed", "Hud:100:109", "FoodRestored", "Hud:100:109", "Noise" }, fixture.Sink.Trace);
+        }
+
+        [Test]
+        public void InteractionStaleSelection_RejectsWithoutRemovingReplacementOrSpendingTurn()
+        {
+            Fixture fixture = CreateFixture(false);
+            var picker = fixture.Presenter.InteractionDisplay;
+            Assert.That(picker.Open(), Is.True);
+            Assert.That(picker.Select(0), Is.True);
+            Assert.That(fixture.Runtime.BoardState.TryMove(fixture.AidId, new GridPosition(1, 1)), Is.True);
+            CommandSubmission result = picker.ConfirmAsync().Result;
+            Assert.That(result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(fixture.Runtime.BoardState.GetActiveNoises(), Is.Empty);
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
+            Assert.That(fixture.Runtime.BoardState.TryGetEntity(fixture.AidId, out _), Is.True);
+        }
+
+        [Test]
+        public void InteractionTerminalCommit_DoesNotReacquireInputAfterOutcomeDisposesPicker()
+        {
+            Fixture fixture = CreateFixture(false, 1);
+            var picker = fixture.Presenter.InteractionDisplay;
+            Assert.That(picker.Open(), Is.True);
+            Assert.That(picker.Select(0), Is.True);
+            Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(picker.IsDisposed, Is.True);
+            Assert.That(fixture.Runtime.Controller.IsTerminal, Is.True);
+            Assert.That(fixture.Presenter.Coordinator.Gate.Blocks & PresentationInputBlock.Interaction,
+                Is.EqualTo(PresentationInputBlock.None));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void InteractionEmptyDisabledAndDisposed_AreFreeAndNeverHoldInput()
+        {
+            Fixture fixture = CreateFixture(false);
+            var picker = fixture.Presenter.InteractionDisplay;
+            fixture.Presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Disabled, true);
+            Assert.That(picker.Open(), Is.False);
+            fixture.Presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Disabled, false);
+            Assert.That(picker.Open(), Is.True);
+            picker.enabled = false;
+            Assert.That(picker.IsOpen, Is.False);
+            Assert.That(fixture.Presenter.Coordinator.CanSubmit, Is.True);
+            picker.enabled = true;
+            fixture.Runtime.BoardState.TryRemove(fixture.AidId);
+            Assert.That(picker.Open(), Is.False);
+            Assert.That(fixture.Presenter.Coordinator.CanSubmit, Is.True);
+            fixture.Presenter.Dispose();
+            Assert.That(picker.Open(), Is.False);
+            Assert.That(fixture.Runtime.IsDisposed, Is.False);
+            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+        }
+
+        [Test]
+        public void InteractionMarkers_RenderEveryLegalTargetWithNumbersAndSelectedShapeWithoutAnimation()
+        {
+            Assert.That(SystemInfo.graphicsDeviceType, Is.Not.EqualTo(UnityEngine.Rendering.GraphicsDeviceType.Null));
+            Fixture fixture = CreateFixture(false);
+            MakeInteractiveFood(fixture);
+            var picker = fixture.Presenter.InteractionDisplay;
+            Assert.That(picker.Open(), Is.True);
+            Assert.That(picker.Select(0), Is.True);
+            LineRenderer[] lines = picker.GetComponentsInChildren<LineRenderer>();
+            Assert.That(lines.Length, Is.EqualTo(2));
+            Assert.That(picker.GetComponentsInChildren<TextMesh>().Select(text => text.text), Is.EqualTo(new[] { ">1", "2" }));
+            Assert.That(lines.All(line => line.startColor == Color.white && line.loop), Is.True);
+            Assert.That(lines[0].GetPosition(0), Is.Not.EqualTo(lines[1].GetPosition(0)));
+            var owner = new GameObject("Interaction evidence camera");
+            objects.Add(owner);
+            Camera camera = owner.AddComponent<Camera>();
+            camera.transform.position = new Vector3(0.5f, 0.5f, -20f);
+            camera.orthographic = true;
+            camera.orthographicSize = 1.4f;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
+            var target = new RenderTexture(512, 512, 24);
+            var pixels = new Texture2D(512, 512, TextureFormat.RGB24, false);
+            RenderTexture previous = RenderTexture.active;
+            try
+            {
+                camera.targetTexture = target;
+                camera.Render();
+                RenderTexture.active = target;
+                pixels.ReadPixels(new Rect(0, 0, 512, 512), 0, 0);
+                pixels.Apply();
+                foreach (var option in picker.Options)
+                {
+                    Vector3 center = camera.WorldToViewportPoint(new Vector3(option.TargetPosition.X, option.TargetPosition.Y, 0));
+                    int marked = 0;
+                    for (int vertical = -80; vertical <= 80; vertical++)
+                        for (int horizontal = -80; horizontal <= 80; horizontal++)
+                        {
+                            Color color = pixels.GetPixel(Mathf.RoundToInt(center.x * 512) + horizontal,
+                                Mathf.RoundToInt(center.y * 512) + vertical);
+                            if (color.r > 0.8f && color.g > 0.8f && color.b > 0.8f) marked++;
+                        }
+                    Assert.That(marked, Is.GreaterThan(100), "Visible numbered target " + option.TargetId);
+                }
+                string image = Path.Combine(Path.GetTempPath(), "HB-M51-targets.png");
+                File.WriteAllBytes(image, pixels.EncodeToPNG());
+                TestContext.WriteLine("Interaction visual evidence: " + image);
+            }
+            finally
+            {
+                camera.targetTexture = null;
+                RenderTexture.active = previous;
+                UnityEngine.Object.DestroyImmediate(pixels);
+                UnityEngine.Object.DestroyImmediate(target);
+            }
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
+        }
+
+        private static void MakeInteractiveFood(Fixture fixture)
+        {
+            fixture.Runtime.BoardState.TryGetEntity(fixture.FoodId, out BoardEntityState item);
+            Assert.That(fixture.Runtime.BoardState.TryRemove(item.Id), Is.True);
+            Assert.That(fixture.Runtime.BoardState.TryAdd(new BoardEntityState(item.Id,
+                new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, "test.collectible",
+                    new BoardEntityTraits(false, false, true), 10), item.Position)), Is.True);
         }
 
         private static void AssertRecovered(Fixture fixture)
