@@ -378,6 +378,31 @@ namespace HallowBlaze.Tests.EditMode
             }
         }
 
+        [Test]
+        public void AddressedComposition_RejectsStaleIdentityWithoutPartialRuntime()
+        {
+            RunState run = RouteLegTests.NewRun();
+            run.StartLeg("edge", "a", "b", RouteLegTests.Segments());
+            BoardRequest request = BoardRequest.CreateFromRun(run, RouteLegTests.World());
+            List<LegacyBoardView> layout = CreateValidLayout();
+            using (BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(request, run, new GridBounds(0, 0, 1, 1), layout))
+                Assert.That(runtime.Request.Address, Is.SameAs(request.Address));
+            foreach (BoardAddress foreign in RouteLegTests.ForeignAddresses(request.Address))
+            {
+                BoardRequest wrong = new BoardRequest(foreign, run.RunSeed, "a", "shelter", "forest", 1);
+                BoardRuntimeCompositionException error = Assert.Throws<BoardRuntimeCompositionException>(() =>
+                    LegacyBoardRuntimeComposer.Compose(wrong, run, new GridBounds(0, 0, 1, 1), layout));
+                Assert.That(error.Code, Is.EqualTo(BoardRuntimeDiagnosticCode.InvalidInput));
+            }
+            BoardRequest legacy = new BoardRequest(run.RunId, run.RunSeed, "a", 1, request.BoardSeed, "shelter", "forest", 1);
+            Assert.Throws<BoardRuntimeCompositionException>(() => LegacyBoardRuntimeComposer.Compose(legacy, run,
+                new GridBounds(0, 0, 1, 1), layout));
+            Assert.That(run.CompletedDayCount, Is.Zero);
+            Assert.That(run.TravelHistory, Is.Empty);
+            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(layout.All(view => view.View != null && view.View.activeSelf), Is.True);
+        }
+
         private List<LegacyBoardView> CreateValidLayout()
         {
             return new List<LegacyBoardView>

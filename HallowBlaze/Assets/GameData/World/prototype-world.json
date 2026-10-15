@@ -75,63 +75,126 @@
       "fromNodeId": "forest.start",
       "toNodeId": "forest.west-trail",
       "direction": "northwest",
-      "clueKey": "clue.dense-trees"
+      "clueKey": "clue.dense-trees",
+      "segments": [
+        { "segmentId": "segment.start-west-trail.entry", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.start-west-trail.stretch", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.start-west-trail.clearing", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.start-west-trail.approach", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.start-west-trail.arrival", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 }
+      ]
     },
     {
       "edgeId": "road.start-east-creek",
       "fromNodeId": "forest.start",
       "toNodeId": "forest.east-creek",
       "direction": "northeast",
-      "clueKey": "clue.running-water"
+      "clueKey": "clue.running-water",
+      "segments": [
+        { "segmentId": "segment.start-east-creek.entry", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.start-east-creek.stretch", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.start-east-creek.clearing", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.start-east-creek.approach", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.start-east-creek.arrival", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 }
+      ]
     },
     {
       "edgeId": "road.west-trail-old-road",
       "fromNodeId": "forest.west-trail",
       "toNodeId": "forest.old-road",
       "direction": "northeast",
-      "clueKey": "clue.broken-signpost"
+      "clueKey": "clue.broken-signpost",
+      "segments": [
+        { "segmentId": "segment.west-trail-old-road.entry", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.west-trail-old-road.stretch", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.west-trail-old-road.clearing", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.west-trail-old-road.approach", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.west-trail-old-road.arrival", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 }
+      ]
     },
     {
       "edgeId": "road.east-creek-old-road",
       "fromNodeId": "forest.east-creek",
       "toNodeId": "forest.old-road",
       "direction": "northwest",
-      "clueKey": "clue.dry-roadbed"
+      "clueKey": "clue.dry-roadbed",
+      "segments": [
+        { "segmentId": "segment.east-creek-old-road.entry", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.east-creek-old-road.stretch", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.east-creek-old-road.clearing", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.east-creek-old-road.approach", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.east-creek-old-road.arrival", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 }
+      ]
     },
     {
       "edgeId": "road.old-road-west-grove",
       "fromNodeId": "forest.old-road",
       "toNodeId": "forest.west-grove",
       "direction": "northwest",
-      "clueKey": "clue.ordered-treeline"
+      "clueKey": "clue.ordered-treeline",
+      "segments": [
+        { "segmentId": "segment.old-road-west-grove.entry", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.old-road-west-grove.stretch", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.old-road-west-grove.clearing", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.old-road-west-grove.approach", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.old-road-west-grove.arrival", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 }
+      ]
     },
     {
       "edgeId": "road.old-road-east-quarry",
       "fromNodeId": "forest.old-road",
       "toNodeId": "forest.east-quarry",
       "direction": "northeast",
-      "clueKey": "clue.stone-dust"
+      "clueKey": "clue.stone-dust",
+      "segments": [
+        { "segmentId": "segment.old-road-east-quarry.entry", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.old-road-east-quarry.stretch", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.old-road-east-quarry.clearing", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.old-road-east-quarry.approach", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.old-road-east-quarry.arrival", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 }
+      ]
     },
     {
       "edgeId": "road.west-grove-ridge",
       "fromNodeId": "forest.west-grove",
       "toNodeId": "forest.ridge",
       "direction": "northeast",
-      "clueKey": "clue.rising-ground"
+      "clueKey": "clue.rising-ground",
+      "segments": [
+        { "segmentId": "segment.west-grove-ridge.entry", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.west-grove-ridge.stretch", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.west-grove-ridge.clearing", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.west-grove-ridge.approach", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.west-grove-ridge.arrival", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 }
+      ]
     },
     {
       "edgeId": "road.east-quarry-ridge",
       "fromNodeId": "forest.east-quarry",
       "toNodeId": "forest.ridge",
       "direction": "northwest",
-      "clueKey": "clue.cold-wind"
+      "clueKey": "clue.cold-wind",
+      "segments": [
+        { "segmentId": "segment.east-quarry-ridge.entry", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.east-quarry-ridge.stretch", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.east-quarry-ridge.clearing", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.east-quarry-ridge.approach", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.east-quarry-ridge.arrival", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 }
+      ]
     },
     {
       "edgeId": "road.ridge-radio-tower",
       "fromNodeId": "forest.ridge",
       "toNodeId": "landmark.radio-tower",
       "direction": "north",
-      "clueKey": "clue.distant-metal"
+      "clueKey": "clue.distant-metal",
+      "segments": [
+        { "segmentId": "segment.ridge-radio-tower.entry", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.ridge-radio-tower.stretch", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.ridge-radio-tower.clearing", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.ridge-radio-tower.approach", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 },
+        { "segmentId": "segment.ridge-radio-tower.arrival", "generationConfigurationId": "legacy.board.v1", "generationVersion": 1 }
+      ]
     }
   ]
 }

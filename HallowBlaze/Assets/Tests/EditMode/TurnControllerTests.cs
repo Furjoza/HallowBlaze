@@ -20,6 +20,167 @@ namespace HallowBlaze.Tests.EditMode
         private static readonly GridPosition Destination = new GridPosition(2, 1);
 
         /// <summary>
+        /// Fresh command sequences preserve explicit movement, rest, fixed-cell miss, conditional
+        /// hit, free rejection, and starvation outcomes regardless of enemy input order.
+        /// </summary>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ScenarioSequence_PreservesExplicitOutcomesAcrossFreshRuns(bool reverseEnemies)
+        {
+            for (int repetition = 0; repetition < 2; repetition++)
+            {
+                string context = $"scenario=move-rest-escape-starvation; reverseEnemies={reverseEnemies}; repetition={repetition}; IDs=1,2,3";
+                TestContext.WriteLine(context);
+                var firstSource = new GridPosition(3, 1);
+                var secondSource = new GridPosition(3, 2);
+                var secondDestination = new GridPosition(2, 2);
+                var escape = new GridPosition(1, 2);
+                BoardState board = CreateShamblerBoard(firstSource);
+                Add(board, 3, BoardLayer.Actor, EntityKind.Enemy, secondSource, BoardEntityTraits.Default);
+                RunState run = CreateRun(4);
+                run.RestoreHealth(90);
+                var first = new ShamblerState(new EntityId(2), new ShamblerDefinition(20));
+                var second = new ShamblerState(new EntityId(3), new ShamblerDefinition(10));
+                ShamblerState[] enemies = { first, second };
+                ShamblerState[] input = reverseEnemies ? new[] { second, first } : enemies;
+                int environmentCalls = 0;
+                var adapter = new EnemyBatchTurnPhases(input,
+                    (boardState, runState, playerId, events) => environmentCalls++);
+                adapter.PlanInitialIntents(board, PlayerId);
+                var controller = new TurnController(board, run, PlayerId, phases: adapter.Handlers);
+                EnemyIntent[] initial = enemies.Select(enemy => enemy.LockedIntent).ToArray();
+                Assert.That(initial.Select(intent => intent.Kind),
+                    Is.EqualTo(new[] { EnemyIntentKind.Move, EnemyIntentKind.Move }), context);
+                Assert.That(initial.Select(intent => intent.TargetPosition),
+                    Is.EqualTo(new GridPosition?[] { Destination, secondDestination }), context);
+                Assert.That(initial.All(intent => intent.TargetId.Equals(PlayerId) && intent.AttackOnPlayerEntry),
+                    Is.True, context);
+
+                TurnResult move = controller.Resolve(new WaitCommand());
+
+                Assert.That(move.Accepted && move.ConsumesTurn, Is.True, context);
+                AssertEvents(move, "EntityWaited", "ActionCostApplied", "EntityMoved", "EntityMoved");
+                EntityMovedEvent[] movements = move.Events.OfType<EntityMovedEvent>().ToArray();
+                Assert.That(movements.Select(movement => movement.EntityId),
+                    Is.EqualTo(new[] { first.ActorId, second.ActorId }), context);
+                Assert.That(movements.Select(movement => movement.From),
+                    Is.EqualTo(new[] { firstSource, secondSource }), context);
+                Assert.That(movements.Select(movement => movement.To),
+                    Is.EqualTo(new[] { Destination, secondDestination }), context);
+                Assert.That(board.TryGetEntity(PlayerId, out BoardEntityState player), Is.True, context);
+                Assert.That(player.Position, Is.EqualTo(Start), context);
+                Assert.That(board.TryGetEntity(first.ActorId, out BoardEntityState firstActor), Is.True, context);
+                Assert.That(firstActor.Position, Is.EqualTo(Destination), context);
+                Assert.That(board.TryGetEntity(second.ActorId, out BoardEntityState secondActor), Is.True, context);
+                Assert.That(secondActor.Position, Is.EqualTo(secondDestination), context);
+                Assert.That(run.Food, Is.EqualTo(3), context);
+                Assert.That(run.Health, Is.EqualTo(100), context);
+                Assert.That(environmentCalls, Is.EqualTo(1), context);
+                Assert.That(enemies.All(enemy => enemy.Phase == ShamblerPhase.Rest &&
+                    enemy.LockedIntent.Kind == EnemyIntentKind.Wait), Is.True, context);
+
+                string beforeRejection = Snapshot(board, run);
+                EnemyIntent[] resting = enemies.Select(enemy => enemy.LockedIntent).ToArray();
+
+                AssertRejected(controller.Resolve(new MoveCommand(Direction.West)), CommandRejectionCode.Blocked);
+
+                Assert.That(Snapshot(board, run), Is.EqualTo(beforeRejection), context);
+                Assert.That(environmentCalls, Is.EqualTo(1), context);
+                for (int index = 0; index < enemies.Length; index++)
+                {
+                    Assert.That(enemies[index].Phase, Is.EqualTo(ShamblerPhase.Rest), context);
+                    Assert.That(enemies[index].LockedIntent, Is.SameAs(resting[index]), context);
+                }
+
+                var beforeRest = board.GetEntities();
+                TurnResult rest = controller.Resolve(new WaitCommand());
+
+                Assert.That(rest.Accepted && rest.ConsumesTurn, Is.True, context);
+                AssertEvents(rest, "EntityWaited", "ActionCostApplied", "EntityWaited", "EntityWaited");
+                Assert.That(rest.Events.OfType<EntityWaitedEvent>().Select(wait => wait.EntityId),
+                    Is.EqualTo(new[] { PlayerId, first.ActorId, second.ActorId }), context);
+                CollectionAssert.AreEqual(beforeRest, board.GetEntities(), context);
+                Assert.That(run.Food, Is.EqualTo(2), context);
+                Assert.That(run.Health, Is.EqualTo(100), context);
+                Assert.That(environmentCalls, Is.EqualTo(2), context);
+                Assert.That(enemies.All(enemy => enemy.Phase == ShamblerPhase.Active), Is.True, context);
+                Assert.That(first.LockedIntent.Kind, Is.EqualTo(EnemyIntentKind.Attack), context);
+                Assert.That(first.LockedIntent.TargetPosition, Is.EqualTo(Start), context);
+                Assert.That(first.LockedIntent.TargetId, Is.EqualTo(PlayerId), context);
+                Assert.That(first.LockedIntent.AttackOnPlayerEntry, Is.False, context);
+                Assert.That(second.LockedIntent.Kind, Is.EqualTo(EnemyIntentKind.Move), context);
+                Assert.That(second.LockedIntent.TargetPosition, Is.EqualTo(escape), context);
+                Assert.That(second.LockedIntent.TargetId, Is.EqualTo(PlayerId), context);
+                Assert.That(second.LockedIntent.AttackOnPlayerEntry, Is.True, context);
+                EnemyIntent fixedAttack = first.LockedIntent;
+                EnemyIntent conditionalMove = second.LockedIntent;
+
+                TurnResult escaped = controller.Resolve(new MoveCommand(Direction.North));
+
+                Assert.That(escaped.Accepted && escaped.ConsumesTurn, Is.True, context);
+                AssertEvents(escaped, "EntityMoved", "ActionCostApplied", "EnemyAttackResolved", "EnemyAttackResolved");
+                var playerMove = (EntityMovedEvent)escaped.Events[0];
+                Assert.That(playerMove.EntityId, Is.EqualTo(PlayerId), context);
+                Assert.That(playerMove.From, Is.EqualTo(Start), context);
+                Assert.That(playerMove.To, Is.EqualTo(escape), context);
+                EnemyAttackResolvedEvent[] attacks = escaped.Events.OfType<EnemyAttackResolvedEvent>().ToArray();
+                Assert.That(attacks.Select(attack => attack.AttackerId),
+                    Is.EqualTo(new[] { first.ActorId, second.ActorId }), context);
+                Assert.That(attacks.Select(attack => attack.TargetPosition),
+                    Is.EqualTo(new[] { Start, escape }), context);
+                Assert.That(attacks.Select(attack => attack.IsHit), Is.EqualTo(new[] { false, true }), context);
+                Assert.That(attacks.Select(attack => attack.AffectedTargetId),
+                    Is.EqualTo(new EntityId?[] { null, PlayerId }), context);
+                Assert.That(attacks.Select(attack => attack.HealthChange), Is.EqualTo(new[] { 0, -10 }), context);
+                Assert.That(board.TryGetEntity(PlayerId, out player), Is.True, context);
+                Assert.That(player.Position, Is.EqualTo(escape), context);
+                Assert.That(board.TryGetEntity(first.ActorId, out firstActor), Is.True, context);
+                Assert.That(firstActor.Position, Is.EqualTo(Destination), context);
+                Assert.That(board.TryGetEntity(second.ActorId, out secondActor), Is.True, context);
+                Assert.That(secondActor.Position, Is.EqualTo(secondDestination), context);
+                Assert.That(fixedAttack.TargetPosition, Is.EqualTo(Start), context);
+                Assert.That(conditionalMove.TargetPosition, Is.EqualTo(escape), context);
+                Assert.That(run.Food, Is.EqualTo(1), context);
+                Assert.That(run.Health, Is.EqualTo(90), context);
+                Assert.That(environmentCalls, Is.EqualTo(3), context);
+                Assert.That(enemies.All(enemy => enemy.Phase == ShamblerPhase.Rest &&
+                    enemy.LockedIntent.Kind == EnemyIntentKind.Wait), Is.True, context);
+                Assert.That(controller.IsResolving || controller.IsTerminal, Is.False, context);
+                EnemyIntent[] beforeTerminal = enemies.Select(enemy => enemy.LockedIntent).ToArray();
+                var terminalBoard = board.GetEntities();
+
+                TurnResult starved = controller.Resolve(new WaitCommand());
+
+                Assert.That(starved.Accepted && starved.ConsumesTurn, Is.True, context);
+                AssertEvents(starved, "EntityWaited", "ActionCostApplied", "PlayerStarved");
+                Assert.That(run.Food, Is.Zero, context);
+                Assert.That(run.Health, Is.EqualTo(90), context);
+                Assert.That(run.Status, Is.EqualTo(RunStatus.Active), context);
+                Assert.That(controller.IsTerminal, Is.True, context);
+                Assert.That(controller.IsResolving, Is.False, context);
+                Assert.That(environmentCalls, Is.EqualTo(3), context);
+                CollectionAssert.AreEqual(terminalBoard, board.GetEntities(), context);
+                string terminalState = Snapshot(board, run);
+
+                AssertRejected(controller.Resolve(new MoveCommand(Direction.South)), CommandRejectionCode.InvalidState);
+
+                Assert.That(Snapshot(board, run), Is.EqualTo(terminalState), context);
+                Assert.That(environmentCalls, Is.EqualTo(3), context);
+                for (int index = 0; index < enemies.Length; index++)
+                {
+                    Assert.That(enemies[index].Phase, Is.EqualTo(ShamblerPhase.Rest), context);
+                    Assert.That(enemies[index].LockedIntent, Is.SameAs(beforeTerminal[index]), context);
+                }
+                foreach (TurnResult accepted in new[] { move, rest, escaped, starved })
+                {
+                    ActionCostAppliedEvent cost = accepted.Events.OfType<ActionCostAppliedEvent>().Single();
+                    Assert.That(cost.EntityId, Is.EqualTo(PlayerId), context);
+                    Assert.That(cost.CostAmount, Is.EqualTo(1), context);
+                }
+            }
+        }
+
+        /// <summary>
         /// The batch adapter retains initial plans, executes only permitted old batches, and plans
         /// once after environment only for nonterminal accepted turns, including the subsequent rest.
         /// </summary>

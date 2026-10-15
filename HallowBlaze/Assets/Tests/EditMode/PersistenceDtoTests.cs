@@ -5,6 +5,7 @@ using HallowBlaze.Core.Persistence;
 using HallowBlaze.Core.Persistence.Dto;
 using HallowBlaze.Core.Persistence.Mapping;
 using HallowBlaze.Core.State;
+using HallowBlaze.Core.Session;
 using NUnit.Framework;
 using UnityEngine.TestTools;
 
@@ -12,6 +13,213 @@ namespace HallowBlaze.Tests.EditMode
 {
     public sealed class PersistenceDtoTests
     {
+        [Test]
+        public void RunV2Dto_HasExplicitTravelSchemaWithoutV1Cutover()
+        {
+            Assert.That(RunStateV2Dto.CurrentSchemaVersion, Is.EqualTo(2));
+            Assert.That(RunStateDto.CurrentSchemaVersion, Is.EqualTo(1));
+            Assert.That(typeof(RunStateV2Dto).GetProperties().Select(property => property.Name),
+                Is.EquivalentTo(new[] { "SchemaVersion", "RunId", "RunSeed", "CompletedDayCount", "ReachedCheckpointNodeId",
+                    "TraversalSequence", "Health", "Food", "Status", "ToolSlots", "TravelHistory", "ActiveLeg" }));
+            foreach (Type type in new[] { typeof(RunStateV2Dto), typeof(TravelHistoryDto), typeof(ActiveRouteLegDto), typeof(RouteSegmentDto) })
+                Assert.That(type.GetProperties().Any(property => typeof(UnityEngine.Object).IsAssignableFrom(property.PropertyType)), Is.False);
+        }
+
+        [TestCase("checkpoint")]
+        [TestCase("pending")]
+        [TestCase("consumed")]
+        [TestCase("intermediate")]
+        [TestCase("complete")]
+        [TestCase("dead")]
+        [TestCase("won")]
+        public void RunV2Mapper_RoundTripsAllStableTravelBoundaries(string boundary)
+        {
+            RunState original = TravelBoundary(boundary);
+            RunStateV2Dto dto = RunStateV2Mapper.ToDto(original);
+            RunState restored = RunStateV2Mapper.FromDto(dto);
+            AssertTravelEquals(original, restored);
+            dto.TravelHistory = Array.Empty<TravelHistoryDto>();
+            if (dto.ActiveLeg != null)
+                dto.ActiveLeg.Segments[0].SegmentId = "mutated.dto";
+            Assert.That(restored.ActiveLeg?.Segments[0].SegmentId, Is.Not.EqualTo("mutated.dto"));
+            if (original.ActiveLeg != null && original.Status == RunStatus.Active)
+                Assert.That(BoardAddressFactory.CreateFromState(restored), Is.EqualTo(BoardAddressFactory.CreateFromState(original)));
+            if (boundary == "complete")
+                Assert.That(restored.StartLeg("return", "b", "a", RouteLegTests.Segments()).LegId, Is.EqualTo("leg.2"));
+        }
+
+        [TestCase(RunStatus.Active, 0)]
+        [TestCase(RunStatus.Active, int.MaxValue)]
+        [TestCase(RunStatus.Dead, 7)]
+        [TestCase(RunStatus.Won, 4)]
+        public void RunV1Migration_PreservesCheckpointWithoutInventedTravel(RunStatus status, int day)
+        {
+            RunStateDto legacy = CreateRunDto();
+            legacy.CurrentDay = day;
+            legacy.Health = int.MaxValue;
+            legacy.Food = int.MaxValue;
+            legacy.Route = new[] { "node.start", "node.start" };
+            legacy.ToolSlots[0] = new ToolSlotDto { ToolId = "axe", RemainingUses = 3 };
+            legacy.Status = status == RunStatus.Active ? "active" : status == RunStatus.Dead ? "dead" : "won";
+            RunState restored = RunStateV2Mapper.FromDto(RunStateV1Migration.Migrate(legacy));
+            AssertRunEquals(RunStateMapper.FromDto(legacy), restored);
+            Assert.That(restored.CompletedDayCount, Is.EqualTo(day));
+            Assert.That(restored.ActiveLeg, Is.Null);
+            Assert.That(restored.TraversalSequence, Is.Zero);
+            Assert.That(restored.TravelHistory.All(entry => entry.Kind == TravelHistoryKind.LegacyCheckpoint &&
+                entry.LegId == null && entry.EdgeId == null && entry.FromNodeId == null && entry.DayNumber == null), Is.True);
+            if (status == RunStatus.Active && day == int.MaxValue)
+                Assert.Throws<OverflowException>(() => restored.StartLeg("edge", restored.WorldNodeId, "b", RouteLegTests.Segments()));
+            legacy.Route[0] = " invalid ";
+            Assert.Throws<PersistenceDataException>(() => RunStateV1Migration.Migrate(legacy));
+        }
+
+        [Test]
+        public void TravelRunReader_DispatchesSupportedSchemasOrRejects()
+        {
+            const string v1 = "{\"schemaVersion\":1,\"runId\":\"legacy\",\"runSeed\":7,\"currentDay\":3,\"worldNodeId\":\"a\",\"health\":80,\"food\":90,\"status\":\"active\",\"toolSlots\":[{\"toolId\":\"axe\",\"remainingUses\":2},{\"toolId\":\"\",\"remainingUses\":0}],\"route\":[\"a\",\"a\"]}";
+            RunState migrated = PersistenceJsonSerializer.DeserializeTravelRun(v1);
+            Assert.That(migrated.CompletedDayCount, Is.EqualTo(3));
+            Assert.That(migrated.TravelHistory, Has.Count.EqualTo(2));
+            Assert.That(migrated.ActiveLeg, Is.Null);
+            foreach (string bad in new[] { "{\"schemaVersion\":3}", "{\"schemaVersion\":0}",
+                "{\"schemaVersion\":2,\"schemaVersion\":2}", "{\"schemaVersion\":2} {}", "{\"schemaVersion\":2}", "{}" })
+                Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeTravelRun(bad), bad);
+        }
+
+        [Test]
+        public void TravelRunWriter_EmitsCompleteV2StableState()
+        {
+            string json = PersistenceJsonSerializer.SerializeTravelRun(TravelBoundary("pending"));
+            Assert.That(json, Does.Contain("\"schemaVersion\": 2").And.Contain("\"introState\": \"pending\""));
+            Assert.That(json, Does.Not.Contain("\"route\":").And.Not.Contain("\"boardSeed\":").And.Not.Contain("\"currentDay\":"));
+            AssertTravelEquals(TravelBoundary("pending"), PersistenceJsonSerializer.DeserializeTravelRun(json));
+            Assert.That(RunStateDto.CurrentSchemaVersion, Is.EqualTo(1));
+        }
+
+        [TestCase("checkpoint")]
+        [TestCase("pending")]
+        [TestCase("consumed")]
+        [TestCase("intermediate")]
+        [TestCase("complete")]
+        [TestCase("dead")]
+        [TestCase("won")]
+        public void TravelPersistence_RoundTripsMigratesAndRejectsCorruption(string boundary)
+        {
+            RunState original = TravelBoundary(boundary);
+            string json = PersistenceJsonSerializer.SerializeTravelRun(original);
+            RunState once = PersistenceJsonSerializer.DeserializeTravelRun(json);
+            RunState twice = PersistenceJsonSerializer.DeserializeTravelRun(PersistenceJsonSerializer.SerializeTravelRun(once));
+            AssertTravelEquals(original, once);
+            AssertTravelEquals(original, twice);
+            Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeTravelRun(json + " {}"));
+            Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeTravelRun(
+                json.Insert(json.IndexOf('{') + 1, "\"unknownField\":true,")));
+            if (original.ActiveLeg != null)
+            {
+                Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeTravelRun(
+                    json.Replace("\"introState\": \"" + (original.ActiveLeg.IntroState == DayIntroState.Pending ? "pending" : "consumed") + "\"",
+                        "\"introState\": \"presented\"")));
+                RunStateV2Dto bad = RunStateV2Mapper.ToDto(original);
+                bad.ActiveLeg.CompletedSegmentCount++;
+                PersistenceDataException error = Assert.Throws<PersistenceDataException>(() => RunStateV2Mapper.FromDto(bad));
+                Assert.That(error.FieldPath, Is.EqualTo("activeLeg.segmentIndex"));
+                bad = RunStateV2Mapper.ToDto(original);
+                bad.TraversalSequence++;
+                Assert.Throws<PersistenceDataException>(() => RunStateV2Mapper.FromDto(bad));
+                bad = RunStateV2Mapper.ToDto(original);
+                bad.TravelHistory[0].LegId = "fabricated";
+                Assert.Throws<PersistenceDataException>(() => RunStateV2Mapper.FromDto(bad));
+            }
+        }
+
+        [Test]
+        public void DefaultRunSchema_UsesAcceptedV2WithoutProfileChange()
+        {
+            ProfileState profile = new ProfileState("profile", "world.test", 1);
+            profile.AdvanceNodeDiscovery("a", NodeDiscoveryState.Visited);
+            string profileJson = PersistenceJsonSerializer.SerializeProfile(profile);
+            RunState run = TravelBoundary("intermediate");
+            string runJson = PersistenceJsonSerializer.SerializeRun(run);
+            Assert.That(runJson, Does.Contain("\"schemaVersion\": 2"));
+            AssertTravelEquals(run, PersistenceJsonSerializer.DeserializeRun(runJson));
+            Assert.That(PersistenceJsonSerializer.SerializeProfile(profile), Is.EqualTo(profileJson));
+            Assert.That(ProfileStateDto.CurrentSchemaVersion, Is.EqualTo(2));
+            Assert.That(RunStateDto.CurrentSchemaVersion, Is.EqualTo(1));
+        }
+
+        [TestCase("runId", "\"run.test\"", "123")]
+        [TestCase("runSeed", "1729", "\"1729\"")]
+        [TestCase("completedDayCount", "0", "0.25")]
+        [TestCase("dayNumber", "1", "1.25")]
+        [TestCase("segmentIndex", "0", "0.25")]
+        [TestCase("generationVersion", "1", "\"1\"")]
+        [TestCase("generationConfigurationId", "\"legacy.board.v1\"", "123")]
+        public void TravelJson_RejectsCoercedScalarTypes(string field, string valid, string invalid)
+        {
+            string json = PersistenceJsonSerializer.SerializeTravelRun(TravelBoundary("pending"));
+            string malformed = json.Replace("\"" + field + "\": " + valid, "\"" + field + "\": " + invalid);
+            Assert.That(malformed, Is.Not.EqualTo(json));
+            PersistenceDataException error = Assert.Throws<PersistenceDataException>(() =>
+                PersistenceJsonSerializer.DeserializeTravelRun(malformed), field);
+            Assert.That(error.Error, Is.EqualTo(PersistenceDataError.InvalidValue));
+            Assert.That(error.FieldPath, Does.Contain(field));
+        }
+
+        [Test]
+        public void TravelJson_RejectsCaseAliasesAndDuplicateBindings()
+        {
+            string json = PersistenceJsonSerializer.SerializeTravelRun(TravelBoundary("pending"));
+            string alias = json.Insert(json.IndexOf('{') + 1, "\"RunId\":123,");
+            Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeTravelRun(alias));
+            Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeTravelRun(json.Replace("\"runId\"", "\"RunId\"")));
+            string duplicate = json.Insert(json.IndexOf('{') + 1, "\"runId\":\"foreign\",");
+            Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeTravelRun(duplicate));
+        }
+
+        internal static RunState TravelBoundary(string boundary)
+        {
+            RunState run = RouteLegTests.NewRun();
+            run.RecordRouteNode("a");
+            run.EquipTool(0, new ToolSlotState("axe", 3));
+            if (boundary == "checkpoint")
+                return run;
+            run.StartLeg("edge", "a", "b", RouteLegTests.Segments());
+            if (boundary != "pending")
+                run.TryConsumeIntro("leg.1");
+            if (boundary == "intermediate" || boundary == "complete" || boundary == "dead" || boundary == "won")
+                run.TryAdvanceSegment("leg.1", "segment.1");
+            if (boundary == "complete")
+                run.TryCompleteLeg("leg.1", "segment.2");
+            if (boundary == "dead")
+                run.MarkDead();
+            if (boundary == "won")
+                run.MarkWon();
+            return run;
+        }
+
+        internal static void AssertTravelEquals(RunState expected, RunState actual)
+        {
+            AssertRunEquals(expected, actual);
+            Assert.That(actual.CompletedDayCount, Is.EqualTo(expected.CompletedDayCount));
+            Assert.That(actual.TraversalSequence, Is.EqualTo(expected.TraversalSequence));
+            Assert.That(actual.TravelHistory, Is.EqualTo(expected.TravelHistory));
+            Assert.That(actual.ActiveLeg == null, Is.EqualTo(expected.ActiveLeg == null));
+            if (actual.ActiveLeg != null)
+            {
+                Assert.That(actual.ActiveLeg.LegId, Is.EqualTo(expected.ActiveLeg.LegId));
+                Assert.That(actual.ActiveLeg.EdgeId, Is.EqualTo(expected.ActiveLeg.EdgeId));
+                Assert.That(actual.ActiveLeg.FromNodeId, Is.EqualTo(expected.ActiveLeg.FromNodeId));
+                Assert.That(actual.ActiveLeg.ToNodeId, Is.EqualTo(expected.ActiveLeg.ToNodeId));
+                Assert.That(actual.ActiveLeg.DayNumber, Is.EqualTo(expected.ActiveLeg.DayNumber));
+                Assert.That(actual.ActiveLeg.SegmentIndex, Is.EqualTo(expected.ActiveLeg.SegmentIndex));
+                Assert.That(actual.ActiveLeg.CompletedSegmentCount, Is.EqualTo(expected.ActiveLeg.CompletedSegmentCount));
+                Assert.That(actual.ActiveLeg.IntroState, Is.EqualTo(expected.ActiveLeg.IntroState));
+                Assert.That(actual.ActiveLeg.Segments.Select(segment => segment.SegmentId + "|" + segment.GenerationConfigurationId + "|" + segment.GenerationVersion),
+                    Is.EqualTo(expected.ActiveLeg.Segments.Select(segment => segment.SegmentId + "|" + segment.GenerationConfigurationId + "|" + segment.GenerationVersion)));
+            }
+        }
+
         [Test]
         public void ProfileRoundTripPreservesCompleteStateAndInsertionOrder()
         {
@@ -269,7 +477,7 @@ namespace HallowBlaze.Tests.EditMode
         {
             string futureDocument = profile
                 ? "{\"schemaVersion\":3}"
-                : "{\"schemaVersion\":2}";
+                : "{\"schemaVersion\":3}";
 
             PersistenceDataException exception = Assert.Throws<PersistenceDataException>(() =>
             {

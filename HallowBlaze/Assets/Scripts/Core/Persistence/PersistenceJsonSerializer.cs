@@ -6,6 +6,7 @@ using HallowBlaze.Core.Persistence.Mapping;
 using HallowBlaze.Core.State;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 
 namespace HallowBlaze.Core.Persistence
 {
@@ -42,17 +43,71 @@ namespace HallowBlaze.Core.Persistence
             return ProfileStateMapper.FromDto(dto);
         }
 
+        /// <summary>Writes a validated schema v2 stable run boundary; profile serialization is unchanged.</summary>
         public static string SerializeRun(RunState run)
         {
-            return Serialize(RunStateMapper.ToDto(run));
+            return SerializeTravelRun(run);
         }
 
+        /// <summary>Reads supported v1/v2 run documents through the explicit, run-only migration boundary.</summary>
         public static RunState DeserializeRun(string json)
         {
-            RunStateDto dto = Deserialize<RunStateDto>(
-                json,
-                RunStateDto.CurrentSchemaVersion);
-            return RunStateMapper.FromDto(dto);
+            return DeserializeTravelRun(json);
+        }
+
+        /// <summary>Writes validated v2 stable travel inputs, not a duplicate address cache or mid-board snapshot.</summary>
+        public static string SerializeTravelRun(RunState run) => Serialize(RunStateV2Mapper.ToDto(run));
+
+        /// <summary>Strictly reads v2 or migrates evidenced v1 checkpoint data without file/profile mutation.</summary>
+        /// <exception cref="PersistenceDataException">Schema, JSON structure or travel invariants are invalid.</exception>
+        public static RunState DeserializeTravelRun(string json)
+        {
+            JObject document = ParseDocument(json);
+            int version = ReadSchemaVersion(document);
+            if (version == RunStateDto.CurrentSchemaVersion)
+                return RunStateV2Mapper.FromDto(RunStateV1Migration.Migrate(Deserialize<RunStateDto>(json, version)));
+            DtoValidation.RequireCurrentSchemaVersion(version, RunStateV2Dto.CurrentSchemaVersion);
+            ValidateTravelTokenTypes(document, typeof(RunStateV2Dto), string.Empty);
+            return RunStateV2Mapper.FromDto(Deserialize<RunStateV2Dto>(json, version));
+        }
+
+        private static void ValidateTravelTokenTypes(JToken token, Type expectedType, string path)
+        {
+            if (token == null || token.Type == JTokenType.Null)
+                return;
+            expectedType = Nullable.GetUnderlyingType(expectedType) ?? expectedType;
+            if (expectedType == typeof(int) || expectedType == typeof(string))
+            {
+                JTokenType required = expectedType == typeof(int) ? JTokenType.Integer : JTokenType.String;
+                if (token.Type != required)
+                    DtoValidation.ThrowInvalidValue(path);
+                return;
+            }
+            if (expectedType.IsArray)
+            {
+                if (!(token is JArray array))
+                {
+                    DtoValidation.ThrowInvalidValue(path);
+                    return;
+                }
+                for (int index = 0; index < array.Count; index++)
+                    ValidateTravelTokenTypes(array[index], expectedType.GetElementType(), path + "[" + index + "]");
+                return;
+            }
+            if (!(token is JObject document))
+            {
+                DtoValidation.ThrowInvalidValue(path);
+                return;
+            }
+            var contract = (JsonObjectContract)JsonSerializer.Create(SerializerSettings).ContractResolver.ResolveContract(expectedType);
+            foreach (JProperty field in document.Properties())
+            {
+                string fieldPath = path.Length == 0 ? field.Name : path + "." + field.Name;
+                JsonProperty property = contract.Properties.GetProperty(field.Name, StringComparison.Ordinal);
+                if (property == null || property.Ignored)
+                    DtoValidation.ThrowInvalidValue(fieldPath);
+                ValidateTravelTokenTypes(field.Value, property.PropertyType, fieldPath);
+            }
         }
 
         private static string Serialize<T>(T dto)
@@ -137,6 +192,11 @@ namespace HallowBlaze.Core.Persistence
             JObject document,
             int currentSchemaVersion)
         {
+            DtoValidation.RequireCurrentSchemaVersion(ReadSchemaVersion(document), currentSchemaVersion);
+        }
+
+        private static int ReadSchemaVersion(JObject document)
+        {
             if (!document.TryGetValue(
                     "schemaVersion",
                     StringComparison.Ordinal,
@@ -162,12 +222,10 @@ namespace HallowBlaze.Core.Persistence
                 exception is OverflowException)
             {
                 DtoValidation.ThrowInvalidValue("schemaVersion");
-                return;
+                return 0;
             }
 
-            DtoValidation.RequireCurrentSchemaVersion(
-                schemaVersion,
-                currentSchemaVersion);
+            return schemaVersion;
         }
     }
 }

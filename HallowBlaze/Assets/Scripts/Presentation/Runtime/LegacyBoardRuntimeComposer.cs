@@ -159,16 +159,11 @@ namespace HallowBlaze.Presentation.Runtime
                 throw Diagnostic(BoardRuntimeDiagnosticCode.InvalidInput, "request:null");
             if (runState == null)
                 throw Diagnostic(BoardRuntimeDiagnosticCode.InvalidInput, "run:null");
-            if (runState.Status != RunStatus.Active ||
-                !string.Equals(request.RunId, runState.RunId, StringComparison.Ordinal) ||
-                request.RunSeed != runState.RunSeed ||
-                !string.Equals(request.WorldNodeId, runState.WorldNodeId, StringComparison.Ordinal) ||
-                request.CurrentDay != runState.CurrentDay ||
-                request.BoardSeed != runState.GetBoardSeed())
+            if (!BoardOutcomeIdentityGuard.ValidateRequest(request, runState, out string context))
             {
                 throw Diagnostic(
                     BoardRuntimeDiagnosticCode.InvalidInput,
-                    "request-run-identity-mismatch");
+                    "request-run-identity-mismatch:" + context);
             }
         }
 

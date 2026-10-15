@@ -198,7 +198,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
             Assert.That(GetField<Text>(replacementPlayer, "foodText").text, Is.EqualTo("Food: 86"));
             Assert.That(GetField<Text>(replacementPlayer, "healthText").text, Is.EqualTo("Health: 89"));
-            Assert.That(GameObject.Find("LevelText").GetComponent<Text>().text, Is.EqualTo("Day: 0"));
+            Assert.That(GameObject.Find("LevelText").GetComponent<Text>().text, Is.EqualTo("Day: 1"));
 
             ProfileState profile = session.Profile;
             GameObject restartButton = GetField<GameObject>(manager, "restartButton");
@@ -237,7 +237,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(restartedRun.Food, Is.EqualTo(100));
             Assert.That(restartedRun.Health, Is.EqualTo(100));
             Assert.That(((Behaviour)manager).enabled, Is.True);
-            Assert.That(GameObject.Find("LevelText").GetComponent<Text>().text, Is.EqualTo("Day: 0"));
+            Assert.That(GameObject.Find("LevelText").GetComponent<Text>().text, Is.EqualTo("Day: 1"));
 
             Scene cleanupScene = SceneManager.CreateScene("M1.4 Smoke Cleanup " + Guid.NewGuid().ToString("N"));
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);

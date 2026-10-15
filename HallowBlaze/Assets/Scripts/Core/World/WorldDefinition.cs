@@ -14,6 +14,8 @@ namespace HallowBlaze.Core.World
 
         private readonly Dictionary<string, WorldNodeDefinition> nodesById;
         private readonly Dictionary<string, WorldEdgeDefinition> edgesById;
+        private readonly Dictionary<string, WorldEdgeDefinition> segmentOwners;
+        private readonly Dictionary<string, RouteSegmentDefinition> segmentsById;
         private readonly Dictionary<string, IReadOnlyList<WorldEdgeDefinition>> outgoingEdgesByNodeId;
         private readonly ReadOnlyCollection<WorldNodeDefinition> nodes;
         private readonly ReadOnlyCollection<WorldEdgeDefinition> edges;
@@ -61,6 +63,18 @@ namespace HallowBlaze.Core.World
 
             nodesById = BuildNodeLookup(nodeList);
             edgesById = BuildEdgeLookup(edgeList);
+            segmentOwners = new Dictionary<string, WorldEdgeDefinition>(StringComparer.Ordinal);
+            segmentsById = new Dictionary<string, RouteSegmentDefinition>(StringComparer.Ordinal);
+            foreach (WorldEdgeDefinition edge in edgeList)
+            {
+                foreach (RouteSegmentDefinition segment in edge.Segments)
+                {
+                    if (segmentOwners.TryGetValue(segment.SegmentId, out WorldEdgeDefinition owner))
+                        throw new ArgumentException($"Segment '{segment.SegmentId}' occurs on '{owner.EdgeId}' and '{edge.EdgeId}'.", nameof(edgeDefinitions));
+                    segmentOwners.Add(segment.SegmentId, edge);
+                    segmentsById.Add(segment.SegmentId, segment);
+                }
+            }
             outgoingEdgesByNodeId = BuildOutgoingLookup(edgeList);
             nodes = nodeList.AsReadOnly();
             edges = edgeList.AsReadOnly();
@@ -100,6 +114,15 @@ namespace HallowBlaze.Core.World
         /// Gets directed roads in stable ordinal identifier order through a read-only view.
         /// </summary>
         public IReadOnlyList<WorldEdgeDefinition> Edges => edges;
+
+        /// <summary>Resolves a globally unique segment and its owning road, or returns false with null outputs.</summary>
+        public bool TryGetSegment(string segmentId, out RouteSegmentDefinition segment, out WorldEdgeDefinition edge)
+        {
+            segment = null;
+            edge = null;
+            return segmentId != null && segmentsById.TryGetValue(segmentId, out segment)
+                && segmentOwners.TryGetValue(segmentId, out edge);
+        }
 
         /// <summary>
         /// Attempts to resolve a node by its stable identifier.

@@ -649,6 +649,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     /// <summary>
     /// Applies one result emitted by the currently active local board.
+    /// Full current-run identity is checked before effects. Active-leg completion awaits M3.12 orchestration.
     /// </summary>
     /// <param name="outcome">The board outcome to handle.</param>
     /// <returns><c>true</c> when the matching outcome was accepted; otherwise <c>false</c>.</returns>
@@ -657,7 +658,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (outcome == null
             || activeBoardRequest == null
             || boardOutcomeHandled
-            || !activeBoardRequest.HasSameIdentity(outcome.Request))
+            || !BoardOutcomeIdentityGuard.ValidateOutcome(outcome, activeBoardRequest, session?.ActiveRun, out _)
+            || session.ActiveRun.ActiveLeg != null)
         {
             return false;
         }

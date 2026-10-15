@@ -1,7 +1,7 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 — M3.6, M3.7, M3.8, M3.9.1-13 and M3.9.P1 accepted; M3.9 blocked on the manual readability gate; route-leg amendments accepted; M9 deferred**
-> Data ostatniej weryfikacji: 2026-10-12
+> Status dokumentu: **Accepted / execution roadmap v0.6 - M3.6-M3.10 accepted; M3.9 readability owner-approved for PoC; route-leg amendments accepted; M8.7 and M9 deferred**
+> Data ostatniej weryfikacji: 2026-10-13
 > Właściciel statusów i kolejności: **Coordinator**  
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
 > Zasady pracy agentów: [`../AGENTS.md`](../AGENTS.md)
@@ -91,7 +91,7 @@ Nowy atlas, resolver tur i save system dotkną wielu plików. Bez poprawnego ign
 | M0 — Safe Repository | repo jest czytelne dla Git, Unity i agentów; istnieje baseline oraz test runner | brak katalogów generowanych w statusie, tekstowe assety, zielony smoke test |
 | M1 — State Foundation | pauza nie mutuje planszy, a `RunState` i `ProfileState` mają jednego właściciela i bezpieczny zapis | pause/exit są bezpieczne; restart sceny i aplikacji nie miesza profilu z runem |
 | M2 — Persistent Atlas Prototype | stały graf około pięciu dni zachowuje odkrycia pomiędzy runami | tester używa wiedzy z pierwszej próby w drugiej |
-| M3 — Deterministic Tactical Core | a command has one result/turn, intents are explicit, and multi-board travel has stable segment identity | replay gives the same hash and route legs advance only at valid boundaries |
+| M3 — Deterministic Tactical Core | a command has one result/turn, intents are explicit, and multi-board travel has stable segment identity | explicit turn scenarios pass and route legs advance only at valid boundaries |
 | M4 — Generation, Noise and Enemies | model-first generator jest walidowany, a hałas tworzy decyzje | 10 000 seedów bez softlocka; Listener jest przewidywalny |
 | M5 — Tools | dwa narzędzia tworzą odmienne decyzje i alternatywne trasy | brak losowego softlocka; koszty narzędzi są czytelne |
 | M6 — Landmark | systemowa zagadka łączy pchanie, płyty i bramy | każdy wariant jest rozwiązywalny; co najmniej dwa sensowne rezultaty |
@@ -142,7 +142,7 @@ This audit reviewed every existing milestone against the accepted multi-board ro
 | M1.1–M1.11 (`Done`) | Do not rewrite history. Current run schema, `Food`, node-ID route, node/day seed, and profile discovery lists are migrated explicitly rather than extended opportunistically. Pause/menu behavior remains compatible; new route/inventory state is migrated explicitly rather than added opportunistically. | M3.11, M7.4, M7.5, M9.2–M9.3 |
 | M2.1–M2.8 (`Done`) | Preserve the accepted atlas prototype. Edge selection must later begin travel instead of immediately reaching its destination; node-based `BoardRequest` is replaced by a stable segment address. | M3.11–M3.12 |
 | M3.1–M3.4 (`Done`) | Grid/item layers and the one-turn result remain valid. Automatic food and cost `1` are transitional behavior, explicitly replaced only by M9. | M9.2 and M9.5 |
-| M3.5, M3.6, M3.10 | Keep orchestration command-agnostic, modal input draft-only, and replay/version/hash extensible. M3.7–M3.9 need no inventory-specific redesign. | amendments in those cards |
+| M3.5, M3.6, M3.10 | Keep orchestration command-agnostic, modal input draft-only, and explicit scenario coverage extensible. Portable replay/version/hash is deferred. M3.7–M3.9 need no inventory-specific redesign. | amendments in those cards, M8.7 |
 | M4.1–M4.6 | Generate by stable board address; represent generic items/source IDs and a read-only resource manifest; measure segment and aggregate route supply. M4.7–M4.9 remain structurally unchanged. | amendments in those cards, M7.4–M7.5 |
 | M5.1–M5.7 | Preserve ground instances until atomic commit; keep generic tool equipment separate from the bag; distinguish tool source, definition, and instance IDs. O-003 is resolved and transitional. | amendments in M5.1–M5.7, M9.5 |
 | M6.1–M6.6 | Landmark/template addressing must not assume node equals one board; rewards use stable item IDs. Puzzle, solver, and gate semantics otherwise remain unchanged. | M6.1/M6.4 readiness notes, M3.11 |
@@ -154,7 +154,11 @@ This audit reviewed every existing milestone against the accepted multi-board ro
 
 #### Rationale
 
-The route-leg model changes identity and persistence before the bag changes UI. Establishing stable edge/segment addresses before generator work avoids later rewrites of seeds, replay, tool locations, and atlas samples. Keeping M9 last still lets the owner play the complete no-backpack game before committing to its new economy.
+The route-leg model changes identity and persistence before the bag changes UI. Establishing stable edge/segment addresses before generator work avoids later rewrites of seeds, future replay, tool locations, and atlas samples. Keeping M9 last still lets the owner play the complete no-backpack game before committing to its new economy.
+
+### 5.6. Owner-approved diagnostic scope reduction - 2026-10-13
+
+M3.10 is an explicit scenario-test gate, not a portable replay implementation. Every new mechanic owns concrete initial-state/command/expected-result tests and its normal save compatibility checks. Planned diagnostic snapshot, replay codec/version, canonical hash, and omission/first-divergence requirements are conditional on acceptance of deferred M8.7; they do not block M3.11/M3.12, generation, tools, atlas, mid-board saves, or M9. M8.7 must first inventory all mechanics already shipped; later mechanic tickets then extend its coverage together. Existing deterministic seed/equality hashes and accepted historical evidence are unaffected.
 
 ---
 
@@ -2869,9 +2873,11 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.9` - Readable locked-intent presentation (tracking umbrella)
 
-**Status:** `Blocked` - updated 2026-10-12. All implementation/regression children `M3.9.1-13`, production prerequisite `M3.9.P1` and startup-layout repair `M3.9.R1` are accepted. Fresh production smoke/captures and human blind-prediction evidence remain required by `M3.9.14`. Automated passes do not establish readability or the majority-of-testers gate. See [readability evidence](Validation/M3.9IntentReadability.md); dependent `M3.10` remains gated.
+**Status:** `Done` - accepted 2026-10-13 after the owner explicitly approved M3.9.14 and confirmed that the current result is satisfactory. All implementation/regression children `M3.9.1-13`, production prerequisite `M3.9.P1` and repairs `M3.9.R1-R3` are separately accepted. See [readability evidence and owner acceptance](Validation/M3.9IntentReadability.md).
 **Priority:** P0
 **Related contract:** sections 10.2, 11, 18, 21.2, and the intent gate in section 22; [accepted Shambler rule](GameDesignContract.md#1131-accepted-shambler-rule).
+
+**Owner acceptance exception:** The owner accepts the current presentation for PoC and closes the manual gate without supplying a formal blind-prediction sample, grayscale capture set, or complete recorded lifecycle smoke. Those missing measurements are waived as blockers for this milestone only; no majority-of-testers or measured manual PASS is claimed. Final graphical polish remains deferred, and later M4.9/M7.8 playtest obligations are unchanged.
 
 **Rationale:** Intent projection, drawing, replay timing, board lifetime, production binding, and human readability are different acceptance problems. A symbol assignment must not also require inventing AI, changing turn ownership, migrating legacy enemies, and running a playtest.
 
@@ -2895,13 +2901,13 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Execution order:** Accept M3.9.1 through M3.9.10 as separate delegations, resolve the production prerequisite before M3.9.11, then accept M3.9.11 through M3.9.13 separately. The Lead performs M3.9.14 after automated gates pass. One writer at a time; independent prerequisites do not authorize simultaneous writers.
 
-**Acceptance criteria:** Every implemented action and the declared player-entry condition remain readable without color or animation; targets and source associations are unambiguous, including shared destinations. Rejection does not refresh/replan; replay does not expose next intents early; terminal/replaced boards cannot publish stale markers. Fixed-cell misses are shown without following the player. Production has visible initial intents before input and a working legend. All fourteen children are independently accepted, including the human gate; screenshots or enum assertions alone do not prove readability.
+**Acceptance criteria:** Every implemented action and the declared player-entry condition remain readable without color or animation; targets and source associations are unambiguous, including shared destinations. Rejection does not refresh/replan; replay does not expose next intents early; terminal/replaced boards cannot publish stale markers. Fixed-cell misses are shown without following the player. Production has visible initial intents before input and a working legend. All fourteen children are accepted, with the human gate closed by the explicit owner exception above rather than measured prediction evidence; screenshots or enum assertions alone do not prove readability.
 
 **Test plan:** Use each child's one focused EditMode/PlayMode filter. Reuse `EnemyIntentProjectionTests`, `EnemyIntentPresentationTests`, and the existing pipeline/ordered/startup fixtures rather than adding a fixture per behavior. Finish with animation-on/off regression and the contract's manual blind-prediction gate. The filters below are planned checks, not claims that tests exist or have passed.
 
 **Save and compatibility impact:** None; display snapshots are disposable presentation data, never a second gameplay owner or save DTO. No profile directory is used by these tests.
 
-**Required handoff:** Link each child's validation/review evidence, retained plan -> symbol/target examples, publication/recovery traces, the accepted production prerequisite, and the readability report with screenshots and prediction counts. Do not mark this umbrella `Done` while the production binding or human gate is blocked.
+**Required handoff:** Link each child's validation/review evidence, retained plan -> symbol/target examples, publication/recovery traces, the accepted production prerequisite, and the readability report. Record the owner exception and actual available evidence without inventing screenshots or prediction counts. The production binding and owner-approved manual gate are complete.
 
 ---
 
@@ -3335,7 +3341,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Validation:** The focused layout test first reproduced the exact overlap exception in the connected Editor. Repaired layout passed 1/1 at 1142x684, 1280x720 and 1920x1080, including actual EventSystem raycast, wheel/drag access to the last symbol and initial top position. Isolated Day 1 startup passed 1/1 at 640x480, including transition release and camera restoration. Final intent fixture 29/29, final startup fixture 8/8 and command path 12/12 passed. Independent Reviewer PASS followed correction of the pointer target; camera resize guards were independently rechecked. Live-runner initialization scenes were backed up with SHA-256 and removed with their metadata; ProjectSettings content was verified identical to HEAD, not restored.
 
-**Readability impact:** This repair does not establish human comprehension. Rerun production smoke and the human prediction gate in `M3.9.14` after acceptance.
+**Readability impact:** This repair does not establish human comprehension. At repair acceptance, fresh production smoke and human prediction evidence were still required; the owner subsequently closed `M3.9.14` for PoC on 2026-10-13 under its explicit exception.
 
 ---
 
@@ -3351,7 +3357,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Validation:** `Markers_RenderAboveProductionBoardLayers` first failed with zero visible Move pixels, then passed 1/1 after the sorting-layer repair. Graphics-enabled Unity validation verifies all five distinct rendered glyphs, the conditional badge and source cue, with a negative board-only control. Full intent fixture 30/30 and startup fixture 8/8 passed; independent Reviewer PASS completed. This test requires a graphics device and must not run with `-nographics`.
 
-**Readability impact:** Pixel visibility is mechanical evidence, not human comprehension. `M3.9.14` remains blocked pending fresh production smoke and recorded human predictions.
+**Readability impact:** Pixel visibility is mechanical evidence, not human comprehension. `M3.9.14` was still blocked at repair acceptance; the owner subsequently closed it for PoC on 2026-10-13 without a measured prediction claim.
 
 ---
 
@@ -3367,537 +3373,129 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Validation:** The focused production startup regression first failed with visible markers during setup, then passed 1/1 after the owner-visibility repair and fixture lookups that distinguish the current owner from deferred-destruction children. Full startup fixture 8/8 includes automatic Day 1 release and hidden/revealed enemy markers; pause fixture 11/11 passed. Tests use isolated persistence roots and fresh Unity XML. Independent Reviewer PASS completed without findings.
 
-**Readability impact:** The owner's qualitative assessment establishes functional PoC sufficiency for the two observed symbols, not a blind-prediction/grayscale PASS. Visual redesign is deferred to the final graphical phase; `M3.9.14` remains blocked.
+**Readability impact:** The owner's qualitative assessment establishes functional PoC sufficiency for the two observed symbols, not a blind-prediction/grayscale PASS. Visual redesign remains deferred to the final graphical phase. The owner subsequently approved `M3.9.14` on 2026-10-13 under the explicit PoC acceptance exception.
 
 ---
 
 ## `M3.9.14` - Lead-owned intent readability gate
 
-**Status:** `Blocked` - updated 2026-10-12. Repairs `M3.9.R1`, `M3.9.R2` and `M3.9.R3` are separately accepted. The owner confirmed clear, visible Conditional Move and Wait markers that are functionally adequate for PoC; R3 mechanically covers hiding the UI over the day transition. Full production lifecycle smoke, grayscale/animation-disabled captures and recorded human predictions remain required. The [Lead-owned report](Validation/M3.9IntentReadability.md) distinguishes qualitative owner feedback from zero formal prediction participants; no manual PASS or umbrella acceptance is claimed.
+**Status:** `Done` - accepted 2026-10-13 by explicit owner approval of this gate and confirmation that the current result is satisfactory. Repairs `M3.9.R1-R3` are separately accepted. The [Lead-owned report](Validation/M3.9IntentReadability.md) records owner-reported PoC acceptance, not a new agent-run smoke or measured majority-of-testers PASS. Formal prediction participants and recorded pre-outcome responses remain zero.
 **Priority:** P0
 **Related contract:** sections 18 and the intent gate in section 22.
 
 **Rationale:** Automated geometry and event assertions cannot establish that players understand the information before acting.
 
-**Current behavior:** M3.9.13 supplies mechanical evidence. The owner's partial production smoke confirms visibility and qualitative PoC readability of Conditional Move and Wait, but is not a complete lifecycle smoke or a recorded blind-prediction sheet. Final graphical polish is deferred at the owner's request.
+**Current behavior:** M3.9.13 and the accepted repairs supply mechanical evidence. Earlier owner feedback confirmed visibility and qualitative PoC readability of Conditional Move and Wait. The owner now approves the milestone as a whole; no additional capture settings, formal predictions, or complete lifecycle-smoke checklist were supplied. Final graphical polish remains deferred at the owner's request.
 
-**Expected outcome:** The Lead records whether production intent UI is readable without animation/color and whether a majority of testers correctly predict known Shambler behavior.
+**Expected outcome:** Record the owner's PoC acceptance and the limits of available evidence. Formal animation-disabled/grayscale and majority-of-testers validation remains a later playtest concern, not an outstanding blocker for this accepted milestone.
 
-**Scope:** This is a manual acceptance task, not a Developer implementation delegation. Run a production PC smoke with animations disabled, inspect symbols/targets in grayscale and at the supported viewport sizes, and capture each supported symbol including the conditional badge and legend. Use a small recorded blind-prediction sheet: after the same brief legend/rule familiarization, the tester commits a prediction before seeing the resolved outcome. Include the conditional entry, different-cell entry, fixed-cell miss, adjacent rest, and shared-target cases. Record denominators, per-case and per-tester results, misunderstood symbols, and a `PASS`/`BLOCKED` verdict. Treat `Investigate` as a presentation-only capture until Listener is implemented; do not claim its gameplay comprehension gate passed.
+**Scope:** Documentation-only closeout of the manual gate by owner approval. Preserve previous mechanical results and qualitative feedback; distinguish acceptance from unsupplied formal measurements. The originally planned full production smoke, grayscale/animation-disabled captures, and pre-outcome prediction sheet are waived as current blockers. Later prediction checks still cover conditional entry, different-cell entry, fixed-cell miss, adjacent rest, and shared targets. `Investigate` remains presentation-only until Listener exists.
 
 **Non-goals:** No code/art repair during the gate, invented tester feedback, statistical market claims, new product rules, broad playtest program, or external transmission of project/tester data.
 
 **Dependencies:** `M3.9.13`.
 
-**Allowed file area:** Proposed Lead-owned `Docs/Validation/M3.9IntentReadability.md` only. Keep screenshots/test captures in an explicit local directory outside the Unity project and reference their paths in the report; do not create unapproved project assets.
+**Allowed file area:** Existing Lead-owned `Docs/Validation/M3.9IntentReadability.md` and status/dependency corrections in this roadmap only. Future screenshots/test captures stay in an explicit local directory outside the Unity project; no project asset or production change is part of this closeout.
 
-**Acceptance criteria:** Actual production startup/turn/lifecycle smoke passes; grayscale and animation-disabled inspection preserves action/target/condition visibility. Report every supported symbol and the actual prediction counts/percentages. Apply the contract's majority-of-testers gate, not a newly invented numeric target or an averaged success rate that hides misunderstanding of the same-cell attack condition. The Lead records the sample limitation and explicitly evaluates the conditional cases; absent human evidence leaves this child and umbrella blocked.
+**Acceptance criteria:** The owner explicitly approves the current PoC presentation; the Lead records the approval/date and previously accepted implementation evidence. Missing formal smoke/capture/prediction measurements are waived for this milestone only. Keep actual participant/response counts at zero and percentages not evaluable; do not claim that the contract's majority-of-testers criterion was measured or passed. Later M4.9/M7.8 playtest gates retain their requirements.
 
-**Test plan:** One manual gate: production smoke plus the recorded pre-outcome blind-prediction sheet and screenshot set. No Unity test filter substitutes for human acceptance; inspect actual evidence before recording `PASS`.
+**Test plan:** Cross-check owner approval, card/umbrella/queue status, and the existing report's evidence limits. No Unity tests are rerun for documentation-only acceptance; automated results retain their original dates. No test filter is treated as human prediction evidence.
 
 **Save and compatibility impact:** None; smoke uses an isolated test profile and does not write to the player's real profile directory.
 
-**Required handoff:** Local capture paths, viewport/animation/grayscale settings, prediction sheet with anonymized counts and percentages, concrete readability findings, and the Lead's acceptance verdict. Any needed repair is a separately scoped task, followed by the relevant automated gate and a fresh readability check.
+**Completion:** Owner acceptance recorded on 2026-10-13; `M3.9.14` and the `M3.9` umbrella are closed. The existing report preserves observed feedback, repair evidence, and missing formal measurements. Any later code/art repair remains a separately scoped task.
 
 ---
 
-## `M3.10` - Command replay and canonical state hash (tracking umbrella)
+## `M3.10` - Explicit turn-scenario regression
 
-**Status:** `Planned`
-**Priority:** P0
-**Related contract:** sections 16, 21.2, 22, and 27.9.
+**Status:** `Done` - accepted 2026-10-13 under the owner-approved reduced scope. New sequence 2/2, combined controller/batch EditMode 83/83, and focused presentation PlayMode 3/3 passed; failed/skipped/inconclusive 0. Implementation and acceptance checks were performed directly by the Lead; the owner waived Developer and Reviewer delegation for this task. This test evidence is separate from M3.6.3's owner-confirmed smoke acceptance on 2026-10-08 and M3.9.14's owner-approved PoC closeout on 2026-10-13.
+**Priority:** P0 test gate
+**Related contract:** sections 11, 16, 21.2, 22, and 27.9.
 
-**Rationale:** Command representation, state capture, canonical encoding, completeness enforcement, recording, replay, and divergence detection have different failure modes. Accept each operation before composing it; do not ask one Developer to create a diagnostics framework and change production flow at once.
+**Rationale:** Before adding more mechanics, preserve concrete examples of correct turns: where actors end up, which announced attack hits or misses, what an action costs, and when the board stops accepting commands. Existing domain APIs can execute these examples without a scene. A portable recording framework is not needed to verify those rules and would add a second state description to maintain before anyone needs exported bug recordings.
 
-**Current behavior:** The domain has immutable commands, enumerable grid state, explicit run state, and one synchronous `TurnController` with reusable phase hooks. M3.7/M3.8 provide retained enemy plans. There is no portable replay input or canonical hash. The generator's `BoardBlueprint` belongs to M4.2 and cannot be a prerequisite of M3.10, because M4 depends on the M3 gate.
+**Current behavior:** One synchronous `TurnController` already composes the accepted player resolver and `EnemyBatchTurnPhases`. Existing tests cover individual phases and multi-enemy conflicts. Presentation consumes completed results rather than deciding gameplay.
 
-**Expected outcome:** A small diagnostic document contains format/rules versions, seed/context, an exact initial model description, versioned tagged commands, and expected post-attempt hashes/results. A fresh headless controller reproduces it and reports the first mismatch. Ordered diagnostic state capture has no Unity references or dependency on generation. M4.2 can later export its blueprint through the accepted capture seam.
+**Expected outcome:** Short, authored command sequences run through the real controller on fresh independent boards. Tests assert explicit expected state and typed events after each attempt, including rejected and terminal attempts. Existing presentation scenarios verify the same accepted rules with animations enabled and disabled.
 
-**Scope:** Execute the children separately: command tags, primitive encoding, board/run/enemy capture, required contributor manifest, hashing, document, strict JSON codec, recorder, runner, divergence comparison, deterministic regression, presentation parity, and the Lead-owned evidence/extension checklist.
+**Scope:** Add the sequence in M3.10.1 and run the bounded domain/presentation gate in M3.10.2. Reuse existing fixtures and helpers; no new runtime service, assembly, package, or general-purpose replay fixture.
 
-**Delegation readiness:** Before each child the Lead supplies actual accepted APIs, an explicit field/owner inventory for the supported rules version, one nearby fixture/helper, small input -> expected output examples, the exact two-file allowlist, and its filter. Confirm that public read/restore operations cover all required values; missing domain access requires a separately scoped prerequisite, never private-field reflection or widening a snapshot assignment. Reuse the existing Turns Resolution assembly for the proposed `Diagnostics` subfolder and the installed Newtonsoft JSON package. If an assembly reference is actually missing, accept a separate bounded reference-only prerequisite before the codec; do not create a new assembly or change packages inside a child.
+**Extension rule:** Each new mechanic adds or updates focused scenarios in its owning test fixture with explicit initial input, ordered commands, expected intermediate results, and free-rejection/terminal assertions where relevant. Do not introduce diagnostic snapshots, command-format versions, or canonical state hashes solely to satisfy this gate. Full portable replay and its eventual coverage/version contract belong to deferred `M8.7`.
 
-**Initial-state boundary:** This diagnostic description is not a gameplay save or a mid-board resume feature. Capture a fresh, active board after initial planning and before its first command; include exact bounds/entities/traits/rewards, run resources/tools/travel context, immutable enemy definition parameters, cadence/locked plans, and player identity. Restore independent values without planning again or sharing mutable owners. Hash the existing controller terminal latch after each attempt; transient resolution/presentation locks, views, profile storage, clock, and cosmetic randomness are not gameplay hash inputs. Do not fabricate future RNG state; its owning ticket must extend the format when introduced.
+**Non-goals:** No recorder, JSON command format, canonical state-hash framework, second AI/resolver, concurrency audit, automatic gameplay capture, generator, player-save change, mid-board resume, or production integration.
 
-**Extension rule:** Every new authoritative field, rule parameter, or command type must update the independently declared coverage inventory, replay-rules version, initial capture/restore and tagged codec where relevant, canonical hash coverage, and mutation/omission tests in its owning ticket. The inventory is not inferred only from the contributors that happen to be supplied. M3.11 extends route/address state after this umbrella is accepted; future tool/noise/inventory tickets follow the same rule.
+**Dependencies:** Accepted M3.5, M3.7/M3.8 domain behavior and M3.9.11/M3.9.13 automated presentation behavior. Manual acceptance remains separate evidence: M3.6.3 smoke and M3.9.14 PoC readability are already closed by their recorded owner approvals.
 
-**Non-goals:** No generator/BoardBlueprint implementation, public replay compatibility promise, network/anti-cheat, animation recording, production recorder hook, new RNG, new save schema, domain balance/AI changes, profile restoration, mid-board resume, new package/assembly, or reflection-based state access.
+**Allowed file area:** `Assets/Tests/EditMode/TurnControllerTests.cs`, `Docs/TechnicalRoadmap.md`, and the related implementation-timing clarification in `Docs/GameDesignContract.md`. Other existing test files are executed unchanged; no manual project-settings edit is part of this task.
 
-**Dependencies:** Full acceptance of `M3.1` through `M3.9`. Neither M4 nor M3.11 is a prerequisite of this initial version; later state additions explicitly extend it.
+**Acceptance criteria:** Fresh runs and both enemy input orders match explicit movement/rest/attack/resource/event expectations. A rejected command neither consumes resources nor replaces locked plans; starvation stops enemy phases, and commands after termination have no effects. Existing multi-enemy permutations and animation-on/off scenarios pass with nonzero counts. No diagnostic work is added to normal gameplay.
 
-**Allowed file area:** Only the exact child source/test paths and the single Lead-owned report below. Proposed diagnostics sources live under the existing `Assets/Scripts/Core/Turns/Resolution/Diagnostics/` boundary. Generated `.meta` companions are inspected, never hand-authored. No production/session/persistence/scene/prefab/configuration edits are authorized by these children.
+**Test plan:** EditMode `HallowBlaze.Tests.EditMode.TurnControllerTests` and `HallowBlaze.Tests.EditMode.EnemyBatchTests`; PlayMode `HallowBlaze.Tests.PlayMode.EnemyIntentPresentationTests.AnnouncedConditionalOutcomes_HaveAnimationParity` and `HallowBlaze.Tests.PlayMode.EnemyIntentPresentationTests.ReplayBoundary_PreservesLockedDisplayUntilNextPublication`. Fresh Unity XML/logs stay outside the project.
 
-**Execution order:** Accept M3.10.1 through M3.10.14 separately, then perform the Lead-owned M3.10.15 gate. One writer at a time. A failing test-only child is not permission to repair implementation in that delegation.
+**Save and compatibility impact:** None. Tests use synthetic state and existing isolated presentation fixtures; no profile/player data is exported. Deferred replay is not a prerequisite for save migration or generation.
 
-**Acceptance criteria:** Equal initial values and command sequences produce equal initial/post-attempt hashes and accepted/rejected results; unordered collection permutations do not change hashes. Ordered route/tool/command data retains its semantics. Changed commands produce a reproducible first divergence. Missing required contributors, unsupported versions/tags, malformed snapshots, and unknown commands fail explicitly before replay effects. Rejections preserve state/cadence/resources; terminal behavior and presentation parity match the existing controller. All fifteen children and extension evidence are accepted.
-
-**Test plan:** Each implementation/test child has one focused EditMode/PlayMode method below, using the shared `ReplayTests` fixture and existing presentation fixture. The Lead verifies actual case counts and a reproducible, synthetic artifact outside the repository. Future test names are acceptance targets, not tests already run.
-
-**Save and compatibility impact:** No player save changes. Replay has separate format and rules versions and rejects unsupported versions rather than silently reinterpreting them. Artifacts use an explicit external temporary directory, so they cannot be staged or imported by Unity; no `.gitignore` change is required.
-
-**Required handoff:** Accepted child evidence, format/rules versions, complete field/owner/ordering inventory, fixed encoding/hash vectors, one redacted replay and first-divergence example, and an external artifact path. No real profile/player data or secrets are exported.
+**Completion:** Both children below are accepted. The previous fifteen replay implementation children are superseded by this reduced scope, not outstanding M3 work; future capability planning is consolidated in M8.7.
 
 ---
 
-## `M3.10.1` - Round-trip versioned command tags
+## `M3.10.1` - Assert a complete multi-turn command sequence
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-13; focused EditMode 2/2 passed, each input-order case executes two fresh sequences.
 **Priority:** P0
-**Related contract:** sections 21.2 and 27.9.
+**Related contract:** sections 10.2, 11.1, 11.3.1, and 16.
 
-**Rationale:** Commands need explicit diagnostic tags before a document or runner can safely consume them.
+**Rationale:** A phase can pass in isolation while its retained state is wrong on the next turn. A short sequence makes those boundaries observable without recording or reconstructing arbitrary player sessions.
 
-**Current behavior:** `MoveCommand`, `WaitCommand`, and `InteractCommand` are immutable domain values, not a versioned wire representation.
+**Scope:** In the existing controller fixture, compose the real batch adapter and resolver. Assert initial plans, two enemy moves, free rejection during rest, one rest turn, a fixed-cell miss and conditional hit after player escape, starvation, and rejection after termination. Repeat with normal/reversed enemy input and fresh owners. Check ordered typed event payloads, positions, resources, cadence, retained plans, and one action cost per accepted turn.
 
-**Expected outcome:** Each accepted command round-trips through a detached tagged record with exactly its required payload.
+**Non-goals:** No production source edit, duplicate rules, new fixture, serializer, hashing, or generated board.
 
-**Scope:** Add one record/codec source for the three existing commands. Preserve direction and full signed `EntityId` values; reject unknown tags, missing/extra payloads, invalid directions, and unsupported command versions. Define explicit stable tags rather than CLR type names or arbitrary `CommandType` dispatch. JSON parsing belongs to M3.10.9.
+**Allowed file area:** `Assets/Tests/EditMode/TurnControllerTests.cs` only.
 
-**Non-goals:** No new command, reflection polymorphism, resolver call, file I/O, document, or future inventory tag.
+**Acceptance criteria:** Every attempt has a concrete expected result; repeated equal failures are not accepted as proof of correctness. Rejection preserves the exact retained plan references. The terminal latch prevents later effects and leaves unexecuted enemy plans unchanged.
 
-**Dependencies:** `M3.9`.
+**Test plan:** EditMode `HallowBlaze.Tests.EditMode.TurnControllerTests.ScenarioSequence_PreservesExplicitOutcomesAcrossFreshRuns`.
 
-**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayCommandRecord.cs`; proposed `Assets/Tests/EditMode/ReplayTests.cs`.
-
-**Acceptance criteria:** Move/Wait/Interact reconstruct equivalent values without side effects. Negative, zero, and extreme target IDs survive; unsupported commands/tags/versions produce diagnostics and are never skipped or converted to `Wait`.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.CommandTags_RoundTripAndRejectUnsupportedInput`.
-
-**Save and compatibility impact:** Diagnostic command version only; no save-format change.
-
-**Required handoff:** Tag/version/payload table and actual invalid-input diagnostics.
+**Save and compatibility impact:** None; synthetic state only.
 
 ---
 
-## `M3.10.2` - Encode canonical primitive values
+## `M3.10.2` - Reuse multi-enemy and presentation scenario gates
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-10-13; combined EditMode 83/83 and focused PlayMode 3/3 passed with no failures, skips, or inconclusive cases.
 **Priority:** P0
-**Related contract:** section 16.
+**Related contract:** sections 11, 18, 21.2, and 22.
 
-**Rationale:** Culture, delimiters, or platform byte order must not create a different hash for equivalent values.
+**Rationale:** Existing fixtures already describe correct contested moves, swaps, live occupancy, removed actors, announced attacks, and presentation timing. Re-running them is useful regression evidence; copying them into a new diagnostics framework would not add rule coverage.
 
-**Current behavior:** There is no shared canonical diagnostics encoder.
+**Scope:** Execute the two domain fixtures and two presentation methods listed by the umbrella. Inspect fresh reports for expected identities and nonzero counts. Reuse explicit state/view/HUD/intent assertions in both animation modes and the held-presentation input gate. No new headless-replay comparison is claimed.
 
-**Expected outcome:** Named primitive values have an unambiguous deterministic byte encoding with fixed test vectors.
+**Non-goals:** No source repair inside this test gate, manual readability acceptance, new snapshots/hash, performance benchmark, or runtime recorder.
 
-**Scope:** Add one small writer for integers, booleans, explicit enum discriminants, nullable values, and length-prefixed UTF-8 strings/collections. Specify widths, byte order, null versus empty, and framing. Use ordinal keys and ordered calls; callers own collection semantics. Use structured encoding, not concatenated display strings or platform `GetHashCode()`.
+**Dependencies:** `M3.10.1`, accepted M3.8/M3.9 automated fixtures.
 
-**Non-goals:** No state discovery, hashing, JSON, domain seed algorithm, compression, or serialization framework.
+**Allowed file area:** Roadmap status only; existing tests run unchanged.
 
-**Dependencies:** `M3.10.1`.
+**Acceptance criteria:** Both domain fixtures and all three filtered PlayMode cases pass. Animation timing cannot cause a second resolution, move a locked target, or change final authoritative resources. Manual M3 gates retain their own status.
 
-**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/CanonicalValueWriter.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+**Test plan:** The umbrella's exact EditMode/PlayMode filters, using Unity CLI batchmode when the live Pipeline is unreachable.
 
-**Acceptance criteria:** Fixed vectors cover integer extremes, empty/null/delimiter-containing/non-ASCII strings, and nested framing; distinct framed values cannot alias merely through concatenation. Changing current culture does not change bytes.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.CanonicalEncoding_HasCultureIndependentVectors`.
-
-**Save and compatibility impact:** Encoding is tied to replay-rules version, not the player's DTO schema.
-
-**Required handoff:** Encoding specification and observed vectors, with no dependency on Unity/time.
-
----
-
-## `M3.10.3` - Capture and rebuild the initial board model
-
-**Status:** `Planned`
-**Priority:** P0
-**Related contract:** sections 16 and 21.1.
-
-**Rationale:** Replay must reconstruct actual grid data without waiting for the future generator blueprint.
-
-**Current behavior:** `BoardState.GetEntities()` supplies an ID-ordered detached enumeration; definitions/traits determine resolution.
-
-**Expected outcome:** A diagnostic board description rebuilds an independent board with equivalent bounds, entities, definitions, positions, and behavior-affecting traits/rewards.
-
-**Scope:** Add capture, validation, canonical-value writing, and reconstruction for this one owner in one source. Include full stable IDs/layers/kinds/content IDs and every accepted definition field, not just positions. Reuse existing constructors and `TryAdd`; reject duplicate IDs/cells, illegal bounds/layers, and unresolved definition input before publishing a board.
-
-**Non-goals:** No GameObject/Transform, `BoardBlueprint`, generation algorithm, run/enemy cadence, JSON, or domain-owner modification.
-
-**Dependencies:** `M3.10.2`.
-
-**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayBoardSnapshot.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
-
-**Acceptance criteria:** Valid input round-trips all board fields/index lookups and canonical values; reconstruction shares no mutable collection. Input/insertion permutations preserve ID ordering. Invalid rows cannot expose a partial board; definition mutations alter canonical output.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.BoardSnapshot_RebuildsExactIndependentGrid`.
-
-**Save and compatibility impact:** Diagnostic snapshot only; not persisted as normal board resume.
-
-**Required handoff:** Complete board field inventory and malformed-row diagnostics; identify the future blueprint export seam without implementing it.
-
----
-
-## `M3.10.4` - Capture and rebuild run inputs
-
-**Status:** `Planned`
-**Priority:** P0
-**Related contract:** sections 16, 21.1, and 27.9.
-
-**Rationale:** Matching the board while omitting food, tools, or travel context is not deterministic replay.
-
-**Current behavior:** `RunState` exposes current node/day, resources, status, tool slots, and ordered node route.
-
-**Expected outcome:** A detached run description rebuilds the exact active initial run and canonically describes its accepted authoritative fields.
-
-**Scope:** Add capture, canonical-value writing, validation, and independent reconstruction for current `RunState` only, using public APIs. Preserve run ID/root seed, node/day, health/food, ordered route, and ordered tool slots/uses. Capture terminal/status values for post-attempt hashing; initial replay accepts only the active, fresh-board boundary stated by the umbrella. Do not use the profile or persistence serializer as a surrogate for canonical state.
-
-**Non-goals:** No new run schema, private-field setters, route-leg state ahead of M3.11, lifecycle/storage, profile capture, or backpack fields.
-
-**Dependencies:** `M3.10.3`.
-
-**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayRunSnapshot.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
-
-**Acceptance criteria:** Every current field round-trips for supported initial input; collections are independent and preserve meaningful order. Post-attempt zero health/food and terminal status encode correctly. Invalid initial state fails before publication; mutating each inventoried field changes its canonical description.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.RunSnapshot_PreservesResourcesToolsAndOrderedContext`.
-
-**Save and compatibility impact:** None; current save mapper remains untouched and M3.11 later extends this diagnostic description.
-
-**Required handoff:** Run field/owner/order inventory and public reconstruction operations; missing access is a prerequisite blocker, not permission to widen this child.
-
----
-
-## `M3.10.5` - Capture retained enemy inputs
-
-**Status:** `Planned`
-**Priority:** P0
-**Related contract:** sections 11.1, 11.3.1, and 16.
-
-**Rationale:** Cadence and a locked target affect the next turn even when enemy positions are identical.
-
-**Current behavior:** Accepted M3.7/M3.8 own definitions, per-enemy cadence, and retained intent batches outside the board's position index.
-
-**Expected outcome:** A detached enemy description rebuilds accepted definition/state/locked-plan values without fresh planning.
-
-**Scope:** Add capture, canonical writing, and reconstruction for accepted Shambler inputs. Include board-local source IDs, definition/rule parameters including 10/20 damage, cadence, intent presence/consumption, exact target identity/cell, and the player-entry condition. Sort unordered enemy rows by ID and preserve semantically ordered intent data. Position remains owned by the board description.
-
-**Non-goals:** No planner call, cadence advancement, duplicated position owner, Listener/noise/RNG, rule changes, or changes to M3.7/M3.8 sources.
-
-**Dependencies:** `M3.10.4`, `M3.8`.
-
-**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayEnemySnapshot.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
-
-**Acceptance criteria:** Hit/miss/conditional/rest inputs retain their exact cells/conditions/cadence after independent rebuild. Equivalent input permutations encode equally. Different locked targets, conditions, consumed state, or damage change canonical values. Invalid definition/source/board associations fail explicitly without planning or mutation.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.EnemySnapshot_RestoresLockedPlansWithoutReplanning`.
-
-**Save and compatibility impact:** Diagnostic only; no enemy mid-board save promise.
-
-**Required handoff:** Accepted public restoration APIs, per-field coverage, and canonical examples for all retained outcome branches.
-
----
-
-## `M3.10.6` - Reject incomplete authoritative contributions
-
-**Status:** `Planned`
-**Priority:** P0
-**Related contract:** sections 16 and 27.9.
-
-**Rationale:** Hashing whatever contributors arrive cannot detect that an entire authoritative owner was omitted.
-
-**Current behavior:** Three snapshot owners can write values; no independent completeness manifest constrains their composition.
-
-**Expected outcome:** The supported replay-rules version declares required board/run/enemy/controller contributions independently of the supplied implementations.
-
-**Scope:** Add a small explicit coverage manifest/registry with stable contributor keys and an independently declared required set. Include player ID and the controller terminal latch; exclude transient resolver/presentation locks. Validate duplicate, missing, unsupported, or unrecognized contributions before canonical output. Enumerate the required field inventory in the owning APIs/documentation; do not discover arbitrary private members with reflection.
-
-**Non-goals:** No auto-registration framework, hashing, new authoritative fields, reflection-driven schema, or production state store.
-
-**Dependencies:** `M3.10.5`.
-
-**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayStateCoverage.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
-
-**Acceptance criteria:** Complete supported input passes; omitting each required owner fails with its key before bytes/hash are accepted. Removing one supplied contributor does not also shrink the required set. Duplicate keys and unsupported rules versions fail. An explicit mutation/coverage table covers every current authoritative field.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.RequiredContributors_CannotBeSilentlyOmitted`.
-
-**Save and compatibility impact:** Coverage is versioned with replay rules; save schema is unchanged.
-
-**Required handoff:** Required keys and field inventory, omitted-contributor diagnostics, and future extension procedure.
-
----
-
-## `M3.10.7` - Hash validated canonical state
-
-**Status:** `Planned`
-**Priority:** P0
-**Related contract:** section 16.
-
-**Rationale:** Hash orchestration should combine already accepted capture/encoding/coverage rather than invent another state mapping.
-
-**Current behavior:** Canonical writer and complete contributors are accepted; no stable digest composes them.
-
-**Expected outcome:** One supported stable state produces a deterministic canonical digest using the standard .NET SHA-256 implementation.
-
-**Scope:** Add a thin hasher composing the accepted contributions/writer and replay-rules version. Order unordered contributors/entities ordinally/by signed ID, retain route/tool-slot order, and hash the resulting canonical bytes. Read the controller only at the stable pre/post-attempt boundary. Do not hash JSON formatting or duplicate snapshot field selection.
-
-**Non-goals:** No seed algorithm, cryptographic security claim, resolver/recorder, clock/view/cosmetic inputs, new capture format, or custom digest algorithm.
-
-**Dependencies:** `M3.10.6`.
-
-**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayStateHasher.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
-
-**Acceptance criteria:** Fixed vectors pass across cultures; unordered insertion permutations hash equally. A change to any covered authoritative field or rules version changes the canonical preimage and fixture digest. Meaningful route/tool order changes remain visible; missing contributors prevent hashing rather than yielding a partial digest.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.StateHash_IsCanonicalAndFieldSensitive`.
-
-**Save and compatibility impact:** Replay digest only; no save-checksum replacement.
-
-**Required handoff:** Exact vectors, covered/excluded field table, stable-boundary requirement, and verification that Unity/time is absent.
-
----
-
-## `M3.10.8` - Validate one immutable replay document
-
-**Status:** `Planned`
-**Priority:** P0
-**Related contract:** sections 16 and 27.9.
-
-**Rationale:** Header, initial context, command attempts, and expected outcomes must agree before execution starts.
-
-**Current behavior:** Individual records and snapshots exist without a complete replay input contract.
-
-**Expected outcome:** A detached document contains explicit format/rules/command versions, seed/context, validated initial descriptions, ordered command attempts, and optional expected result/hash frames.
-
-**Scope:** Add document/header/frame values in one source, reusing the accepted snapshot and tagged record APIs. Distinguish attempt index from accepted-turn count; a rejected command may be recorded but does not become a gameplay turn. Frame expectations include acceptance/rejection code and canonical state hash. Specify initial checksum and validate version/context/sequence consistency without invoking resolution.
-
-**Non-goals:** No JSON parsing, file storage, recorder/runner, event reserialization, save DTO reuse, or future route address invented ahead of M3.11.
-
-**Dependencies:** `M3.10.7`.
-
-**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayDocument.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
-
-**Acceptance criteria:** Valid documents own independent read-only collections; source mutation cannot change a document. Invalid versions, missing initial fields, mismatched root seed/context, malformed commands, or inconsistent expectation indexes fail explicitly. Diagnostic metadata is not a second gameplay owner.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.ReplayDocument_ValidatesDetachedVersionedInputs`.
-
-**Save and compatibility impact:** Independent replay format version; unsupported versions are rejected, not silently migrated as player saves.
-
-**Required handoff:** Header/frame schema, supported versions, initial boundary, and examples of each invalid-input diagnostic.
-
----
-
-## `M3.10.9` - Round-trip the diagnostic JSON document strictly
-
-**Status:** `Planned`
-**Priority:** P0
-**Related contract:** sections 16, 27.9, and repository external-data rules.
-
-**Rationale:** An external replay artifact must not bypass the validated record/snapshot contracts or instantiate arbitrary CLR types.
-
-**Current behavior:** M3.10.8 defines validated in-memory data; no external artifact codec exists.
-
-**Expected outcome:** One structured JSON codec round-trips supported documents and rejects malformed/unsupported input before replay.
-
-**Scope:** Use the installed Newtonsoft package and its structured token/serializer APIs, following the strict parsing style of `PersistenceJsonSerializer` without calling the player save serializer. Decode explicit tags through M3.10.1; reject duplicate keys, trailing content, missing/invalid/unknown fields, unsupported versions/tags, and invalid snapshot associations. Disable type-name-driven materialization. Confirm assembly access in the readiness packet before writing.
-
-**Non-goals:** No package/assembly changes, player save migration, file I/O, compatibility across arbitrary rules versions, or permissive unknown-field fallback.
-
-**Dependencies:** `M3.10.8`; any actually needed reference-only prerequisite must already be accepted.
-
-**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayJsonCodec.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
-
-**Acceptance criteria:** Supported synthetic replay round-trips all fields and hashes independent of JSON whitespace/property order. Each malformed input fails before constructing a replay controller; unknown tags are never skipped. Stable diagnostics identify the offending version/tag/field without secrets or arbitrary object activation.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.ReplayJson_StrictlyRoundTripsOrRejects`.
-
-**Save and compatibility impact:** Replay JSON only; normal profile/run deserialization remains unchanged.
-
-**Required handoff:** Synthetic JSON example, strict parser settings, supported schema, and observed invalid-input cases.
-
----
-
-## `M3.10.10` - Record an already resolved command attempt
-
-**Status:** `Planned`
-**Priority:** P0
-**Related contract:** sections 21.2 and 27.9.
-
-**Rationale:** Recording must observe the sole controller result, not cause an extra resolution or record animation timing.
-
-**Current behavior:** Records/documents/hash exist; a caller cannot yet accumulate one diagnostic command trace.
-
-**Expected outcome:** Explicit calls append a command, its actual accepted/rejected result, and a stable post-attempt hash to one detached replay trace.
-
-**Scope:** Add one recorder that accepts the initial validated description and supplied command/result/state contribution inputs. Use the accepted tagged codec/hasher/document; append in attempt order and advance accepted-turn count only for accepted results. Test callers resolve exactly once then record. Return a detached document suitable for the accepted JSON codec.
-
-**Non-goals:** No production input/coordinator hook, autonomous controller call, UI/animation samples, profile/file I/O, or hidden command interception.
-
-**Dependencies:** `M3.10.9`.
-
-**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayRecorder.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
-
-**Acceptance criteria:** Supplied results are recorded once in order; rejection records unchanged state with no accepted-turn increment. Missing/inconsistent inputs cannot append a partial frame. Recording changes no board/run/enemy state and invokes no resolver/planner; returned trace is immune to later recorder/input mutation.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.Recorder_ObservesOneResolutionWithoutEffects`.
-
-**Save and compatibility impact:** None; in-memory diagnostic trace, never player storage.
-
-**Required handoff:** Accepted/rejected attempt trace, invocation counts, and exact document export operation.
-
----
-
-## `M3.10.11` - Replay through one fresh domain controller
-
-**Status:** `Planned`
-**Priority:** P0
-**Related contract:** sections 10.2, 11, 16, and 21.2.
-
-**Rationale:** The runner must compose accepted domain operations rather than duplicate resolution rules.
-
-**Current behavior:** Initial snapshots and tagged commands can be independently reconstructed; no runner executes them.
-
-**Expected outcome:** A validated document reconstructs one fresh board/run/enemy batch and produces actual result/hash frames with one controller call per command attempt.
-
-**Scope:** Add a thin headless runner using accepted snapshot rebuilders, M3.8 phase adapter, `TurnController`, command decoder, and hasher. Restore the recorded initial locked plans without planning again. Validate all command/schema/context input before effects; use the already approved environment rules, not a new configurable arbitrary-code hook. Preserve rejected/early-terminal/enemy-terminal behavior and return detached actual frames/results.
-
-**Non-goals:** No GameObject, runtime/presentation controller replacement, production integration, AI/turn implementation, generator, diagnostics file I/O, or divergence algorithm.
-
-**Dependencies:** `M3.10.10`, `M3.8.9`.
-
-**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayRunner.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
-
-**Acceptance criteria:** Fresh runs produce the expected state/results from exact initial data; each attempt has one resolution and one stable hash. Rejection/commands after terminal preserve state; initial intent targets/cadence are not silently replaced. No mutable replay owners are shared with the recording fixture; unsupported input cannot partially execute.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.ReplayRunner_UsesFreshOwnersAndOneController`.
-
-**Save and compatibility impact:** None; reconstruction is diagnostics-only and does not restore player files.
-
-**Required handoff:** Initial/restored owner identities and command -> result/hash traces, including rejected and terminal paths.
-
----
-
-## `M3.10.12` - Report the first deterministic divergence
-
-**Status:** `Planned`
-**Priority:** P0
-**Related contract:** sections 16 and 22.
-
-**Rationale:** A useful replay report identifies the first bad boundary, not only a final unequal digest.
-
-**Current behavior:** Expected and actual frames exist without an explicit comparison/report operation.
-
-**Expected outcome:** One pure comparison returns success or the first differing initial/attempt boundary with reproducible context.
-
-**Scope:** Add a comparator/report value for initial checksum, frame count, acceptance/rejection code, and canonical state hash. Include seed/context, rules version, attempt index, accepted-turn number, command tag/payload, and expected/actual values. Stop at the first mismatch; distinguish a missing/extra frame from a state mismatch. Never rerun a command to produce the report.
-
-**Non-goals:** No state repair, deep reflection diff, UI, file writer, automatic retry, or broad telemetry framework.
-
-**Dependencies:** `M3.10.11`.
-
-**Allowed file area:** Proposed `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayComparison.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
-
-**Acceptance criteria:** Equal traces pass; changed initial state/command/result/hash and missing/extra frames identify the earliest exact boundary. Report values are stable under repeated comparison and contain no Unity/time/secrets. Comparison mutates nothing and never invokes the resolver.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.Divergence_ReportsFirstExactBoundary`.
-
-**Save and compatibility impact:** None; report is diagnostic data only.
-
-**Required handoff:** Minimal equal/divergent examples and actual diagnostic context, including attempt versus accepted-turn indexes.
-
----
-
-## `M3.10.13` - Cross-case canonical replay regression
-
-**Status:** `Planned`
-**Priority:** P0
-**Related contract:** sections 11, 16, and 27.9.
-
-**Rationale:** Local encoder tests need one bounded end-to-end check using real accepted turn rules.
-
-**Current behavior:** Individual replay operations are accepted; cross-case permutation and completeness evidence is still missing.
-
-**Expected outcome:** Fixed synthetic turn traces repeat exactly under unordered collection permutations, while intentional command/state changes and omitted owners are detected.
-
-**Scope:** Add one parameterized test in the existing fixture. Reuse accepted M3.7/M3.8 helpers and independent initial data per run. Cover 2-5 enemies, shared targets, conditional attacks, fixed-cell misses/rest, rejected commands, and terminal state across small fixtures. Permute only unordered entity/enemy/contributor inputs; do not permute meaningful route, slot, or command order. Mutate covered fields and omit each independently required owner in separate cases.
-
-**Non-goals:** No source repair, new fixture, large-seed benchmark, RNG/generator, replay rules expansion, or implementation redesign.
-
-**Dependencies:** `M3.10.12`.
-
-**Allowed file area:** Existing `Assets/Tests/EditMode/ReplayTests.cs` only.
-
-**Acceptance criteria:** Repeated/permuted traces equal explicit expected results/hashes at every boundary. A command change reports the expected first divergence; rejections cost nothing; omission fails explicitly. Failures identify fixture, seed, source IDs, input permutation, and attempt. No skip or zero-test success counts as evidence.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.CanonicalReplay_PreservesExpectedOutcomesAcrossPermutations`.
-
-**Save and compatibility impact:** None; synthetic isolated test data.
-
-**Required handoff:** Fixture/case/permutation counts, exact results, and reproducible failure context if any; repair requires a new scoped task.
-
----
-
-## `M3.10.14` - Compare headless replay with final presentation
-
-**Status:** `Planned`
-**Priority:** P0
-**Related contract:** sections 16, 18, and 21.2.
-
-**Rationale:** A reproducible domain trace must agree with what the existing presentation path finally shows.
-
-**Current behavior:** M3.9 accepts real enemy presentation; M3.10.13 accepts headless replay separately.
-
-**Expected outcome:** The same initial capture and commands yield identical domain hashes and final displayed positions/resources/intents in animation-on/off modes.
-
-**Scope:** Add one test to the accepted shared intent fixture. Capture initial data from its real accepted runtime/phase composition, run an independent headless replay, and submit the same commands through the fixture's sole presentation coordinator. Reuse existing fixture setup/view/HUD assertions. Compare actual hashes per completed attempt and final registered views/HUD/locked markers; never replace the runtime's private controller or feed presentation values back into hashing.
-
-**Non-goals:** No production source edits, repairs, new fixture, screenshot framework, model hash based on Transform, or automatic production recorder hook.
-
-**Dependencies:** `M3.10.13`, `M3.9.13`.
-
-**Allowed file area:** Existing `Assets/Tests/PlayMode/EnemyIntentPresentationTests.cs` only.
-
-**Acceptance criteria:** Both animation modes show the authoritative final cells/resources/retained intents and match headless hashes/results. Held replay blocks another command; rejection does not mutate or publish a new plan. Conditional hit and fixed-cell miss remain at recorded cells. All fixture storage is isolated from the player's profile.
-
-**Test plan:** PlayMode filter `HallowBlaze.Tests.PlayMode.EnemyIntentPresentationTests.HeadlessReplay_MatchesFinalPresentationInBothAnimationModes`.
-
-**Save and compatibility impact:** None; no real player file or persisted replay hook.
-
-**Required handoff:** Per-attempt hash/result parity, final view/HUD/intent assertions, animation modes, and resolution counts.
-
----
-
-## `M3.10.15` - Lead-owned replay evidence and extension checklist
-
-**Status:** `Planned`
-**Priority:** P0
-**Related contract:** sections 16, 22, and 27.9.
-
-**Rationale:** Future state owners need an explicit version/coverage contract, and acceptance needs an actual reproducible artifact.
-
-**Current behavior:** Automated operations/regressions are accepted; their complete schema/coverage evidence has not been collected.
-
-**Expected outcome:** One short validation report records observed replay evidence and the exact extension obligations for future authoritative state.
-
-**Scope:** The Lead writes the report after the implementation writer finishes. Include accepted format/rules versions, field/owner/order/required-contributor inventory, source/test references, actual filters/counts/results, and a synthetic JSON replay plus earliest-divergence example exported to an explicit directory outside the repository/Unity project. Record that external artifacts cannot be staged/imported; do not edit parent `.gitignore`. Include the owning-ticket checklist for adding a command or authoritative field and identify M3.11's required extension.
-
-**Non-goals:** No implementation repair, copied real profile, secrets, external upload, new compatibility policy, or version bump without a behavior/schema change.
-
-**Dependencies:** `M3.10.14`.
-
-**Allowed file area:** Proposed Lead-owned `Docs/Validation/M3.10Replay.md` only.
-
-**Acceptance criteria:** The example is actually decoded/replayed with nonzero passing evidence, not merely plausible JSON. Missing-contributor and first-divergence checks were observed. Every authoritative owner is accounted for, exclusions are explicit, and extension instructions require rules-version/capture/codec/hash/tests updates together. Missing executable evidence keeps the umbrella blocked.
-
-**Test plan:** One Lead evidence check: reproduce the synthetic document with the accepted runner, inspect the fresh focused reports and exported artifact, and cross-check the coverage inventory against accepted owning APIs.
-
-**Save and compatibility impact:** No save change; report explicitly distinguishes diagnostic reconstruction from supported gameplay resume.
-
-**Required handoff:** Report link, external artifact location, reproducible command/filter, observed counts, and extension checklist; no unverified claim of test success.
+**Save and compatibility impact:** None; existing isolated fixtures remain unchanged.
 
 ---
 
 ## `M3.11` - Route-leg state and stable board address (tracking umbrella)
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0 architecture gate
 **Related contract:** sections 4-8, 16, 21, and [accepted route-leg contract](GameDesignContract.md#272-route-legs-local-boards-and-days).
 
-**Rationale:** Segment authoring, travel-state transitions, identity/seed derivation, stale-outcome guards, save migration, and replay extension are separate acceptance surfaces. A single domain model assignment must not also change scenes, rewrite persistence, and convert route selection.
+**Completion (2026-10-14):** M3.11.1-M3.11.32 are accepted with full EditMode `635/635` and production-focused PlayMode `39/39`, zero failures/skips. The owner explicitly assigned Lead, Developer, and Reviewer to the same assistant for this task: final review is self-review, not independent review. [Acceptance and all child evidence](Validation/M3.11RouteAddress.md). Child starting-state descriptions and staged-cutover requirements below record the implementation sequence, not the final default schema.
 
-**Current behavior:** `WorldEdgeDefinition` has no segments. `RunState` owns node/day and ordered node IDs; `WorldMapService.ChooseRoute()` immediately reaches the destination. `BoardFlowContracts` identifies a board by run/node/day/seed. Run schema is currently v1; the new M3.10 diagnostics must be extended rather than bypassed.
+**Rationale:** Segment authoring, travel-state transitions, identity/seed derivation, stale-outcome guards, save migration, and scenario regression are separate acceptance surfaces. A single domain model assignment must not also change scenes, rewrite persistence, and convert route selection.
+
+**Current behavior:** World edges expose authored stable segments; `RunState` owns checkpoint/day/history and optional immutable active-leg state. Session derives full segment addresses and validates runtime/outcome identity before effects. Normal run saves write v2 and read supported v1/v2; profile schema is unchanged. Production `WorldMapService.ChooseRoute()` deliberately retains the legacy checkpoint flow until M3.12. Multi-board orchestration and pre-render intro checkpointing are not active. Portable replay remains deferred to M8.7.
 
 **Expected outcome:** Edges expose ordered non-empty stable segment definitions. The run owns a reached checkpoint, completed-day count, structured history, and an optional persisted active leg with a unique run-local traversal ID. The leg has one 1-based displayed day, stable segment cursor/progress, and `Pending`/`Consumed` intro state. A `BoardAddress` identifies run, traversal, edge, segment, day, generation version/configuration, and deterministic seed. Separate child acceptance precedes production travel flow in M3.12.
 
@@ -3909,7 +3507,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Compatibility boundary:** Existing production route selection remains checkpoint-based until M3.12 activates leg travel. Preserve it through an explicitly identified adapter; new active-leg APIs never pretend the destination has already been reached. New published world JSON names its segments explicitly; the temporary five-argument edge/old JSON adapter uses the Lead's frozen one-segment mapping, not list position or Unity identity. Ordered segment lists define travel order, but board identity/seed never uses an ordinal cursor as a substitute for stable segment ID. Existing profile/world binding must remain valid; do not silently bump world identity/version or reset a profile when adding metadata.
 
-**Scope:** Execute segment/value/catalogue/authoring children, run checkpoint and one-transition-at-a-time children, address/seed/request/guard children, independent v2 DTO/mapping/migration/activation children, replay extension/regression, and the Lead-owned integration gate below.
+**Scope:** Execute segment/value/catalogue/authoring children, run checkpoint and one-transition-at-a-time children, address/seed/request/guard children, independent v2 DTO/mapping/migration/activation children, explicit travel/address/persistence scenarios, and the Lead-owned integration gate below. M3.11.27-31 are test-only checks, not prerequisites for diagnostic infrastructure.
 
 **Non-goals:** No production `ChooseRoute` cutover, multi-board scene flow, intro rendering/checkpoint orchestration, discovery commits, resource observation values, tool-source availability, generator/RNG-stream rewrite, backpack/satiety, mid-board save, scene/prefab edits, package/settings/assembly changes, or unrelated documentation migration. The observation extension remains owned by the active leg; do not invent future data now.
 
@@ -3917,21 +3515,21 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Allowed file area:** Only each child's exact source/test paths and the single Lead-owned validation report. No blanket permission to edit Core, world assets, or production callers. Unity-generated metadata is inspected, not invented; existing GUIDs are preserved.
 
-**Execution order:** Accept M3.11.1 through M3.11.31 separately, then perform M3.11.32. The early v2 DTO/mapper/migrator are callable but do not change default save behavior until M3.11.25; the integrated round-trip gate precedes activation. Accept replay extension before final review. One writer at a time.
+**Execution order:** The owner authorized all children in one combined-role task with one writer. Implementation proceeded through focused validation slices, keeping v2 DTO/mapper/migration and explicit codec callable before the M3.11.25 default activation. The pre-activation integrated gate passed `41/41`; explicit scenario regression preceded final review and the fresh full integration gates. No subagents or separate independent reviewer were used.
 
-**Acceptance criteria:** Published edges/segments are valid and globally unique; unchanged stable identity has stable addressing/seed independent of catalogue enumeration. Different supported segment/traversal contexts do not alias through node/day-only derivation; equality always compares full identity, not a 32-bit seed. Repeated edge traversal has a new persisted leg ID. Day 1 starts from zero completed days; intermediate segment advancement changes neither day nor checkpoint. Intro consumption is idempotent and persisted. Parallel edges remain distinct in structured history. Foreign run/leg/edge/segment/day/config outcomes are rejected before effects. Old v1 run migration yields a reached checkpoint without fabricated edges/legs, preserving resources/tools/profile. New run/address state round-trips and participates in versioned replay/coverage/hash. All thirty-two children and the full EditMode gate are accepted.
+**Acceptance criteria:** Published edges/segments are valid and globally unique; unchanged stable identity has stable addressing/seed independent of catalogue enumeration. Different supported segment/traversal contexts do not alias through node/day-only derivation; equality always compares full identity, not a 32-bit seed. Repeated edge traversal has a new persisted leg ID. Day 1 starts from zero completed days; intermediate segment advancement changes neither day nor checkpoint. Intro consumption is idempotent and persisted. Parallel edges remain distinct in structured history. Foreign run/leg/edge/segment/day/config outcomes are rejected before effects. Old v1 run migration yields a reached checkpoint without fabricated edges/legs, preserving resources/tools/profile. New run/address state round-trips and matches explicit expected travel/turn outcomes. All thirty-two children and the full EditMode gate are accepted; no portable replay/hash implementation is required.
 
-**Test plan:** One focused EditMode method per implementation/test child, reusing existing World/RunState/Persistence/Replay fixtures and one `RouteLegTests` fixture. Production guard wiring uses existing startup tests. The Lead ends with fresh full EditMode and focused PlayMode guard evidence; filters below are planned, not checks already run.
+**Test plan:** Completed named child checks reuse existing World/RunState/Persistence fixtures and one `RouteLegTests` fixture. The final full EditMode gate passed `635/635`; startup/lifecycle/infrastructure PlayMode passed `39/39`, including the production foreign-address guard. The report maps every child to executed tests and records the combined-role review limitation.
 
 **Save and compatibility impact:** Explicit v1 -> v2 run migration; profile schema/data is unchanged. `completedDayCount = old currentDay`, last reached node is preserved, active leg is absent, and old route nodes become explicitly legacy checkpoint entries with no invented edge/traversal/day evidence. Unrecoverable run input fails with existing controlled recovery while profile remains usable. V2 stores traversal sequence/history and active segment/intro state at stable boundaries, not a mid-board snapshot.
 
-**Required handoff:** Child evidence, state/ownership diagram, version/migration/compatibility table, authored segment registry, fixed seed vectors, stale-identity matrix, new JSON round-trips, replay coverage/version evidence, and concrete M3.12 readiness requirements. Never present the foundation as completed multi-board travel.
+**Required handoff:** Child evidence, state/ownership diagram, version/migration/compatibility table, authored segment registry, fixed seed vectors, stale-identity matrix, new JSON round-trips, explicit scenario outcomes, and concrete M3.12 readiness requirements. Never present the foundation as completed multi-board travel.
 
 ---
 
 ## `M3.11.1` - Define one stable route segment
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -3961,7 +3559,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.2` - Give an edge an ordered segment list
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -3991,7 +3589,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.3` - Enforce published segment uniqueness
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.3 and 27.2.
 
@@ -4021,7 +3619,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.4` - Read explicit authored segments
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.3 and 27.2.
 
@@ -4051,7 +3649,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.5` - Author the prototype segment registry
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -4081,7 +3679,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.6` - Represent structured travel and legacy checkpoints
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 27.1 and 27.2.
 
@@ -4111,7 +3709,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.7` - Define one validated active leg
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -4141,7 +3739,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.8` - Add checkpoint and history ownership to the run
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 27.1 and 27.2.
 
@@ -4171,7 +3769,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.9` - Start one leg without arriving at its destination
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -4193,7 +3791,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.StartLeg_CreatesPendingIdentityWithoutArrival`.
 
-**Save and compatibility impact:** Sequence/leg fields must later be stored in v2 and hashed; no default file writes here.
+**Save and compatibility impact:** Sequence/leg fields must later be stored in v2 and covered by explicit scenarios; diagnostic hash coverage is deferred to M8.7. No default file writes here.
 
 **Required handoff:** Start transition before/after fields, deterministic ID examples, and rejected/overflow cases.
 
@@ -4201,7 +3799,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.10` - Consume the intro idempotently in run state
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -4231,7 +3829,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.11` - Advance one intermediate segment
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -4261,7 +3859,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.12` - Complete the leg in run state once
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.2.
 
@@ -4291,7 +3889,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.13` - Define complete board-address equality
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 7, 16, and 27.2.
 
@@ -4313,15 +3911,15 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.BoardAddress_UsesEveryStableIdentityField`.
 
-**Save and compatibility impact:** Address fields are versioned in later DTO/replay steps; no default persistence yet.
+**Save and compatibility impact:** Address fields are versioned in later DTO steps; portable replay integration is deferred to M8.7. No default persistence yet.
 
-**Required handoff:** Identity/equality matrix and canonical field order for later replay encoding.
+**Required handoff:** Identity/equality matrix and complete field table for persistence and future M8.7 diagnostic encoding.
 
 ---
 
 ## `M3.11.14` - Derive a stable segment address and seed
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 16 and 27.2.
 
@@ -4351,7 +3949,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.15` - Carry addresses through request and outcome contracts
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 7 and 27.2.
 
@@ -4381,7 +3979,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.16` - Reject foreign addressed outcomes before effects
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 7, 21.2, and 27.2.
 
@@ -4411,7 +4009,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.17` - Validate addressed runtime composition
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 7, 21.1, and 27.2.
 
@@ -4441,7 +4039,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.18` - Wire the guarded production outcome boundary
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 7, 21.5, and 27.2.
 
@@ -4471,7 +4069,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.19` - Define the independent v2 run document
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4, 27.1, and 27.2.
 
@@ -4501,7 +4099,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.20` - Map current travel state to v2 and back
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4 and 27.2.
 
@@ -4531,7 +4129,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.21` - Migrate one validated v1 run to a checkpoint
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** section 27.1 and the explicit M3.11 migration contract.
 
@@ -4561,7 +4159,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.22` - Read supported run schemas strictly
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4 and 27.1.
 
@@ -4591,7 +4189,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.23` - Write explicit v2 stable-boundary JSON
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4 and 27.2.
 
@@ -4621,7 +4219,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.24` - Integrated migration and corruption regression
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4, 27.1, and 27.2.
 
@@ -4651,7 +4249,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.25` - Activate the accepted run schema path
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4 and 27.1.
 
@@ -4681,7 +4279,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ## `M3.11.26` - Verify isolated save-store recovery and profile preservation
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 21.4 and 27.1.
 
@@ -4709,161 +4307,141 @@ Run the children in order as separate delegations. Foundation children are valid
 
 ---
 
-## `M3.11.27` - Extend the replay run snapshot with travel state
+## `M3.11.27` - Assert the complete route-leg transition sequence
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 16, 27.2, and 27.9.
 
-**Rationale:** The accepted M3.10 node-era snapshot must not omit new authoritative travel ownership.
+**Rationale:** Checkpoint, segment cursor, day, intro status, and history must stay consistent across several operations, not merely pass isolated setters.
 
-**Current behavior:** M3.10 captures run resources/tools/node history; M3.11 adds checkpoint/leg/sequence/history/intro fields.
+**Expected outcome:** Fresh runs match explicit expected state after departure, intro consumption, intermediate advancement, and final arrival.
 
-**Expected outcome:** The diagnostic run snapshot captures, independently restores, and canonically writes every new travel field using accepted public APIs.
+**Scope:** Add a test-only sequence through the accepted public State/Session APIs. Assert every authoritative travel field, unchanged resources/tools, ordered history, and independent owners. Repeat intro consumption and reject invalid advancement without partial effects.
 
-**Scope:** Extend only `ReplayRunSnapshot` for completed days/checkpoint, traversal sequence, tagged ordered history, and optional active leg with stable segment/configuration/cursor/day/intro data. Replace node-history-only mapping with the approved legacy view/structured ownership. Keep existing resources/tools/status behavior; use the accepted restore boundary without invoking travel or fresh planning.
+**Non-goals:** No diagnostic snapshot/hash, replay format, source repair, production travel, or private-field reflection.
 
-**Non-goals:** No new save mapper, command tag, runner/JSON change, rules-version activation, profile state, or private-field reflection.
+**Dependencies:** `M3.11.26`, `M3.10`.
 
-**Dependencies:** `M3.11.26`, `M3.10.4`.
+**Allowed file area:** Shared `Assets/Tests/EditMode/RouteLegTests.cs` only.
 
-**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayRunSnapshot.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+**Acceptance criteria:** Each transition has a concrete expected checkpoint/day/cursor/leg/intro/history result. Rejections preserve the entire relevant state; repeated intro consumption is idempotent. Fresh runs share no mutable travel state.
 
-**Acceptance criteria:** Checkpoint/Pending/Consumed/intermediate/complete travel values rebuild exactly and independently. Each new field affects canonical description; meaningful segment/history order is preserved. Reconstruction neither allocates a new leg ID nor consumes intro or plans enemies.
+**Test plan:** Planned EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.TravelSequence_PreservesExplicitBoundaryState`.
 
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.TravelRunSnapshot_CoversAndRestoresEveryAuthoritativeField`.
-
-**Save and compatibility impact:** Diagnostic capture extension only; normal v2 persistence remains unchanged.
-
-**Required handoff:** Added/replaced field inventory and mutation/restore evidence for each travel field.
+**Save and compatibility impact:** No implementation change; accepted v2 persistence is exercised by later scenario cards.
 
 ---
 
-## `M3.11.28` - Add full address to the replay document
+## `M3.11.28` - Assert address identity across traversals and segments
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
-**Related contract:** sections 16 and 27.9.
+**Related contract:** sections 16 and 27.2.
 
-**Rationale:** Run travel state is insufficient if replay context still identifies the initial board only by node/day/seed.
+**Rationale:** Equal node/day or board seed must not make distinct traversals or route segments interchangeable.
 
-**Current behavior:** M3.10 document header is node-era; M3.11 now has an immutable full address.
+**Scope:** Add explicit address/seed/equality cases for parallel edges, repeated traversal, two segments in one day, checkpoint mode, and generation configuration. Permute only unordered catalogue input; preserve semantic route order and use the accepted address factory.
 
-**Expected outcome:** The replay document retains exact optional checkpoint-mode versus required active-leg address context and validates it against restored travel inputs.
+**Non-goals:** No replay document, new seed algorithm, source repair, or generator implementation.
 
-**Scope:** Extend document/header values and validation for the accepted `BoardAddress` fields and identity mode. Keep legacy checkpoint representation explicit; active-leg documents require complete address data and cannot downgrade to legacy. Add canonical address contribution using the accepted primitive writer/field order, not a display string. Expose new version constants without activating unsupported old JSON as new rules.
+**Dependencies:** `M3.11.27`, `M3.11.15`.
 
-**Non-goals:** No JSON parsing, controller/command changes, codec fallback, file save, or seed derivation duplicate.
+**Allowed file area:** Shared `Assets/Tests/EditMode/RouteLegTests.cs` only.
 
-**Dependencies:** `M3.11.27`, `M3.11.15`, `M3.10.8`.
+**Acceptance criteria:** Fixed contexts reproduce the approved address/seed vectors. Distinct full identities remain unequal even when their seeds coincide; partial/foreign associations fail explicitly. Test expectations enumerate every address field.
 
-**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayDocument.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+**Test plan:** Planned EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.AddressedContexts_PreserveExplicitIdentityAndSeed`.
 
-**Acceptance criteria:** Run/leg/edge/segment/day/configuration/seed context is retained and consistent. Partial/mismatched/legacy-downgraded addressed input fails. Addresses differing only by traversal/segment remain different diagnostic inputs even with equal board grids/seeds.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.TravelReplayDocument_RequiresFullConsistentAddress`.
-
-**Save and compatibility impact:** Replay schema/rules extension is separate from run v2 migration; no automatic promise to read older replay versions.
-
-**Required handoff:** Context/address field and version table, active versus checkpoint rules, and mismatch diagnostics.
+**Save and compatibility impact:** None; portable context encoding remains deferred to M8.7.
 
 ---
 
-## `M3.11.29` - Require complete travel-aware replay coverage
+## `M3.11.29` - Assert save/load continuation at travel boundaries
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
-**Related contract:** sections 16 and 27.9; M3.10 extension contract.
+**Related contract:** sections 21.4, 27.2, and 27.9.
 
-**Rationale:** Adding snapshot/header fields requires an independent mandatory field/owner inventory, not silent partial hashing.
+**Rationale:** A resumed route must continue from its saved segment and intro status rather than allocating a new traversal or replaying an already consumed transition.
 
-**Current behavior:** New values can encode travel/address, but required coverage still targets the prior replay-rules version.
+**Scope:** Round-trip checkpoint/Pending/Consumed/intermediate/completed contexts with the accepted v2 mapper and isolated storage helpers, then perform the next permitted operation. Compare each field and operation result to explicit expectations and an independently prepared equivalent run.
 
-**Expected outcome:** The required manifest/rules version admits only complete travel/address contributions before a canonical hash is accepted.
+**Non-goals:** No new mapper/schema, portable replay, canonical diagnostic hash, production orchestration, or real profile access.
 
-**Scope:** Update only the independently required travel/address field/contribution inventory and rules version. The Lead supplies exact accepted field/version mappings and confirms that hasher/runner/recorder consume registered operations without further source edits. Reject missing travel/address input before hashing. If a consumer cannot accept the established registration seam, define a separate adapter prerequisite before delegation rather than modifying it here.
+**Dependencies:** `M3.11.28`, `M3.11.26`.
 
-**Non-goals:** No JSON codec, new command, old-replay migration, hasher/runner/recorder edits, save schema, or planner call.
+**Allowed file area:** Shared `Assets/Tests/EditMode/RouteLegTests.cs` only.
 
-**Dependencies:** `M3.11.28`, `M3.10.6`.
+**Acceptance criteria:** Full identity, cursor/day/intro/history/resources/tools survive save/load; the next transition occurs exactly once. Source and restored owners are independent, and storage stays isolated from player files.
 
-**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayStateCoverage.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+**Test plan:** Planned EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.SavedTravel_ContinuesFromExplicitBoundary`.
 
-**Acceptance criteria:** New rules hash complete checkpoint/Pending/Consumed/address fixtures; omitting any newly required contribution fails with its stable key. Field mutation alters canonical input and registered contributions cannot shrink the required set. Unsupported rules versions fail explicitly. Consumer source remains unchanged or the child is blocked by the separately scoped adapter prerequisite.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.TravelReplayCoverage_RequiresEveryNewAuthoritativeContribution`.
-
-**Save and compatibility impact:** Diagnostic rules-version extension; no player schema or wire-format activation.
-
-**Required handoff:** Required fields/keys/rules version, observed omission/mutation tests, and unchanged-consumer or accepted prerequisite evidence.
+**Save and compatibility impact:** Validation of accepted v2 behavior, not a diagnostic wire-format change.
 
 ---
 
-## `M3.11.30` - Activate the strict travel-aware replay codec
+## `M3.11.30` - Assert free rejection of foreign or stale outcomes
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
-**Related contract:** sections 16 and 27.9.
+**Related contract:** sections 21.4 and 27.2.
 
-**Rationale:** Wire-format activation should reuse accepted snapshot/header/coverage rather than change hashing at the same time.
+**Rationale:** An old board's callback must never advance the current leg, duplicate arrival, or overwrite its persisted boundary.
 
-**Current behavior:** Travel/address and new rules coverage are accepted in memory; JSON still describes the previous diagnostic format.
+**Scope:** In a test-only matrix, change run/leg/edge/segment/day/generation context one field at a time and resubmit already consumed outcomes. Call the accepted production guard/factory seam; compare travel, resources, history, and isolated save evidence before and after rejection.
 
-**Expected outcome:** The codec round-trips complete supported travel-aware documents and rejects partial/unsupported wire input.
+**Non-goals:** No new guard, replay codec, source repair, scene flow, or real player files.
 
-**Scope:** Extend only strict JSON fields/version dispatch through the accepted snapshot/document operations. Preserve command tags, stable identity mode, ordered history/segments, and Pending/Consumed. Validate full address against run context before replay. Unsupported old replay versions are rejected explicitly unless a separate migration was approved; player run migration is not replay migration.
+**Dependencies:** `M3.11.29`, `M3.11.16`.
 
-**Non-goals:** No manifest/hash/runner/recorder change, new command, implicit fallback, save-schema update, or file I/O.
+**Allowed file area:** Shared `Assets/Tests/EditMode/RouteLegTests.cs` only.
 
-**Dependencies:** `M3.11.29`, `M3.10.9`.
+**Acceptance criteria:** Every foreign/stale input is rejected before any transition or save effect; valid current input produces its explicit one-time result. Failure context names the altered identity field.
 
-**Allowed file area:** Existing `Assets/Scripts/Core/Turns/Resolution/Diagnostics/ReplayJsonCodec.cs`; existing `Assets/Tests/EditMode/ReplayTests.cs`.
+**Test plan:** Planned EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.ForeignOrStaleOutcome_PreservesCurrentTravel`.
 
-**Acceptance criteria:** Checkpoint/Pending/Consumed/current-address fixtures round-trip every new field and replay hash. Missing/mixed/foreign address input, bad intro/progress, unknown tags, and unsupported versions fail before controller effects. JSON property order/whitespace does not affect reconstructed values; no field is silently dropped.
-
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.TravelReplayCodec_RoundTripsOrRejectsUnsupportedInput`.
-
-**Save and compatibility impact:** Explicit diagnostic wire-version activation only; v1/v2 player saves are unchanged.
-
-**Required handoff:** Supported rules/format versions, synthetic JSON round-trips, strict errors, and actual post-decode hash comparisons.
+**Save and compatibility impact:** No format change; invalid outcomes cannot publish a checkpoint.
 
 ---
 
-## `M3.11.31` - Addressed save/replay and stale-identity regression
+## `M3.11.31` - Addressed save and local-turn scenario regression
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0
 **Related contract:** sections 16, 27.2, and 27.9.
 
-**Rationale:** One final bounded cross-case regression must connect persisted travel identity with local turn replay.
+**Rationale:** One final bounded cross-case regression must connect persisted travel identity with concrete local turn outcomes, without inventing a portable replay system.
 
-**Current behavior:** Travel state, v2 persistence, addresses, and versioned replay extension are individually accepted.
+**Current behavior:** Travel state, v2 persistence, addresses, and focused boundary scenarios are individually accepted.
 
-**Expected outcome:** Equivalent captured/persisted travel context reproduces the same local turn hashes, while different traversal/segment/intro/progress context is detected.
+**Expected outcome:** Equivalent persisted travel context produces explicit expected local turn results while distinct traversal/segment/intro/progress values remain distinct.
 
-**Scope:** Add one test-only matrix using accepted persistence/snapshot/factory/runner/hasher helpers and independent owners per case. Cover parallel edges, repeat traversal IDs, two segments at one day, Pending/Consumed, v1-to-checkpoint migration, and foreign outcome fields. Round-trip supported current documents, mutate each travel/address field, and exercise required-owner omissions. Catalogue enumeration permutations must not alter a fixed captured leg/address; do not assert that a semantically reordered future travel sequence has the same full run hash.
+**Scope:** Add one test-only matrix using accepted persistence/address factories, the real turn controller/batch adapter, and independent owners per case. Cover parallel edges, repeat traversal IDs, two segments at one day, Pending/Consumed, and v1-to-checkpoint migration. Execute a short authored command sequence after round-trip and assert positions, resources, events, cadence, and address at each boundary. Permute only unordered catalogue/enemy input, not semantic route or command order.
 
-**Non-goals:** No source repairs, new fixture, scene travel, intro rendering, generator/large-seed gate, or old replay compatibility beyond supported versions.
+**Non-goals:** No source repairs, new fixture, scene travel, intro rendering, generator/large-seed gate, snapshot codec, or canonical state hash.
 
-**Dependencies:** `M3.11.30`, `M3.11.16`, `M3.11.26`.
+**Dependencies:** `M3.11.30`, `M3.11.26`, `M3.10`.
 
-**Allowed file area:** Existing `Assets/Tests/EditMode/ReplayTests.cs` only.
+**Allowed file area:** Shared `Assets/Tests/EditMode/RouteLegTests.cs` only.
 
-**Acceptance criteria:** Explicit expected addresses/seeds/state/results/hashes survive valid persistence/replay round-trips. Each changed identity/progress/intro/sequence field changes canonical input or rejects inconsistent data. Foreign outcomes have no effects; missing required contributions fail. Failures identify seed/run/leg/edge/segment/case and first differing attempt.
+**Acceptance criteria:** Explicit expected addresses/seeds/state/results survive valid persistence round-trips and fresh command sequences. Different identity/progress/intro values cannot be silently dropped. Rejected commands preserve resources and retained plans. Failures identify seed/run/leg/edge/segment/case and command index.
 
-**Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.ReplayTests.AddressedTravel_RoundTripsAndRejectsForeignOrIncompleteState`.
+**Test plan:** Planned EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.AddressedTravel_PreservesExplicitTurnOutcomesAfterLoad`.
 
-**Save and compatibility impact:** Evidence for v2/diagnostic compatibility, with no real player/profile access.
+**Save and compatibility impact:** Evidence for v2 compatibility, with no real player/profile access. Portable replay coverage remains deferred to M8.7.
 
-**Required handoff:** Matrix/case counts, exact outcomes, reproduced first divergence, and accepted supported-version boundaries.
+**Required handoff:** Matrix/case counts, explicit intermediate outcomes, and accepted save-version boundaries.
 
 ---
 
 ## `M3.11.32` - Lead-owned route/address integration gate
 
-**Status:** `Planned`
+**Status:** `Done`
 **Priority:** P0 architecture gate
 **Related contract:** sections 21.4, 22, and 27.1-27.2.
+
+**Acceptance (2026-10-14):** Full EditMode `635/635`, production-focused PlayMode `39/39`, and final self-review passed. The owner's explicit combined-role instruction replaces this card's independent-review steps for this task only; no independent review is claimed. [Integration evidence and M3.12 prerequisites](Validation/M3.11RouteAddress.md).
 
 **Rationale:** Shared State/Session/Persistence compatibility changes require a final independent integration check after focused child acceptance.
 
@@ -4871,7 +4449,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Expected outcome:** The Lead accepts the foundation only with fresh full EditMode, production guard evidence, complete field/compatibility mapping, and explicit remaining M3.12 work.
 
-**Scope:** After the implementation writer finishes, run the repository's verified full EditMode gate and focused PlayMode production identity test, inspect fresh reports for real counts/results, and perform independent review. Write one report with state diagram, field/owner/day/cursor/intro tables, authored segment registry, fixed seed vectors, v1->v2 mapping, actual profile-preservation/storage evidence, foreign-address matrix, and replay rules/coverage evidence. Confirm no production leg/Day UI flow was silently activated and list the contract-alignment prerequisite for M3.12.
+**Scope:** After the implementation writer finishes, run the repository's verified full EditMode gate and focused PlayMode production identity test, inspect fresh reports for real counts/results, and perform independent review. Write one report with state diagram, field/owner/day/cursor/intro tables, authored segment registry, fixed seed vectors, v1->v2 mapping, actual profile-preservation/storage evidence, foreign-address matrix, and explicit travel/turn scenario evidence. Confirm no production leg/Day UI flow was silently activated and list the contract-alignment prerequisite for M3.12. Portable replay/hash is not part of this gate.
 
 **Non-goals:** No implementation rescue, scene/prefab changes, player-save cleanup, documentation rewrite of M3.12, or acceptance from an agent claim without executable reports.
 
@@ -4939,7 +4517,7 @@ Reached checkpoint + chosen edge
 
 ### Bramka M3
 
-M3 is complete when each input creates at most one command, rejected actions are free, accepted actions resolve one full turn, intents are locked and readable, identical seed/state/commands yield identical hashes, and a variable-length route leg advances through stable board addresses without changing day or discovery until final arrival.
+M3 is complete when each input creates at most one command, rejected actions are free, accepted actions resolve one full turn, intents are locked and readable, authored command scenarios match explicit expected state/events on fresh runs, and a variable-length route leg advances through stable board addresses without changing day or discovery until final arrival. Portable replay and canonical diagnostic hashes are deferred to M8.7 and do not block this gate.
 
 ---
 
@@ -4969,7 +4547,7 @@ M3 is complete when each input creates at most one command, rejected actions are
 
 **Kryteria akceptacji:** Ten sam root/stream daje tę samą sekwencję; pobranie z kosmetyki nie zmienia board stream; zakresy są udokumentowane; brak globalnego RNG w zmigrowanym gameplayu; two route segments never alias a gameplay stream merely because they share node/day context.
 
-**Plan testów:** Stałe test vectors, niezależność strumieni, granice range, replay M3.
+**Plan testów:** Fixed vectors, stream independence, range boundaries, and explicit M3 command-scenario regression. Portable replay integration is conditional on M8.7 acceptance.
 
 **Wpływ na save i kompatybilność:** Run DTO przechowuje root seed oraz identyfikatory/wersję algorytmu niezbędne do odtworzenia granicy planszy.
 
@@ -4983,7 +4561,7 @@ M3 is complete when each input creates at most one command, rejected actions are
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 7.2, 8, 16 i 17.
 
-**Rationale:** Generator powinien wytworzyć dane możliwe do walidacji przed `Instantiate`. Blueprint jest też wejściem replayu, testów i prezentera.
+**Rationale:** The generator must produce inspectable data before Instantiate. The blueprint feeds validation, state construction, tests, and presentation; future M8.7 may consume its accepted export APIs without making replay a generator prerequisite.
 
 **Obecne zachowanie:** `BoardManager` losuje oraz natychmiast tworzy GameObjecty, a trudność wynika głównie z dnia/liczby zombie.
 
@@ -5001,7 +4579,7 @@ M3 is complete when each input creates at most one command, rejected actions are
 
 **Plan testów:** EditMode construction, round-trip blueprint→state, hash i invalid examples.
 
-**Wpływ na save i kompatybilność:** Blueprint może wejść do replay, ale nie do normalnego save między planszami.
+**Wpływ na save i kompatybilność:** A future M8.7 diagnostic capture may use the blueprint, but normal between-board saves do not store it. No portable replay format is required here.
 
 **Wymagany handoff:** Przykład jednego blueprintu i mapping pól budżetu na zamierzoną presję.
 
@@ -5091,7 +4669,7 @@ M3 is complete when each input creates at most one command, rejected actions are
 
 **Plan testów:** Wymuszony generator zawsze-fail, sukces na N-tej próbie, uszkodzony fallback oraz timeout/performance bound.
 
-**Wpływ na save i kompatybilność:** Wybrany board seed/config zostaje w run boundary data; zmiana algorytmu może zmienić planszę po aktualizacji i wymaga version label dla replay.
+**Wpływ na save i kompatybilność:** The selected board seed/config stays in run-boundary data. Algorithm changes can change generated boards and require explicit generation/version identity; diagnostic format updates apply only after M8.7 acceptance.
 
 **Wymagany handoff:** Maksymalna liczba prób, zasada sub-seedów i raport z wymuszonego fallbacku.
 
@@ -5149,7 +4727,7 @@ M3 is complete when each input creates at most one command, rejected actions are
 
 **Kryteria akceptacji:** Ten sam event daje ten sam obszar; UI i AI czytają ten sam model; wygasanie jest jawne; brak ukrytego rzutu; sygnał jest czytelny bez audio.
 
-**Plan testów:** EditMode zasięg/przeszkody/lifetime i replay; PlayMode zgodności wizualizacji.
+**Plan testów:** EditMode range/obstacle/lifetime and explicit noise-command scenarios; PlayMode visual consistency. Portable replay coverage is conditional on M8.7 acceptance.
 
 **Wpływ na save i kompatybilność:** Bieżący hałas jest BoardState i nie jest zapisowany między planszami.
 
@@ -5209,7 +4787,7 @@ M3 is complete when each input creates at most one command, rejected actions are
 
 **Kryteria akceptacji:** Większość uczestników przewiduje znanego zombie; błędy są sklasyfikowane UI/reguła/tutorial; porażkę można wyjaśnić bez ukrytego RNG; istnieje decyzja bramki.
 
-**Plan testów:** Playtest według jednego skryptu, osobne wyniki pierwszego kontaktu i po nauczeniu, porównanie z automatycznym replayem.
+**Plan testów:** Scripted playtest, separate first-contact and learned results, and comparison with explicit automated enemy/noise scenarios. Portable replay comparison applies only after M8.7 acceptance.
 
 **Wpływ na save i kompatybilność:** Brak; profile testowe są izolowane.
 
@@ -5217,7 +4795,7 @@ M3 is complete when each input creates at most one command, rejected actions are
 
 ### Bramka M4
 
-M4 jest zaliczony, gdy 10 000 seedów aktywnej konfiguracji nie zawiera invalid boardów, replay jest stabilny, globalny RNG nie steruje logiką, a testerzy potrafią przewidzieć Shamblera i Listenera oraz świadomie wykorzystać hałas.
+M4 is accepted when 10,000 active-configuration seeds produce no invalid boards, explicit generator/enemy/noise scenarios are repeatable, global RNG does not control gameplay, and testers can predict Shambler/Listener behavior and intentionally use noise. Portable replay is not required unless M8.7 has separately been accepted.
 
 ---
 
@@ -5337,7 +4915,7 @@ M4 jest zaliczony, gdy 10 000 seedów aktywnej konfiguracji nie zawiera invalid 
 
 **Kryteria akceptacji:** Obie trasy są legalne; axe zawsze jest szybsza według config; noise i charge są pokazane przed/po akcji; brak axe nie softlockuje; Listener reaguje na dokładnie ten noise event.
 
-**Plan testów:** EditMode porównania kosztów/charges/noise i replay; PlayMode przeszkoda z/bez axe oraz reakcja Listenera.
+**Plan testów:** EditMode explicit cost/charge/noise command sequences; PlayMode obstacle interaction with/without an axe and Listener response. Portable replay is additional coverage only after M8.7 acceptance.
 
 **Wpływ na save i kompatybilność:** Tool charges w runie; fact discovery w profilu może wymagać rozszerzenia/migracji listy stabilnych fact IDs.
 
@@ -5467,7 +5045,7 @@ M5 jest zaliczony, gdy oba narzędzia tworzą różne decyzje, każde ma koszt l
 
 **Plan testów:** EditMode load/validation/stable ID/round-trip template→blueprint.
 
-**Wpływ na save i kompatybilność:** Run/replay identify the landmark by its active `BoardAddress` plus stable template/variant ID and record the outcome at the completed-board boundary. Destination node arrival remains the route-flow consequence of completing the final segment; no node ID is used as board identity.
+**Wpływ na save i kompatybilność:** Run data identifies the landmark by its active `BoardAddress` plus stable template/variant ID and records the outcome at the completed-board boundary. Future replay uses the same identity after M8.7 acceptance. Destination node arrival remains the route-flow consequence of completing the final segment; no node ID is used as board identity.
 
 **Wymagany handoff:** Schemat szablonu i przykład dwóch outcomes bez implementowania rozwiązania.
 
@@ -5555,7 +5133,7 @@ M5 jest zaliczony, gdy oba narzędzia tworzą różne decyzje, każde ma koszt l
 
 **Kryteria akceptacji:** Co najmniej dwa outcomes mają różny koszt; brak narzędzia nie blokuje celu obowiązkowego; zasady są komunikowane przez istniejące UI; ukończenie zapisuje outcome w runie i discovery w profilu, jeśli dotyczy.
 
-**Plan testów:** Ręczne przejście każdą zamierzoną drogą, automated validator, replay wszystkich rozwiązań i test death/exit.
+**Plan testów:** Manual traversal of each intended route, automated validator, explicit command sequences for every solution, and death/exit tests. Portable replay is conditional on M8.7 acceptance.
 
 **Wpływ na save i kompatybilność:** Stable template/outcome IDs w run/profile; zmiana ID wymaga migracji/aliasu.
 
@@ -5575,15 +5153,15 @@ M5 jest zaliczony, gdy oba narzędzia tworzą różne decyzje, każde ma koszt l
 
 **Oczekiwany rezultat:** Ograniczony BFS/A* enumeruje domenowe stany dla landmarku, znajduje co najmniej jedno rozwiązanie każdego wymaganej rezultatu albo raportuje minimalny failing fixture.
 
-**Zakres:** Kanoniczny hash stanu, legal command enumeration, limity czasu/stanów, reconstruction path i integration z testami template.
+**Zakres:** A solver-local state key with structural equality for deduplication, legal command enumeration, time/state limits, solution-path reconstruction, and template-test integration. This key covers the modeled puzzle inputs; it is not the portable replay hash deferred to M8.7 and requires no replay codec or capture framework.
 
 **Non-goals:** Bez AI podpowiadającego graczowi, optymalnego solvera dowolnego poziomu, generowania puzzli i uwzględniania animacji.
 
 **Zależności:** `M6.4` i `M3.10`.
 
-**Dozwolony obszar plików:** Core Solver/Diagnostics, tests i ignorowane raporty.
+**Dozwolony obszar plików:** Core Solver, tests, and external validation output. Portable replay sources are not required.
 
-**Kryteria akceptacji:** Każdy wymagany outcome ma znalezioną ścieżkę w limicie; celowo zablokowany wariant failuje; hash deduplikuje stany; raport zawiera template ID/variant/seed.
+**Kryteria akceptacji:** Every required outcome has a path within budget; an intentionally blocked variant fails. Equal solver-local state keys deduplicate equivalent states, while hash collisions cannot merge structurally different states. Failure context includes template ID/variant/seed. No M8.7 dependency is introduced.
 
 **Plan testów:** Znane małe puzzle, no-solution fixture, determinism i performance budget.
 
@@ -5615,9 +5193,9 @@ M5 jest zaliczony, gdy oba narzędzia tworzą różne decyzje, każde ma koszt l
 
 **Kryteria akceptacji:** Wszystkie warianty mają rozwiązanie i dwa sensowne rezultaty tam, gdzie wymagane; gracz potrafi wyjaśnić konsekwencję; selection jest deterministyczny; brak znanego softlocka.
 
-**Plan testów:** Solver dla każdego wariantu, replay, ręczny playtest bez instrukcji rozwiązania.
+**Plan testów:** Solve every variant, execute the found command sequence through the real rules with explicit outcome assertions, and conduct manual playtests without solution instructions. Portable replay is additional coverage only after M8.7 acceptance.
 
-**Wpływ na save i kompatybilność:** Run/replay zapisuje variant ID/seed; profil nie zaznacza automatycznie wszystkich wariantów jako odwiedzone.
+**Wpływ na save i kompatybilność:** Run data stores variant ID/seed; future M8.7 must include them once accepted. The profile does not automatically mark all variants as visited.
 
 **Wymagany handoff:** Macierz wariant → rozwiązania → koszt → wynik solvera/playtestu.
 
@@ -5740,7 +5318,7 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 - Commit a complete sample only on final arrival; commit an optional partial lower bound on death/abandon according to the contract.
 - Add profile DTO migration, missing-definition handling, atlas query model, and UI states for rumor versus partial versus historical range.
 - Show route segment count beside aggregate supply and current health/resource context without computing a “best” route.
-- Bump replay rules/version and canonical hash coverage for the active-leg accumulator and deterministic observation events; profile projection checks compare the resulting aggregate explicitly.
+- Add explicit leg/observation scenarios and compare the resulting profile aggregate. Extend replay rules/version/hash only if M8.7 is already accepted.
 
 **Non-goals:** No guarantee of ordinary loot on the next run, hidden-loot leakage, per-tile memory, cloud analytics, inventory, or automatic route recommendation.
 
@@ -5757,9 +5335,9 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 - only observable/revealed supply contributes; hidden content remains unknown;
 - profile observations survive death/new run and actual loot remains run/board state;
 - unknown resource-family IDs degrade to a controlled placeholder without destroying other knowledge.
-- replay of the same leg produces the same accumulator, observation event, profile aggregate, and canonical hashes; omitted observation state fails the extension contract from M3.10.
+- repeated authored leg scenarios produce explicit expected accumulator, observation event, and profile aggregate values; after M8.7 acceptance, replay also covers these fields and rejects omitted required contributions.
 
-**Test plan:** EditMode merge/idempotency/min-max/partial/hidden/reload/revisit tests; schema round-trip and v2 migration; replay/version/hash expansion and divergence injection; PlayMode complete and partial multi-board routes; atlas readability test comparing rumor, one sample, range, and taken current-run resources.
+**Test plan:** EditMode merge/idempotency/min-max/partial/hidden/reload/revisit scenarios; schema round-trip and v2 migration; replay/version/hash expansion only after M8.7 acceptance; PlayMode complete and partial multi-board routes; atlas readability test comparing rumor, one sample, range, and taken current-run resources.
 
 **Save and compatibility impact:** New additive profile schema plus active-leg accumulator in run schema. Existing profiles migrate with empty observations. Published edge/resource IDs require alias/migration when renamed.
 
@@ -5779,7 +5357,7 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 **Expected outcome:** Authored `ToolSourceDefinition` records stable source ID, tool-definition ID, physical edge-segment binding, and an optional atlas anchor for presentation. First sight permanently reveals the correct atlas icon. Each new run restores one instance at every fixed source; pickup marks it `taken` only for the current run.
 
-**Scope:** Source definitions and validation, deterministic `BoardAddress` binding, optional node/segment atlas anchor, sight event, profile discovered-source IDs, current-run taken state, atlas query/presentation, M5 tool-pickup integration, replay/version/hash expansion, and content examples with multiple axe/shovel sources.
+**Scope:** Source definitions and validation, deterministic `BoardAddress` binding, optional node/segment atlas anchor, sight event, profile discovered-source IDs, current-run taken state, atlas query/presentation, M5 tool-pickup integration, explicit sight/take/reload scenarios, and content examples with multiple axe/shovel sources. Replay/version/hash expansion is conditional on M8.7 acceptance.
 
 **Non-goals:** No guarantee for ordinary random consumables, tool respawn within the same run, permanent carried tools, shop, crafting, repair, or mandatory exit requiring a tool.
 
@@ -5796,9 +5374,9 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 - the same source returns once in the next run and every authored fixed source is present for supported seeds/fallbacks;
 - multiple sources of the same tool remain independently discoverable;
 - validator proves every mandatory exit has a tool-free path.
-- replay of sight/take/reload reproduces discovered/taken state and canonical hashes; omitting either new authoritative state fails the M3.10 extension contract.
+- sight/take/reload scenarios reproduce explicit discovered/taken state; after M8.7 acceptance, replay also covers both authoritative fields and rejects missing contributions.
 
-**Test plan:** Definition/ID validation, profile migration/idempotency, replay/version/hash expansion, generator and fallback presence across representative seeds, PlayMode sight/pickup/reload/death/new run, atlas icon/taken-state readability, and softlock validation.
+**Test plan:** Definition/ID validation, profile migration/idempotency, explicit sight/take/reload sequences, replay/version/hash expansion only after M8.7 acceptance, generator and fallback presence across representative seeds, PlayMode sight/pickup/reload/death/new run, atlas icon/taken-state readability, and softlock validation.
 
 **Save and compatibility impact:** New additive profile list of discovered source IDs and run state for taken source IDs; missing definitions use controlled placeholders/diagnostics. World-definition version changes when published source bindings change.
 
@@ -5910,7 +5488,7 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 
 **Powiązany kontrakt:** sekcje 6.2, 10, 16 i 20.
 
-**Rationale:** Wymaga stabilnego `BoardState`, resolvera, wersjonowanego replayu i wszystkich dynamicznych systemów; wcześniejszy snapshot podwoiłby koszt migracji. Bez niego gracz może celowo wyjść do menu lub zamknąć grę, a następnie użyć `Continue`, aby cofnąć niekorzystne akcje i odtworzyć początek tej samej planszy.
+**Rationale:** Exact-turn resume requires stable BoardState/resolution and coverage of every shipped dynamic system; an early snapshot would double migration work. Portable replay is not a prerequisite. Without mid-board persistence, Exit to Menu or closing the game followed by Continue resets uncommitted actions to the same board's initial state.
 
 **Obecne zachowanie:** M1.10 odtwarza deterministycznie ten sam początkowy układ planszy i ostatnią zatwierdzoną granicę runu. Nie zachowuje mutacji środka planszy: pozycji aktorów, zebranych przedmiotów, uszkodzonych lub zniszczonych przeszkód, stanu przeciwników, zasobów po turach, hałasu ani efektów pola. `Exit to Menu → Continue` działa więc jak reset bieżącej planszy.
 
@@ -5924,9 +5502,9 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 
 **Dozwolony obszar plików:** Core Persistence/Board/Turns i testy.
 
-**Kryteria akceptacji:** After representative turns, `Exit to Menu → Continue` and process restart produce the same canonical board/run/completed-turn hash. Repeated `Continue` restores neither loot, health, satiety/legacy food, tool charges, enemies, obstacles, nor route observations and does not change gameplay RNG. If M9 is present, it cannot restore consumed/discarded items or an earlier bag/pocket layout. A snapshot never represents half a command or modal draft; corruption returns to one coherent backup. Missing/older snapshots have an explicit migration or accepted fallback to the safe M1.10 boundary.
+**Kryteria akceptacji:** After representative turns, Exit to Menu -> Continue and process restart preserve every inventoried board/run/completed-turn field and the next command's explicit expected result. Repeated Continue restores neither loot, health, satiety/legacy food, tool charges, enemies, obstacles, nor route observations and does not change gameplay RNG. If M9 is present, it cannot restore consumed/discarded items or an earlier bag/pocket layout. A snapshot never represents half a command or modal draft; corruption returns to one coherent backup. Missing/older snapshots have an explicit migration or accepted fallback to the safe M1.10 boundary. Diagnostic hash parity is additional coverage only after M8.7 acceptance.
 
-**Plan testów:** Round-trip każdego typu encji i dynamicznego pola; hash przed wyjściem i po `Continue`; scenariusze po zebraniu łupu, zniszczeniu przeszkody, użyciu narzędzia, obrażeniach i ruchu/śmierci przeciwnika; wielokrotne `Exit to Menu → Continue`; restart procesu; crash injection przed zapisem, pomiędzy temp-write i replace oraz po replace; zgodność replay/hash i test migracji poprzedniej schemy.
+**Plan testów:** Per-field/entity round-trip; explicit state and next-command assertions before exit and after Continue; pickup, obstacle destruction, tool use, damage, enemy movement/death, repeated Continue, process restart, crash injection before/during/after atomic replacement, and previous-schema migration. Add replay/hash parity only if M8.7 is already accepted.
 
 **Wpływ na save:** Nowa wersja schema z migracją. Dotychczasowy zapis granicy M1.10 pozostaje jednoznacznym fallbackiem dla save'ów bez snapshotu, jeśli migracja nie może odtworzyć stanu środka planszy.
 
@@ -6024,6 +5602,82 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 
 ---
 
+## `M8.7` - Portable bug replay for real testers and players
+
+**Status:** `Deferred` - owner decision 2026-10-13; not an M3, generator, save, atlas, or inventory gate.
+**Priority:** P2 until a concrete user need is demonstrated
+**Related contract:** sections 16, 21.2, 22, and 27.9.
+
+**Rationale:** Exported replay pays for its maintenance when a tester/player can send a difficult-to-reproduce sequence and a developer can run it locally. Until that workflow is needed, authored scenarios already verify rules without maintaining a second portable description of every gameplay field.
+
+**Activation trigger:** Actual testers/players report bugs that authored fixtures or seed-plus-steps cannot reasonably reproduce, a named recipient and local artifact handoff workflow exist, and the owner approves the cost. Real users alone do not automatically activate the card. Otherwise keep it Deferred.
+
+**Expected outcome:** A tester can opt into bounded diagnostic recording and manually export an artifact; a developer can validate it and reproduce its commands through the existing controller, with an earliest-mismatch report. No second AI or resolver is implemented.
+
+**Scope:** The four future tasks below. Before Ready, inventory every authoritative mechanic already shipped, choose supported build/rules/format versions and a stable initial boundary, split implementation into bounded source/test assignments, and define exact filters and write scopes. This planning does not authorize code or configuration changes now.
+
+**Coverage boundary:** Start from an exact fresh active board after initial planning, before its first command. Include full board/entity/definition values, run resources/tools/travel address/history, player identity, enemy cadence and retained plans, controller terminal state, and any authoritative noise/effect/inventory/RNG inputs already implemented. Preserve semantic command/route/slot order; sort only unordered collections. Rebuild independent owners through public APIs without replanning initial intents. Do not invent future RNG or use player-save DTOs as the diagnostic state contract. Player profile storage, Unity objects, clock, animation, and cosmetic randomness are not gameplay hash inputs.
+
+**Extension rule after acceptance:** Each later authoritative field, rule parameter, or command type updates the independently required field/owner inventory, supported rules version, capture/restore, tagged codec, canonical hash coverage, and mutation/omission tests together in its owning ticket. The required inventory cannot shrink merely because a supplied contributor disappears. Unsupported versions/tags fail before replay effects; there is no automatic public cross-version compatibility promise.
+
+**Build/performance boundary:** Tests and offline replay run separately from gameplay. Recording is Editor/Development-only and opt-in, with bounded memory/history and explicit export. A disabled recorder bypasses capture, encoding, hashing, and writes before doing that work. Normal release gameplay has no diagnostic recorder work; the same controller/rules and normal command validation remain in all builds. Measure enabled/disabled costs rather than assuming hashing is free.
+
+**Non-goals:** No network/anti-cheat, automatic telemetry/upload, animation video, player-save migration, mid-board resume, arbitrary CLR-type materialization, duplicated rules, or unconditional release recording.
+
+**Dependencies:** The activation trigger and all accepted mechanics included in the initial coverage inventory. Use actual accepted BoardAddress/generator APIs when available; neither M9 nor optional M8.1 is mandatory unless its state is already shipped.
+
+**Allowed file area:** None until Ready. Define a closed source/test/build scope per child; keep artifacts and validation reports outside the Unity project. No package, assembly, scene, prefab, or settings changes are implicitly authorized.
+
+**Acceptance criteria:** An actual tester-originated or representative synthetic recording is exported, strictly decoded, and reproduced locally with nonzero passing evidence. A controlled command/state change identifies the first divergent boundary. Omitted authoritative owners fail rather than producing partial hashes. Release/disabled paths perform no diagnostic capture/hash/write; bounded-history and profiler evidence satisfy owner-approved budgets. Sensitive profile files/secrets are not exported.
+
+**Save and compatibility impact:** A separate diagnostic format/rules version, not player-save compatibility or a resume feature. Build/rules mismatches are explicit; historical recordings are never silently reinterpreted.
+
+---
+
+## `M8.7.1` - Define complete portable inputs and canonical comparison
+
+**Status:** `Deferred`
+**Rationale:** A transferred bug report is useful only if it carries every input that affects the recorded decisions, not merely a seed and actor positions.
+**Scope:** Inventory shipped owners/fields; define versioned explicit command tags, immutable initial descriptions, public independent restoration, deterministic framed encoding, independently required contributions, canonical state hash, and a strict structured JSON codec. Include full current route/resource/tool/enemy/inventory inputs where shipped; do not freeze the old node-only M3 assumptions.
+**Acceptance criteria:** Synthetic round-trips preserve all fields and semantic order; culture and unordered insertion do not change canonical values. Per-field mutations and omitted owners are detected. Duplicate/unknown fields, invalid associations, commands/tags, and unsupported versions fail before execution; type-name-driven object creation is disabled.
+**Test plan:** Focused codec/capture/encoding/coverage EditMode vectors and malformed-input tests, defined before Ready.
+**Dependencies:** M8.7 activation and accepted public read/restore APIs. Missing access requires a separately scoped prerequisite.
+
+---
+
+## `M8.7.2` - Reproduce artifacts through the existing controller
+
+**Status:** `Deferred`
+**Rationale:** Reproduction must run the real gameplay rules; a second decision implementation could agree with itself while missing the reported bug.
+**Scope:** Rebuild fresh owners, restore initial locked plans without replanning, decode the ordered attempts, and call the existing controller once per attempt. Compare initial/post-attempt state hashes and accepted/rejected results; report the first mismatch with build/rules/seed/address, attempt index, accepted-turn count, command, and expected/actual values.
+**Acceptance criteria:** Equal traces pass; injected initial/command/result/state changes report the earliest boundary. Rejected and post-terminal attempts cost nothing. No mutable owners are shared with the recording run, and malformed artifacts cannot partially execute.
+**Test plan:** Authored turn traces plus intentional divergence, missing/extra-frame, rejection, and terminal EditMode cases.
+**Dependencies:** `M8.7.1`.
+
+---
+
+## `M8.7.3` - Add opt-in bounded Development recording and export
+
+**Status:** `Deferred`
+**Rationale:** A replay format without a way for real testers to collect the failing sequence does not solve bug-report reproduction.
+**Scope:** Add an explicitly enabled Editor/Development recording boundary around completed command attempts. Observe the sole controller result without resolving/planning again; distinguish attempts from accepted turns. Retain a complete initial state and bounded trace. When the limit is reached, stop/mark recording incomplete or use another explicitly approved reconstructible boundary; never silently discard the required command prefix. Manually export to an explicit external location. Exclude release recording and short-circuit the disabled path before capture/hash work.
+**Acceptance criteria:** One admitted command has one resolution and one recorded frame; rejected results preserve state. Lifecycle replacement/cancellation cannot mix boards. Length/size limits have explicit behavior; unsupported/incomplete traces are diagnosed. Release and disabled paths create no diagnostic snapshots, hashes, history, or file writes.
+**Test plan:** Command-count/state-isolation, enabled/disabled/release compilation, bounded-history, cancellation/replacement, and export checks; no tests touch real player storage.
+**Dependencies:** `M8.7.2` and a named tester handoff workflow.
+
+---
+
+## `M8.7.4` - Validate tester reproduction and measured overhead
+
+**Status:** `Deferred`
+**Rationale:** The feature is justified by a working bug-report workflow and acceptable measured costs, not merely passing serialization tests.
+**Scope:** Collect a real or representative tester trace, export/decode/reproduce it in a fresh process, and introduce a controlled first divergence. Profile representative turns with recording on/off, retained memory/allocations, and explicit export latency. Verify release recording exclusion and parity of the shared rules in all builds. Agree budgets before measurements; record an owner Accept/Revise/Defer verdict.
+**Acceptance criteria:** A recipient can reproduce the reported sequence from the artifact without private profile files. The earliest mismatch is actionable; all shipped owner/field coverage is audited. Limits and measured CPU/allocation/memory/export costs meet the agreed budgets, and disabled/release paths perform no recorder work. No external upload is required.
+**Test plan:** End-to-end local artifact workflow, fresh automated reports, profiler captures, and representative Development/release build checks.
+**Dependencies:** `M8.7.1`-`M8.7.3`.
+
+---
+
 # M9 — Spatial Inventory and Resource Pressure
 
 M9 is intentionally listed last and remains **Deferred** until the owner has played the complete no-backpack vertical slice. It may begin only after an explicit `proceed to M9` verdict from `M7.8` or a later explicit owner override. It does not require optional M8 work.
@@ -6080,7 +5734,7 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 
 **Expected outcome:** `RunState` has one authoritative `Satiety` value in `0..200`, initially `100`, and health in `0..100`. An action-cost policy samples satiety at command start (`1` at `<=100`, `2` above `100`). Pure, data-driven consumable effects resolve before the selected cost and report capped/wasted amounts.
 
-**Scope:** Resource configuration/invariants, `Food`→`Satiety` domain migration, health cap, cost policy, item-effect definitions/registry, effect events, terminal ordering, run DTO migration for resources, replay-rules/version and canonical-hash expansion, and a temporary adapter preserving automatic board-food behavior until M9.5.
+**Scope:** Resource configuration/invariants, `Food`->`Satiety` domain migration, health cap, cost policy, item-effect definitions/registry, effect events, terminal ordering, run DTO migration for resources, explicit resource/effect command scenarios, and a temporary adapter preserving automatic board-food behavior until M9.5. Replay-rules/version/hash expansion is required only after M8.7 acceptance.
 
 **Non-goals:** No bag integration, manual consumable pickup, inventory UI, quick use, spoilage, buffs, combat stats, or balancing a large item catalogue.
 
@@ -6098,9 +5752,9 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 - starvation/exit priority still follows O-002;
 - runtime has no synchronized duplicate `Food` and `Satiety` fields;
 - legacy run saves migrate deterministically and current no-bag play remains functional through the temporary adapter.
-- replay captures satiety, health caps, selected cost tier, and consumable effects; omitting the renamed/new state fails the M3.10 extension contract.
+- explicit command scenarios assert satiety, health caps, selected cost tier, and consumable effects; after M8.7 acceptance, replay captures all renamed/new fields and rejects omitted required contributions.
 
-**Test plan:** Boundary table for health/satiety/cost, effect-before-cost sequences, starvation/exit, rejected actions, caps/waste events, schema round-trip and legacy migration, replay/version/hash expansion with divergence injection, plus M3 turn regression.
+**Test plan:** Boundary table for health/satiety/cost, effect-before-cost sequences, starvation/exit, rejected actions, caps/waste events, schema round-trip and legacy migration, explicit multi-turn resource scenarios, plus M3 turn regression. Add replay/version/hash divergence coverage only after M8.7 acceptance.
 
 **Save and compatibility impact:** New run schema maps old `food` to clamped satiety and adds explicit configuration/version semantics. Invalid legacy values produce a controlled migration result; profile save is unchanged.
 
@@ -6108,25 +5762,25 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 
 ---
 
-## `M9.3` — Inventory persistence, replay, and `RunState` integration
+## `M9.3` - Inventory persistence and RunState integration
 
 **Status:** `Deferred`
 **Priority:** P1
 **Related contract:** sections 6, 16, 21.3–21.4, and 27.4/27.9.
 
-**Rationale:** A carried item is a run resource. Integrating it without versioned save and canonical replay would permit duplication, loss, or different layouts after `Continue`, even before the first bag command exists.
+**Rationale:** A carried item is a run resource. Versioned saves and explicit save/load scenarios must prevent duplication, loss, or changed layouts after Continue. Portable replay is not required to prove those invariants.
 
-**Current behavior:** `RunState`/run DTO store resources and two tool slots but no item instances, spatial placements, pockets, or inventory revision. Replay/hash does not include them.
+**Current behavior:** `RunState`/run DTO store resources and two tool slots but no item instances, spatial placements, pockets, or inventory revision. Portable replay is deferred to M8.7.
 
-**Expected outcome:** Every active run owns one empty-or-populated `InventoryState` and a monotonic inventory revision. Any accepted operation that changes inventory advances it, and every accepted `ManageInventoryCommand` advances it even when its final layout/actions are a no-op. Run DTO, validation, backup/recovery, canonical serialization, replay version, and state hash preserve item instances, main-grid placements, pocket references, and revision using stable IDs only.
+**Expected outcome:** Every active run owns one empty-or-populated `InventoryState` and a monotonic inventory revision. Any accepted operation that changes inventory advances it, and every accepted `ManageInventoryCommand` advances it even when its final layout/actions are a no-op. Run DTO, validation, backup/recovery, and explicit round-trip scenarios preserve item instances, main-grid placements, pocket references, and revision using stable IDs only. Portable replay coverage is conditional on M8.7 acceptance.
 
-**Scope:** Attach inventory to `RunState`; mapper/DTO/schema migration; load validation; unknown/missing item handling policy; canonical hash/replay contributor; two-run isolation; save-boundary integration. Old saves receive an empty backpack and pockets.
+**Scope:** Attach inventory to `RunState`; mapper/DTO/schema migration; load validation; unknown/missing item handling policy; explicit field/layout/revision scenarios; two-run isolation; save-boundary integration. Add a canonical hash/replay contribution only if M8.7 is already accepted. Old saves receive an empty backpack and pockets.
 
 **Non-goals:** No bag/pickup/quick-use command, UI, mid-board snapshot, profile inventory, item transfer between profiles, or persistence of modal drafts.
 
 **Dependencies:** `M9.1`, `M9.2`, `M3.10`, and accepted atomic persistence.
 
-**Allowed file area:** Core State/Inventory/Persistence/Diagnostics/Session, migration fixtures, and tests. No scenes/prefabs.
+**Allowed file area:** Core State/Inventory/Persistence/Session, migration fixtures, and tests; Diagnostics only for an already accepted M8.7 extension. No scenes/prefabs.
 
 **Acceptance criteria:**
 
@@ -6134,15 +5788,15 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 - old run schema migrates with empty inventory without changing profile knowledge;
 - load rejects overlap, out-of-bounds, duplicate placement, incompatible pocket, duplicate instance ID, and unknown required effect safely;
 - two runs share no mutable inventory collection or instance;
-- replay/hash changes when any authoritative inventory field changes and unknown command/state versions fail explicitly;
+- explicit round-trip scenarios check every authoritative inventory field and reject unknown save versions/IDs; after M8.7 acceptance, replay/hash coverage also detects each field change and rejects unknown diagnostic versions;
 - repeating an already accepted no-op management payload with the old expected revision is rejected as stale and cannot consume another turn;
 - failed write/replace recovers one coherent pre- or post-change state, never a mixed inventory.
 
-**Test plan:** DTO round-trip matrix, legacy migration, corrupt/unknown ID fixtures, backup/crash injection, canonical ordering/hash, two-run isolation, and repeated save/load with full inventory.
+**Test plan:** DTO round-trip matrix, legacy migration, corrupt/unknown ID fixtures, backup/crash injection, explicit item/layout/revision checks, two-run isolation, and repeated save/load with full inventory. Canonical diagnostic ordering/hash is additional coverage only after M8.7 acceptance.
 
 **Save and compatibility impact:** New run schema. Profile schema is unchanged. Mid-board modal/draft state is intentionally absent; M8.1 must include committed inventory if it is implemented later.
 
-**Required handoff:** Complete domain↔DTO field map, migration/recovery matrix, canonical hash proof, and redacted sample save with every container represented.
+**Required handoff:** Complete domain-to-DTO field map, migration/recovery matrix, explicit round-trip evidence, and redacted sample save with every container represented. Include diagnostic hash evidence only for an accepted M8.7 extension.
 
 ---
 
@@ -6175,9 +5829,9 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 - stale revision, invalid effect/target, invalid layout, duplicate action, or rapid resubmit applies nothing and costs nothing;
 - discarded carried items are destroyed and do not appear in `BoardState`;
 - quick use cannot be attached, and newly pocketed items are unavailable until the command fully resolves;
-- replay reproduces ordered effects and the final layout.
+- explicit command scenarios assert ordered effects and the final layout; portable replay parity is added only after M8.7 acceptance.
 
-**Test plan:** EditMode action/layout cross-product, ordering/caps/starvation, stale/invalid atomic rollback, no-op finish, discard destruction, replay/hash; PlayMode modal input lock, rapid submit, one enemy phase, and animations disabled.
+**Test plan:** EditMode action/layout cross-product, ordering/caps/starvation, stale/invalid atomic rollback, no-op finish, discard destruction, and explicit multi-turn inventory scenarios; replay/hash only after M8.7 acceptance. PlayMode modal input lock, rapid submit, one enemy phase, and animations disabled.
 
 **Save and compatibility impact:** Only the committed post-turn inventory is saved. Drafts are never saved. Existing M9.3 schema should not change unless events require a separately justified version.
 
@@ -6197,7 +5851,7 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 
 **Expected outcome:** Entering a consumable tile presents `Use now`, `Store`, or `Leave` before final command submission. Item-producing interactions such as a shovel cache use the same decision within their interaction command. The accepted composite command either uses/removes, stores/removes, or leaves the exact same ground instance. Tool pickup continues to use M5.6's separate equipment flow.
 
-**Scope:** Pickup query/options and availability reasons, move- and interaction-based composite payloads, placement choice/preview, all-or-nothing BoardState→RunState transfer, entry-trigger behavior, M5.5 cache-adapter migration, removal of the legacy automatic-food path, presentation modal, and replay/events.
+**Scope:** Pickup query/options and availability reasons, move- and interaction-based composite payloads, placement choice/preview, all-or-nothing BoardState-to-RunState transfer, entry-trigger behavior, M5.5 cache-adapter migration, removal of the legacy automatic-food path, presentation modal, and explicit command/event scenarios. Replay integration is conditional on M8.7 acceptance.
 
 **Non-goals:** No automatic best placement, drop-to-ground, bag rearrangement during pickup, multiple ground items on one cell, shopping, crafting, or tool storage in the bag.
 
@@ -6216,7 +5870,7 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 - a revealed shovel-cache reward follows the same choice, remains the same ground instance on `Leave`, and never restores a resource through a bypass;
 - automatic food pickup no longer exists after this card, and O-003 transition is documented in handoff.
 
-**Test plan:** EditMode every option with empty/full/fragmented bag, capped/illegal effect, leave/re-entry, stale IDs, transfer rollback, duplicate submit, and replay; PlayMode prompt/input/re-entry/reload plus regression for tool pickup.
+**Test plan:** EditMode every option with empty/full/fragmented bag, capped/illegal effect, leave/re-entry, stale IDs, transfer rollback, duplicate submit, and explicit transfer sequences; replay only after M8.7 acceptance. PlayMode prompt/input/re-entry/reload plus regression for tool pickup.
 
 **Save and compatibility impact:** Uses M9.3 inventory and existing board-boundary persistence. If M8.1 exists, the same exact ground/carried instance transition must survive mid-board snapshot without duplication.
 
@@ -6236,13 +5890,13 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 
 **Expected outcome:** An optional `QuickItemUse` from either pocket may wrap one accepted non-inventory primary command. At most one item resolves, then the primary action/resource/hostile phases complete as one atomic turn. `Wait` supports intentional quick use without movement.
 
-**Scope:** Command envelope/modifier, compatibility query for primary command types, validation and ordering, pocket removal/effect events, rejection atomicity, replay/hash, input selection, and minimal feedback.
+**Scope:** Command envelope/modifier, compatibility query for primary command types, validation and ordering, pocket removal/effect events, rejection atomicity, explicit composite-command scenarios, input selection, and minimal feedback. Replay/hash is conditional on M8.7 acceptance.
 
 **Non-goals:** No two-pocket use in one turn, quick use with `ManageInventoryCommand`, free standalone use, automatic emergency consumption, action queue, or moving an item into a pocket and using it in the same bag turn.
 
 **Dependencies:** `M9.4`, `M9.5`, `M3.5`, and accepted O-009.
 
-**Allowed file area:** Core Turns/Inventory/Items/Interaction/Tools, Presentation HUD/Input, replay/tests, and explicitly allowlisted UI assets.
+**Allowed file area:** Core Turns/Inventory/Items/Interaction/Tools, Presentation HUD/Input, tests, and explicitly allowlisted UI assets; replay sources only for an already accepted M8.7 extension.
 
 **Acceptance criteria:**
 
@@ -6251,13 +5905,13 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 - rejected/stale primary command consumes neither item, satiety, tool charge, nor turn;
 - bag command, empty/ineligible pocket, duplicate submit, and two-item payload are rejected atomically;
 - either pocket can be used on consecutive turns, and `Wait` is a legal primary action;
-- replay/hash reproduces the exact pocket, item, effect, primary command, and resulting state.
+- explicit scenarios assert the exact pocket, item, effect, primary command, and resulting state; replay/hash parity is added only after M8.7 acceptance.
 
-**Test plan:** Matrix of both pockets × supported primary commands × accepted/rejected/stale, two-item and bag incompatibility, starvation/exit/tool charge order, rapid input, replay, and PlayMode enemy-phase count.
+**Test plan:** Matrix of both pockets x supported primary commands x accepted/rejected/stale, two-item and bag incompatibility, starvation/exit/tool charge order, rapid input, explicit composite sequences, and PlayMode enemy-phase count. Add portable replay only after M8.7 acceptance.
 
-**Save and compatibility impact:** No new persistent shape beyond M9.3 unless the command replay tag requires a version bump. Save boundaries contain only the completed result, never a pending modifier.
+**Save and compatibility impact:** No new persistent shape beyond M9.3. After M8.7 acceptance, new command tags require an explicit diagnostic-version update. Save boundaries contain only the completed result, never a pending modifier.
 
-**Required handoff:** Supported-command matrix, exact event chronology, rejected-command state hashes, and proof that two quick items cannot resolve in one turn.
+**Required handoff:** Supported-command matrix, exact event chronology, explicit unchanged-state rejection evidence, and proof that two quick items cannot resolve in one turn.
 
 ---
 
@@ -6308,7 +5962,7 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 
 **Rationale:** Correct inventory code can still make the game slower, encourage obsessive cleanup, or trivialize route decisions. M9 succeeds only if the complete economy creates understandable trade-offs and preserves the logic-first identity.
 
-**Current behavior:** Individual M9 systems may pass focused tests, but there is no representative item set, route supply tuning, complete migration/replay gate, or evidence that players use the bag and atlas as intended.
+**Current behavior:** Individual M9 systems may pass focused tests, but there is no representative item set, route supply tuning, complete migration/scenario gate, or evidence that players use the bag and atlas as intended.
 
 **Expected outcome:** A small data-driven content set and controlled route supply produce food-versus-healing and carry-versus-use choices. Full automated validation, smoke, migration/recovery, and comparative playtests yield an explicit `Accept`, `Revise`, or `Remove/Defer` decision for M9.
 
@@ -6323,7 +5977,7 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 **Acceptance criteria:**
 
 - zero known duplication/silent-loss paths and no P0/P1 defects;
-- full EditMode/PlayMode, replay/hash, save migration/recovery, generator supply, fixed-source, and deterministic batch gates pass twice;
+- full EditMode/PlayMode, explicit command scenarios, save migration/recovery, generator supply, fixed-source, and deterministic batch gates pass twice; replay/hash joins the gate only if M8.7 is already accepted;
 - caps, cost tier, pickup, two-action bag budget, quick-use limit, and one-hostile-phase atomicity match section 27;
 - route rumors never lie and observed ranges are not mistaken for guarantees;
 - testers make at least some route choices from current health/satiety/capacity plus atlas knowledge;
@@ -6331,7 +5985,7 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 - session length and interaction time remain acceptable relative to the no-backpack baseline;
 - the owner records `Accept`, `Revise`, or `Remove/Defer` with evidence.
 
-**Test plan:** Complete automated suites twice, 10,000-seed supply/softlock gate, old-save migration and crash recovery, full PC smoke, accessibility/input matrix, replay divergence injection, and pre-scripted comparative playtests with behavioral observations rather than preference-only surveys.
+**Test plan:** Complete automated suites twice, 10,000-seed supply/softlock gate, old-save migration and crash recovery, full PC smoke, accessibility/input matrix, explicit resource/inventory command sequences, and pre-scripted comparative playtests with behavioral observations rather than preference-only surveys. Add replay divergence injection only after M8.7 acceptance.
 
 **Save and compatibility impact:** Validate upgrade from the last supported pre-M9 schemas and all intermediate M9 schemas; backup/recovery is mandatory. Failure may disable/retire the active run only through an explicit safe policy and must never erase the profile/atlas.
 
@@ -6357,21 +6011,19 @@ O-002, O-003, O-004, O-005, O-006, O-007, O-008, and O-009 are resolved in `Game
 
 # Kolejka wykonawcza
 
-M0, M1, and M2 are complete; M3.1–M3.6.2 are `Done`; the M3.6 umbrella is split into three executable children; `M3.6.3` is `Active`, with its production implementation and automated gates complete, no material code defects reported by independent review, and final acceptance `BLOCKED` by the missing manual PC smoke. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. M3.6.1 was implemented from the clean baseline `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. M3.6.2 was implemented from the clean baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e64f7ebaea81e015`. M3.6.3 uses `M3/ProductionCutover` at `af030818d5de705968e26907139c435bc26ecd86`. Every new child still begins with its normal clean-worktree preflight.
+M0, M1, and M2 are complete; M3.1-M3.11 are `Done`. The M3.6 umbrella and M3.6.3 were accepted on 2026-10-08 with owner-confirmed PC smoke and final independent review. M3.9.14 and M3.9 were accepted for PoC by the owner on 2026-10-13 without a measured prediction claim; reduced M3.10's automated scenario gates are complete. M3.11 and all thirty-two children were accepted on 2026-10-14 with full EditMode `635/635`, production-focused PlayMode `39/39`, and owner-authorized combined-role self-review; [evidence](Validation/M3.11RouteAddress.md). M3.12 planning alignment is next. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. M3.6.1 was implemented from the clean baseline `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. M3.6.2 was implemented from the clean baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e64f7ebaea81e015`. M3.6.3 uses `M3/ProductionCutover` at `af030818d5de705968e26907139c435bc26ecd86`. Every new ticket still begins with its normal clean-worktree preflight.
 
 The next safe sequence is:
 
-1. complete the outstanding manual PC smoke and final independent acceptance for `M3.6.3`;
-2. use the accepted Shambler rule in contract section 11.3.1, verify the remaining M3.7 readiness prerequisites, and execute `M3.7.1` through `M3.7.8`, then `M3.7.11`, `M3.7.9`, and `M3.7.10` as separate delegations; after M3.7 acceptance, execute `M3.8.1` through `M3.8.10` separately, resolving the chain-occupancy decision before M3.8.6; after M3.8 acceptance, execute `M3.9.1` through `M3.9.10` separately, require an explicitly scoped and accepted production enemy-composition prerequisite before M3.9.11, then accept M3.9.11 through M3.9.13 separately and the Lead-owned M3.9.14 readability gate; execute `M3.10.1` through `M3.10.14` separately and accept the Lead-owned M3.10.15 replay/extension evidence gate;
-3. after M3.10 acceptance, execute `M3.11.1` through `M3.11.31` separately, with integrated v2 round-trip acceptance before M3.11.25 default activation; accept M3.11.32 with full EditMode and focused PlayMode identity evidence; align M3.12 planning with accepted section 27.2 Pending/Consumed and checkpoint-before-render semantics before making it Ready, then execute M3.12 before M4 so generation, replay, atlas observations, and tool sources share stable route-segment identity;
-4. complete the no-backpack vertical slice through `M7.8`, then make the explicit M9 verdict;
-5. keep M9 deferred and last unless the owner explicitly changes that order.
+1. align M3.12 planning with accepted section 27.2 Pending/Consumed and checkpoint-before-render semantics before making it Ready, then execute M3.12 before M4 so generation, future replay, atlas observations, and tool sources share stable route-segment identity;
+2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
+3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
 `M0.9` remains deferred by owner decision. No implementation agent performs external history rewriting, exposes historical values, or runs BFG without a separate explicit request.
 
-### Rationale — why M3.6.3 is next
+### Rationale - why M3.12 is next
 
-The accepted M3.6.1 runtime binds each generated board to authoritative `BoardState`, a stable board-local player ID, one controller, and a read-only view registry. Accepted M3.6.2 proves reusable command submission, gating, ordered replay, and controlled recovery in isolation. M3.6.3 now binds that path to production and removes the legacy mutation sources, but the required manual PC smoke still blocks final acceptance and completion of the M3.6 umbrella. M3.11/M3.12 and M9 can reuse the completed M3.6 boundary, while inserting route identity before M4 prevents generator-era rework.
+Accepted M3.6 establishes one production gameplay authority, M3.7/M3.8 provide deterministic retained enemy behavior, M3.9 is owner-approved for PoC, and reduced M3.10 protects concrete turn scenarios. Accepted M3.11 supplies stable traversal/segment identity and compatible save state. M3.12 must now align its planning with the accepted intro durability contract and activate multi-board travel before M4 consumes those addresses. Deferred portable replay is not a prerequisite.
 
 # Zasada aktualizacji roadmapy
 

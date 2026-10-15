@@ -900,7 +900,7 @@ Jawna losowość tworzy różnorodność, a deterministyczny wynik zachowuje ucz
 ### Konsekwencje implementacyjne
 
 - Logika domenowa nie używa globalnego `UnityEngine.Random`.
-- Ten sam seed, stan i sekwencja komend dają ten sam hash wyniku.
+- The same seed, initial state, and command sequence produce the same authoritative results. M3.10 validates explicit expected states/events in authored scenarios; portable replay and canonical diagnostic state hashing are deferred to M8.7 until real tester/player bug reports justify them.
 - `generate → validate → build state → present` jest obowiązującym przepływem.
 - Generator ma ograniczoną liczbę prób i poprawny fallback.
 
@@ -1423,17 +1423,19 @@ Pockets reward preparation by avoiding an extra bag-opening turn, but the one-it
 - The run save includes active route address/accumulator, durable Day-transition status, item instances, bag placements, pockets, tool instances, health, and satiety once their owning cards ship.
 - The profile save includes typed observation aggregates and discovered fixed-source IDs.
 - Mid-board snapshot, when implemented, captures only a completed turn; modal pickup and bag drafts are never persisted.
-- Replay is a versioned tagged-command format. Its canonical hash expands whenever authoritative route, resource, tool, or inventory state is added; unknown command types fail explicitly.
+- Portable diagnostic replay is deferred to M8.7 until real testers/players need transferable bug recordings. Until that capability is accepted, each mechanic owns explicit deterministic command-scenario tests; save migrations, generation, and inventory do not require a replay format or canonical diagnostic hash.
+- Once implemented, replay uses a versioned tagged-command format. Its independently declared coverage inventory, capture/restore, codec, and canonical hash expand together whenever authoritative route, resource, tool, or inventory state is added; unknown command types and unsupported versions fail explicitly. It reuses the gameplay controller and rules rather than providing a second decision engine.
+- Diagnostic recording is optional and limited to Editor/Development builds. Normal release gameplay performs no replay snapshot capture, diagnostic state hashing, history accumulation, or replay file writes. Development recording is bounded and opt-in; its cost and disabled-path behavior require measurement before acceptance. This restriction does not disable normal gameplay validation, generation, or player-save operations.
 - The route-choice view shows current health, satiety, predicted cost tier, free bag capacity, pocket/tool status, route length, rumor or historical resource range, and fixed-source knowledge without calculating a single “best route” score.
 
 #### Rationale
 
-These features cross `ProfileState`, `RunState`, and `BoardState`; save and replay are therefore part of the mechanic, not cleanup after UI. Showing both current need and historical route knowledge is what turns inventory pressure into a strategic choice.
+These features cross `ProfileState`, `RunState`, and `BoardState`; save compatibility and deterministic scenario coverage therefore belong to each mechanic, not cleanup after UI. Portable replay adds a separate state-description maintenance cost and is justified only when someone needs to transfer and reproduce real bug reports. Showing both current need and historical route knowledge is what turns inventory pressure into a strategic choice.
 
 #### Validation
 
 - Round-trip and migration tests cover empty, full, partially filled, and invalid inventories plus active and completed route legs.
-- Deterministic replay covers pickup, two-action bag sessions, quick use, route-segment advance, complete/partial atlas samples, and fixed-source collection.
+- Explicit deterministic scenarios cover pickup, two-action bag sessions, quick use, route-segment advance, complete/partial atlas samples, and fixed-source collection. After M8.7 is accepted, the same mechanics also extend portable replay/version/hash coverage; M8.7 initially inventories every mechanic already shipped.
 - Property tests prove no overlap, duplicate placement, false rumor band, duplicated observation sample, or mandatory tool softlock.
 - PlayMode tests cover modal input locks, one enemy phase per accepted composite command, Day transition HUD hiding, and `Continue` at route boundaries.
 - Playtests compare the no-backpack baseline with M9 using the inventory gate in section 22.

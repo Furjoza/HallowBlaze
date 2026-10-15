@@ -492,6 +492,72 @@ namespace HallowBlaze.Tests.PlayMode
                 .Invoke(manager, arguments);
         }
 
+        [UnityTest]
+        public IEnumerator ForeignBoardAddress_CannotReachProductionOutcomeEffects()
+        {
+            persistenceRoot = Path.Combine(Path.GetTempPath(), "HB-M311-guard-" + Guid.NewGuid().ToString("N"));
+            gameManagerType.GetField("PersistenceRootOverride", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, persistenceRoot);
+            Component board = CreateBoardManager();
+            Component manager = board.gameObject.AddComponent(gameManagerType);
+            var authored = new TextAsset(File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json")));
+            createdAssets.Add(authored);
+            SetField(manager, "worldDefinitionJson", authored);
+            SetField(manager, "levelStartDelay", 100f);
+            Assert.That((bool)InvokeManager(manager, "TryEnsureWorldMap"), Is.True);
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            session.StartNewRun("production-address-guard", 54321, new RunStateConfiguration(100, 100, 0, "forest.start"));
+            RunState run = session.ActiveRun;
+            run.StartLeg("road.start-east-creek", "forest.start", "forest.east-creek",
+                new[] { "entry", "stretch", "clearing", "approach", "arrival" }.Select(name =>
+                    new RouteSegmentState("segment.start-east-creek." + name, "legacy.board.v1", 1)));
+            run.TryConsumeIntro(run.ActiveLeg.LegId);
+            GameObject playerObject = CreateObject("Address guard player", 0, 0);
+            playerObject.tag = "Player";
+            playerObject.AddComponent(boardManagerType.Assembly.GetType("PlayerScript", true));
+            CreateObject("LevelImage", 0, 0);
+            InvokeManager(manager, "InitGame");
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            Assert.That(runtime, Is.Not.Null);
+            BoardRequest expected = runtime.Request;
+            BoardAddress address = expected.Address;
+            Assert.That(address, Is.Not.Null);
+            var beforeFiles = Directory.Exists(persistenceRoot)
+                ? Directory.GetFiles(persistenceRoot, "*", SearchOption.AllDirectories).ToDictionary(path => path, path => Convert.ToBase64String(File.ReadAllBytes(path)))
+                : new Dictionary<string, string>();
+            ProfileState profile = session.Profile;
+            NodeDiscovery[] nodes = profile.NodeDiscoveries.ToArray();
+            EdgeDiscovery[] edges = profile.EdgeDiscoveries.ToArray();
+            for (int field = 0; field < 8; field++)
+            {
+                BoardAddress foreign = new BoardAddress(field == 0 ? "foreign" : address.RunId,
+                    field == 1 ? "foreign" : address.LegId, field == 2 ? "foreign" : address.EdgeId,
+                    field == 3 ? "foreign" : address.SegmentId, field == 4 ? address.DayNumber + 1 : address.DayNumber,
+                    field == 5 ? "foreign" : address.GenerationConfigurationId,
+                    field == 6 ? address.GenerationVersion + 1 : address.GenerationVersion,
+                    field == 7 ? address.BoardSeed + 1 : address.BoardSeed);
+                BoardRequest wrong = new BoardRequest(foreign, run.RunSeed, run.WorldNodeId, expected.PlaceKind,
+                    expected.BiomeFamily, expected.LegacyDifficultyLevel);
+                foreach (BoardOutcome outcome in new[] { BoardOutcome.ExitReached(wrong), BoardOutcome.PlayerDied(wrong, DeathReason.Starvation) })
+                    Assert.That((bool)InvokeManager(manager, "HandleBoardOutcome", outcome), Is.False, foreign.ToString());
+            }
+            Assert.That((bool)InvokeManager(manager, "HandleBoardOutcome", BoardOutcome.ExitReached(expected)), Is.False,
+                "Matched active-leg orchestration must not silently use legacy route completion before M3.12.");
+            Assert.That(run.Status, Is.EqualTo(RunStatus.Active));
+            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Health, Is.EqualTo(100));
+            Assert.That(run.CompletedDayCount, Is.Zero);
+            Assert.That(run.ActiveLeg.SegmentIndex, Is.Zero);
+            Assert.That(profile.NodeDiscoveries, Is.EqualTo(nodes));
+            Assert.That(profile.EdgeDiscoveries, Is.EqualTo(edges));
+            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.SameAs(runtime));
+            Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
+            var afterFiles = Directory.Exists(persistenceRoot)
+                ? Directory.GetFiles(persistenceRoot, "*", SearchOption.AllDirectories).ToDictionary(path => path, path => Convert.ToBase64String(File.ReadAllBytes(path)))
+                : new Dictionary<string, string>();
+            Assert.That(afterFiles, Is.EquivalentTo(beforeFiles));
+            yield return null;
+        }
+
         private static T GetManagerField<T>(Component manager, string name)
         {
             return (T)manager.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(manager);

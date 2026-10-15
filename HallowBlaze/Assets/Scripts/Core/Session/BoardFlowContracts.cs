@@ -5,7 +5,7 @@ using HallowBlaze.Core.World;
 namespace HallowBlaze.Core.Session
 {
     /// <summary>
-    /// Represents a request to create a board for a specific world node in a run.
+    /// Represents an addressed segment board or an explicitly legacy checkpoint board.
     /// </summary>
     public sealed class BoardRequest
     {
@@ -49,6 +49,18 @@ namespace HallowBlaze.Core.Session
             LegacyDifficultyLevel = legacyDifficultyLevel;
         }
 
+        /// <summary>Creates an addressed request; node/place/biome are compatibility context, not board identity.</summary>
+        public BoardRequest(BoardAddress address, int runSeed, string checkpointNodeId,
+            string placeKind, string biomeFamily, int legacyDifficultyLevel)
+            : this((address ?? throw new ArgumentNullException(nameof(address))).RunId, runSeed,
+                checkpointNodeId, address.DayNumber, address.BoardSeed, placeKind, biomeFamily, legacyDifficultyLevel)
+        {
+            Address = address;
+        }
+
+        /// <summary>Gets the full segment identity, or null only for explicit checkpoint compatibility.</summary>
+        public BoardAddress Address { get; }
+
         /// <summary>
         /// Gets the unique identifier of the active run.
         /// </summary>
@@ -60,7 +72,7 @@ namespace HallowBlaze.Core.Session
         public int RunSeed { get; }
 
         /// <summary>
-        /// Gets the identifier of the world node to create a board for.
+        /// Gets reached-node compatibility context; this is not an addressed segment's identity.
         /// </summary>
         public string WorldNodeId { get; }
 
@@ -115,6 +127,9 @@ namespace HallowBlaze.Core.Session
             }
 
             int legacyDifficultyLevel = Math.Max(1, run.CurrentDay);
+            if (run.ActiveLeg != null)
+                return new BoardRequest(BoardAddressFactory.Create(run, worldDefinition), run.RunSeed,
+                    run.WorldNodeId, nodeDefinition.PlaceKind, nodeDefinition.BiomeFamily, legacyDifficultyLevel);
             return new BoardRequest(
                 run.RunId,
                 run.RunSeed,
@@ -128,9 +143,11 @@ namespace HallowBlaze.Core.Session
 
         /// <summary>Checks whether another request identifies the same board boundary.</summary>
         /// <param name="other">The request to compare.</param>
-        /// <returns><c>true</c> when the run, node, day, and board seed match.</returns>
+        /// <returns>Full address equality in segment mode; run/node/day/seed equality only in legacy mode.</returns>
         public bool HasSameIdentity(BoardRequest other)
         {
+            if (Address != null || other?.Address != null)
+                return Address != null && other?.Address != null && Address.Equals(other.Address);
             return other != null
                 && string.Equals(RunId, other.RunId, StringComparison.Ordinal)
                 && string.Equals(WorldNodeId, other.WorldNodeId, StringComparison.Ordinal)
@@ -191,6 +208,9 @@ namespace HallowBlaze.Core.Session
         /// Gets the original board request that produced this outcome.
         /// </summary>
         public BoardRequest Request { get; }
+
+        /// <summary>Gets the exact originating address, without reconstructing or reducing its fields.</summary>
+        public BoardAddress Address => Request.Address;
 
         /// <summary>
         /// Gets the type of outcome (exit reached or player died).

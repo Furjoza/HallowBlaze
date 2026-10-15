@@ -246,7 +246,7 @@ namespace HallowBlaze.Tests.EditMode
                 File.ReadAllText(Path.Combine(testRoot, "run.json")));
 
             Assert.That(profileEnvelope.schemaVersion, Is.EqualTo(2));
-            Assert.That(runEnvelope.schemaVersion, Is.EqualTo(1));
+            Assert.That(runEnvelope.schemaVersion, Is.EqualTo(2));
         }
 
         [Serializable]

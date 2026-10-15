@@ -51,6 +51,28 @@ namespace HallowBlaze.Core.World
                 document = parsedDocument;
             }
 
+            if (document["edges"] is JArray edgeRows)
+                foreach (JToken edgeRow in edgeRows)
+                {
+                    if (!(edgeRow is JObject rawEdge))
+                        continue;
+                    foreach (JProperty field in rawEdge.Properties())
+                        if (string.Equals(field.Name, "segments", StringComparison.OrdinalIgnoreCase) && field.Name != "segments")
+                            throw new JsonSerializationException("Segment field names are case-sensitive.");
+                    if (rawEdge["segments"] is JArray segmentRows)
+                        foreach (JToken segmentRow in segmentRows)
+                        {
+                            if (!(segmentRow is JObject row))
+                                throw new JsonSerializationException("Segment rows must be objects.");
+                            foreach (JProperty field in row.Properties())
+                                if (field.Name != "segmentId" && field.Name != "generationConfigurationId" && field.Name != "generationVersion")
+                                    throw new JsonSerializationException("Unknown segment field: " + field.Name);
+                            RequireSegmentToken(row, "segmentId", JTokenType.String);
+                            RequireSegmentToken(row, "generationConfigurationId", JTokenType.String);
+                            RequireSegmentToken(row, "generationVersion", JTokenType.Integer);
+                        }
+                }
+
             JsonSerializer serializer = JsonSerializer.Create(SerializerSettings);
             WorldDefinitionDto dto = document.ToObject<WorldDefinitionDto>(serializer);
             if (dto == null)
@@ -78,6 +100,21 @@ namespace HallowBlaze.Core.World
                 if (edge == null)
                     throw new JsonSerializationException("World edge definitions cannot contain null values.");
 
+                if (edge.Segments != null)
+                {
+                    List<RouteSegmentDefinition> segments = new List<RouteSegmentDefinition>();
+                    foreach (RouteSegmentDto segment in edge.Segments)
+                    {
+                        if (segment == null)
+                            throw new JsonSerializationException("Segment rows cannot be null.");
+                        segments.Add(new RouteSegmentDefinition(segment.SegmentId,
+                            segment.GenerationConfigurationId, segment.GenerationVersion));
+                    }
+                    edges.Add(new WorldEdgeDefinition(edge.EdgeId, edge.FromNodeId, edge.ToNodeId,
+                        edge.Direction, edge.ClueKey, segments));
+                    continue;
+                }
+
                 edges.Add(
                     new WorldEdgeDefinition(
                         edge.EdgeId,
@@ -94,6 +131,12 @@ namespace HallowBlaze.Core.World
                 dto.GoalNodeId,
                 nodes,
                 edges);
+        }
+
+        private static void RequireSegmentToken(JObject row, string field, JTokenType type)
+        {
+            if (row[field] == null || row[field].Type != type)
+                throw new JsonSerializationException("Invalid segment scalar type: " + field);
         }
 
         [JsonObject(MemberSerialization.OptIn)]
@@ -157,6 +200,22 @@ namespace HallowBlaze.Core.World
 
             [JsonProperty("clueKey", Required = Required.Always)]
             public string ClueKey { get; set; }
+
+            [JsonProperty("segments", Required = Required.DisallowNull)]
+            public List<RouteSegmentDto> Segments { get; set; }
+        }
+
+        [JsonObject(MemberSerialization.OptIn)]
+        private sealed class RouteSegmentDto
+        {
+            [JsonProperty("segmentId", Required = Required.Always)]
+            public string SegmentId { get; set; }
+
+            [JsonProperty("generationConfigurationId", Required = Required.Always)]
+            public string GenerationConfigurationId { get; set; }
+
+            [JsonProperty("generationVersion", Required = Required.Always)]
+            public int GenerationVersion { get; set; }
         }
     }
 }

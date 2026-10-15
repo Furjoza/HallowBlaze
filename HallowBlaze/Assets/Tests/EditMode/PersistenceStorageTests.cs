@@ -4,6 +4,7 @@ using System.Linq;
 using HallowBlaze.Core.Persistence;
 using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.State;
+using HallowBlaze.Core.Session;
 using NUnit.Framework;
 
 namespace HallowBlaze.Tests.EditMode
@@ -48,6 +49,48 @@ namespace HallowBlaze.Tests.EditMode
 
             Assert.That(store.LoadProfile().Type, Is.EqualTo(SaveStoreResultType.Missing));
             Assert.That(store.LoadRun().Type, Is.EqualTo(SaveStoreResultType.Missing));
+        }
+
+        [TestCase("pending")]
+        [TestCase("consumed")]
+        [TestCase("intermediate")]
+        [TestCase("complete")]
+        public void TravelRunRecovery_PreservesProfileAndStableBoundary(string boundary)
+        {
+            FileSystemSaveStore store = new FileSystemSaveStore(testRootPath);
+            ProfileState profile = CreateProfile("profile-travel");
+            profile.AdvanceNodeDiscovery("b", NodeDiscoveryState.Visited);
+            profile.AdvanceEdgeDiscovery("edge", EdgeDiscoveryState.Traversed);
+            Assert.That(store.SaveProfile(profile).IsSuccess, Is.True);
+            string profilePath = Path.Combine(testRootPath, "profile.json");
+            byte[] profileBytes = File.ReadAllBytes(profilePath);
+            RunState run = PersistenceDtoTests.TravelBoundary(boundary);
+            Assert.That(store.SaveRun(run).IsSuccess, Is.True);
+            RunState loaded = new FileSystemSaveStore(testRootPath).LoadRun().Data;
+            PersistenceDtoTests.AssertTravelEquals(run, loaded);
+            if (run.ActiveLeg != null)
+                Assert.That(BoardAddressFactory.CreateFromState(loaded), Is.EqualTo(BoardAddressFactory.CreateFromState(run)));
+            Assert.That(store.SaveRun(run).IsSuccess, Is.True);
+            string runPath = Path.Combine(testRootPath, "run.json");
+            File.WriteAllText(runPath, "{bad-json");
+            var recovered = new FileSystemSaveStore(testRootPath).LoadRun();
+            Assert.That(recovered.Type, Is.EqualTo(SaveStoreResultType.Recovered));
+            PersistenceDtoTests.AssertTravelEquals(run, recovered.Data);
+            File.WriteAllText(Path.Combine(testRootPath, "run.backup.json"), "{bad-backup");
+            Assert.That(store.LoadRun().Type, Is.EqualTo(SaveStoreResultType.Corrupt));
+            Assert.That(File.ReadAllBytes(profilePath), Is.EqualTo(profileBytes));
+            Assert.That(store.LoadProfile().Data.GetEdgeDiscoveryState("edge"), Is.EqualTo(EdgeDiscoveryState.Traversed));
+            const string legacy = "{\"schemaVersion\":1,\"runId\":\"old\",\"runSeed\":7,\"currentDay\":3,\"worldNodeId\":\"a\",\"health\":80,\"food\":90,\"status\":\"active\",\"toolSlots\":[{\"toolId\":\"axe\",\"remainingUses\":2},{\"toolId\":\"\",\"remainingUses\":0}],\"route\":[\"a\",\"a\"]}";
+            File.WriteAllText(runPath, legacy);
+            RunState migrated = new FileSystemSaveStore(testRootPath).LoadRun().Data;
+            Assert.That(migrated.CompletedDayCount, Is.EqualTo(3));
+            Assert.That(migrated.TravelHistory, Has.Count.EqualTo(2));
+            Assert.That(migrated.TravelHistory.All(entry => entry.EdgeId == null && entry.LegId == null), Is.True);
+            Assert.That(File.ReadAllText(runPath), Is.EqualTo(legacy), "Reading must not rewrite an old file.");
+            Assert.That(store.SaveRun(migrated).IsSuccess, Is.True);
+            Assert.That(File.ReadAllText(runPath), Does.Contain("\"schemaVersion\": 2"));
+            Assert.That(File.ReadAllText(Path.Combine(testRootPath, "run.backup.json")), Is.EqualTo(legacy));
+            Assert.That(File.ReadAllBytes(profilePath), Is.EqualTo(profileBytes));
         }
 
         [Test]
@@ -359,10 +402,9 @@ namespace HallowBlaze.Tests.EditMode
         public void RunV0MigrationPreservesRunAndFutureVersionIsProtected()
         {
             FileSystemSaveStore store = new FileSystemSaveStore(testRootPath);
-            store.SaveRun(CreateRun("run-v0"));
+            Directory.CreateDirectory(testRootPath);
             string currentPath = Path.Combine(testRootPath, "run.json");
-            string v0Json = File.ReadAllText(currentPath)
-                .Replace("\"schemaVersion\": 1", "\"schemaVersion\": 0");
+            const string v0Json = "{\"schemaVersion\":0,\"runId\":\"run-v0\",\"runSeed\":7,\"currentDay\":3,\"worldNodeId\":\"node.start\",\"health\":80,\"food\":90,\"status\":\"active\",\"toolSlots\":[{\"toolId\":\"axe\",\"remainingUses\":2},{\"toolId\":\"\",\"remainingUses\":0}],\"route\":[\"node.start\"]}";
             File.WriteAllText(currentPath, v0Json);
 
             Assert.That(SaveMigration.MigrateRunV0ToV1(testRootPath).IsSuccess, Is.True);
