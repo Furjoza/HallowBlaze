@@ -4944,13 +4944,13 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 ## `M5.2` — Dwa sloty i stan instancji narzędzia
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-16)
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcja 13.1.
 
 **Rationale:** Dwa generic equipment slots tworzą czytelny koszt okazji. They remain separate from the future spatial backpack rather than acting as a substitute for or becoming cells inside it. Definition, run instance, and authored atlas source need different identities.
 
-**Obecne zachowanie:** Run nie ma docelowego modelu slotów, definicji tool contentu ani ograniczonych użyć.
+**Current behavior:** `RunState` owns exactly two generic equipment cells backed by immutable tool-instance snapshots. Shared definitions, instance identity, charge invariants, explicit equip/replace/remove, compatible persistence, and read-only HUD are implemented. Tool pickup, turn-based use, and effects remain outside this card.
 
 **Oczekiwany rezultat:** `ToolDefinition` ma stabilne ID i niezmienne dane, `ToolInstanceState` has a run-local instance ID, definition ID, and charges, while `RunState` owns exactly two generic slots. A future `toolSourceId` identifies where an instance came from and is never used as the instance ID.
 
@@ -4966,9 +4966,15 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 **Plan testów:** EditMode equip/replace/empty/charges/copy; PlayMode HUD po reload sceny.
 
-**Wpływ na save i kompatybilność:** Run DTO otrzymuje sloty i stable tool IDs; wymaga migracji schema z pustymi slotami.
+**Save and compatibility impact:** The current run writer uses schema v4 with two nullable equipment cells, stable definition/instance IDs, charges, and the durable instance allocator. Readers retain v1-v3 support: empty legacy cells stay empty; occupied legacy cells retain their definition and charges and receive deterministic `tool.N` instance IDs in slot order. Migration does not reset the run, refill tools, rewrite a file on read, change layout RNG/travel identity, or alter profile schema v2. Backup recovery preserves equipment and allocator gaps.
 
-**Wymagany handoff:** Model definition vs instance oraz zachowanie nieznanego tool ID przy load.
+**Definition and instance contract:** `ToolDefinition` is shared immutable content; remaining charges live only in immutable `ToolInstanceState` snapshots. The run allocates monotonically numbered run-local `tool.N` IDs, rejects duplicate equipment, and preserves the allocator after removal or replacement. `EquipTool` requires an empty cell; explicit `ReplaceTool` and `RemoveTool` return the displaced instance. Zero charges remain an occupied slot. A new run clears both slots and its allocator without touching profile knowledge. The future authored `toolSourceId` is not an instance ID and is not introduced by this card.
+
+**Content and presentation:** Authored `axe.basic` and `shovel.basic` placeholders each start with three charges; these are provisional content values, not implemented tool effects or final balance. Both cells accept either definition. The read-only HUD observes the active run, refreshes after changes, recreates after scene reload/Continue, and is hidden during Day/setup and terminal/route-choice presentation. Its reserved top band does not cover the inspectable board. No tool is automatically granted and no tool-use command, pickup decision, backpack, or pocket is added.
+
+**Unknown definition policy:** A syntactically valid unknown definition ID retains its slot, instance ID and exact nonnegative charges through load/save/recovery; it is neither dropped, substituted, nor refilled. The HUD displays `Unknown tool` and its remaining charges. Content lookup owns future availability; malformed equipment is rejected through the existing controlled persistence failure path.
+
+**Acceptance (2026-10-16):** Started from clean baseline `8e655acb78eef4aa0cbb581ff599156baa561f17` on `M5/2/ItemsItems` in Git root `D:/Repos/HallowBlaze`. Unity 6000.3.21f1 compiled the final implementation. Full EditMode passed 951 tests with only the existing Explicit M4.6 10,000-seed milestone skipped; full graphics-enabled PlayMode passed 138/138 without skips. Coverage includes immutable ownership, equip/replace/remove, invalid/depleted charges, atomic restore, allocator gaps/overflow, v1-v4 migration, unknown IDs, isolated file round-trip/backup recovery/profile preservation, real scene reload/Continue, HUD lifetime, and nonblank label pixels at 1280x720 and 320x640. Lead self-review, editor diagnostics, metadata-pair and diff checks found no remaining M5.2 blocker. The owner explicitly requested solo work and continuation of M5.2 despite the still-Pending M4.9 human gate; no independent review or human-playtest verdict is claimed. No commit or push was performed, and this exception does not authorize M5.3.
 
 ---
 
@@ -6124,7 +6130,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further M5 content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately requested and accepted direct implementation/self-review of M5.1, including the diagnosed traversal fixture correction; M5.1 is Done with full EditMode 934 passed plus the existing Explicit skip and graphics PlayMode 134/134. This exception neither closes M4.9 nor authorizes M5.2. Preserve independent review on later cards unless separately waived;
+1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further M5 content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized solo implementation/self-review of M5.1 and then M5.2. Both cards are Done; M5.2 passed full EditMode 951 tests plus the existing Explicit skip and graphics PlayMode 138/138. These card-specific exceptions do not close M4.9 or authorize execution of M5.3, which remains Planned. Preserve independent review on later cards unless separately waived;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6152,7 +6158,9 @@ M4.8 is accepted on 2026-10-15 with latest-heard board memory, fixed Investigate
 
 M4.9 started on 2026-10-15 from clean baseline `fb417dc6b12f484f8e329c383311e49e654683f1` on `M4/9/NoiseGate`. Protocol and test-only capture materials are ready with independent preparation Reviewer PASS, full graphics PlayMode 125/125 and final focused export 2/2. No human sessions have run and no Proceed/Revise/Stop result is claimed. That preparation did not authorize M5 or accept M4 from automated checks; the later owner-authorized M5.1 exception is recorded below. The human gate still requires moderated prediction/readability evidence.
 
-M5.1 was subsequently completed on 2026-10-15 at the owner's request from clean baseline `c0431c142b7d4611dca1c7c29145af7d80a9fe9a` on `M5/1/CommonInteractionModel`, with direct Lead implementation and self-review only. The owner authorized correction of the diagnosed traversal fixture blocker. Final full EditMode passed 934 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 134/134. The M5.1 card is Done; M4.9 remains Pending and M5.2 remains Planned. No commit or push was performed.
+M5.1 was subsequently completed on 2026-10-15 at the owner's request from clean baseline `c0431c142b7d4611dca1c7c29145af7d80a9fe9a` on `M5/1/CommonInteractionModel`, with direct Lead implementation and self-review only. The owner authorized correction of the diagnosed traversal fixture blocker. Final full EditMode passed 934 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 134/134. The M5.1 card is Done; M4.9 remains Pending. No commit or push was performed.
+
+M5.2 was completed on 2026-10-16 at the owner's explicit request from clean baseline `8e655acb78eef4aa0cbb581ff599156baa561f17` on `M5/2/ItemsItems`, with direct Lead implementation and self-review only. It adds two generic identity-bearing equipment cells, immutable definitions/instances, charge invariants, compatible run schema v4 and a read-only HUD. Full EditMode passed 951 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 138/138. M4.9 remains Pending with no human result and M5.3 remains Planned, not authorized for automatic execution. No independent review verdict, commit, or push is claimed.
 
 # Zasada aktualizacji roadmapy
 

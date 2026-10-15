@@ -42,6 +42,45 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(store.LoadRun().Data.RunId, Is.EqualTo("run-main"));
         }
 
+        /// <summary>Equipment survives file round-trip and backup recovery without changing profile knowledge or resetting the allocator.</summary>
+        [Test]
+        public void ToolEquipmentRoundTripsAndRecoversWithoutMutatingProfile()
+        {
+            var store = new FileSystemSaveStore(testRootPath);
+            ProfileState profile = CreateProfile("tool-owner");
+            profile.AdvanceNodeDiscovery("forest.start", NodeDiscoveryState.Visited);
+            Assert.That(store.SaveProfile(profile).IsSuccess, Is.True);
+            byte[] profileBefore = File.ReadAllBytes(Path.Combine(testRootPath, "profile.json"));
+            RunState run = CreateRun("tool-run");
+            run.ClearTool(0);
+            run.ClearTool(1);
+            ToolInstanceState removed = run.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 3));
+            run.EquipTool(0, removed);
+            run.RemoveTool(0);
+            ToolInstanceState kept = run.CreateToolInstance(new ToolDefinition("unknown.retained", "Unknown", 2));
+            run.EquipTool(1, kept);
+            run.TrySpendToolCharge(1, kept.InstanceId);
+            Assert.That(store.SaveRun(run).IsSuccess, Is.True);
+            RunState restored = new FileSystemSaveStore(testRootPath).LoadRun().Data;
+            Assert.That(restored.ToolSlots[0].IsEmpty, Is.True);
+            Assert.That(restored.ToolSlots[1].Instance.InstanceId, Is.EqualTo(kept.InstanceId));
+            Assert.That(restored.ToolSlots[1].Instance.Charges, Is.EqualTo(1));
+            Assert.That(restored.ToolInstanceSequence, Is.EqualTo(run.ToolInstanceSequence));
+            Assert.That(restored.TrySpendToolCharge(1, kept.InstanceId), Is.True);
+            Assert.That(run.ToolSlots[1].Instance.Charges, Is.EqualTo(1));
+            Assert.That(store.SaveRun(run).IsSuccess, Is.True);
+            File.WriteAllText(Path.Combine(testRootPath, "run.json"), "{corrupt");
+            var recovered = store.LoadRun();
+            Assert.That(recovered.Type, Is.EqualTo(SaveStoreResultType.Recovered));
+            Assert.That(recovered.Data.ToolSlots[1].Instance.DefinitionId, Is.EqualTo("unknown.retained"));
+            Assert.That(recovered.Data.ToolSlots[1].Instance.Charges, Is.EqualTo(1));
+            Assert.That(recovered.Data.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 3)).InstanceId,
+                Is.Not.EqualTo(removed.InstanceId).And.Not.EqualTo(kept.InstanceId));
+            recovered.Data.Reset("fresh-run", 42, new RunStateConfiguration(100, 100, 0, "forest.start"));
+            Assert.That(recovered.Data.ToolSlots.All(slot => slot.IsEmpty), Is.True);
+            Assert.That(File.ReadAllBytes(Path.Combine(testRootPath, "profile.json")), Is.EqualTo(profileBefore));
+        }
+
         [Test]
         public void MissingFilesReturnTypedResults()
         {
@@ -88,7 +127,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(migrated.TravelHistory.All(entry => entry.EdgeId == null && entry.LegId == null), Is.True);
             Assert.That(File.ReadAllText(runPath), Is.EqualTo(legacy), "Reading must not rewrite an old file.");
             Assert.That(store.SaveRun(migrated).IsSuccess, Is.True);
-            Assert.That(File.ReadAllText(runPath), Does.Contain("\"schemaVersion\": 3")
+            Assert.That(File.ReadAllText(runPath), Does.Contain("\"schemaVersion\": 4")
                 .And.Contain(RunState.LegacyRandomAlgorithmId));
             Assert.That(File.ReadAllText(Path.Combine(testRootPath, "run.backup.json")), Is.EqualTo(legacy));
             Assert.That(File.ReadAllBytes(profilePath), Is.EqualTo(profileBytes));
@@ -329,7 +368,7 @@ namespace HallowBlaze.Tests.EditMode
             string backupPath = Path.Combine(testRootPath, "run.backup.json");
             string backup = File.ReadAllText(backupPath);
             var document = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(currentPath));
-            document["schemaVersion"] = 4;
+            document["schemaVersion"] = 5;
             string future = document.ToString();
             File.WriteAllText(currentPath, future);
             Assert.That(store.LoadRun().Type, Is.EqualTo(SaveStoreResultType.UnsupportedFutureSchema));

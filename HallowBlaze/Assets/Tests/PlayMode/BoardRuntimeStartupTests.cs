@@ -787,6 +787,8 @@ namespace HallowBlaze.Tests.PlayMode
             EnemyIntentLegend legend = GetManagerField<EnemyIntentLegend>(manager, "activeIntentLegend");
             Assert.That(legend, Is.Not.Null);
             Assert.That(legend.Root.activeInHierarchy, Is.False, "Day 1 must not show a legend over its loading overlay.");
+            ToolHudPresenter toolHud = GetProperty<ToolHudPresenter>(manager, "ActiveToolHud");
+            Assert.That(toolHud.Root.activeInHierarchy, Is.False, "Day N hides equipment as well as resources.");
             Assert.That(legend.Control.gameObject.activeInHierarchy, Is.False);
             float deadline = Time.realtimeSinceStartup + 2;
             while (transition.activeSelf && Time.realtimeSinceStartup < deadline)
@@ -796,6 +798,17 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(legend.Root.activeInHierarchy, Is.True);
             Assert.That(legend.Control.gameObject.activeInHierarchy, Is.True);
             var inspected = (Rect)InvokeManager(manager, "InspectedBoardArea");
+            Assert.That(toolHud.Root.activeInHierarchy, Is.True);
+            Assert.That(toolHud.GetSlotText(0), Is.EqualTo("Empty"));
+            Assert.That(toolHud.GetSlotText(1), Is.EqualTo("Empty"));
+            Assert.That(toolHud.Bounds.Overlaps(inspected), Is.False, "Equipment must not cover inspectable board pixels.");
+            ToolInstanceState equipped = session.ActiveRun.CreateToolInstance(ToolContentCatalog.Load()["axe.basic"]);
+            session.ActiveRun.EquipTool(1, equipped);
+            yield return null;
+            Assert.That(toolHud.GetSlotText(1), Is.EqualTo("Axe  3"));
+            Assert.That(session.ActiveRun.TrySpendToolCharge(1, equipped.InstanceId), Is.True);
+            yield return null;
+            Assert.That(toolHud.GetSlotText(1), Is.EqualTo("Axe  2"));
             Assert.That(legend.PanelBounds.Overlaps(inspected) || legend.ControlBounds.Overlaps(inspected), Is.False);
             legend.Control.onClick.Invoke();
             Assert.That(legend.IsVisible, Is.True);
@@ -809,6 +822,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(session.ActiveRun.Food, Is.EqualTo(99));
             Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.EqualTo(1));
             InvokeManager(manager, "BlockBoardStartup");
+            Assert.That(toolHud.IsDisposed, Is.True);
             Assert.That(camera.rect, Is.EqualTo(originalRect));
             Assert.That(camera.orthographicSize, Is.EqualTo(originalSize));
             TestContext.WriteLine("Day: 1 released; production camera (3.5,3.5,-10), size5; viewport=" + Screen.width + "x" + Screen.height + "; nonoverlapping legend; one command/cost.");

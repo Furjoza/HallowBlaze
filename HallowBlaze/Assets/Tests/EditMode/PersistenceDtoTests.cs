@@ -91,10 +91,10 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
-        public void TravelRunWriter_EmitsCompleteV3StableState()
+        public void TravelRunWriter_EmitsCompleteV4StableState()
         {
             string json = PersistenceJsonSerializer.SerializeTravelRun(TravelBoundary("pending"));
-            Assert.That(json, Does.Contain("\"schemaVersion\": 3").And.Contain("\"introState\": \"pending\""));
+            Assert.That(json, Does.Contain("\"schemaVersion\": 4").And.Contain("\"introState\": \"pending\""));
             Assert.That(json, Does.Not.Contain("\"route\":").And.Not.Contain("\"boardSeed\":").And.Not.Contain("\"currentDay\":"));
             AssertTravelEquals(TravelBoundary("pending"), PersistenceJsonSerializer.DeserializeTravelRun(json));
             Assert.That(RunStateDto.CurrentSchemaVersion, Is.EqualTo(1));
@@ -137,18 +137,89 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
-        public void DefaultRunSchema_UsesV3RngIdentityWithoutProfileChange()
+        public void DefaultRunSchema_UsesV4EquipmentWithoutProfileChange()
         {
             ProfileState profile = new ProfileState("profile", "world.test", 1);
             profile.AdvanceNodeDiscovery("a", NodeDiscoveryState.Visited);
             string profileJson = PersistenceJsonSerializer.SerializeProfile(profile);
             RunState run = TravelBoundary("intermediate");
             string runJson = PersistenceJsonSerializer.SerializeRun(run);
-            Assert.That(runJson, Does.Contain("\"schemaVersion\": 3"));
+            Assert.That(runJson, Does.Contain("\"schemaVersion\": 4"));
             AssertTravelEquals(run, PersistenceJsonSerializer.DeserializeRun(runJson));
             Assert.That(PersistenceJsonSerializer.SerializeProfile(profile), Is.EqualTo(profileJson));
             Assert.That(ProfileStateDto.CurrentSchemaVersion, Is.EqualTo(2));
             Assert.That(RunStateDto.CurrentSchemaVersion, Is.EqualTo(1));
+        }
+
+        /// <summary>Equipment identities, depletion, allocator gaps and unknown definitions survive a detached v4 round-trip.</summary>
+        [Test]
+        public void ToolInstancesRoundTripWithoutAliasingAndRetainUnknownDefinition()
+        {
+            RunState run = TravelBoundary("consumed");
+            run.ClearTool(0);
+            run.ClearTool(1);
+            ToolInstanceState removed = run.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 3));
+            ToolInstanceState unknown = run.CreateToolInstance(new ToolDefinition("uninstalled.tool", "Unknown", 1));
+            run.EquipTool(1, unknown);
+            run.TrySpendToolCharge(1, unknown.InstanceId);
+            RunStateV4Dto dto = RunStateV4Mapper.ToDto(run);
+            RunState restored = PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(run));
+            Assert.That(restored.ToolSlots[0].IsEmpty, Is.True);
+            Assert.That(restored.ToolSlots[1].Instance.DefinitionId, Is.EqualTo("uninstalled.tool"));
+            Assert.That(restored.ToolSlots[1].Instance.InstanceId, Is.EqualTo(unknown.InstanceId));
+            Assert.That(restored.ToolSlots[1].Instance.Charges, Is.Zero);
+            Assert.That(restored.ToolInstanceSequence, Is.EqualTo(run.ToolInstanceSequence));
+            Assert.That(BoardAddressFactory.CreateFromState(restored), Is.EqualTo(BoardAddressFactory.CreateFromState(run)));
+            dto.ToolSlots[1].Charges = 99;
+            Assert.That(restored.ToolSlots[1].Instance.Charges, Is.Zero);
+            Assert.That(run.ToolSlots[1].Instance.Charges, Is.Zero);
+            Assert.That(restored.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 3)).InstanceId,
+                Is.Not.EqualTo(removed.InstanceId).And.Not.EqualTo(unknown.InstanceId));
+        }
+
+        /// <summary>All historical schemas acquire deterministic instance IDs and preserve existing rewards, RNG and tool values.</summary>
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public void LegacyToolSlotsMigrateWithoutLosingChargesAndEmptySlotsStayEmpty(int version)
+        {
+            RunState original = TravelBoundary("checkpoint");
+            original.ClearTool(1);
+            object dto = version == 1 ? (object)RunStateMapper.ToDto(original) :
+                version == 2 ? RunStateV2Mapper.ToDto(original) : (object)RunStateV3Mapper.ToDto(original);
+            RunState migrated = PersistenceJsonSerializer.DeserializeRun(JsonConvert.SerializeObject(dto));
+            Assert.That(migrated.ToolSlots[0].Instance.InstanceId, Is.EqualTo("tool.1"));
+            Assert.That(migrated.ToolSlots[0].ToolId, Is.EqualTo(original.ToolSlots[0].ToolId));
+            Assert.That(migrated.ToolSlots[0].RemainingUses, Is.EqualTo(original.ToolSlots[0].RemainingUses));
+            Assert.That(migrated.ToolSlots[1].IsEmpty, Is.True);
+            Assert.That(migrated.ToolInstanceSequence, Is.EqualTo(1));
+            original.ClearTool(0);
+            dto = version == 1 ? (object)RunStateMapper.ToDto(original) :
+                version == 2 ? RunStateV2Mapper.ToDto(original) : (object)RunStateV3Mapper.ToDto(original);
+            RunState empty = PersistenceJsonSerializer.DeserializeRun(JsonConvert.SerializeObject(dto));
+            Assert.That(empty.ToolSlots.All(slot => slot.IsEmpty), Is.True);
+            Assert.That(empty.ToolInstanceSequence, Is.Zero);
+        }
+
+        /// <summary>Malformed v4 equipment is rejected rather than coerced, partially restored or silently replaced.</summary>
+        [TestCase("count")]
+        [TestCase("duplicate")]
+        [TestCase("unallocated")]
+        [TestCase("negative")]
+        [TestCase("coerced")]
+        [TestCase("missing")]
+        [TestCase("source-as-instance")]
+        public void ToolPersistenceRejectsMalformedEquipment(string invalid)
+        {
+            JObject json = JObject.Parse(PersistenceJsonSerializer.SerializeRun(TravelBoundary("consumed")));
+            if (invalid == "count") ((JArray)json["toolSlots"]).RemoveAt(1);
+            if (invalid == "duplicate") json["toolSlots"][1] = json["toolSlots"][0].DeepClone();
+            if (invalid == "unallocated") json["toolInstanceSequence"] = 0;
+            if (invalid == "negative") json["toolSlots"][0]["charges"] = -1;
+            if (invalid == "coerced") json["toolSlots"][0]["charges"] = "3";
+            if (invalid == "missing") ((JObject)json["toolSlots"][0]).Remove("definitionId");
+            if (invalid == "source-as-instance") json["toolSlots"][0]["instanceId"] = "atlas.source.axe";
+            Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeRun(json.ToString()));
         }
 
         [TestCase("checkpoint")]
@@ -536,7 +607,7 @@ namespace HallowBlaze.Tests.EditMode
         {
             string futureDocument = profile
                 ? "{\"schemaVersion\":3}"
-                : "{\"schemaVersion\":4}";
+                : "{\"schemaVersion\":5}";
 
             PersistenceDataException exception = Assert.Throws<PersistenceDataException>(() =>
             {
