@@ -4861,7 +4861,7 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 ## `M4.9` — Bramka czytelności intentów i hałasu
 
-**Status:** `Planned`  
+**Status:** `Active` - preparation ready on 2026-10-15; human sessions and gate decision pending.
 **Priorytet:** P1  
 **Powiązany kontrakt:** bramka intentów z sekcji 22.
 
@@ -4886,6 +4886,8 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 **Wpływ na save i kompatybilność:** Brak; profile testowe są izolowane.
 
 **Wymagany handoff:** Zanonimizowana tabela wyników, obserwacje i dokładna rekomendacja dalszego działania.
+
+**Preparation (2026-10-15):** [The M4.9 protocol](Validation/M4.9.md) preregisters 5-8 moderated sessions, separate first-contact/learned responses, counterbalanced forms, whole-phase prediction locking, error categories and explicit decision thresholds. A test-only fixture exports two forms of four Shambler cases, four Listener cases and a two-branch deliberate-lure choice using production composition/resolution/presenters, without production changes. Full graphics-enabled PlayMode **125/125** and final focused export **2/2** passed. Independent technical and protocol preparation reviews returned **PASS**, with scoring ambiguities resolved. Eighteen blind images, twenty moderator outcome images and empty response templates are external technical materials, not participant evidence. Formal participants **0**, locked responses **0**; the human gate remains **Pending**, not Proceed or Done. The owner requested direct Lead implementation without Developer delegation and retained independent review. M5 content is not authorized by this preparation.
 
 ### Bramka M4
 
@@ -6109,7 +6111,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. continue M4 with `M4.9` after the accepted M4.8 changes are committed and a new clean baseline is established; this is a moderated human-playtest gate, not a task that automated tests alone can close. Follow the existing dependency order and preserve independent review; the M3.12 and M4.1-M4.5 review waivers do not extend to later tasks, and M4.6-M4.8 received independent review;
+1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before advancing to M5 content. Technical preparation passed, but zero participants is not a closed human gate. Preserve independent review; the M3.12 and M4.1-M4.5 review waivers do not extend to later tasks;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6133,7 +6135,9 @@ M4.6 is accepted on 2026-10-15 with repeatable daily/milestone seed gates, full 
 
 M4.7 is accepted on 2026-10-15 with deterministic board-owned noise, atomic accepted-action emission, explicit command-based expiration and a shared hearing/debug footprint. Full EditMode passed 895 tests with the existing Explicit M4.6 milestone skipped; graphics-enabled PlayMode passed 120/120. Independent Reviewer returned PASS. Listener reaction was subsequently implemented in M4.8.
 
-M4.8 is accepted on 2026-10-15 with latest-heard board memory, fixed Investigate opportunities, shared Shambler/Listener initiative and explicit authored runtime/display mapping. Full EditMode passed 921 tests with the existing Explicit M4.6 milestone skipped; graphics-enabled PlayMode passed 123/123. Independent Reviewer returned PASS across all reviewed implementation scopes. Direct Lead implementation followed the owner's current instruction; no Developer PASS is claimed. Published generation content and saves remain unchanged. M4.9 is the next planned task and requires moderated human prediction/readability evidence.
+M4.8 is accepted on 2026-10-15 with latest-heard board memory, fixed Investigate opportunities, shared Shambler/Listener initiative and explicit authored runtime/display mapping. Full EditMode passed 921 tests with the existing Explicit M4.6 milestone skipped; graphics-enabled PlayMode passed 123/123. Independent Reviewer returned PASS across all reviewed implementation scopes. Direct Lead implementation followed the owner's current instruction; no Developer PASS is claimed. Published generation content and saves remain unchanged.
+
+M4.9 started on 2026-10-15 from clean baseline `fb417dc6b12f484f8e329c383311e49e654683f1` on `M4/9/NoiseGate`. Protocol and test-only capture materials are ready with independent preparation Reviewer PASS, full graphics PlayMode 125/125 and final focused export 2/2. No human sessions have run and no Proceed/Revise/Stop result is claimed. The active task is to collect moderated prediction/readability evidence, not to start M5 or mark M4 accepted from automated checks.
 
 # Zasada aktualizacji roadmapy
 
