@@ -44,7 +44,10 @@ namespace HallowBlaze.Presentation.Runtime
         Aid,
 
         /// <summary>A legacy enemy view.</summary>
-        Enemy
+        Enemy,
+
+        /// <summary>An explicitly authored noise-only Listener, never inferred from a Shambler damage variant.</summary>
+        Listener
     }
 
     /// <summary>Describes how one legacy content category participates in the authoritative runtime.</summary>
@@ -232,7 +235,8 @@ namespace HallowBlaze.Presentation.Runtime
                     EntityKind.Item,
                     "legacy.aid",
                     new BoardEntityTraits(false, false, true)),
-                Mapped(LegacyBoardContentKind.Enemy, BoardLayer.Actor, EntityKind.Enemy, "legacy.enemy")
+                Mapped(LegacyBoardContentKind.Enemy, BoardLayer.Actor, EntityKind.Enemy, "legacy.enemy"),
+                Mapped(LegacyBoardContentKind.Listener, BoardLayer.Actor, EntityKind.Enemy, "enemy.listener")
             });
 
         private static readonly IReadOnlyDictionary<LegacyBoardContentKind, LegacyBoardContentDefinition> byKind =

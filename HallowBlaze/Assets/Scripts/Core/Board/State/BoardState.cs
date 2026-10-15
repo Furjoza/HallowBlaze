@@ -21,6 +21,7 @@ namespace HallowBlaze.Core.Board.State
         private readonly Dictionary<EntityId, BoardEntityState> entitiesById;
         private readonly Dictionary<BoardLayer, Dictionary<GridPosition, EntityId>> entityIdsByLayer;
         private readonly List<BoardNoise> activeNoises;
+        private readonly Dictionary<EntityId, BoardNoise> listenerNoises = new Dictionary<EntityId, BoardNoise>();
         private long nextNoiseId;
 
         /// <summary>
@@ -79,7 +80,7 @@ namespace HallowBlaze.Core.Board.State
         }
 
         /// <summary>
-        /// Removes an entity and its layer occupancy entry as one operation.
+        /// Removes an entity, its layer occupancy entry and any Listener hearing registration as one operation.
         /// </summary>
         /// <param name="id">The board-local entity identifier.</param>
         /// <returns><see langword="true"/> when an entity was removed; otherwise, <see langword="false"/>.</returns>
@@ -91,6 +92,7 @@ namespace HallowBlaze.Core.Board.State
             Dictionary<GridPosition, EntityId> layer = entityIdsByLayer[entity.Definition.Layer];
             layer.Remove(entity.Position);
             entitiesById.Remove(id);
+            listenerNoises.Remove(id);
             return true;
         }
 
@@ -197,8 +199,37 @@ namespace HallowBlaze.Core.Board.State
                 clone.activeNoises.Add(noise);
             }
             clone.nextNoiseId = nextNoiseId;
+            foreach (var listener in listenerNoises)
+                clone.listenerNoises.Add(listener.Key, listener.Value);
 
             return clone;
+        }
+
+        /// <summary>
+        /// Registers a live enemy to remember future audible emissions on this board only.
+        /// Registration does not hear past signals, move the actor or replace any locked intent.
+        /// </summary>
+        /// <param name="actorId">The existing enemy actor, registered at most once.</param>
+        /// <exception cref="ArgumentException">The identity is not a live enemy actor or is already registered.</exception>
+        public void RegisterListener(EntityId actorId)
+        {
+            if (!TryGetEntity(actorId, out BoardEntityState actor) || actor.Definition.Layer != BoardLayer.Actor ||
+                !actor.Definition.Kind.Equals(EntityKind.Enemy) || listenerNoises.ContainsKey(actorId))
+                throw new ArgumentException("A Listener requires one unique live enemy actor.", nameof(actorId));
+            listenerNoises.Add(actorId, null);
+        }
+
+        /// <summary>
+        /// Reads the latest noise heard at emission, using the exact immutable UI/hearing footprint.
+        /// Newer emission IDs win even when quieter. A remembered source need not still exist;
+        /// its target survives movement outside the footprint but not the noise's expiration.
+        /// </summary>
+        /// <param name="actorId">A board-registered Listener.</param>
+        /// <param name="noise">The current immutable signal, or null when no active heard signal remains.</param>
+        /// <returns>True only when that Listener remembers a currently active signal.</returns>
+        public bool TryGetListenerNoise(EntityId actorId, out BoardNoise noise)
+        {
+            return listenerNoises.TryGetValue(actorId, out noise) && noise != null;
         }
 
         /// <summary>
@@ -272,6 +303,9 @@ namespace HallowBlaze.Core.Board.State
             var noise = new BoardNoise(nextNoiseId, sourceId, position, strength, lifetimeTurns, audibleCells);
             activeNoises.Add(noise);
             nextNoiseId++;
+            foreach (EntityId listenerId in new List<EntityId>(listenerNoises.Keys))
+                if (TryGetEntity(listenerId, out BoardEntityState listener) && noise.IsAudible(listener.Position))
+                    listenerNoises[listenerId] = noise;
             return noise;
         }
 
@@ -305,6 +339,13 @@ namespace HallowBlaze.Core.Board.State
                 {
                     activeNoises.RemoveAt(noiseIndex);
                 }
+            }
+            foreach (EntityId listenerId in new List<EntityId>(listenerNoises.Keys))
+            {
+                BoardNoise remembered = listenerNoises[listenerId];
+                if (remembered == null)
+                    continue;
+                listenerNoises[listenerId] = activeNoises.Find(noise => noise.Id == remembered.Id);
             }
         }
     }

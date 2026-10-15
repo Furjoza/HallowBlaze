@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
+using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.Turns.Resolution;
 using UnityEngine;
 using EntityId = HallowBlaze.Core.Board.Primitives.EntityId;
@@ -59,11 +60,12 @@ namespace HallowBlaze.Presentation.Runtime
         /// </summary>
         /// <param name="board">Borrowed board used only to copy the current enemy source cells.</param>
         /// <param name="enemies">Unique non-null states with retained intents; enumeration order is irrelevant.</param>
+        /// <param name="listeners">Optional Listener roster; actor IDs must also be unique across archetypes.</param>
         /// <exception cref="ArgumentNullException">The board or enemy collection is null.</exception>
         /// <exception cref="ArgumentException">States are duplicated, missing a retained plan/source, or cannot use shared-cell geometry.</exception>
         /// <exception cref="ObjectDisposedException">This display lifetime has ended.</exception>
         /// <exception cref="InvalidOperationException">The presenter is unbound/stale or required glyph rendering is unavailable.</exception>
-        public void Publish(BoardState board, IEnumerable<ShamblerState> enemies)
+        public void Publish(BoardState board, IEnumerable<ShamblerState> enemies, IEnumerable<ListenerState> listeners = null)
         {
             EnsureOpen();
             if (board == null)
@@ -80,12 +82,22 @@ namespace HallowBlaze.Presentation.Runtime
             IReadOnlyList<ShamblerState> ordered = EnemyInitiativeOrder.Create(enemies);
             var projections = new List<EnemyIntentProjection>(ordered.Count);
             var targets = new Dictionary<GridPosition, int>();
+            var plans = new SortedDictionary<EntityId, EnemyIntent>();
             foreach (ShamblerState enemy in ordered)
+                plans.Add(enemy.ActorId, enemy.LockedIntent);
+            if (listeners != null)
+                foreach (ListenerState listener in listeners)
+                {
+                    if (listener == null || plans.ContainsKey(listener.ActorId))
+                        throw new ArgumentException("Display actors must be unique across archetypes.", nameof(listeners));
+                    plans.Add(listener.ActorId, listener.LockedIntent);
+                }
+            foreach (var plan in plans)
             {
-                if (enemy.LockedIntent == null || !board.TryGetEntity(enemy.ActorId, out BoardEntityState entity) ||
+                if (plan.Value == null || !board.TryGetEntity(plan.Key, out BoardEntityState entity) ||
                     entity.Definition.Layer != BoardLayer.Actor || !entity.Definition.Kind.Equals(EntityKind.Enemy))
                     throw new ArgumentException("Every source must be a board enemy with one retained intent.", nameof(enemies));
-                EnemyIntentProjection projection = EnemyIntentProjection.FromRetainedIntent(enemy.LockedIntent, entity.Position);
+                EnemyIntentProjection projection = EnemyIntentProjection.FromRetainedIntent(plan.Value, entity.Position);
                 projections.Add(projection);
                 if (projection.TargetPosition.HasValue)
                 {

@@ -18,6 +18,7 @@ namespace HallowBlaze.Presentation.Runtime
         /// Entity IDs are assigned after deterministic sorting and never depend on Unity instance IDs
         /// or descriptor enumeration order. Enemy descriptors require explicit 10/20 HP variants;
         /// their initial active intents are retained on the sole controller before publication.
+        /// Explicit Listener descriptors require no damage and start with target-free Wait.
         /// </summary>
         /// <param name="request">The stable request used to generate this board.</param>
         /// <param name="runState">The active run referenced by the request.</param>
@@ -120,6 +121,7 @@ namespace HallowBlaze.Presentation.Runtime
             var boardState = new BoardState(bounds);
             var registry = new Dictionary<EntityId, GameObject>(mapped.Count);
             var enemies = new List<ShamblerState>();
+            var listeners = new List<ListenerState>();
             EntityId playerId = default(EntityId);
             for (int index = 0; index < mapped.Count; index++)
             {
@@ -148,9 +150,11 @@ namespace HallowBlaze.Presentation.Runtime
                     playerId = id;
                 else if (mappedView.Descriptor.Kind == LegacyBoardContentKind.Enemy)
                     enemies.Add(new ShamblerState(id, new ShamblerDefinition(mappedView.Descriptor.EnemyDamage.Value)));
+                else if (mappedView.Descriptor.Kind == LegacyBoardContentKind.Listener)
+                    listeners.Add(new ListenerState(id, new ListenerDefinition()));
             }
 
-            return new BoardRuntime(request, runState, boardState, playerId, registry, enemies);
+            return new BoardRuntime(request, runState, boardState, playerId, registry, enemies, listeners);
         }
 
         private static void ValidateIdentity(BoardRequest request, RunState runState)

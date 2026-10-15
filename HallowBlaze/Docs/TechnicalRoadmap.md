@@ -4829,7 +4829,7 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 ## `M4.8` — Listener reagujący na ostatni słyszany hałas
 
-**Status:** `Planned`  
+**Status:** `Done` - accepted 2026-10-15 after Lead validation and independent Reviewer PASS across all implementation scopes.
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 11.3 i 12.
 
@@ -4854,6 +4854,8 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 **Wpływ na save i kompatybilność:** Pamięć hałasu żyje tylko w BoardState.
 
 **Wymagany handoff:** Jednozdaniowa reguła Listenera i macierz przykładów.
+
+**Accepted scope (2026-10-15):** Noise-only Listener definition, board-owned event-time hearing memory, stable newest-emission selection and explicit target expiration. `Investigate` retains the origin, immediate step, noise source and emission ID; invalidation consumes the opportunity as Wait without replanning or an undeclared attack. Shambler and Listener opportunities share stable actor-ID initiative and live occupancy. Explicit authored `Listener` content maps to `enemy.listener`, with magnifier/source-diamond presentation before input and lifecycle-safe replay. Published generation configurations, existing Shambler variants, saved layouts and save format are unchanged. [The rule and example matrix](Testing.md#m48-listener) include real command-based luring and the intentional no-pursuit/no-attack fallback. Final full EditMode **921 passed, 0 failed, 1 expected pre-existing Explicit M4.6 skip** and graphics-enabled PlayMode **123/123** passed. New memory **7/7**, Listener domain **12/12**, turn scenarios **7/7** and presentation **3/3** passed. Independent read-only reviews of core execution, hearing/initiative, composition and presentation all returned **PASS**, after larger provider requests failed to return a verdict. The owner explicitly requested direct Lead implementation without Developer delegation; independent review was retained. No scene/prefab, package/settings or protected agent configuration changes. M4.9 remains a separate moderated human-readability gate, not an automated acceptance claim.
 
 ---
 
@@ -6107,7 +6109,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. continue M4 with `M4.8` after the accepted M4.7 changes are committed and a new clean baseline is established, then follow the existing dependency order; the M3.12 and M4.1-M4.5 review authorizations and M4.7 implementation takeover do not extend to later tasks, and M4.6-M4.7 received independent review;
+1. continue M4 with `M4.9` after the accepted M4.8 changes are committed and a new clean baseline is established; this is a moderated human-playtest gate, not a task that automated tests alone can close. Follow the existing dependency order and preserve independent review; the M3.12 and M4.1-M4.5 review waivers do not extend to later tasks, and M4.6-M4.8 received independent review;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6129,7 +6131,9 @@ M4.5 is accepted on 2026-10-15 with bounded deterministic attempts, two validate
 
 M4.6 is accepted on 2026-10-15 with repeatable daily/milestone seed gates, full histogram/failure diagnostics, per-segment and complete-edge resource evidence, and independent Reviewer PASS. The 10,000-board gate passed twice with identical hash, zero invalid/static-unreachable boards and 0% fallback usage against the predeclared 1% ceiling. Full EditMode passed 867 tests with only the intentionally Explicit milestone skipped; that milestone passed separately. Current production budgets and runtime are unchanged by M4.6.
 
-M4.7 is accepted on 2026-10-15 with deterministic board-owned noise, atomic accepted-action emission, explicit command-based expiration and a shared hearing/debug footprint. Full EditMode passed 895 tests with the existing Explicit M4.6 milestone skipped; graphics-enabled PlayMode passed 120/120. Independent Reviewer returned PASS. Listener reaction remains unimplemented and belongs to M4.8, the next planned task.
+M4.7 is accepted on 2026-10-15 with deterministic board-owned noise, atomic accepted-action emission, explicit command-based expiration and a shared hearing/debug footprint. Full EditMode passed 895 tests with the existing Explicit M4.6 milestone skipped; graphics-enabled PlayMode passed 120/120. Independent Reviewer returned PASS. Listener reaction was subsequently implemented in M4.8.
+
+M4.8 is accepted on 2026-10-15 with latest-heard board memory, fixed Investigate opportunities, shared Shambler/Listener initiative and explicit authored runtime/display mapping. Full EditMode passed 921 tests with the existing Explicit M4.6 milestone skipped; graphics-enabled PlayMode passed 123/123. Independent Reviewer returned PASS across all reviewed implementation scopes. Direct Lead implementation followed the owner's current instruction; no Developer PASS is claimed. Published generation content and saves remain unchanged. M4.9 is the next planned task and requires moderated human prediction/readability evidence.
 
 # Zasada aktualizacji roadmapy
 

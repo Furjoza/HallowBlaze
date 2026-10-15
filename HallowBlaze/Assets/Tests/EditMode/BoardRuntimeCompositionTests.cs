@@ -47,7 +47,8 @@ namespace HallowBlaze.Tests.EditMode
                 LegacyBoardContentKind.BushFood,
                 LegacyBoardContentKind.BuriedFood,
                 LegacyBoardContentKind.Aid,
-                LegacyBoardContentKind.Enemy
+                LegacyBoardContentKind.Enemy,
+                LegacyBoardContentKind.Listener
             };
 
             CollectionAssert.AreEquivalent(
@@ -65,6 +66,11 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(FoodReward(LegacyBoardContentKind.Food), Is.EqualTo(10));
             Assert.That(FoodReward(LegacyBoardContentKind.Soda), Is.EqualTo(20));
             Assert.That(FoodReward(LegacyBoardContentKind.BushFood), Is.EqualTo(10));
+            LegacyBoardContentDefinition listener = LegacyBoardContentCatalog.Definitions.Single(
+                definition => definition.Kind == LegacyBoardContentKind.Listener);
+            Assert.That(listener.ContentId, Is.EqualTo("enemy.listener"));
+            Assert.That(listener.Layer, Is.EqualTo(BoardLayer.Actor));
+            Assert.That(listener.EntityKind, Is.EqualTo(EntityKind.Enemy));
             Assert.That(LegacyBoardContentCatalog.DeferredLegacyMutationPaths, Is.Empty);
         }
 

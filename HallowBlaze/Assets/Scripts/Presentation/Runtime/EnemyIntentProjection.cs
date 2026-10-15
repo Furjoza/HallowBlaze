@@ -13,7 +13,7 @@ namespace HallowBlaze.Presentation.Runtime
         ConditionalMove = 2,
         /// <summary>An attack at the recorded cell rather than at a newly selected target.</summary>
         Attack = 3,
-        /// <summary>A presentation-only investigation example until a domain rule is accepted.</summary>
+        /// <summary>A fixed investigation step toward a recorded heard noise source.</summary>
         Investigate = 4,
         /// <summary>An opportunity with no movement, attack, or target.</summary>
         Wait = 5
@@ -35,17 +35,23 @@ namespace HallowBlaze.Presentation.Runtime
         public GridPosition? TargetPosition { get; }
         /// <summary>Gets the recorded original player identity for attacks, or null for non-attacking examples.</summary>
         public EntityId? TargetId { get; }
+        /// <summary>Gets the heard noise source, separate from the immediately announced step; null for other shapes/examples.</summary>
+        public GridPosition? InvestigationTarget { get; }
+        /// <summary>Gets the exact emission ID of an announced investigation, otherwise null.</summary>
+        public long? NoiseId { get; }
         /// <summary>Gets whether the symbol preserves the declared same-cell player-entry attack condition.</summary>
         public bool AttackOnPlayerEntry => Symbol == EnemyIntentSymbol.ConditionalMove;
 
         private EnemyIntentProjection(EntityId sourceId, GridPosition sourcePosition, EnemyIntentSymbol symbol,
-            GridPosition? targetPosition, EntityId? targetId)
+            GridPosition? targetPosition, EntityId? targetId, GridPosition? investigationTarget = null, long? noiseId = null)
         {
             SourceId = sourceId;
             SourcePosition = sourcePosition;
             Symbol = symbol;
             TargetPosition = targetPosition;
             TargetId = targetId;
+            InvestigationTarget = investigationTarget;
+            NoiseId = noiseId;
         }
 
         /// <summary>
@@ -73,15 +79,19 @@ namespace HallowBlaze.Presentation.Runtime
                 case EnemyIntentKind.Wait:
                     symbol = EnemyIntentSymbol.Wait;
                     break;
+                case EnemyIntentKind.Investigate:
+                    symbol = EnemyIntentSymbol.Investigate;
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(intent), intent.Kind, "No display mapping is accepted for this action.");
             }
-            return new EnemyIntentProjection(intent.ActorId, sourcePosition, symbol, intent.TargetPosition, intent.TargetId);
+            return new EnemyIntentProjection(intent.ActorId, sourcePosition, symbol, intent.TargetPosition, intent.TargetId,
+                intent.InvestigationTarget, intent.NoiseId);
         }
 
         /// <summary>
-        /// Creates validated prototype or legend data, including ordinary move and investigate examples
-        /// absent from current Shambler plans. This does not create a domain action or Listener behavior.
+        /// Creates validated prototype or legend data, including shapes absent from Shambler plans.
+        /// This does not create a domain action, hearing memory or Listener behavior.
         /// </summary>
         /// <param name="sourceId">The example actor identity; zero and negative values are valid.</param>
         /// <param name="sourcePosition">The copied source cell, without inferred board legality.</param>
@@ -110,7 +120,8 @@ namespace HallowBlaze.Presentation.Runtime
         public bool Equals(EnemyIntentProjection other)
         {
             return other != null && SourceId.Equals(other.SourceId) && SourcePosition.Equals(other.SourcePosition) &&
-                Symbol == other.Symbol && Nullable.Equals(TargetPosition, other.TargetPosition) && Nullable.Equals(TargetId, other.TargetId);
+                Symbol == other.Symbol && Nullable.Equals(TargetPosition, other.TargetPosition) && Nullable.Equals(TargetId, other.TargetId) &&
+                Nullable.Equals(InvestigationTarget, other.InvestigationTarget) && Nullable.Equals(NoiseId, other.NoiseId);
         }
 
         /// <inheritdoc />
@@ -126,7 +137,9 @@ namespace HallowBlaze.Presentation.Runtime
                 hash = hash * 23 + SourcePosition.GetHashCode();
                 hash = hash * 23 + (int)Symbol;
                 hash = hash * 23 + TargetPosition.GetHashCode();
-                return hash * 23 + TargetId.GetHashCode();
+                hash = hash * 23 + TargetId.GetHashCode();
+                hash = hash * 23 + InvestigationTarget.GetHashCode();
+                return hash * 23 + NoiseId.GetHashCode();
             }
         }
     }

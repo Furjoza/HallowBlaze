@@ -22,6 +22,8 @@ namespace HallowBlaze.Presentation.Runtime
         private readonly ReadOnlyDictionary<EntityId, GameObject> readOnlyViews;
         private readonly List<ShamblerState> mutableEnemies;
         private readonly ReadOnlyCollection<ShamblerState> readOnlyEnemies;
+        private readonly List<ListenerState> mutableListeners;
+        private readonly ReadOnlyCollection<ListenerState> readOnlyListeners;
         private BoardRequest request;
         private RunState runState;
         private BoardState boardState;
@@ -34,7 +36,8 @@ namespace HallowBlaze.Presentation.Runtime
             BoardState boardState,
             EntityId playerId,
             Dictionary<EntityId, GameObject> views,
-            IEnumerable<ShamblerState> enemies)
+            IEnumerable<ShamblerState> enemies,
+            IEnumerable<ListenerState> listeners = null)
         {
             this.request = request ?? throw new ArgumentNullException(nameof(request));
             this.runState = runState ?? throw new ArgumentNullException(nameof(runState));
@@ -43,8 +46,13 @@ namespace HallowBlaze.Presentation.Runtime
             readOnlyViews = new ReadOnlyDictionary<EntityId, GameObject>(mutableViews);
             mutableEnemies = new List<ShamblerState>(EnemyInitiativeOrder.Create(enemies));
             readOnlyEnemies = mutableEnemies.AsReadOnly();
+            mutableListeners = new List<ListenerState>(listeners ?? Array.Empty<ListenerState>());
+            mutableListeners.Sort((left, right) => left.ActorId.CompareTo(right.ActorId));
+            readOnlyListeners = mutableListeners.AsReadOnly();
             PlayerId = playerId;
-            var enemyPhases = new EnemyBatchTurnPhases(readOnlyEnemies);
+            var enemyPhases = new MixedEnemyTurnPhases(readOnlyEnemies, readOnlyListeners);
+            foreach (ListenerState listener in readOnlyListeners)
+                boardState.RegisterListener(listener.ActorId);
             enemyPhases.PlanInitialIntents(boardState, playerId);
             controller = new TurnController(boardState, runState, playerId,
                 new TurnResolver(ActionNoiseProfile.Prototype), enemyPhases.Handlers);
@@ -126,6 +134,17 @@ namespace HallowBlaze.Presentation.Runtime
             }
         }
 
+        /// <summary>Gets the separate read-only Listener roster; hearing memory remains owned by BoardState.</summary>
+        /// <exception cref="ObjectDisposedException">This runtime has been disposed.</exception>
+        public IReadOnlyList<ListenerState> Listeners
+        {
+            get
+            {
+                EnsureActive();
+                return readOnlyListeners;
+            }
+        }
+
         /// <summary>Releases resolver and enemy roster ownership and clears borrowed view references without destroying views.</summary>
         public void Dispose()
         {
@@ -135,6 +154,7 @@ namespace HallowBlaze.Presentation.Runtime
             isDisposed = true;
             mutableViews.Clear();
             mutableEnemies.Clear();
+            mutableListeners.Clear();
             controller = null;
             boardState = null;
             runState = null;
