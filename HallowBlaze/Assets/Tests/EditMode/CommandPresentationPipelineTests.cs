@@ -45,6 +45,7 @@ namespace HallowBlaze.Tests.EditMode
             dispatcher = new OrderedEventDispatcher(value => diagnostic = value, () => recoveryCount++);
             coordinator = new CommandPresentationCoordinator(runtime, gate, dispatcher, value => rejection = value);
             dispatcher.Register<ActionCostAppliedEvent>((gameEvent, token) => Record(gameEvent));
+            dispatcher.Register<NoiseEvent>((gameEvent, token) => Record(gameEvent));
             trace.Clear();
             diagnostic = null;
             recoveryCount = 0;
@@ -83,7 +84,7 @@ namespace HallowBlaze.Tests.EditMode
             while (!first.IsCompleted)
                 yield return null;
             Assert.That(first.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
-            CollectionAssert.AreEqual(new[] { "EntityMoved", "ActionCostApplied" }, trace);
+            CollectionAssert.AreEqual(new[] { "EntityMoved", "ActionCostApplied", "Noise" }, trace);
             Assert.That(gate.State, Is.EqualTo(PresentationGateState.Idle));
             Assert.That(coordinator.CanSubmit, Is.False);
             gate.SetBlocked(PresentationInputBlock.Modal, false);

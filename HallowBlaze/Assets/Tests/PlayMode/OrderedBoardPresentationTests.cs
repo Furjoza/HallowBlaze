@@ -67,7 +67,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(immediate.FoodView.activeSelf, Is.False);
             Assert.That(animated.Runtime.RunState.Food, Is.EqualTo(immediate.Runtime.RunState.Food));
             CollectionAssert.AreEqual(animated.Sink.Trace, immediate.Sink.Trace);
-            CollectionAssert.AreEqual(new[] { "EntityMoved", "Hud:100:109", "FoodRestored", "Hud:100:109" }, animated.Sink.Trace);
+            CollectionAssert.AreEqual(new[] { "EntityMoved", "Hud:100:109", "FoodRestored", "Hud:100:109", "Noise" }, animated.Sink.Trace);
             Assert.That(animated.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
             Assert.That(immediate.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
             Assert.That(animated.Presenter.Coordinator.CanSubmit, Is.True);
@@ -178,7 +178,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(98));
             Assert.That(fixture.Runtime.Views[fixture.Runtime.PlayerId].transform.position, Is.EqualTo(origin));
             Assert.That(fixture.Runtime.Views[fixture.AidId].activeSelf, Is.True);
-            CollectionAssert.AreEqual(new[] { "EntityWaited", "Hud:100:99", "InteractionPerformed", "Hud:100:98" }, fixture.Sink.Trace);
+            CollectionAssert.AreEqual(new[] { "EntityWaited", "Hud:100:99", "InteractionPerformed", "Hud:100:98", "Noise" }, fixture.Sink.Trace);
         }
 
         [TestCase("exit")]

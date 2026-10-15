@@ -7,6 +7,7 @@ using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.Turns.Resolution;
+using HallowBlaze.Presentation.Runtime.Noise;
 using UnityEngine;
 using EntityId = HallowBlaze.Core.Board.Primitives.EntityId;
 
@@ -81,9 +82,13 @@ namespace HallowBlaze.Presentation.Runtime
                 throw new ArgumentOutOfRangeException(nameof(moveDuration));
             MoveDuration = moveDuration;
             attacks = new EnemyAttackPresenter(runtime, hud, feedback, moveDuration);
+            var noiseOwner = new GameObject("Board noise debug") { hideFlags = HideFlags.DontSave };
+            NoiseDisplay = noiseOwner.AddComponent<BoardNoisePresenter>();
+            NoiseDisplay.Bind(runtime.BoardState, () => disposed || runtime.IsDisposed || runtime.Controller.IsTerminal
+                ? null : runtime.BoardState);
             Dispatcher = new OrderedEventDispatcher(diagnostic, SynchronizeFromState);
             Coordinator = new CommandPresentationCoordinator(runtime, new PresentationGate(), Dispatcher,
-                feedback.ShowRejection, result => RefreshIntents());
+                feedback.ShowRejection, result => { RefreshIntents(); NoiseDisplay.Refresh(); });
             if (intents != null)
                 intents.Bind(runtime.BoardState, () => disposed || runtime.IsDisposed || runtime.Controller.IsTerminal
                     ? null : runtime.BoardState);
@@ -93,6 +98,11 @@ namespace HallowBlaze.Presentation.Runtime
             Dispatcher.Register<ItemCollectedEvent>((gameEvent, token) => HideItem(gameEvent));
             Dispatcher.Register<FoodRestoredEvent>((gameEvent, token) => RefreshFood(gameEvent));
             Dispatcher.Register<ActionCostAppliedEvent>((gameEvent, token) => RefreshHud());
+            Dispatcher.Register<NoiseEvent>((gameEvent, token) =>
+            {
+                NoiseDisplay.Refresh();
+                return ShowFeedback(gameEvent);
+            });
             Dispatcher.Register<EnemyAttackResolvedEvent>((gameEvent, token) =>
             {
                 attacks.AnimationsEnabled = AnimationsEnabled;
@@ -107,6 +117,8 @@ namespace HallowBlaze.Presentation.Runtime
         public CommandPresentationCoordinator Coordinator { get; }
         /// <summary>Gets the extensible registry; future concrete events can register handlers before replay.</summary>
         public OrderedEventDispatcher Dispatcher { get; }
+        /// <summary>Gets this presenter's owned debug hearing display; snapshots are never recomputed by presentation.</summary>
+        public BoardNoisePresenter NoiseDisplay { get; }
         /// <summary>Gets or sets whether movement and attacks animate; false uses the same handlers with zero visual delay.</summary>
         public bool AnimationsEnabled { get; set; } = true;
         /// <summary>Gets movement duration in unscaled seconds; zero completes synchronously in either mode.</summary>
@@ -124,6 +136,7 @@ namespace HallowBlaze.Presentation.Runtime
             if (disposed || runtime.IsDisposed)
             {
                 CloseIntents();
+                NoiseDisplay.Dispose();
                 return;
             }
             var errors = new List<Exception>();
@@ -142,6 +155,8 @@ namespace HallowBlaze.Presentation.Runtime
             try { RefreshHud(); }
             catch (Exception error) { errors.Add(error); }
             try { RefreshIntents(); }
+            catch (Exception error) { errors.Add(error); }
+            try { NoiseDisplay.Refresh(); }
             catch (Exception error) { errors.Add(error); }
             if (errors.Count != 0)
                 throw new AggregateException("Registered views or HUD could not be fully synchronized.", errors);
@@ -245,6 +260,7 @@ namespace HallowBlaze.Presentation.Runtime
         private Task NotifyOutcome(GameEvent gameEvent)
         {
             CloseIntents();
+            NoiseDisplay.Dispose();
             outcomes.TryNotify(runtime.Request, gameEvent);
             return Task.CompletedTask;
         }
@@ -267,6 +283,14 @@ namespace HallowBlaze.Presentation.Runtime
             Coordinator.Dispose();
             attacks.Dispose();
             CloseIntents();
+            NoiseDisplay.Dispose();
+            if (NoiseDisplay != null)
+            {
+                if (Application.isPlaying)
+                    UnityEngine.Object.Destroy(NoiseDisplay.gameObject);
+                else
+                    UnityEngine.Object.DestroyImmediate(NoiseDisplay.gameObject);
+            }
         }
     }
 }

@@ -4797,7 +4797,7 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 ## `M4.7` — Hałas jako zdarzenie domenowe
 
-**Status:** `Planned`  
+**Status:** `Done` - accepted 2026-10-15 after Lead validation and independent Reviewer PASS.
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcja 12.
 
@@ -4822,6 +4822,8 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 **Wpływ na save i kompatybilność:** Bieżący hałas jest BoardState i nie jest zapisowany między planszami.
 
 **Wymagany handoff:** Reguła propagacji w jednym akapicie i screenshot/debug view dla kilku sił.
+
+**Accepted scope (2026-10-15):** Board-owned immutable noise snapshots, deterministic orthogonal path-budget propagation around impassable ground/obstacles, and `NoiseEvent` carrying the exact hearing footprint. Configurable accepted movement/interaction emissions use prototype strengths 2/4 and lifetime 2; Wait is silent. Only pre-command noise ages after acceptance, before enemy execution/planning; rejected commands do not emit, age noise or change costs. Clone preserves the sequence with independent collections, and new boards start empty without save changes. A runtime-owned debug view reads the same cells, displays strength/lifetime without audio, and clears on terminal/replacement/disposal. [Propagation, lifetime, commands and external screenshot instructions](Testing.md#m47-domain-noise) document the rule and the rendered strengths 1/3/5. Final full EditMode **895 passed, 0 failed, 1 expected pre-existing Explicit skip** and graphics-enabled PlayMode **120/120** passed, including model **18/18**, command scenarios **10/10** and visual integration **3/3**; focused command-pipeline **31/31** and presentation regression **46/46** also passed. Independent Reviewer returned **PASS** with no material findings. The owner authorized autonomous Lead takeover after the initial local microtask failed; this is not a local-worker PASS or a waiver of independent review. No Listener, tool/axe balance, audio mix, generator, save format, scene/prefab, package/settings or protected agent configuration change. M4.8 owns Listener behavior.
 
 ---
 
@@ -6105,7 +6107,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. continue M4 with `M4.7` after the accepted M4.6 changes are committed and a new clean baseline is established, then follow the existing dependency order; the M3.12 and M4.1-M4.5 review authorizations do not extend to later tasks, and M4.6 received independent review;
+1. continue M4 with `M4.8` after the accepted M4.7 changes are committed and a new clean baseline is established, then follow the existing dependency order; the M3.12 and M4.1-M4.5 review authorizations and M4.7 implementation takeover do not extend to later tasks, and M4.6-M4.7 received independent review;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6125,7 +6127,9 @@ M4.4 is accepted on 2026-10-14 with the addressed single-candidate ordinary gene
 
 M4.5 is accepted on 2026-10-15 with bounded deterministic attempts, two validated authored fallbacks, explicit recovery diagnostics and request-requirement preservation under generation version 2. Full EditMode `857/857` and graphics-enabled PlayMode `117/117` passed. The owner's current autonomous instruction authorized direct implementation and self-review for M4.5 only; no independent verdict is claimed.
 
-M4.6 is accepted on 2026-10-15 with repeatable daily/milestone seed gates, full histogram/failure diagnostics, per-segment and complete-edge resource evidence, and independent Reviewer PASS. The 10,000-board gate passed twice with identical hash, zero invalid/static-unreachable boards and 0% fallback usage against the predeclared 1% ceiling. Full EditMode passed 867 tests with only the intentionally Explicit milestone skipped; that milestone passed separately. Current production budgets and runtime are unchanged. M4.7 is the next planned task.
+M4.6 is accepted on 2026-10-15 with repeatable daily/milestone seed gates, full histogram/failure diagnostics, per-segment and complete-edge resource evidence, and independent Reviewer PASS. The 10,000-board gate passed twice with identical hash, zero invalid/static-unreachable boards and 0% fallback usage against the predeclared 1% ceiling. Full EditMode passed 867 tests with only the intentionally Explicit milestone skipped; that milestone passed separately. Current production budgets and runtime are unchanged by M4.6.
+
+M4.7 is accepted on 2026-10-15 with deterministic board-owned noise, atomic accepted-action emission, explicit command-based expiration and a shared hearing/debug footprint. Full EditMode passed 895 tests with the existing Explicit M4.6 milestone skipped; graphics-enabled PlayMode passed 120/120. Independent Reviewer returned PASS. Listener reaction remains unimplemented and belongs to M4.8, the next planned task.
 
 # Zasada aktualizacji roadmapy
 

@@ -13,7 +13,8 @@ namespace HallowBlaze.Presentation.Runtime
 {
     /// <summary>
     /// Owns one live board's authoritative domain state, resolver, and Unity view bindings.
-    /// The runtime is reconstructed for every board and is never persisted.
+    /// The runtime is reconstructed for every board and is never persisted. Its resolver opts
+    /// into the prototype action noise profile; a new board starts without active noise.
     /// </summary>
     public sealed class BoardRuntime : IDisposable
     {
@@ -45,7 +46,8 @@ namespace HallowBlaze.Presentation.Runtime
             PlayerId = playerId;
             var enemyPhases = new EnemyBatchTurnPhases(readOnlyEnemies);
             enemyPhases.PlanInitialIntents(boardState, playerId);
-            controller = new TurnController(boardState, runState, playerId, phases: enemyPhases.Handlers);
+            controller = new TurnController(boardState, runState, playerId,
+                new TurnResolver(ActionNoiseProfile.Prototype), enemyPhases.Handlers);
         }
 
         /// <summary>Gets whether this runtime has released its controller and view bindings.</summary>
