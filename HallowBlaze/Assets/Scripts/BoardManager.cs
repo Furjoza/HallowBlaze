@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Generation;
+using HallowBlaze.Core.Generation.Pipeline;
 using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.Random;
 using HallowBlaze.Core.Session;
@@ -50,6 +51,7 @@ public class BoardManager : MonoBehaviour
     private BoardRequest activeRequest;
     private BoardRuntime activeRuntime;
     private BoardBlueprint activeBlueprint;
+    private BoardGenerationResult activeGenerationResult;
 
     private void InitialiseList()
     {
@@ -175,7 +177,7 @@ public class BoardManager : MonoBehaviour
 
     /// <summary>
     /// Creates and validates the addressed layout before publishing one authoritative runtime.
-    /// Ordinary v1 boards generate model-first; checkpoint and legacy v1 boards preserve their original layout path.
+    /// Ordinary version 2 uses bounded retry/fallback; version 1, checkpoint and legacy boards retain their original generation.
     /// A failed setup destroys its staged views and leaves no active request or runtime.
     /// Ordinary enemy rules come from the catalog; legacy variants retain prefab 10/20 HP data.
     /// Initial domain plans exist before activation.
@@ -317,6 +319,9 @@ public class BoardManager : MonoBehaviour
     /// <summary>Gets the immutable accepted ordinary blueprint, or null for legacy setup and released/failed boards.</summary>
     public BoardBlueprint ActiveBlueprint => activeBlueprint;
 
+    /// <summary>Gets the accepted version-2 attempt history, or null for retained/failed/released boards.</summary>
+    public BoardGenerationResult ActiveGenerationResult => activeGenerationResult;
+
     /// <summary>Gets the complete active runtime, or null when startup failed or the board was released.</summary>
     public BoardRuntime ActiveRuntime => activeRuntime;
 
@@ -332,7 +337,13 @@ public class BoardManager : MonoBehaviour
             throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, "ordinary:bounds-player-or-identity");
         BoardValidationCatalog catalog = OrdinaryBoardContent.CreateCatalog();
         BoardGenerationConfig config = OrdinaryBoardContent.CreateConfiguration(request.Address);
-        BoardBlueprint blueprint = OrdinaryBoardGenerator.Generate(request.Address, config, catalog, request.RunSeed);
+        BoardGenerationResult generation = config.Version == BoardGenerationPipeline.OrdinaryConfigurationVersion
+            ? BoardGenerationPipeline.GenerateOrdinary(new BoardGenerationRequest(request.Address, config, catalog, request.RunSeed)) : null;
+        if (generation != null && !generation.IsSuccess)
+            throw new InvalidOperationException("Ordinary generation exhausted its attempts and fallbacks: " + generation);
+        BoardBlueprint blueprint = generation?.Blueprint ?? OrdinaryBoardGenerator.Generate(request.Address, config, catalog, request.RunSeed);
+        if (generation != null && generation.Attempts.Count > 1)
+            Debug.LogWarning("Board generation recovery: " + generation);
         RequirePrefabs(floorTiles, nameof(floorTiles));
         RequirePrefabs(outerWallTiles, nameof(outerWallTiles));
         if (exit == null)
@@ -371,6 +382,7 @@ public class BoardManager : MonoBehaviour
             boardHolder = stagingHolder;
             activeRequest = request;
             activeBlueprint = blueprint;
+            activeGenerationResult = generation;
             activeRuntime = runtime;
             stagingHolder.gameObject.SetActive(true);
             return runtime;
@@ -468,6 +480,7 @@ public class BoardManager : MonoBehaviour
         activeRuntime = null;
         activeRequest = null;
         activeBlueprint = null;
+        activeGenerationResult = null;
         if (boardHolder != null)
         {
             DestroyBoardHolder(boardHolder);

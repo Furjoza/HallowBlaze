@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Generation;
+using HallowBlaze.Core.Generation.Pipeline;
 using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.Persistence;
 using HallowBlaze.Core.Persistence.Storage;
@@ -288,6 +289,67 @@ namespace HallowBlaze.Tests.PlayMode
             return manager;
         }
 
+        /// <summary>Version-2 runtime retains blueprint and recovery diagnostics across a serialized Continue boundary.</summary>
+        [UnityTest]
+        public IEnumerator OrdinaryPipelineVersionTwoContinuesWithIdenticalSelection()
+        {
+            Component manager = CreateOrdinaryBoardManager();
+            var run = new RunState("pipeline-runtime", 77, new RunStateConfiguration(100, 100, 3, "forest.start"));
+            run.StartLeg("edge", run.WorldNodeId, "destination", new[]
+            {
+                new RouteSegmentState("pipeline.segment", OrdinaryBoardGenerator.ConfigurationId, 2)
+            });
+            var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed, run.WorldNodeId, "forest", "temperate", 4);
+            GameObject player = CreateObject("Pipeline player", 0, 0);
+            BoardRuntime first = InvokeSetup(manager, request, run, player);
+            BoardGenerationResult result = GetProperty<BoardGenerationResult>(manager, "ActiveGenerationResult");
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result.IsSuccess, Is.True);
+            Assert.That(result.Attempts.Count, Is.InRange(1, 10));
+            Assert.That(first.BoardState.GetEntities(), Is.EqualTo(result.Blueprint.Entities));
+            foreach (var entity in result.Blueprint.Entities)
+                Assert.That(first.Views[entity.Id].transform.position, Is.EqualTo(new Vector3(entity.Position.X, entity.Position.Y, 0)));
+            RunState restored = PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(run));
+            BoardRuntime second = InvokeSetup(manager, request, restored, player);
+            BoardGenerationResult continued = GetProperty<BoardGenerationResult>(manager, "ActiveGenerationResult");
+            Assert.That(continued.Blueprint, Is.EqualTo(result.Blueprint));
+            Assert.That(continued.ToString(), Is.EqualTo(result.ToString()));
+            Assert.That(first.IsDisposed, Is.True);
+            Assert.That(second.Request.Address, Is.EqualTo(request.Address));
+            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Health, Is.EqualTo(100));
+            yield return null;
+        }
+
+        /// <summary>A forced authored fallback composes the same independent runtime and view bindings as a generated result.</summary>
+        [UnityTest]
+        public IEnumerator ForcedFallbackBuildsRuntimeWithoutLosingModelData()
+        {
+            var run = new RunState("fallback-runtime", 77, new RunStateConfiguration(100, 100, 3, "forest.start"));
+            run.StartLeg("edge", run.WorldNodeId, "destination", new[]
+            {
+                new RouteSegmentState("fallback.segment", OrdinaryBoardGenerator.ConfigurationId, 2)
+            });
+            var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed, run.WorldNodeId, "forest", "temperate", 4);
+            var input = new BoardGenerationRequest(request.Address, OrdinaryBoardContent.CreateConfiguration(request.Address),
+                OrdinaryBoardContent.CreateCatalog(), run.RunSeed);
+            BoardGenerationResult result = BoardGenerationPipeline.Generate(input, (_, __) => null, OrdinaryBoardFallbacks.CreateLibrary());
+            Assert.That(result.UsedFallback, Is.True, result.ToString());
+            Assert.That(result.Attempts.Count, Is.EqualTo(9));
+            var views = result.Blueprint.Entities.ToDictionary(entity => entity.Id,
+                entity => CreateObject(entity.Definition.ContentId, entity.Position.X, entity.Position.Y));
+            using (BoardRuntime runtime = BlueprintBoardRuntimeComposer.Compose(request, run, result.Blueprint, input.Catalog, views))
+            {
+                Assert.That(runtime.BoardState.GetEntities(), Is.EqualTo(result.Blueprint.Entities));
+                Assert.That(runtime.Views.Count, Is.EqualTo(result.Blueprint.Entities.Count));
+                Assert.That(runtime.Enemies.Count, Is.EqualTo(2));
+                Assert.That(runtime.Enemies.All(enemy => enemy.LockedIntent != null), Is.True);
+                Assert.That(runtime.Controller.Resolve(new WaitCommand()).Accepted, Is.True);
+                Assert.That(run.Food, Is.EqualTo(99));
+            }
+            yield return null;
+        }
+
         /// <summary>Ordinary enemy variants retain their initial intent and execute only through the one runtime controller.</summary>
         [UnityTest]
         public IEnumerator OrdinaryEnemiesUseBlueprintRulesAndOneTurnController()
@@ -342,7 +404,7 @@ namespace HallowBlaze.Tests.PlayMode
             GameObject player = CreateObject("Version-test player", 0, 0);
             BoardRuntime previous = InvokeSetup(manager, request, run, player);
             var address = new BoardAddress(request.Address.RunId, request.Address.LegId, request.Address.EdgeId,
-                request.Address.SegmentId, request.Address.DayNumber, OrdinaryBoardGenerator.ConfigurationId, 2, request.BoardSeed);
+                request.Address.SegmentId, request.Address.DayNumber, OrdinaryBoardGenerator.ConfigurationId, 3, request.BoardSeed);
             var unsupported = new BoardRequest(address, run.RunSeed, run.WorldNodeId, "forest", "temperate", 1);
             Assert.Throws<TargetInvocationException>(() => InvokeSetup(manager, unsupported, run, player));
             Assert.That(previous.IsDisposed, Is.True);

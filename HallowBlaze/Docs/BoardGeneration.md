@@ -3,8 +3,9 @@
 M4.2 defines initial data, M4.3 adds an independent ordinary-board validator, and M4.4
 connects a single-candidate model-first generator to production presentation. The engine-free
 `HallowBlaze.Core.Generation` assembly uses board primitives/state, addressed PCG32 RNG,
-stable travel identity, and the existing turn contracts and Shambler planner. This is the
-first ordinary family, not final balance; retry/fallback orchestration belongs to M4.5.
+stable travel identity, and the existing turn contracts and Shambler planner. M4.5 adds
+bounded retries, authored fallbacks and recovery diagnostics under generation version 2.
+This remains the first ordinary family, not final balance.
 
 ## Ownership and construction
 
@@ -288,8 +289,8 @@ is null for legacy, failed and released boards. Runtime pickups/movement do not 
 
 ### Compatibility
 
-The prototype's 45 published stable segment IDs and order are unchanged; their current
-configuration is now `ordinary.board.v1/1`. Starting a current-RNG leg persists this
+The prototype's 45 published stable segment IDs and order are unchanged; M4.4 published
+`ordinary.board.v1/1` (M4.5 now publishes version 2, described below). Starting a current-RNG leg persists this
 identity before board creation. A saved `legacy.board.v1/1` leg remains explicitly legacy,
 retaining its original seed, layout algorithm and draw order across all its segments.
 `BoardAddressFactory` allows only this named legacy-to-ordinary publication upgrade;
@@ -328,8 +329,8 @@ The separate construction fixture freezes a golden algorithm snapshot in
 This family reserves only monotone south-to-north routes; it is not a solver for every
 joint budget accepted by `BoardGenerationConfig`. It never publishes invalid data,
 silently relaxes budgets, retries indefinitely, repairs GameObjects, or writes profile/
-atlas observations. Rejected candidates are explicit. Retry/sub-seed/fallback policy is
-M4.5; 1,000/10,000-seed gates and distribution reporting are M4.6. Static reachability
+atlas observations. Rejected candidates are explicit. M4.5 adds the retry/sub-seed/fallback
+policy below; 1,000/10,000-seed gates and distribution reporting remain M4.6. Static reachability
 and opening safety are not proofs of fun or full-run survival. Final biomes, landmarks,
 fixed-source guarantees, hidden-item presentation and carried inventory are not added.
 
@@ -346,3 +347,130 @@ catalog order/culture, rejection reports, view parity/invalid bindings, initial 
 rules/one turn controller, failure cleanup, legacy seed vectors and real Main-scene
 repeated Continue. Reports/logs remain outside the project. The owner authorized
 combined Lead/Developer/Reviewer work for M4.4; this was self-review, not independent review.
+
+## M4.5 bounded generation pipeline
+
+The engine-free pipeline lives in
+[BoardGenerationPipeline](../Assets/Scripts/Core/Generation/Pipeline/BoardGenerationPipeline.cs).
+`GenerateOrdinary(request)` uses at most **8 candidate calls**, followed by at most
+**2 authored fallback calls** in stable priority order. The generic `Generate` API
+accepts a candidate limit in `1..8` and at most eight uniquely named fallbacks, giving
+an absolute maximum of 16 builder calls. Invalid limits/registrations fail before
+candidate generation. The first validated result stops all remaining work.
+
+Builders are trusted synchronous bounded project code, not sandboxed plugins. The
+pipeline bounds work counts rather than attempting to interrupt an arbitrary hung
+callback. Actual ordinary builders have finite board/content loops; focused tests use
+a five-second NUnit timeout and explicit elapsed-time assertions. These checks are not
+a production latency SLA, a large-seed performance study, or an OS-level watchdog.
+
+### Request And Selection
+
+`BoardGenerationRequest` copies the optional exact `BoardRequiredFeature` list and owns
+the original address, configuration, catalog and run root seed. The configuration's
+inclusive resource-family budgets are also binding authored supply bands. Required
+features specify an immutable definition, exact position and optional stable item-source
+ID with initial observability. Neither candidates nor fallbacks may change these values.
+Source IDs must still resolve in the authoritative catalog. This is a generation input
+contract, not atlas knowledge, a rumor UI, route-wide supply allocation or inventory.
+
+For zero-based attempt `i`, `DeriveSubSeed` creates an independent addressed PCG32 stream:
+
+```text
+provider root = persisted run seed
+purpose       = board-generation-attempt-v1
+identity      = run ID, leg ID, edge ID, segment ID, day,
+                configuration ID, generation version, saved board seed, attempt i
+sub-seed      = first UInt32 draw, reinterpreted as signed Int32
+```
+
+Identity parts use the existing length-framed `RandomStreamProvider.StreamId` with
+invariant numeric formatting. The candidate receives the sub-seed as its private root
+seed while its blueprint retains the original full `BoardAddress` and configuration.
+The saved seed is never replaced by a selected attempt seed; repeating the boundary
+recomputes the same selection. No clock, global RNG, mutable shared cursor or prefab
+ordering participates. The retained M4.4 golden layout and seed derivation are unchanged.
+
+Every returned candidate/fallback is independently passed through `BoardValidator`
+against the original request, then checked for unchanged address/configuration and all
+exact required features. A structurally constructible blueprint with an unreachable exit
+is still rejected. Expected `BoardGenerationException` and argument rejection become
+diagnostics; unexpected implementation exceptions propagate instead of being hidden by
+a successful fallback. Exhaustion returns a failed result with no blueprint. Production
+setup raises an explicit startup failure before creating views or publishing a runtime.
+
+### Authored Fallback Library
+
+[OrdinaryBoardFallbacks](../Assets/Scripts/Core/Generation/Pipeline/OrdinaryBoardFallbacks.cs)
+contains two fixed, versioned topology templates in source-controlled data tables:
+
+1. `ordinary.southwest.v1`: player `(0,0)`, exit `(7,7)`, reserved left/top route.
+2. `ordinary.southeast.v1`: the horizontally mirrored layout and route.
+
+Both include a perimeter blocker, up to nine authored obstacle slots and three separated
+enemy slots. They do not call the random generator. Definitions resolve from the original
+allowed catalog. Counts use the original inclusive budget's lower bound, with at least
+one perimeter blocker, and item slots are filled deterministically. This selects within
+the accepted band, not a rewritten difficulty configuration. Exact fixed items are counted
+before filling supply; their source identity and hidden/observable status are retained.
+Conflicts with an existing authored slot, missing content, capacity overrun or impossible
+combined budgets reject the template. The next template is tried once; no requirement is
+silently dropped. The finite library covers current production presets, not every
+theoretically constructible configuration or future landmark rule set.
+
+Each template is independently tested for all representative production pressure bands
+(days 1, 2, 4, 7 and 10). Additional fixtures enforce exact four-item supply with a hidden
+fixed source, reject conflicting features/resources, and prove that a corrupted fallback
+cannot be published. There is no scene repair, network content fetch or profile write.
+
+### Diagnostics And Forced Fallback Evidence
+
+`BoardGenerationResult` exposes `Blueprint`, `IsSuccess`, `Attempts`, `SelectedAttempt`,
+`UsedFallback` and `FallbackId`. Each immutable attempt records its zero-based index,
+sub-seed or fallback ID, and detached validation report. Its summary includes complete
+requested address/seed/configuration and distinct concise rejection codes. Candidate
+validation errors retain their original rule codes; `CandidateInput`,
+`CandidateIdentityMismatch` and `RequiredFeature` cover pipeline-specific rejection.
+
+`BoardManager.ActiveGenerationResult` retains an accepted version-2 history for the board
+lifetime and clears it with the runtime. More than one candidate/any fallback emits a
+recovery warning; first-attempt success does not log. Exhaustion reports the full history.
+The result exposes fallback usage for future M4.6 aggregation without recording player
+telemetry, creating replay files, writing profile/atlas data or adding unbounded history.
+
+Verified forced cases:
+
+- An always-invalid generator stops after exactly 1, 3 or 8 calls. A repeat selects the
+  identical fallback and history. The maximum generic all-fail case executes exactly
+  eight candidates plus eight fallback builders and returns no blueprint.
+- Each real authored template is forced independently after a rejected candidate and
+  passes the unchanged production budgets. For `run/leg/road/segment`, day 1, root seed
+  `77`, board seed `42`, configuration `ordinary.board.v1/1`, the candidate sub-seed is
+  `-1221944210`; forced missing data reports
+  `MissingEntities,MissingExit,MissingItems,MissingStart`, followed by an accepted
+  `ordinary.southwest.v1` or `ordinary.southeast.v1` with its full address intact.
+- The PlayMode `ForcedFallbackBuildsRuntimeWithoutLosingModelData` forces eight candidate
+  rejections under version 2, then selects `ordinary.southwest.v1` on the ninth builder
+  call. Model/view counts and positions, both initial enemy intents and one-controller
+  turn execution are preserved.
+- A blocked-exit fallback fails independent semantic validation; a following good
+  fallback may succeed, but an exhausted corrupt library returns no blueprint.
+
+### Publication And Compatibility
+
+New prototype legs persist `ordinary.board.v1/2` before board creation. All 45 stable
+segment IDs, ordering and resource/topology budgets remain unchanged. Version 1 still
+uses the M4.4 single-candidate path with its original root seed and fingerprint; legacy
+v1 boards and imported legacy-RNG future legs retain their original algorithm too.
+Named publication upgrades allow these saved identities against the new published world
+without rewriting the active leg, address or seed. Future versions and downgrades remain
+rejected. Normal run schemas are unchanged and do not persist a blueprint or retry cursor.
+
+Acceptance on 2026-10-15: focused pipeline EditMode **27/27**, travel EditMode **41/41**,
+startup PlayMode **23/23**, full EditMode **857/857**, and graphics-enabled full PlayMode
+**117/117** passed, with zero failed, skipped or inconclusive cases. Full PlayMode includes
+the real Main scene and repeated Continue. Tests/logs are external temporary artifacts;
+no separate success report was added to the repository. The owner's current autonomous
+instruction authorized direct implementation and self-review for M4.5; no independent
+review or user-run manual smoke is claimed. M4.6 owns large seed sweeps and fallback-rate
+thresholds; this task makes no measured frequency or final balance claim.
