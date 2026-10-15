@@ -5,6 +5,7 @@ connects a single-candidate model-first generator to production presentation. Th
 `HallowBlaze.Core.Generation` assembly uses board primitives/state, addressed PCG32 RNG,
 stable travel identity, and the existing turn contracts and Shambler planner. M4.5 adds
 bounded retries, authored fallbacks and recovery diagnostics under generation version 2.
+M4.6 adds test-only daily/milestone seed sweeps and detached aggregate diagnostics.
 This remains the first ordinary family, not final balance.
 
 ## Ownership and construction
@@ -472,5 +473,135 @@ startup PlayMode **23/23**, full EditMode **857/857**, and graphics-enabled full
 the real Main scene and repeated Continue. Tests/logs are external temporary artifacts;
 no separate success report was added to the repository. The owner's current autonomous
 instruction authorized direct implementation and self-review for M4.5; no independent
-review or user-run manual smoke is claimed. M4.6 owns large seed sweeps and fallback-rate
-thresholds; this task makes no measured frequency or final balance claim.
+review or user-run manual smoke is claimed. M4.6 owns the seed sweeps and fallback-rate
+thresholds below; M4.5 itself makes no measured frequency or final balance claim.
+
+## M4.6 Seed Series And Measurements
+
+The test-only [harness](../Assets/Tests/EditMode/SeedSeriesHarness.cs) and
+[fixtures](../Assets/Tests/EditMode/BoardGenerationSeedSeriesTests.cs) execute the actual
+`ordinary.board.v1/2` production pipeline and revalidate every result against its original
+request. No runtime generator, preset, source content, world data, save or presentation
+code is changed. [Testing instructions](Testing.md#m46-generation-gates) provide exact
+CLI filters and external-artifact locations.
+
+### Coverage And Gates
+
+Thresholds were committed to the test before the first production measurement: zero
+invalid boards, zero statically unreachable exits, fallback rate at most `0.01`, and
+per-pass elapsed limits of 60 seconds for daily 1,000 boards / 300 seconds for milestone
+10,000 boards. The harness itself caps a batch at 10,000 cases. It records time-limit
+exhaustion and every unexecuted case rather than accepting a shortened sweep. The
+synchronous generator is bounded by M4.5; this timer is not an OS-level interruption
+mechanism for arbitrary hung code.
+
+The daily/milestone fixtures load the current prototype registry, cover all nine edges,
+all 45 segment IDs and all days 1-10. Each sample is a complete five-board synthetic leg,
+with the exact generation identity read from the published segment. Edges cycle through
+the catalog and days cycle 1-10 across traversals. Root seeds alternate `0,-1,1,-2,...`;
+run IDs include the traversal number. The production `BoardAddressFactory` derives the
+board seeds and addresses. The daily gate covers 200 complete traversals; milestone
+covers 2,000. Both assert exactly 1,000/10,000 distinct board seeds, not only request count.
+
+Every sweep is run twice. Canonical, ordinally ordered JSON includes the input sequence,
+blueprint/selection history hash, complete histograms, per-day measurements, per-segment
+resource families and complete-traversal edge totals/variance. SHA-256 of that summary
+must match, as must the entire deterministic summary. Elapsed time and random artifact
+directory names are recorded separately and excluded from comparison.
+
+Failed cases retain full address, root/board seed, configuration targets and allowed IDs,
+exact feature/source requirements, fixture/segment identity, all concise failure reasons
+and pipeline attempt history in external `failures.json`. No failing seed is filtered out
+and no reroll is performed by the harness. Expected negative controls prove that corrupt
+configuration, changed supply bands, dropped fixed sources, excess fallback usage and
+incomplete traversals fail the gate. Every histogram retains all bins, including outliers.
+
+### Observed Results
+
+Measured on 2026-10-15 in headless Unity `6000.3.21f1`, on the active workspace:
+
+| Gate | Boards Per Pass | Pass 1 | Pass 2 | Invalid / Static Softlocks / Fallbacks |
+| --- | --- | --- | --- | --- |
+| Daily | 1,000 | 4.62 s | 1.96 s | 0 / 0 / 0 in both |
+| Milestone | 10,000 | 23.44 s | 21.17 s | 0 / 0 / 0 in both |
+
+The daily deterministic summary hash is
+`ec14cc44aeff8cd95a36cf50b87b58b0dd3feff100a3eb0e0e65bb8b1dac3bba`;
+the milestone hash is
+`e2175d0edfa6b6a6562c2041c3adf01bbef83927cad5e38f3bf25b5fe8eaaf83`.
+All 10,000 milestone boards succeeded on candidate index zero. Observed fallback rate
+was `0%` against the predeclared `1%` ceiling; this is fixture evidence, not a universal
+zero-fallback guarantee. No production failing seeds or incomplete traversals were found.
+
+Milestone distributions:
+
+| Measurement | Minimum | Maximum | Mean |
+| --- | --- | --- | --- |
+| Start-connected passable cells | 46 | 59 | 56.7891 |
+| Shortest required exit distance, cardinal moves | 8 | 14 | 10.9814 |
+| Branch-point cells | 35 | 54 | 45.0219 |
+| Obstacle occupancy / 64 | 0.078125 | 0.140625 | 0.11075 |
+| Enemy actors | 0 | 3 | 1.9 |
+| Safe first-step destinations | 2 | 3 | 2.7498 |
+| Maximum initial concurrent threats | 0 | 1 | 0.9 |
+
+Shortest paths have the full histogram `{8:2525, 10:2545, 12:2428, 14:2502}`. The smallest
+reachable component (46 cells) occurred once and remains in the histogram, not discarded
+as an outlier. Each of the 45 segment supply distributions has 222-223 observations,
+food-family range `2..5`, and population variance between approximately `1.1312..1.4031`.
+Observable and total supply are separately measured; production food is initially observable.
+
+Each published road has five segments. Food-family edge totals are computed per complete
+run/leg/edge traversal, not by pooling board observations. Below are independent samples
+and population variance per stable edge suffix (all IDs start with `road.`):
+
+| Edge | Samples | Minimum | Maximum | Mean | Variance |
+| --- | --- | --- | --- | --- | --- |
+| start-east-creek | 222 | 10 | 24 | 17.3333 | 6.2222 |
+| start-west-trail | 222 | 10 | 23 | 17.3649 | 6.8624 |
+| west-grove-ridge | 222 | 10 | 24 | 17.6081 | 6.0942 |
+| east-quarry-ridge | 223 | 11 | 23 | 17.4978 | 6.6984 |
+| ridge-radio-tower | 222 | 11 | 25 | 17.5946 | 6.8987 |
+| east-creek-old-road | 223 | 11 | 23 | 17.1794 | 7.0620 |
+| old-road-west-grove | 222 | 11 | 25 | 17.9414 | 6.5596 |
+| west-trail-old-road | 222 | 11 | 23 | 17.2207 | 5.6945 |
+| old-road-east-quarry | 222 | 11 | 24 | 17.4189 | 6.9912 |
+
+### Authored Resource Evidence
+
+Separate synthetic fixtures exercise eight traversals each of two- and five-segment roads
+(56 boards total). Exact food bands `4..4` produce complete-traversal totals 8 and 20 with
+zero variance. A hidden fixed axe source appears exactly once at its required cell per
+traversal: total tool supply 1, observable tool supply 0. Source presence has its own
+per-segment observation count. These fixtures use a test-only catalog and are not new
+authored production content or a bag implementation. Their explicit `100%` allowed
+fallback rate tests preservation, not the production gate's `1%` quality threshold.
+
+Independent negative controls return a pipeline-successful but altered request: the
+harness still catches a changed resource band or a missing source. Partial traversals
+do not contribute to complete edge distributions and cause a failed batch. A separate
+known-count fixture proves totals `{5,9}`, mean 7 and population variance 4. This supports
+future truthful supply-band and fixed-source evidence without writing atlas knowledge.
+
+### Recommendation And Limits
+
+Keep the current production budgets provisionally unchanged: observed topology, opening
+safety and supply are within every accepted bound, and neither rerolls nor fallback
+inflated this sample. Do not infer equal tactical difficulty from the means. Current
+paths are exclusively even-length and branching remains high; these facts follow the
+first topology family and are not evidence of varied decision quality. Use M4.9 and
+later playtests to evaluate pressure/fun before adjusting budgets. Keep the `1%` fallback
+ceiling and rerun both gates whenever generation identity, definitions or targets change.
+
+Zero static softlocks means every required exit is reachable under the validator's
+terrain/obstacle rules without optional tools. It does not prove survival against all
+future enemy turns, full-run food solvability, landmark state-space solvability or fun.
+These tests never access the player's profile or external services. JSON/XML/logs remain
+external temporary diagnostics, not replay captures or persistent gameplay telemetry.
+
+Mechanical evidence: focused harness **9/9**, daily gate **1/1**, explicit milestone
+gate **1/1**, and full EditMode **867 passed, 0 failed, 1 expected Explicit skip**. The
+skipped milestone test was executed separately on the final source and passed. PlayMode
+was not rerun because changes are exclusively test/diagnostic/documentation code; M4.5's
+production PlayMode baseline remains unchanged. Independent Reviewer returned **PASS**
+with no material findings; M4.6 was accepted on 2026-10-15 in the owning roadmap card.

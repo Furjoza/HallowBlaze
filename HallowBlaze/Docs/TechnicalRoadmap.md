@@ -4765,7 +4765,7 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 ## `M4.6` — Testy 1 000/10 000 seedów i metryki trudności
 
-**Status:** `Planned`  
+**Status:** `Done` - accepted 2026-10-15 after Lead-owned mechanical validation and independent Reviewer PASS.
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 16, 17 i 22.
 
@@ -4790,6 +4790,8 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 **Wpływ na save i kompatybilność:** Brak; używa synthetic runs.
 
 **Wymagany handoff:** Raport zbiorczy, wszystkie failing seeds i rekomendacja budżetu; bez selektywnego pomijania wyników.
+
+**Accepted scope (2026-10-15):** Test-only headless seed harness over the unchanged published `ordinary.board.v1/2` pipeline. Daily 1,000-board and explicit milestone 10,000-board gates each execute twice and compare complete deterministic summaries/hashes, covering all 45 published segments, nine edges, days 1-10 and full production-derived board addresses. Predeclared limits are zero invalid/static-unreachable exits, at most 1% fallback usage, and 60/300 seconds per daily/milestone pass. Every failed/unexecuted case is retained externally with address/root seed/board seed/config/requirements/reasons/history; reports preserve all histogram bins, per-day topology/opening metrics, observed/total per-family segment supply and complete-traversal edge totals/population variance. Both milestone passes produced 10,000 distinct board seeds, zero invalid boards, zero static softlocks and zero fallbacks; elapsed times were **23.44 s / 21.17 s**, with identical hash `e2175d0edfa6b6a6562c2041c3adf01bbef83927cad5e38f3bf25b5fe8eaaf83`. Daily passes also matched with zero failures/fallbacks. Synthetic 2/5-segment fixtures prove exact authored resource bands and one hidden fixed source per traversal, while negative controls catch corrupt configurations, altered supply, lost sources, excess fallback use, partial traversals and timeout truncation. [Commands](Testing.md#m46-generation-gates) and [complete measurement summary, outliers, failing-seed outcome and budget recommendation](BoardGeneration.md#m46-seed-series-and-measurements) are documented. Focused harness **9/9**, daily gate **1/1**, explicit milestone gate **1/1**, and full EditMode **867 passed, 0 failed, 1 expected Explicit skip** passed; the skipped milestone test was run separately on final source. Independent Reviewer returned **PASS** with no material findings. PlayMode was not rerun for this test/diagnostic/documentation-only change; production code, budgets, saves, world content, scenes, prefabs, packages/settings and protected agent configuration are unchanged. Zero static softlocks is not a dynamic survival/full-run solvability or fun claim. Current budgets remain provisionally unchanged; M4.7 is next and M4.9/playtests retain the tactical-quality decision.
 
 ---
 
@@ -6103,7 +6105,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. continue M4 with `M4.6` after the accepted M4.5 changes are committed and a new clean baseline is established, then follow the existing dependency order; the M3.12 and M4.1-M4.5 review authorizations do not extend to later tasks;
+1. continue M4 with `M4.7` after the accepted M4.6 changes are committed and a new clean baseline is established, then follow the existing dependency order; the M3.12 and M4.1-M4.5 review authorizations do not extend to later tasks, and M4.6 received independent review;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6121,7 +6123,9 @@ M4.3 is accepted on 2026-10-14 with a pure local-board validator, shared structu
 
 M4.4 is accepted on 2026-10-14 with the addressed single-candidate ordinary generator, blueprint-first production presentation, deterministic generic supply, and explicit legacy layout compatibility. Full EditMode `827/827` and graphics-enabled PlayMode `115/115` passed. The owner separately authorized combined Lead/Developer/Reviewer work for M4.4 only; this was self-review, not an independent verdict.
 
-M4.5 is accepted on 2026-10-15 with bounded deterministic attempts, two validated authored fallbacks, explicit recovery diagnostics and request-requirement preservation under generation version 2. Full EditMode `857/857` and graphics-enabled PlayMode `117/117` passed. The owner's current autonomous instruction authorized direct implementation and self-review for M4.5 only; no independent verdict is claimed. M4.6 is the next planned task.
+M4.5 is accepted on 2026-10-15 with bounded deterministic attempts, two validated authored fallbacks, explicit recovery diagnostics and request-requirement preservation under generation version 2. Full EditMode `857/857` and graphics-enabled PlayMode `117/117` passed. The owner's current autonomous instruction authorized direct implementation and self-review for M4.5 only; no independent verdict is claimed.
+
+M4.6 is accepted on 2026-10-15 with repeatable daily/milestone seed gates, full histogram/failure diagnostics, per-segment and complete-edge resource evidence, and independent Reviewer PASS. The 10,000-board gate passed twice with identical hash, zero invalid/static-unreachable boards and 0% fallback usage against the predeclared 1% ceiling. Full EditMode passed 867 tests with only the intentionally Explicit milestone skipped; that milestone passed separately. Current production budgets and runtime are unchanged. M4.7 is the next planned task.
 
 # Zasada aktualizacji roadmapy
 
