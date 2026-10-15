@@ -978,7 +978,7 @@ namespace HallowBlaze.Tests.PlayMode
                     GameEvent[] events = submitted.Result.Events.ToArray();
                     string action = scenario == "same-cell" || scenario == "fixed-miss" ? "EnemyAttackResolved" :
                         scenario == "adjacent-rest" ? "EntityWaited" : "EntityMoved";
-                    var order = new List<string> { "EntityMoved", "ActionCostApplied", action };
+                    var order = new List<string> { "EntityMoved", "ActionCostApplied", "Noise", action };
                     if (scenario == "shared")
                         order.Add("EntityWaited");
                     CollectionAssert.AreEqual(order, events.Select(gameEvent => gameEvent.EventType), context);
@@ -996,7 +996,7 @@ namespace HallowBlaze.Tests.PlayMode
                     for (int index = 0; index < announced.Length; index++)
                     {
                         EntityId sourceId = announced[index].SourceId;
-                        GameEvent actual = events[2 + index];
+                        GameEvent actual = events[3 + index];
                         GridPosition expectedSource = announced[index].SourcePosition;
                         if (scenario == "same-cell" || scenario == "fixed-miss")
                         {

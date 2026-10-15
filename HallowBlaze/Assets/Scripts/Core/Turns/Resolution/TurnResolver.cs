@@ -15,6 +15,14 @@ namespace HallowBlaze.Core.Turns.Resolution
     {
         private const int ActionFoodCost = 1;
         private const long MaxInteractionDistance = 1;
+        private readonly ActionNoiseProfile noiseProfile;
+
+        /// <summary>Creates a resolver with an optional immutable noise profile; null preserves silent action behavior.</summary>
+        /// <param name="noiseProfile">Action emission budgets, or null for no emission. Rejections never emit noise.</param>
+        public TurnResolver(ActionNoiseProfile noiseProfile = null)
+        {
+            this.noiseProfile = noiseProfile;
+        }
 
         /// <summary>Validates and resolves one player command.</summary>
         /// <param name="boardState">The authoritative mutable board state.</param>
@@ -44,17 +52,32 @@ namespace HallowBlaze.Core.Turns.Resolution
                 return new RejectedTurnResult(CommandRejectionCode.InvalidState);
             }
 
+            TurnResult result;
             switch (command)
             {
                 case MoveCommand moveCommand:
-                    return ResolveMove(boardState, runState, player, moveCommand);
+                    result = ResolveMove(boardState, runState, player, moveCommand);
+                    break;
                 case WaitCommand _:
-                    return ResolveWait(runState, playerId);
+                    result = ResolveWait(runState, playerId);
+                    break;
                 case InteractCommand interactCommand:
-                    return ResolveInteract(boardState, runState, player, interactCommand);
+                    result = ResolveInteract(boardState, runState, player, interactCommand);
+                    break;
                 default:
                     return new RejectedTurnResult(CommandRejectionCode.InvalidCommand);
             }
+            int strength = command is MoveCommand ? noiseProfile?.MovementStrength ?? 0 :
+                command is InteractCommand ? noiseProfile?.InteractionStrength ?? 0 : 0;
+            if (!result.Accepted || strength == 0)
+                return result;
+            boardState.TryGetEntity(playerId, out BoardEntityState currentPlayer);
+            BoardNoise noise = boardState.EmitNoise(playerId, currentPlayer.Position, strength, noiseProfile.LifetimeTurns);
+            var events = new List<GameEvent>(result.Events);
+            int terminalIndex = events.FindIndex(gameEvent => gameEvent is ExitReachedEvent ||
+                gameEvent is PlayerStarvedEvent || gameEvent is PlayerDiedEvent);
+            events.Insert(terminalIndex < 0 ? events.Count : terminalIndex, new NoiseEvent(noise));
+            return new AcceptedTurnResult(events);
         }
 
         private TurnResult ResolveMove(

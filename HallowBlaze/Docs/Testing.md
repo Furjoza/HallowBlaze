@@ -1,5 +1,53 @@
 # HallowBlaze Testing
 
+## M4.7 Domain Noise
+
+Propagation rule: emission freezes a board-local immutable `BoardNoise` footprint. The source
+is always audible; each orthogonal step costs one strength point, including detours. A reached
+cell requires existing walkable terrain and no impassable obstacle. Missing/non-walkable ground
+and impassable obstacles are excluded and stop that path; walkable obstacles, actors and items
+do not block. A breadth-first search finds every cell within the inclusive path budget, with
+coordinate-sorted output and no random hearing roll. Later terrain changes never recompute
+that event's footprint. `NoiseEvent.Noise`, the active `BoardState` snapshots and debug display
+share these immutable cells; future Listener code must use `IsAudible`, not a new distance rule.
+
+`ActionNoiseProfile` is immutable configuration. The production prototype uses movement strength
+**2**, interaction strength **4**, and lifetime **2**. Movement emits at its resulting cell;
+interaction emits at the actor's cell. Wait is silent, and zero in either configured strength
+suppresses that action's emission. Standalone `TurnResolver` defaults remain silent unless
+configured. These prototype values are not axe balance or Listener behavior.
+
+After an accepted player phase, `TurnController` ages only noise present before that command,
+before executing locked enemy intents and planning the next batch. Newly emitted noise retains
+its full lifetime. Thus lifetime 2 survives the emitting command and one subsequent accepted
+command, then expires on the next accepted command. Rejection and blocked input do not age or
+emit noise and do not change costs. An accepted terminal action still emits before the terminal
+event. Old event/snapshot values remain immutable while active state receives aged replacements.
+Clone copies the emission sequence and owns independent collections; each fresh board starts
+empty. Noise is not added to save DTOs or carried to another board.
+
+The board-owned debug view draws a thin outline at every audible cell plus `S<strength>` and
+`T<remaining>` at the source. It reads snapshots only, without gameplay mutation or audio, and
+is refreshed at noise replay, recovery and command completion (including silent Wait). Terminal,
+replacement and disposal close its lifetime. Existing scenes, prefabs and audio assets are unchanged.
+
+Run focused gates from the Unity project root, with one Unity process at a time:
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter HallowBlaze.Tests.EditMode.BoardNoiseTests --output "$env:TEMP/HB-M47-model.xml" -- -nographics -logFile "$env:TEMP/HB-M47-model.log"
+unity test $project --mode EditMode --filter HallowBlaze.Tests.EditMode.NoiseTurnTests --output "$env:TEMP/HB-M47-turns.xml" -- -nographics -logFile "$env:TEMP/HB-M47-turns.log"
+unity test $project --mode PlayMode --filter HallowBlaze.Tests.PlayMode.NoisePresentationTests --output "$env:TEMP/HB-M47-view.xml" -- -logFile "$env:TEMP/HB-M47-view.log"
+```
+
+The visual gate needs graphics, so do **not** add `-nographics` to its command. It compares
+displayed cells with hearing queries, exercises production replay/Wait/disposal, and renders
+strengths **1 / 3 / 5** side by side. Pixel checks require a nonempty image in every panel. The
+test output prints `%TEMP%/HB-M47-visual-<unique-id>/noise-strengths-1-3-5.png`; this screenshot is
+external evidence, not a source asset. Full EditMode and graphics-enabled PlayMode also guard
+the existing command gate, resource costs, intent execution, animation parity and terminal flow.
+Require a fresh nonzero passed XML report with the expected test identity, not only CLI success.
+
 ## M4.6 Generation Gates
 
 Current generation automation uses Unity CLI against the active project, not the old
