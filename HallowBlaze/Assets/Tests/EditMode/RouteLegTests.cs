@@ -239,7 +239,8 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(BoardRequest.CreateFromRun(restored, published).Address, Is.EqualTo(before));
             Assert.That(restored.ActiveLeg.Segments.Select(segment => segment.GenerationConfigurationId),
                 Is.All.EqualTo("legacy.board.v1"));
-            Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 2)));
+            Assert.That(BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 2)), Is.EqualTo(before));
+            Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 3)));
             Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("unknown", 1)));
             restored.TryConsumeIntro(restored.ActiveLeg.LegId);
             restored.TryAdvanceSegment(restored.ActiveLeg.LegId, "segment.1");
@@ -247,20 +248,40 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         /// <summary>New legs persist the ordinary family for current RNG while imported runs retain their explicit legacy family.</summary>
-        [TestCase(false)]
-        [TestCase(true)]
-        public void OrdinaryRouteStartPersistsTheCorrectGenerationFamily(bool legacyRandom)
+        [TestCase(false, 1)]
+        [TestCase(true, 1)]
+        [TestCase(false, 2)]
+        [TestCase(true, 2)]
+        public void OrdinaryRouteStartPersistsTheCorrectGenerationFamily(bool legacyRandom, int generationVersion)
         {
             var session = new GameSession(new ProfileState("profile.test", "world.test", 1));
             RunState run = legacyRandom ? new RunState("run.test", 1729, new RunStateConfiguration(100, 100, 0, "a"),
                 RunState.LegacyRandomAlgorithmId, RunState.LegacyRandomAlgorithmVersion) : NewRun();
             session.ContinueRun(run);
-            WorldDefinition published = WorldWithGeneration("ordinary.board.v1", 1);
+            WorldDefinition published = WorldWithGeneration("ordinary.board.v1", generationVersion);
             var store = new TravelSaveStore();
             Assert.That(new RouteTravelService(session, published, store).StartRoute("edge").IsSuccess, Is.True);
             string expected = legacyRandom ? "legacy.board.v1" : "ordinary.board.v1";
             Assert.That(store.SavedLeg.Segments.Select(segment => segment.GenerationConfigurationId), Is.All.EqualTo(expected));
             Assert.That(BoardAddressFactory.Create(run, published).GenerationConfigurationId, Is.EqualTo(expected));
+            Assert.That(BoardAddressFactory.Create(run, published).GenerationVersion, Is.EqualTo(legacyRandom ? 1 : generationVersion));
+        }
+
+        /// <summary>Saved ordinary v1 legs keep their exact seed and algorithm against a v2 publication without accepting downgrades.</summary>
+        [Test]
+        public void BoundedPipelinePublicationPreservesOrdinaryVersionOne()
+        {
+            RunState run = NewRun();
+            run.StartLeg("edge", "a", "b", Segments().Select(segment => new RouteSegmentState(segment.SegmentId, "ordinary.board.v1", 1)));
+            BoardAddress original = BoardAddressFactory.Create(run, WorldWithGeneration("ordinary.board.v1", 1));
+            RunState restored = PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(run));
+            Assert.That(BoardRequest.CreateFromRun(restored, WorldWithGeneration("ordinary.board.v1", 2)).Address, Is.EqualTo(original));
+            Assert.That(restored.ActiveLeg.CurrentSegment.GenerationVersion, Is.EqualTo(1));
+            Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 3)));
+            var session = new GameSession(new ProfileState("profile.test", "world.test", 1));
+            session.ContinueRun(NewRun());
+            new RouteTravelService(session, WorldWithGeneration("ordinary.board.v1", 2), new TravelSaveStore()).StartRoute("edge");
+            Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(session.ActiveRun, WorldWithGeneration("ordinary.board.v1", 1)));
         }
 
         private static WorldDefinition WorldWithGeneration(string identifier, int version)

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Generation;
+using HallowBlaze.Core.Generation.Pipeline;
 using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.State;
 using HallowBlaze.Core.Turns.Resolution;
@@ -41,7 +42,7 @@ namespace HallowBlaze.Presentation.Runtime
                 });
         }
 
-        /// <summary>Resolves the initial ordinary preset by persisted address; arbitrary configuration IDs/versions are rejected.</summary>
+        /// <summary>Resolves retained single-candidate v1 or bounded pipeline v2 budgets; arbitrary IDs/versions are rejected.</summary>
         /// <param name="address">The actual segment identity; day affects obstacle/enemy pressure, not board size.</param>
         /// <returns>A detached inclusive budget; this is a first-family preset, not final balance.</returns>
         /// <exception cref="ArgumentException">The generation family or version is unsupported.</exception>
@@ -50,12 +51,13 @@ namespace HallowBlaze.Presentation.Runtime
         {
             if (address == null) throw new ArgumentNullException(nameof(address));
             if (address.GenerationConfigurationId != OrdinaryBoardGenerator.ConfigurationId ||
-                address.GenerationVersion != OrdinaryBoardGenerator.ConfigurationVersion)
+                (address.GenerationVersion != OrdinaryBoardGenerator.ConfigurationVersion &&
+                address.GenerationVersion != BoardGenerationPipeline.OrdinaryConfigurationVersion))
                 throw new ArgumentException("Unsupported ordinary generation identity: " + address.GenerationConfigurationId +
                     "/" + address.GenerationVersion, nameof(address));
             int obstacleMinimum = 5 + Math.Min(2, (address.DayNumber - 1) / 3);
             int enemyCount = Math.Min(3, (int)Math.Log(address.DayNumber, 2));
-            return new BoardGenerationConfig(OrdinaryBoardGenerator.ConfigurationId, OrdinaryBoardGenerator.ConfigurationVersion,
+            return new BoardGenerationConfig(address.GenerationConfigurationId, address.GenerationVersion,
                 new GenerationRange(8, 14), new GenerationRange(20, 58),
                 new GenerationRange(obstacleMinimum, obstacleMinimum + 2), new GenerationRange(enemyCount, enemyCount),
                 Math.Min(1, enemyCount), 2,

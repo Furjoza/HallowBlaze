@@ -4733,7 +4733,7 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 ## `M4.5` — Ograniczone próby i poprawny fallback generatora
 
-**Status:** `Planned`  
+**Status:** `Done` - accepted 2026-10-15 under the owner's current autonomous implementation and self-review authorization. No independent Reviewer verdict is claimed.
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcja 16.
 
@@ -4758,6 +4758,8 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 **Wpływ na save i kompatybilność:** The selected board seed/config stays in run-boundary data. Algorithm changes can change generated boards and require explicit generation/version identity; diagnostic format updates apply only after M8.7 acceptance.
 
 **Wymagany handoff:** Maksymalna liczba prób, zasada sub-seedów i raport z wymuszonego fallbacku.
+
+**Accepted scope (2026-10-15):** Engine-free bounded generate/validate/retry/fallback pipeline with eight production candidate calls and two versioned authored fallback templates, independent full-address/root-seed/attempt PCG32 sub-seeds, immutable attempt diagnostics, and explicit exhaustion without a blueprint. The generic API rejects limits above eight and libraries above eight; supplied builders are synchronous bounded project code, not interruptible plugins. Every returned result is independently validated against unchanged configuration/resource bands, complete address and optional exact feature/source/observability requirements. Corrupt fallback data and conflicting requirements cannot be silently published or relaxed. Production `BoardManager` exposes the accepted history, reports recovery and blocks startup on exhaustion. New prototype segments select `ordinary.board.v1/2`; saved ordinary version 1, legacy layouts, root seeds and Continue boundaries remain compatible without save-schema changes. [Bounds, sub-seeds, library, forced-fallback evidence and compatibility](BoardGeneration.md#m45-bounded-generation-pipeline) are documented. Focused pipeline EditMode **27/27**, travel EditMode **41/41**, startup PlayMode **23/23**, full EditMode **857/857**, and graphics-enabled full PlayMode **117/117** passed with zero failed, skipped or inconclusive cases. Self-review passed under the owner's current M4.5 autonomous instruction; no independent review, manual user smoke, production latency SLA or measured fallback-frequency claim is made. M4.6 large seed gates/metrics remain next; scenes, prefabs, packages, project settings and protected agent configuration are unchanged.
 
 ---
 
@@ -6101,7 +6103,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. continue M4 with `M4.5` after the accepted M4.4 changes are committed and a new clean baseline is established, then follow the existing dependency order; the M3.12 and M4.1-M4.4 review authorizations do not extend to later tasks;
+1. continue M4 with `M4.6` after the accepted M4.5 changes are committed and a new clean baseline is established, then follow the existing dependency order; the M3.12 and M4.1-M4.5 review authorizations do not extend to later tasks;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6117,7 +6119,9 @@ M4.2 is accepted on 2026-10-14 with the immutable blueprint/configuration contra
 
 M4.3 is accepted on 2026-10-14 with a pure local-board validator, shared structural checks, explicit item/source catalog resolution, static topology/budget metrics, and current initial-intent safety checks. Focused EditMode `138/138`, full EditMode `795/795`, and graphics-enabled PlayMode `111/111` passed. The owner authorized combined Lead/Developer/Reviewer work for M4.3 only; this was self-review, not an independent verdict.
 
-M4.4 is accepted on 2026-10-14 with the addressed single-candidate ordinary generator, blueprint-first production presentation, deterministic generic supply, and explicit legacy layout compatibility. Full EditMode `827/827` and graphics-enabled PlayMode `115/115` passed. The owner separately authorized combined Lead/Developer/Reviewer work for M4.4 only; this was self-review, not an independent verdict. M4.5 is the next planned task.
+M4.4 is accepted on 2026-10-14 with the addressed single-candidate ordinary generator, blueprint-first production presentation, deterministic generic supply, and explicit legacy layout compatibility. Full EditMode `827/827` and graphics-enabled PlayMode `115/115` passed. The owner separately authorized combined Lead/Developer/Reviewer work for M4.4 only; this was self-review, not an independent verdict.
+
+M4.5 is accepted on 2026-10-15 with bounded deterministic attempts, two validated authored fallbacks, explicit recovery diagnostics and request-requirement preservation under generation version 2. Full EditMode `857/857` and graphics-enabled PlayMode `117/117` passed. The owner's current autonomous instruction authorized direct implementation and self-review for M4.5 only; no independent verdict is claimed. M4.6 is the next planned task.
 
 # Zasada aktualizacji roadmapy
 

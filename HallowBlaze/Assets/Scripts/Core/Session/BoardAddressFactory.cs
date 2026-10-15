@@ -13,8 +13,8 @@ namespace HallowBlaze.Core.Session
 
         /// <summary>
         /// Validates published road/segment/configuration associations and derives the persisted address.
-        /// The explicit legacy v1 to ordinary v1 publication upgrade retains saved legacy identity and seed;
-        /// other configuration drift is rejected, never substituted into an active leg.
+        /// Named publication upgrades from legacy v1 or ordinary version 1 to ordinary version 2 retain
+        /// saved identity, seed and algorithm. Other drift is rejected, never substituted into an active leg.
         /// </summary>
         /// <exception cref="ArgumentException">The saved leg references foreign or changed published content.</exception>
         public static BoardAddress Create(RunState run, WorldDefinition world)
@@ -40,7 +40,10 @@ namespace HallowBlaze.Core.Session
             return (published.GenerationVersion == saved.GenerationVersion &&
                 published.GenerationConfigurationId == saved.GenerationConfigurationId) ||
                 (saved.GenerationConfigurationId == "legacy.board.v1" && saved.GenerationVersion == 1 &&
-                published.GenerationConfigurationId == "ordinary.board.v1" && published.GenerationVersion == 1);
+                published.GenerationConfigurationId == "ordinary.board.v1" &&
+                (published.GenerationVersion == 1 || published.GenerationVersion == 2)) ||
+                (saved.GenerationConfigurationId == "ordinary.board.v1" && saved.GenerationVersion == 1 &&
+                published.GenerationConfigurationId == "ordinary.board.v1" && published.GenerationVersion == 2);
         }
 
         /// <summary>
