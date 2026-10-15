@@ -1,9 +1,10 @@
 # Board generation data contract
 
-M4.2 defines initial data; M4.3 adds an independent ordinary-board validator, not a new
-generator or final balance preset. The engine-free `HallowBlaze.Core.Generation` assembly
-uses board primitives/state, stable travel identity, and the existing turn contracts and
-Shambler planner for opening measurements. Production generation and presentation are unchanged.
+M4.2 defines initial data, M4.3 adds an independent ordinary-board validator, and M4.4
+connects a single-candidate model-first generator to production presentation. The engine-free
+`HallowBlaze.Core.Generation` assembly uses board primitives/state, addressed PCG32 RNG,
+stable travel identity, and the existing turn contracts and Shambler planner. This is the
+first ordinary family, not final balance; retry/fallback orchestration belongs to M4.5.
 
 ## Ownership and construction
 
@@ -28,7 +29,7 @@ conflicts, missing/duplicate player actors, missing exits, start/exit overlap, i
 item bindings, and mismatched configuration identity. It deliberately does not prove
 reachability, tactical fairness, catalog resolution, or compliance with budget targets.
 M4.3 validates static reachability, catalogs, budgets, and the supported opening rules;
-generation and view construction belong to M4.4. Construction and raw-candidate validation
+M4.4 generates and presents only a validated blueprint. Construction and raw-candidate validation
 share one structural rule implementation rather than competing checks.
 
 ## Generic items and initial supply
@@ -55,8 +56,8 @@ collects items nor writes resource observations, taken-source state, or profile 
 ## Budget dimensions
 
 All `GenerationRange` bounds are inclusive, nonnegative targets. Construction alone does
-not prove joint feasibility; M4.3 checks a candidate's measured compliance. M4.4 will
-generate candidates against these targets.
+not prove joint feasibility; M4.3 checks a candidate's measured compliance. M4.4 generates
+a candidate against these targets and explicitly rejects unsupported joint budgets.
 
 | Field | Unit / contract | Intended pressure |
 | --- | --- | --- |
@@ -146,7 +147,7 @@ All candidate definitions must match catalog kind, layer, traits and compatibili
 reward exactly. `AllowedContentIds` is an allowlist, not proof that an ID exists. Source
 IDs are optional for ordinary random items, but any supplied ID must resolve to the same
 item definition. The catalog copies its inputs and rejects duplicate or dangling
-registrations. M4.4 owns connecting generation to the actual content catalog and validator.
+registrations. M4.4 connects generation to `OrdinaryBoardContent.CreateCatalog()` and this validator.
 
 ## Validation rule catalog
 
@@ -231,7 +232,117 @@ The exporter preserves the current legacy layered exit without counting it as su
 It rejects non-8x8 bounds. It does not scrape a scene or alter the production generator.
 
 Normal between-board saves still store their existing seed/configuration boundary rather
-than a blueprint. Save schemas, RNG algorithms, generation behavior, and carried inventory
-are unchanged. Focused executable coverage is in
+than a blueprint. M4.4 changes ordinary generation under a new explicit configuration;
+save schemas, RNG algorithms, and carried inventory are unchanged. Focused data/validation coverage is in
 [BoardBlueprintTests](../Assets/Tests/EditMode/BoardBlueprintTests.cs) and
 [BoardValidatorTests](../Assets/Tests/EditMode/BoardValidatorTests.cs).
+
+## M4.4 ordinary generation
+
+`OrdinaryBoardGenerator.Generate(address, config, catalog, runSeed)` owns one candidate.
+It uses a fresh `ordinary-board-v1` PCG32 stream framed with run, leg, edge, segment, day,
+configuration ID/version and board seed. The run root seed also participates in derivation.
+Definition enumeration is sorted by layer/content ID, and coordinates are sorted before
+shuffling. Neither collection hash iteration, culture, prefab order nor cosmetic draws
+can select gameplay placement. Stable textual item IDs plus the full address identify
+each item instance; the resource manifest remains derived from those instances.
+
+### Phases
+
+1. Resolve allowed, authoritative ground, terrain exit, player, blocking obstacles,
+  current enemies and generic item definitions from the detached catalog.
+2. Choose a south-edge start `(x,0)` and north-edge exit `(7-x,7)`. Reserve a randomly
+  interleaved monotone cardinal route plus every in-bounds first-step neighbor.
+3. Fill all 64 terrain cells, replacing the exit cell with explicit exit terrain.
+  Place budgeted obstacles only outside the reservation, including at least one
+  blocking perimeter cell. No fully walkable 28-cell perimeter is retained.
+4. Compute the start-connected passable component. Place enemies only there, off the
+  exit, at Manhattan distance at least four from the player and three from each other.
+  The actual validator still decides initial intent safety and concurrent threats.
+5. Place budgeted item instances on reachable cells outside initial actors and the exit.
+  Existing food/soda definitions map to family `food`; their automatic food rewards
+  remain runtime compatibility effects, not generation counts or an inventory model.
+6. Validate the raw complete candidate. A failed candidate throws
+  `BoardGenerationException` with its detached report, full identity and all reasons.
+  A passing candidate becomes an immutable blueprint before any view is instantiated.
+7. `BoardManager` instantiates existing mapped views in an inactive staging holder.
+  `BlueprintBoardRuntimeComposer` checks exact ID/count/position parity, creates state
+  directly from the blueprint, and resolves enemy rules from the catalog. The exit's
+  decorative marker and outer wall outside `0..7` are not authoritative resource entities.
+  Publication is atomic; failure destroys staged views and restores the player pose.
+
+### First Production Preset
+
+`ordinary.board.v1/1` uses 8x8 bounds, shortest path `8..14`, branch points `20..58`,
+two safe first steps, and `2..5` initial food-family instances. Obstacle targets are
+`5..7` on days 1-3, `6..8` on days 4-6, and `7..9` afterwards. Enemy count is
+`min(3, floor(log2(day)))`, with at most one enemy threatening a cell initially.
+Obstacle topology, opening safety, path/branch targets and resource supply therefore
+remain explicit dimensions rather than difficulty being only a zombie count.
+
+The existing `GameManager` prefab maps both Shambler variants (10/20 HP), floor/wall
+artwork and food/soda. Ordinary views may select cosmetic variants but cannot replace
+an enemy rule, item definition, entity ID or cell. Missing mappings reject setup.
+`BoardManager.ActiveBlueprint` exposes the accepted initial layout for inspection and
+is null for legacy, failed and released boards. Runtime pickups/movement do not edit it.
+
+### Compatibility
+
+The prototype's 45 published stable segment IDs and order are unchanged; their current
+configuration is now `ordinary.board.v1/1`. Starting a current-RNG leg persists this
+identity before board creation. A saved `legacy.board.v1/1` leg remains explicitly legacy,
+retaining its original seed, layout algorithm and draw order across all its segments.
+`BoardAddressFactory` allows only this named legacy-to-ordinary publication upgrade;
+unknown IDs, future versions, foreign roads and foreign segments remain rejected.
+Imported legacy-RNG runs also retain legacy configuration when starting another leg.
+Checkpoint-only boards retain their previous path. No save reset or schema change occurs.
+
+### Checked Examples
+
+These are generated and validated test outputs, not hand-authored fallbacks. Both use
+root seed `77`, board seed `42`, and run/leg/edge/segment IDs `run/leg/road/segment`.
+Rows are shown north to south. `P` is the player, `E` the exit, `#` a blocking obstacle,
+`Z` an enemy and `f` one food-family instance (not its restoration amount).
+
+```text
+Day 1                 Day 4
+......E.              E....#..
+.....f#.              ........
+......##              .#.....f
+........              Z#f.....
+...#.f..              ........
+.....#f#              ##...f..
+......f#              f..#f...
+.P......              ..Z.##.P
+```
+
+The day-one fingerprint is
+`a9400fb48d29fcb420826b067dc62f3ebe7b4b9770006d1e0125981a0aa03b37`;
+the day-four fingerprint is
+`8f729f25ec47bdcc7e68242aba732eff5ea269ac6e01340901d29841c11412b0`.
+The separate construction fixture freezes a golden algorithm snapshot in
+[OrdinaryBoardGeneratorTests](../Assets/Tests/EditMode/OrdinaryBoardGeneratorTests.cs).
+
+### Limits And Verification
+
+This family reserves only monotone south-to-north routes; it is not a solver for every
+joint budget accepted by `BoardGenerationConfig`. It never publishes invalid data,
+silently relaxes budgets, retries indefinitely, repairs GameObjects, or writes profile/
+atlas observations. Rejected candidates are explicit. Retry/sub-seed/fallback policy is
+M4.5; 1,000/10,000-seed gates and distribution reporting are M4.6. Static reachability
+and opening safety are not proofs of fun or full-run survival. Final biomes, landmarks,
+fixed-source guarantees, hidden-item presentation and carried inventory are not added.
+
+M4.4 removes no further production global-RNG calls: M4.1 already removed them from
+`BoardManager`. Its remaining seeded `System.Random` calls are legacy-save compatibility;
+`SoundManager`'s global Unity RNG remains cosmetic. The new generator/presenter uses
+separate addressed streams and never reads or advances global Unity RNG.
+
+Acceptance on 2026-10-14: generator/composer EditMode `46/46`, travel EditMode `38/38`,
+startup PlayMode `21/21`, full EditMode `827/827`, and graphics-enabled full PlayMode
+`115/115`, all passed with zero failed, skipped or inconclusive cases. Coverage includes
+known seeds, a golden snapshot, days 1/4/10 presets, changed full address/root seed,
+catalog order/culture, rejection reports, view parity/invalid bindings, initial enemy
+rules/one turn controller, failure cleanup, legacy seed vectors and real Main-scene
+repeated Continue. Reports/logs remain outside the project. The owner authorized
+combined Lead/Developer/Reviewer work for M4.4; this was self-review, not independent review.

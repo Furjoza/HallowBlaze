@@ -4701,13 +4701,13 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 ## `M4.4` — Generator model-first zwykłej planszy 8×8
 
-**Status:** `Planned`  
+**Status:** `Done` - accepted 2026-10-14 with owner-authorized combined Lead, Developer, and Reviewer implementation, validation, and self-review. No independent Reviewer verdict is claimed.
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 7.2, 8, 16 i Appendix A.
 
 **Rationale:** Docelowa różnorodność ma pochodzić z decyzji/topologii, nie z wydłużania mapy lub automatycznie bezpiecznej ramki. Generacja danych przed widokiem umożliwia walidację i deterministyczność.
 
-**Obecne zachowanie:** Generator zostawia wolny obwód, używa globalnego RNG i łączy losowanie z `Instantiate`.
+**Behavior before this task:** M4.1 already replaced global gameplay RNG with addressed streams. The legacy generator still reserved a free perimeter and coupled placement to `Instantiate` before runtime composition.
 
 **Oczekiwany rezultat:** Dla request/config/seed generator zwraca blueprint 8×8 bez gwarantowanego bezpiecznego obwodu, z legalnym startem, exit i kontrolowaną topologią. Item spawns are generic content instances and expose deterministic initial counts by resource family without writing to profile/atlas state.
 
@@ -4726,6 +4726,8 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 **Wpływ na save i kompatybilność:** Run przechowuje seed i config ID, nie pełny środek planszy.
 
 **Wymagany handoff:** Fazy algorytmu, przykładowe blueprinty i lista usuniętych użyć globalnego RNG.
+
+**Accepted scope (2026-10-14):** Engine-free single-candidate ordinary 8x8 generation with full-address PCG32 identity, reserved south-to-north route/opening, perimeter/interior obstacles, separated current enemies, generic reachable items and derived resource counts. The independent M4.3 validator admits every published result; unsupported joint budgets return explicit reproducible rejection rather than hidden relaxation or retry. Production `BoardManager` builds views from the blueprint, retains entity IDs and catalog rules through direct state composition, isolates cosmetic RNG, and publishes atomically. All 45 prototype segment IDs/order remain stable and now select `ordinary.board.v1/1`; existing active legacy legs retain their exact saved address/seed/layout, including imported legacy-RNG future-leg compatibility. Unknown generation identities remain rejected. Save schemas and profile/atlas state are unchanged. [Algorithm phases, presets, checked examples, RNG audit and limits](BoardGeneration.md#m44-ordinary-generation) are documented. Focused generator/composer EditMode **46/46**, travel EditMode **38/38**, startup PlayMode **21/21**, full EditMode **827/827**, and graphics-enabled full PlayMode **115/115** passed with zero failed, skipped or inconclusive cases, including real Main-scene repeated Continue. Lead self-review passed under the owner's M4.4-specific combined-role authorization; no independent review or user-run manual smoke is claimed. M4.5 retries/fallbacks, M4.6 seed sweeps, final biomes, landmarks, tools and inventory remain out of scope. Scenes, prefabs, packages, settings and protected agent configuration are unchanged; Unity generated only metadata for new source/test files.
 
 ---
 
@@ -6099,7 +6101,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. continue M4 with `M4.4` after the accepted M4.3 changes are committed and a new clean baseline is established, then follow the existing dependency order; the M3.12, M4.1, M4.2, and M4.3 review authorizations do not extend to later tasks;
+1. continue M4 with `M4.5` after the accepted M4.4 changes are committed and a new clean baseline is established, then follow the existing dependency order; the M3.12 and M4.1-M4.4 review authorizations do not extend to later tasks;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6113,7 +6115,9 @@ M4.1 is accepted on 2026-10-14 with versioned independent RNG, compatible run sc
 
 M4.2 is accepted on 2026-10-14 with the immutable blueprint/configuration contract, generic item/source metadata, derived initial supply, and transitional state export. The owner separately authorized Lead-only implementation, validation, and self-review for M4.2; no independent review is claimed.
 
-M4.3 is accepted on 2026-10-14 with a pure local-board validator, shared structural checks, explicit item/source catalog resolution, static topology/budget metrics, and current initial-intent safety checks. Focused EditMode `138/138`, full EditMode `795/795`, and graphics-enabled PlayMode `111/111` passed. The owner authorized combined Lead/Developer/Reviewer work for M4.3 only; this was self-review, not an independent verdict. M4.4 is the next planned task.
+M4.3 is accepted on 2026-10-14 with a pure local-board validator, shared structural checks, explicit item/source catalog resolution, static topology/budget metrics, and current initial-intent safety checks. Focused EditMode `138/138`, full EditMode `795/795`, and graphics-enabled PlayMode `111/111` passed. The owner authorized combined Lead/Developer/Reviewer work for M4.3 only; this was self-review, not an independent verdict.
+
+M4.4 is accepted on 2026-10-14 with the addressed single-candidate ordinary generator, blueprint-first production presentation, deterministic generic supply, and explicit legacy layout compatibility. Full EditMode `827/827` and graphics-enabled PlayMode `115/115` passed. The owner separately authorized combined Lead/Developer/Reviewer work for M4.4 only; this was self-review, not an independent verdict. M4.5 is the next planned task.
 
 # Zasada aktualizacji roadmapy
 

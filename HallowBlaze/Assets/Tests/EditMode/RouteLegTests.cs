@@ -226,6 +226,52 @@ namespace HallowBlaze.Tests.EditMode
             public SaveStoreResult DeleteRun() => throw new NotSupportedException();
         }
 
+        /// <summary>The ordinary publication upgrade retains the entire saved legacy leg, address and frozen seed.</summary>
+        [Test]
+        public void OrdinaryPublicationKeepsSavedLegacyBoundaryWithoutAcceptingOtherDrift()
+        {
+            RunState run = NewRun();
+            run.StartLeg("edge", "a", "b", Segments());
+            BoardAddress before = BoardAddressFactory.Create(run, World());
+            WorldDefinition published = WorldWithGeneration("ordinary.board.v1", 1);
+            Assert.That(BoardAddressFactory.Create(run, published), Is.EqualTo(before));
+            RunState restored = PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(run));
+            Assert.That(BoardRequest.CreateFromRun(restored, published).Address, Is.EqualTo(before));
+            Assert.That(restored.ActiveLeg.Segments.Select(segment => segment.GenerationConfigurationId),
+                Is.All.EqualTo("legacy.board.v1"));
+            Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 2)));
+            Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("unknown", 1)));
+            restored.TryConsumeIntro(restored.ActiveLeg.LegId);
+            restored.TryAdvanceSegment(restored.ActiveLeg.LegId, "segment.1");
+            Assert.That(BoardAddressFactory.Create(restored, published).BoardSeed, Is.EqualTo(1058255485));
+        }
+
+        /// <summary>New legs persist the ordinary family for current RNG while imported runs retain their explicit legacy family.</summary>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void OrdinaryRouteStartPersistsTheCorrectGenerationFamily(bool legacyRandom)
+        {
+            var session = new GameSession(new ProfileState("profile.test", "world.test", 1));
+            RunState run = legacyRandom ? new RunState("run.test", 1729, new RunStateConfiguration(100, 100, 0, "a"),
+                RunState.LegacyRandomAlgorithmId, RunState.LegacyRandomAlgorithmVersion) : NewRun();
+            session.ContinueRun(run);
+            WorldDefinition published = WorldWithGeneration("ordinary.board.v1", 1);
+            var store = new TravelSaveStore();
+            Assert.That(new RouteTravelService(session, published, store).StartRoute("edge").IsSuccess, Is.True);
+            string expected = legacyRandom ? "legacy.board.v1" : "ordinary.board.v1";
+            Assert.That(store.SavedLeg.Segments.Select(segment => segment.GenerationConfigurationId), Is.All.EqualTo(expected));
+            Assert.That(BoardAddressFactory.Create(run, published).GenerationConfigurationId, Is.EqualTo(expected));
+        }
+
+        private static WorldDefinition WorldWithGeneration(string identifier, int version)
+        {
+            WorldDefinition world = World();
+            return new WorldDefinition(world.WorldDefinitionId, world.Version, world.StartNodeId, world.GoalNodeId, world.Nodes,
+                world.Edges.Select(edge => new WorldEdgeDefinition(edge.EdgeId, edge.FromNodeId, edge.ToNodeId,
+                    edge.WorldDirection, edge.ClueKey, edge.Segments.Select(segment =>
+                        new RouteSegmentDefinition(segment.SegmentId, identifier, version)))));
+        }
+
         [TestCase(2)]
         [TestCase(5)]
         public void TravelBoundaries_ConsumeBeforeRenderAdvanceOnceAndRollbackFailures(int count)

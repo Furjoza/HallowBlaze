@@ -65,11 +65,25 @@ namespace HallowBlaze.Core.Generation.Validation
         }
 
         internal bool ContainsContent(string identifier) => contentIds.Contains(identifier);
+        internal IReadOnlyList<BoardEntityDefinition> GetDefinitions()
+        {
+            var ordered = new List<BoardEntityDefinition>(definitions.Values);
+            ordered.Sort((left, right) =>
+            {
+                int layer = left.Layer.CompareTo(right.Layer);
+                return layer != 0 ? layer : string.CompareOrdinal(left.ContentId, right.ContentId);
+            });
+            return ordered.AsReadOnly();
+        }
         internal bool TryGetDefinition(BoardEntityDefinition candidate, out BoardEntityDefinition definition) =>
             definitions.TryGetValue((candidate.Layer, candidate.ContentId), out definition);
         internal bool TryGetItemFamily(string identifier, out string family) => itemFamilies.TryGetValue(identifier, out family);
         internal bool TryGetSourceDefinition(string identifier, out string definition) => fixedSources.TryGetValue(identifier, out definition);
         internal bool ContainsFamily(string family) => itemFamilies.ContainsValue(family);
-        internal bool TryGetShambler(string identifier, out ShamblerDefinition definition) => shamblers.TryGetValue(identifier, out definition);
+        /// <summary>Resolves the authoritative enemy rule for runtime construction without reading a prefab's gameplay data.</summary>
+        /// <param name="identifier">Stable enemy content ID.</param>
+        /// <param name="definition">The registered immutable rule, or null when no supported rule is registered.</param>
+        /// <returns>True only for an explicitly registered current Shambler rule.</returns>
+        public bool TryGetShambler(string identifier, out ShamblerDefinition definition) => shamblers.TryGetValue(identifier, out definition);
     }
 }

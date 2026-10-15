@@ -7,6 +7,8 @@ using System.Reflection;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 using HallowBlaze.Core.Board.Primitives;
+using HallowBlaze.Core.Generation;
+using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.Persistence;
 using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
@@ -189,6 +191,164 @@ namespace HallowBlaze.Tests.PlayMode
                     .Where(entity => runtime.Views[entity.Id].name.StartsWith("Legacy Food", StringComparison.Ordinal))
                     .Select(entity => entity.Position), Is.EquivalentTo(expected));
             }
+            yield return null;
+        }
+
+        /// <summary>Ordinary setup retains blueprint identity, initial state, enemy rules and view parity across Continue and cosmetic changes.</summary>
+        [UnityTest]
+        public IEnumerator OrdinarySetupBuildsViewsFromValidatedBlueprintAndContinuesIdentically()
+        {
+            UnityEngine.Random.State previousRandom = UnityEngine.Random.state;
+            try
+            {
+                Component manager = CreateOrdinaryBoardManager();
+                RunState run = CreateRun();
+                run.StartLeg("edge", run.WorldNodeId, "destination", new[]
+                {
+                    new RouteSegmentState("ordinary.segment", OrdinaryBoardGenerator.ConfigurationId, 1)
+                });
+                var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed,
+                    run.WorldNodeId, "forest", "temperate", 1);
+                GameObject player = CreateObject("Ordinary Player", 0, 0);
+                UnityEngine.Random.InitState(987);
+                UnityEngine.Random.State beforeSetup = UnityEngine.Random.state;
+                BoardRuntime first = InvokeSetup(manager, request, run, player);
+                BoardBlueprint blueprint = GetProperty<BoardBlueprint>(manager, "ActiveBlueprint");
+                Assert.That(blueprint, Is.Not.Null);
+                Assert.That(BoardValidator.Validate(blueprint, OrdinaryBoardContent.CreateCatalog()).IsValid, Is.True);
+                Assert.That(UnityEngine.Random.state, Is.EqualTo(beforeSetup));
+                Assert.That(first.BoardState.GetEntities(), Is.EqualTo(blueprint.Entities));
+                Assert.That(first.Views.Count, Is.EqualTo(blueprint.Entities.Count));
+                foreach (var entity in blueprint.Entities)
+                {
+                    Assert.That(first.Views[entity.Id].transform.position,
+                        Is.EqualTo(new Vector3(entity.Position.X, entity.Position.Y, 0)));
+                    if (entity.Definition.Kind.Equals(EntityKind.Enemy))
+                        Assert.That(first.Enemies.Single(enemy => enemy.ActorId.Equals(entity.Id)).Definition.Damage,
+                            Is.EqualTo(entity.Definition.ContentId == OrdinaryBoardContent.Enemy10Id ? 10 : 20));
+                }
+                string fingerprint = blueprint.ContentHash;
+                UnityEngine.Random.Range(0, 9999);
+                SetField(manager, "floorTiles", new[] { CreateObject("Cosmetic floor alternative", 0, 0) });
+                RunState restored = PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(run));
+                BoardRuntime resumed = InvokeSetup(manager, request, restored, player);
+                Assert.That(first.IsDisposed, Is.True);
+                Assert.That(GetProperty<BoardBlueprint>(manager, "ActiveBlueprint").ContentHash, Is.EqualTo(fingerprint));
+                Assert.That(resumed.BoardState.GetEntities(), Is.EqualTo(blueprint.Entities));
+                Assert.That(run.Health, Is.EqualTo(100));
+                Assert.That(run.Food, Is.EqualTo(100));
+                yield return null;
+            }
+            finally { UnityEngine.Random.state = previousRandom; }
+        }
+
+        /// <summary>Missing ordinary mappings restore the player and cannot publish a blueprint, runtime or partial board.</summary>
+        [UnityTest]
+        public IEnumerator OrdinaryMappingFailureDoesNotPublishOrMovePlayer()
+        {
+            Component manager = CreateOrdinaryBoardManager();
+            RunState run = CreateRun();
+            run.StartLeg("edge", run.WorldNodeId, "destination", new[]
+            {
+                new RouteSegmentState("ordinary.segment", OrdinaryBoardGenerator.ConfigurationId, 1)
+            });
+            var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed,
+                run.WorldNodeId, "forest", "temperate", 1);
+            GameObject player = CreateObject("Player on failed setup", 2, 2);
+            SetField(manager, "wallTiles", Array.Empty<GameObject>());
+            TargetInvocationException failure = Assert.Throws<TargetInvocationException>(() => InvokeSetup(manager, request, run, player));
+            Assert.That(failure.InnerException, Is.TypeOf<BoardRuntimeCompositionException>());
+            Assert.That(GetProperty<BoardBlueprint>(manager, "ActiveBlueprint"), Is.Null);
+            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveRuntime"), Is.Null);
+            Assert.That(GetProperty<BoardRequest>(manager, "ActiveRequest"), Is.Null);
+            Assert.That(player.transform.position, Is.EqualTo(new Vector3(2, 2, 0)));
+            Assert.That(run.Health, Is.EqualTo(100));
+            Assert.That(run.Food, Is.EqualTo(100));
+            yield return null;
+            Assert.That(manager.transform.childCount, Is.Zero);
+        }
+
+        private Component CreateOrdinaryBoardManager()
+        {
+            Component manager = CreateBoardManager();
+            SetField(manager, "columns", 8);
+            SetField(manager, "rows", 8);
+            GameObject food = CreateObject("Ordinary food prefab", 0, 0);
+            GameObject soda = CreateObject("Ordinary soda prefab", 0, 0);
+            soda.tag = "Soda";
+            SetField(manager, "groundFoodTiles", new[] { food, soda });
+            var enemies = new List<GameObject>();
+            foreach (int damage in new[] { 10, 20 })
+            {
+                GameObject enemy = CreateObject("Ordinary enemy " + damage, 0, 0);
+                SetField(enemy.AddComponent(boardManagerType.Assembly.GetType("Enemy", true)), "playerDamage", damage);
+                enemies.Add(enemy);
+            }
+            SetField(manager, "enemyTiles", enemies.ToArray());
+            return manager;
+        }
+
+        /// <summary>Ordinary enemy variants retain their initial intent and execute only through the one runtime controller.</summary>
+        [UnityTest]
+        public IEnumerator OrdinaryEnemiesUseBlueprintRulesAndOneTurnController()
+        {
+            Component manager = CreateOrdinaryBoardManager();
+            GameObject player = CreateObject("Ordinary enemy-test player", 0, 0);
+            foreach (int day in new[] { 2, 4, 10 })
+            {
+                var run = new RunState("ordinary-day-" + day, 77,
+                    new RunStateConfiguration(100, 100, day - 1, "forest.start"));
+                run.StartLeg("edge", run.WorldNodeId, "destination", new[]
+                {
+                    new RouteSegmentState("ordinary.segment", OrdinaryBoardGenerator.ConfigurationId, 1)
+                });
+                var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed,
+                    run.WorldNodeId, "forest", "temperate", day);
+                BoardRuntime runtime = InvokeSetup(manager, request, run, player);
+                BoardBlueprint blueprint = GetProperty<BoardBlueprint>(manager, "ActiveBlueprint");
+                string hash = blueprint.ContentHash;
+                Assert.That(runtime.Enemies.Count, Is.EqualTo(OrdinaryBoardContent.CreateConfiguration(request.Address).EnemyCount.Minimum));
+                foreach (ShamblerState enemy in runtime.Enemies)
+                {
+                    var entity = blueprint.Entities.Single(candidate => candidate.Id.Equals(enemy.ActorId));
+                    Component artwork = runtime.Views[enemy.ActorId].GetComponent(boardManagerType.Assembly.GetType("Enemy", true));
+                    Assert.That(artwork.GetType().GetField("playerDamage").GetValue(artwork), Is.EqualTo(enemy.Definition.Damage));
+                    Assert.That(enemy.Definition.Damage, Is.EqualTo(entity.Definition.ContentId == OrdinaryBoardContent.Enemy10Id ? 10 : 20));
+                    Assert.That(enemy.LockedIntent, Is.Not.Null);
+                }
+                TurnController controller = runtime.Controller;
+                Assert.That(controller.Resolve(new WaitCommand()).Accepted, Is.True);
+                Assert.That(run.Food, Is.EqualTo(99));
+                Assert.That(run.Health, Is.EqualTo(100));
+                Assert.That(runtime.Enemies.All(enemy => enemy.Phase == ShamblerPhase.Rest), Is.True);
+                Assert.That(runtime.Controller, Is.SameAs(controller));
+                Assert.That(blueprint.ContentHash, Is.EqualTo(hash));
+                yield return null;
+            }
+        }
+
+        /// <summary>A future generation version is rejected without leaving the previous runtime or its blueprint published.</summary>
+        [UnityTest]
+        public IEnumerator OrdinaryUnsupportedVersionReleasesThePreviousRuntime()
+        {
+            Component manager = CreateOrdinaryBoardManager();
+            RunState run = CreateRun();
+            run.StartLeg("edge", run.WorldNodeId, "destination", new[]
+            {
+                new RouteSegmentState("ordinary.segment", OrdinaryBoardGenerator.ConfigurationId, 1)
+            });
+            var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed,
+                run.WorldNodeId, "forest", "temperate", 1);
+            GameObject player = CreateObject("Version-test player", 0, 0);
+            BoardRuntime previous = InvokeSetup(manager, request, run, player);
+            var address = new BoardAddress(request.Address.RunId, request.Address.LegId, request.Address.EdgeId,
+                request.Address.SegmentId, request.Address.DayNumber, OrdinaryBoardGenerator.ConfigurationId, 2, request.BoardSeed);
+            var unsupported = new BoardRequest(address, run.RunSeed, run.WorldNodeId, "forest", "temperate", 1);
+            Assert.Throws<TargetInvocationException>(() => InvokeSetup(manager, unsupported, run, player));
+            Assert.That(previous.IsDisposed, Is.True);
+            Assert.That(GetProperty<BoardBlueprint>(manager, "ActiveBlueprint"), Is.Null);
+            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveRuntime"), Is.Null);
+            Assert.That(GetProperty<BoardRequest>(manager, "ActiveRequest"), Is.Null);
             yield return null;
         }
 
@@ -519,7 +679,7 @@ namespace HallowBlaze.Tests.PlayMode
             persistenceRoot = Path.Combine(Path.GetTempPath(), "HB-LegendStartup-" + Guid.NewGuid().ToString("N"));
             gameManagerType.GetField("PersistenceRootOverride", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, persistenceRoot);
             Time.timeScale = 1;
-            Component board = CreateBoardManager();
+            Component board = CreateOrdinaryBoardManager();
             SetField(board, "columns", 8);
             SetField(board, "rows", 8);
             Component manager = board.gameObject.AddComponent(gameManagerType);
@@ -554,6 +714,7 @@ namespace HallowBlaze.Tests.PlayMode
             InvokeManager(manager, "InitGame");
             BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
             Assert.That(runtime, Is.Not.Null);
+            Assert.That(GetProperty<BoardBlueprint>(board, "ActiveBlueprint"), Is.Not.Null);
             Assert.That(runtime.Enemies, Is.Empty);
             Assert.That(dayText.text, Is.EqualTo("Day: 1"));
             Assert.That(new HallowBlaze.Core.Persistence.Storage.FileSystemSaveStore(persistenceRoot).LoadRun().Data.ActiveLeg.IntroState,
@@ -926,8 +1087,9 @@ namespace HallowBlaze.Tests.PlayMode
             WorldDefinition original = WorldDefinitionJson.Deserialize(world.text);
             WorldDefinition fixture = new WorldDefinition(original.WorldDefinitionId, original.Version,
                 original.StartNodeId, original.GoalNodeId, original.Nodes, original.Edges.Select(edge =>
-                    edge.EdgeId == "road.start-east-creek" ? new WorldEdgeDefinition(edge.EdgeId,
-                        edge.FromNodeId, edge.ToNodeId, edge.WorldDirection, edge.ClueKey, edge.Segments.Take(count)) : edge));
+                    new WorldEdgeDefinition(edge.EdgeId, edge.FromNodeId, edge.ToNodeId, edge.WorldDirection, edge.ClueKey,
+                        (edge.EdgeId == "road.start-east-creek" ? edge.Segments.Take(count) : edge.Segments)
+                            .Select(segment => new RouteSegmentDefinition(segment.SegmentId, "legacy.board.v1", 1)))));
             SetField(manager, "worldDefinition", fixture);
             SetField(manager, "worldMap", new WorldMapService(fixture, session, store));
             Assert.That((bool)InvokeManager(manager, "TryEnterCurrentWorldNode"), Is.True);
