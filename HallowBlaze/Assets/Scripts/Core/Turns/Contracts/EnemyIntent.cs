@@ -21,13 +21,17 @@ namespace HallowBlaze.Core.Turns.Contracts
         /// <summary>
         /// Take no movement or attack action, regardless of subsequent player movement.
         /// </summary>
-        Wait = 3
+        Wait = 3,
+
+        /// <summary>Take one fixed step toward a heard noise, without attacking any occupant.</summary>
+        Investigate = 4
     }
 
     /// <summary>
     /// Retains one immutable, board-local enemy action and its declared target policy.
     /// A move's player-entry attack uses the same recorded cell; a planned attack never
-    /// follows its target. Board legality and execution are validated separately.
+    /// follows its target. Investigation retains its origin, next step and noise source without
+    /// an attack condition. Board legality and execution are validated separately.
     /// This value does not advance cadence, mutate gameplay state, or belong to a save DTO.
     /// </summary>
     public sealed class EnemyIntent
@@ -43,14 +47,14 @@ namespace HallowBlaze.Core.Turns.Contracts
         public EnemyIntentKind Kind { get; }
 
         /// <summary>
-        /// Gets the fixed movement destination or original attack cell; wait has no target cell.
+        /// Gets the fixed movement/investigation step or original attack cell; wait has no target cell.
         /// Coordinates are copied by value and are not constrained to a particular board's bounds.
         /// </summary>
         public GridPosition? TargetPosition { get; }
 
         /// <summary>
         /// Gets the original player's identity for a planned or conditional attack;
-        /// wait has no target identity. A replacement occupant is not this target.
+        /// wait and investigation have no target identity. A replacement occupant is not this target.
         /// </summary>
         public EntityId? TargetId { get; }
 
@@ -60,17 +64,28 @@ namespace HallowBlaze.Core.Turns.Contracts
         /// </summary>
         public bool AttackOnPlayerEntry { get; }
 
+        /// <summary>Gets the heard noise's fixed source cell for investigation, otherwise null.</summary>
+        public GridPosition? InvestigationTarget { get; }
+        /// <summary>Gets the exact board-local emission being investigated, otherwise null.</summary>
+        public long? NoiseId { get; }
+        /// <summary>Gets the recorded investigation origin; a displaced actor cannot execute this step.</summary>
+        public GridPosition? SourcePosition { get; }
+
         /// <summary>
         /// Creates a validated snapshot of one action, rejecting missing or contradictory payloads.
         /// Move requires a fixed cell, a distinct player identity, and the player-entry condition.
         /// Attack requires that cell and identity without the condition; wait permits neither target
-        /// nor condition. All primitive ID and coordinate values, including zero and origin, remain valid.
+        /// nor condition. Investigation requires a fixed adjacent step, recorded origin and noise
+        /// source/emission ID, never an actor target. All primitive IDs and coordinates, including zero, remain valid.
         /// </summary>
         /// <param name="actorId">The actor's board-local identity; zero and negative values are valid.</param>
-        /// <param name="kind">One of the three defined actions.</param>
-        /// <param name="targetPosition">The fixed destination or attack cell; null only for wait.</param>
-        /// <param name="targetId">The original player's identity, distinct from the actor; null only for wait.</param>
-        /// <param name="attackOnPlayerEntry">True for move's declared same-cell condition; false for attack and wait.</param>
+        /// <param name="kind">One of the defined actions.</param>
+        /// <param name="targetPosition">The fixed step or attack cell; null only for wait.</param>
+        /// <param name="targetId">The original player's identity for Move/Attack; null for Wait/Investigate.</param>
+        /// <param name="attackOnPlayerEntry">True only for Move's declared same-cell condition.</param>
+        /// <param name="investigationTarget">The heard source cell, required only for investigation.</param>
+        /// <param name="noiseId">A nonnegative board emission ID, required only for investigation.</param>
+        /// <param name="sourcePosition">The recorded origin adjacent to the investigation step, otherwise null.</param>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is undefined.</exception>
         /// <exception cref="ArgumentException">The payload is missing, contradictory, or targets the actor itself.</exception>
         public EnemyIntent(
@@ -78,10 +93,22 @@ namespace HallowBlaze.Core.Turns.Contracts
             EnemyIntentKind kind,
             GridPosition? targetPosition = null,
             EntityId? targetId = null,
-            bool attackOnPlayerEntry = false)
+            bool attackOnPlayerEntry = false,
+            GridPosition? investigationTarget = null,
+            long? noiseId = null,
+            GridPosition? sourcePosition = null)
         {
+            if (kind != EnemyIntentKind.Investigate &&
+                (investigationTarget.HasValue || noiseId.HasValue || sourcePosition.HasValue))
+                throw new ArgumentException("Only investigation may retain noise and origin fields.");
             switch (kind)
             {
+                case EnemyIntentKind.Investigate:
+                    if (!targetPosition.HasValue || !investigationTarget.HasValue || !noiseId.HasValue || noiseId < 0 ||
+                        !sourcePosition.HasValue || sourcePosition.Value.ManhattanDistance(targetPosition.Value) != 1 ||
+                        targetId.HasValue || attackOnPlayerEntry)
+                        throw new ArgumentException("Investigation requires one adjacent step, an origin and a noise target, without an attack.");
+                    break;
                 case EnemyIntentKind.Move:
                 case EnemyIntentKind.Attack:
                     ValidateTarget(actorId, targetPosition, targetId);
@@ -117,6 +144,9 @@ namespace HallowBlaze.Core.Turns.Contracts
             TargetPosition = targetPosition;
             TargetId = targetId;
             AttackOnPlayerEntry = attackOnPlayerEntry;
+            InvestigationTarget = investigationTarget;
+            NoiseId = noiseId;
+            SourcePosition = sourcePosition;
         }
 
         private static void ValidateTarget(EntityId actorId, GridPosition? targetPosition, EntityId? targetId)

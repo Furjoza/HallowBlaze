@@ -1,5 +1,53 @@
 # HallowBlaze Testing
 
+## M4.8 Listener
+
+**Rule:** The Listener remembers the latest noise audible at emission and takes the announced
+shortest-path step toward its fixed source while that signal is active; otherwise it waits.
+
+The [accepted rule](GameDesignContract.md#1132-accepted-listener-rule---m48) specifies event-time
+hearing, emission-ID tie-breaking, lifetime and blocked-step semantics. Memory belongs to
+`BoardState`, not a view or a save DTO. Source actors need not remain present. Planning is read-only;
+new noise cannot replace a locked opportunity. Investigation is not an unannounced attack, including
+when a player occupies its next cell. No player knowledge, perception RNG or hidden alert state is used.
+
+| Example | Announced / actual outcome |
+| --- | --- |
+| No audible noise, even next to the player | Target-free Wait; no pursuit or attack |
+| Older loud event followed by a quieter audible event | Higher emission ID becomes the remembered source |
+| New event is outside the Listener's footprint | Previous heard target remains unchanged |
+| Listener moves into an older footprint after emission | No retroactive hearing |
+| Equal shortest routes toward a source | North, East, West, South first-step priority |
+| New noise after an investigation was announced | Execute the old fixed step; new source controls next planning |
+| Source actor leaves or is removed | Keep the original source cell while the event is active |
+| Signal expires before execution or step becomes occupied/impassable | Consume the opportunity as Wait, without replanning |
+| Latest signal expires while an older event remains active | Forget the target; never revive the older event |
+| Several actors claim one destination | Ascending actor ID executes first; later actors see live occupancy |
+| Player command is rejected, or terminates before enemy phase | Do not consume or replace the retained intent |
+
+The production runtime accepts explicit `LegacyBoardContentKind.Listener` descriptors without a
+damage variant, producing stable `enemy.listener` actors and initial Wait intents. `Enemy1` and
+`Enemy2` remain Shamblers; published ordinary/legacy generation configurations are unchanged.
+The intent display publishes both archetypes in the same actor-ID order. An investigation shows
+a magnifier at the immediate step and a linked diamond at the heard source. Both remain frozen
+until replay/recovery completes; expiration and board lifetime boundaries clear them normally.
+
+Run focused verification from the Unity project root:
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter 'HallowBlaze.Tests.EditMode.(ListenerNoiseMemoryTests|ListenerTests|ListenerTurnTests)' --output "$env:TEMP/HB-M48-domain.xml" -- -nographics -logFile "$env:TEMP/HB-M48-domain.log"
+unity test $project --mode PlayMode --filter HallowBlaze.Tests.PlayMode.ListenerPresentationTests --output "$env:TEMP/HB-M48-view.xml" -- -logFile "$env:TEMP/HB-M48-view.log"
+```
+
+The PlayMode scenario uses the real composer, controller and event presenter: an adjacent
+interaction emits noise, the initial Listener Wait executes, Investigate is shown before input,
+and the player then leaves while the Listener moves to the exact previously announced step.
+Both animation modes check source/step markers, rejection stability, resource costs, expiration
+and disposal. Full EditMode and graphics-enabled PlayMode remain regression gates for Shambler
+paths/cadence/attacks, mixed initiative and presentation. Keep fresh XML/log output outside the
+project. M4.9 human prediction/playtests and M8.7 portable replay are not claimed by these tests.
+
 ## M4.7 Domain Noise
 
 Propagation rule: emission freezes a board-local immutable `BoardNoise` footprint. The source

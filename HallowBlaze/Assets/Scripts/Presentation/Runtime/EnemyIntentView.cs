@@ -30,6 +30,8 @@ namespace HallowBlaze.Presentation.Runtime
         private Transform glyph;
         private LineRenderer sourceCue;
         private LineRenderer sourceLink;
+        private LineRenderer noiseCue;
+        private LineRenderer noiseLink;
 
         /// <summary>Gets the immutable display value currently drawn, or null before publication.</summary>
         public EnemyIntentProjection Projection { get; private set; }
@@ -39,6 +41,7 @@ namespace HallowBlaze.Presentation.Runtime
         /// <summary>
         /// Selects a persistent shape synchronously, including the badge before player input.
         /// Places it at the exact copied target, or source for wait, and connects it to the copied source.
+        /// An investigation also marks its recorded noise source separately from the immediate step.
         /// Null input fails without replacing the current display; no occupancy or transform is queried.
         /// </summary>
         /// <param name="projection">Immutable display data; no planner or gameplay state is accessed.</param>
@@ -77,6 +80,15 @@ namespace HallowBlaze.Presentation.Runtime
             sourceLink.enabled = projection.TargetPosition.HasValue;
             sourceLink.SetPosition(0, sourceOffset);
             sourceLink.SetPosition(1, glyphOffset + (sourceOffset - glyphOffset).normalized * (MarkerSize * glyphScale / 2f + StrokeWidth));
+            noiseCue.enabled = projection.InvestigationTarget.HasValue;
+            noiseLink.enabled = projection.InvestigationTarget.HasValue;
+            if (projection.InvestigationTarget.HasValue)
+            {
+                GridPositionToWorld(projection.InvestigationTarget.Value, out Vector3 noise);
+                noiseCue.transform.localPosition = noise - target;
+                noiseLink.SetPosition(0, glyphOffset);
+                noiseLink.SetPosition(1, noise - target);
+            }
             glyph.localPosition = glyphOffset;
             glyph.localScale = Vector3.one * glyphScale;
             glyph.localRotation = projection.Symbol == EnemyIntentSymbol.Move || projection.Symbol == EnemyIntentSymbol.ConditionalMove
@@ -115,6 +127,12 @@ namespace HallowBlaze.Presentation.Runtime
             sourceCue = DrawLine(gameObject, "SourceCue", true, new Vector3(-0.08f, -0.08f),
                 new Vector3(0.08f, -0.08f), new Vector3(0.08f, 0.08f), new Vector3(-0.08f, 0.08f));
             sourceLink = DrawLine(gameObject, "SourceLink", false, Vector3.zero, Vector3.zero);
+            noiseCue = DrawLine(gameObject, "HeardNoiseTarget", true, new Vector3(0, 0.16f), new Vector3(0.16f, 0),
+                new Vector3(0, -0.16f), new Vector3(-0.16f, 0));
+            noiseLink = DrawLine(gameObject, "HeardNoiseLink", false, Vector3.zero, Vector3.zero);
+            noiseLink.widthMultiplier = StrokeWidth / 2f;
+            noiseCue.enabled = false;
+            noiseLink.enabled = false;
             sourceCue.enabled = false;
             sourceLink.enabled = false;
 

@@ -760,6 +760,39 @@ The player must see the movement destination **and its attack-on-player-entry co
 
 Focused tests must cover shortest paths around obstacles, the North/East/West/South tie-break, initial active phase, a complete cadence cycle including failed opportunities, fixed-cell attack misses, player-on-destination attacks, non-player blockers, and no attacks during rest. The same-cell conditional outcome consumes one existing active opportunity and is followed by rest; it never adds a second action, turn, or cost.
 
+### 11.3.2. Accepted Listener rule - M4.8
+
+**Status:** `Accepted` on 2026-10-15 for the noise-only prototype archetype.
+
+**Named rule:** Investigate the latest audible emission; otherwise wait.
+
+- `BoardState` registers each Listener before initial planning and captures hearing at emission,
+	using the exact immutable `NoiseEvent.Noise` footprint displayed by UI. A later move into an
+	old footprint does not retroactively hear it; moving outside a heard footprint does not forget it.
+- The greatest board-local emission ID wins among heard events, regardless of strength or source
+	identity. IDs strictly order even multiple emissions in one player phase. Unheard noise does not
+	replace memory. An expired latest signal is forgotten without reviving an older active signal.
+- Memory lasts only while that noise is active. Its target is the recorded emission cell, not the
+	source actor's new position. Removing the source does not change a still-active noise. New boards
+	start without hearing memory; clones retain independent collections and the same immutable values.
+- Planning reads that memory without changing it. It retains one orthogonal shortest-path step as
+	`Investigate`, with the fixed origin, next cell, noise source cell and emission ID. Equal shortest
+	routes use **North -> East -> West -> South**. Bounds, terrain, impassable obstacles and actors
+	constrain paths. An occupied source can be approached, but is never entered or attacked.
+- No signal, arrival at its source, an invalid actor or an unavailable path produces target-free
+	`Wait`. This first Listener has no hidden player pursuit, sight cone, random perception, attack
+	conversion or Shambler active/rest cadence. Each executed enemy phase consumes one opportunity.
+- Execution uses the announcement already shown before the player command. A new signal changes
+	the next plan only. Expiration of the original noise, a changed origin or an illegal/occupied
+	destination blocks the recorded step as `Wait`; there is no alternate route, retry or replanning
+	within that opportunity. Rejected commands and early terminal outcomes do not consume it.
+- Shambler and Listener opportunities share ascending stable actor-ID initiative and live sequential
+	occupancy. UI distinguishes the immediate investigation step (magnifier) from the heard source
+	(linked diamond), without calculating another path or changing domain state.
+- Explicit authored `Listener` content maps to `enemy.listener`; the two Shambler damage variants
+	remain Shamblers. Published versioned generation configurations and saved initial layouts are
+	unchanged by M4.8. The moderated M4.9 fixture owns the human readability assessment.
+
 ## 12. Hałas
 
 ### Decyzja

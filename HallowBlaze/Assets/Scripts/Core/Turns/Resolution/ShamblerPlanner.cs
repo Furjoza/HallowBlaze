@@ -63,12 +63,23 @@ namespace HallowBlaze.Core.Turns.Resolution
                 return new EnemyIntent(enemy.Id, EnemyIntentKind.Attack, player.Position, playerId);
             }
 
+            GridPosition? step = FirstStepTo(boardState, enemy.Position, player.Position, playerId);
+            return step.HasValue
+                ? new EnemyIntent(enemy.Id, EnemyIntentKind.Move, step, playerId, attackOnPlayerEntry: true)
+                : new EnemyIntent(enemy.Id, EnemyIntentKind.Wait);
+        }
+
+        internal static GridPosition? FirstStepTo(BoardState boardState, GridPosition source,
+            GridPosition target, EntityId? allowedTargetActor)
+        {
+            if (source.Equals(target) || !IsAccessible(boardState, target, allowedTargetActor))
+                return null;
             var frontier = new Queue<GridPosition>();
             var firstSteps = new Dictionary<GridPosition, GridPosition>
             {
-                { enemy.Position, enemy.Position }
+                { source, source }
             };
-            frontier.Enqueue(enemy.Position);
+            frontier.Enqueue(source);
 
             while (frontier.Count > 0)
             {
@@ -77,27 +88,24 @@ namespace HallowBlaze.Core.Turns.Resolution
                 {
                     if (!TryGetNeighbor(boardState.Bounds, current, direction, out GridPosition next) ||
                         firstSteps.ContainsKey(next) ||
-                        !IsAccessible(boardState, next, playerId))
+                        !IsAccessible(boardState, next, allowedTargetActor))
                     {
                         continue;
                     }
 
-                    GridPosition firstStep = current.Equals(enemy.Position) ? next : firstSteps[current];
-                    if (next.Equals(player.Position))
-                    {
-                        return new EnemyIntent(enemy.Id, EnemyIntentKind.Move, firstStep, playerId,
-                            attackOnPlayerEntry: true);
-                    }
+                    GridPosition firstStep = current.Equals(source) ? next : firstSteps[current];
+                    if (next.Equals(target))
+                        return firstStep;
 
                     firstSteps.Add(next, firstStep);
                     frontier.Enqueue(next);
                 }
             }
 
-            return new EnemyIntent(enemy.Id, EnemyIntentKind.Wait);
+            return null;
         }
 
-        private static bool IsAccessible(BoardState boardState, GridPosition position, EntityId playerId)
+        private static bool IsAccessible(BoardState boardState, GridPosition position, EntityId? allowedTargetActor)
         {
             if (!boardState.TryGetEntity(BoardLayer.Terrain, position, out BoardEntityState terrain) ||
                 !terrain.Definition.Traits.IsWalkable)
@@ -111,7 +119,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             }
 
             return !boardState.TryGetEntity(BoardLayer.Actor, position, out BoardEntityState actor) ||
-                actor.Id.Equals(playerId);
+                allowedTargetActor.HasValue && actor.Id.Equals(allowedTargetActor.Value);
         }
 
         private static bool TryGetNeighbor(

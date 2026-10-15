@@ -174,6 +174,7 @@ namespace HallowBlaze.Presentation.Runtime
             if (intents == null || intents.IsDisposed)
                 throw new InvalidOperationException("The active board's required intent display is unavailable.");
             var live = new List<ShamblerState>();
+            var liveListeners = new List<ListenerState>();
             var next = new Dictionary<EntityId, (EnemyIntent Plan, GridPosition Source)>();
             bool unchanged = true;
             foreach (ShamblerState enemy in runtime.Enemies)
@@ -187,9 +188,20 @@ namespace HallowBlaze.Presentation.Runtime
                     intents.Views.TryGetValue(enemy.ActorId, out EnemyIntentView view) &&
                     view != null && view.gameObject.activeInHierarchy;
             }
+            foreach (ListenerState listener in runtime.Listeners)
+            {
+                if (!runtime.BoardState.TryGetEntity(listener.ActorId, out BoardEntityState entity))
+                    continue;
+                liveListeners.Add(listener);
+                next.Add(listener.ActorId, (listener.LockedIntent, entity.Position));
+                unchanged &= published.TryGetValue(listener.ActorId, out var previous) &&
+                    ReferenceEquals(previous.Plan, listener.LockedIntent) && previous.Source.Equals(entity.Position) &&
+                    intents.Views.TryGetValue(listener.ActorId, out EnemyIntentView view) &&
+                    view != null && view.gameObject.activeInHierarchy;
+            }
             if (unchanged && published.Count == next.Count && intents.Views.Count == next.Count)
                 return;
-            intents.Publish(runtime.BoardState, live);
+            intents.Publish(runtime.BoardState, live, liveListeners);
             published.Clear();
             foreach (var entry in next)
                 published.Add(entry.Key, entry.Value);
