@@ -93,11 +93,15 @@ namespace HallowBlaze.Core.Session
             return deleteResult;
         }
 
+        /// <summary>Closes the dead run, retaining only fully completed days in its profile summary.</summary>
+        /// <returns>The save/delete result; failed finalization can be retried without duplicating the summary.</returns>
         public SaveStoreResult MarkDead()
         {
             return CompleteRun(RunStatus.Dead);
         }
 
+        /// <summary>Closes the won run and records its completed-day total without counting an active leg.</summary>
+        /// <returns>The save/delete result; failed finalization can be retried without duplicating the summary.</returns>
         public SaveStoreResult MarkWon()
         {
             return CompleteRun(RunStatus.Won);
@@ -123,7 +127,7 @@ namespace HallowBlaze.Core.Session
             }
 
             session.Profile.RecordRunSummary(
-                new ProfileRunSummary(run.RunId, run.CurrentDay, outcome));
+                new ProfileRunSummary(run.RunId, run.CompletedDayCount, outcome));
 
             SaveStoreResult profileResult = saveStore.SaveProfile(session.Profile);
             if (profileResult.IsFailure)

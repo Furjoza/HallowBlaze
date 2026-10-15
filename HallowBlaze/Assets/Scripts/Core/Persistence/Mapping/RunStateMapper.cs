@@ -37,7 +37,13 @@ namespace HallowBlaze.Core.Persistence.Mapping
             };
         }
 
+        /// <summary>Reads historical v1 data with its original seeded layout RNG, not the current default.</summary>
         public static RunState FromDto(RunStateDto dto)
+        {
+            return FromDto(dto, RunState.LegacyRandomAlgorithmId, RunState.LegacyRandomAlgorithmVersion);
+        }
+
+        internal static RunState FromDto(RunStateDto dto, string randomAlgorithmId, int randomAlgorithmVersion)
         {
             if (dto == null)
                 throw new ArgumentNullException(nameof(dto));
@@ -67,7 +73,8 @@ namespace HallowBlaze.Core.Persistence.Mapping
                 dto.Food,
                 dto.CurrentDay,
                 dto.WorldNodeId);
-            RunState run = new RunState(dto.RunId, dto.RunSeed, configuration);
+            RunState run = new RunState(dto.RunId, dto.RunSeed, configuration,
+                randomAlgorithmId, randomAlgorithmVersion);
 
             foreach (string nodeId in route)
                 run.RecordRouteNode(nodeId);

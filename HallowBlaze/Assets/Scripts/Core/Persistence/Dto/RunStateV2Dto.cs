@@ -3,9 +3,9 @@ using Newtonsoft.Json;
 
 namespace HallowBlaze.Core.Persistence.Dto
 {
-    /// <summary>Run-only stable-boundary schema; profile schema and mid-board state are independent.</summary>
+    /// <summary>Frozen v2 travel fields, also inherited by the RNG-versioned v3 schema; no mid-board snapshot.</summary>
     [JsonObject(MemberSerialization.OptIn)]
-    public sealed class RunStateV2Dto
+    public class RunStateV2Dto
     {
         /// <summary>Gets the supported travel schema version; v1 remains a separate migration input.</summary>
         public const int CurrentSchemaVersion = 2;

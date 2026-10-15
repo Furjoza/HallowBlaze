@@ -88,7 +88,8 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(migrated.TravelHistory.All(entry => entry.EdgeId == null && entry.LegId == null), Is.True);
             Assert.That(File.ReadAllText(runPath), Is.EqualTo(legacy), "Reading must not rewrite an old file.");
             Assert.That(store.SaveRun(migrated).IsSuccess, Is.True);
-            Assert.That(File.ReadAllText(runPath), Does.Contain("\"schemaVersion\": 2"));
+            Assert.That(File.ReadAllText(runPath), Does.Contain("\"schemaVersion\": 3")
+                .And.Contain(RunState.LegacyRandomAlgorithmId));
             Assert.That(File.ReadAllText(Path.Combine(testRootPath, "run.backup.json")), Is.EqualTo(legacy));
             Assert.That(File.ReadAllBytes(profilePath), Is.EqualTo(profileBytes));
         }
@@ -315,6 +316,25 @@ namespace HallowBlaze.Tests.EditMode
 
             Assert.That(result.Type, Is.EqualTo(SaveStoreResultType.IoError));
             Assert.That(result.ErrorMessage, Does.Not.Contain("profile-io"));
+        }
+
+        [Test]
+        public void FutureRunSchemaDoesNotRecoverAnOlderBackupOrRewriteFiles()
+        {
+            FileSystemSaveStore store = new FileSystemSaveStore(testRootPath);
+            RunState run = PersistenceDtoTests.TravelBoundary("consumed");
+            Assert.That(store.SaveRun(run).IsSuccess, Is.True);
+            Assert.That(store.SaveRun(run).IsSuccess, Is.True);
+            string currentPath = Path.Combine(testRootPath, "run.json");
+            string backupPath = Path.Combine(testRootPath, "run.backup.json");
+            string backup = File.ReadAllText(backupPath);
+            var document = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(currentPath));
+            document["schemaVersion"] = 4;
+            string future = document.ToString();
+            File.WriteAllText(currentPath, future);
+            Assert.That(store.LoadRun().Type, Is.EqualTo(SaveStoreResultType.UnsupportedFutureSchema));
+            Assert.That(File.ReadAllText(currentPath), Is.EqualTo(future));
+            Assert.That(File.ReadAllText(backupPath), Is.EqualTo(backup));
         }
 
         [Test]

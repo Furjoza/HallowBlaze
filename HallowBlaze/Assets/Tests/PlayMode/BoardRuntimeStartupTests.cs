@@ -7,10 +7,13 @@ using System.Reflection;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 using HallowBlaze.Core.Board.Primitives;
+using HallowBlaze.Core.Persistence;
+using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
 using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.Turns.Resolution;
+using HallowBlaze.Core.World;
 using HallowBlaze.Presentation.Runtime;
 using NUnit.Framework;
 using UnityEngine;
@@ -91,6 +94,101 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(viewPosition.y, Is.EqualTo(entity.Position.Y));
             }
 
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator AddressedRngRecreatesFullLayoutAfterCosmeticDrawsAndSavedContinue()
+        {
+            UnityEngine.Random.State previousRandom = UnityEngine.Random.state;
+            try
+            {
+                Component manager = CreateBoardManager();
+                SetField(manager, "columns", 8);
+                SetField(manager, "rows", 8);
+                SetCount(manager, "wallCount", 5, 9);
+                SetCount(manager, "foodCount", 1, 5);
+                SetCount(manager, "buriedCount", 0, 1);
+                SetCount(manager, "aidCount", 0, 1);
+                SetField(manager, "floorTiles", new[] { CreateObject("Floor A", 0, 0), CreateObject("Floor B", 0, 0) });
+                SetField(manager, "outerWallTiles", new[] { CreateObject("Outer A", 0, 0), CreateObject("Outer B", 0, 0) });
+                RunState run = CreateRun();
+                run.StartLeg("edge", run.WorldNodeId, "destination", new[]
+                {
+                    new RouteSegmentState("segment.1", "legacy.board.v1", 1),
+                    new RouteSegmentState("segment.2", "legacy.board.v1", 1)
+                });
+                run.TryConsumeIntro(run.ActiveLeg.LegId);
+                var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed,
+                    run.WorldNodeId, "forest", "temperate", 1);
+                GameObject player = CreateObject("RNG Player", 0, 0);
+                UnityEngine.Random.InitState(101);
+                UnityEngine.Random.State beforeSetup = UnityEngine.Random.state;
+                BoardRuntime first = InvokeSetup(manager, request, run, player);
+                Assert.That(UnityEngine.Random.state, Is.EqualTo(beforeSetup), "Generation must not consume global RNG.");
+                string[] baseline = GeneratedLayout(manager);
+                string[] authoritative = GameplayLayout(first);
+                for (int draw = 0; draw < 200; draw++)
+                    UnityEngine.Random.Range(0, 1000);
+                BoardRuntime second = InvokeSetup(manager, request, run, player);
+                Assert.That(GeneratedLayout(manager), Is.EqualTo(baseline));
+                Assert.That(GameplayLayout(second), Is.EqualTo(authoritative));
+                SetField(manager, "floorTiles", new[] { CreateObject("Additional Cosmetic Variant", 0, 0) });
+                BoardRuntime alteredCosmetics = InvokeSetup(manager, request, run, player);
+                Assert.That(GameplayLayout(alteredCosmetics), Is.EqualTo(authoritative),
+                    "Changing floor choices must not consume the gameplay stream.");
+                SetField(manager, "floorTiles", new[] { CreateObject("Floor A", 0, 0), CreateObject("Floor B", 0, 0) });
+                RunState restored = PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(run));
+                var continued = new BoardRequest(BoardAddressFactory.CreateFromState(restored), restored.RunSeed,
+                    restored.WorldNodeId, "forest", "temperate", 1);
+                Assert.That(continued.Address, Is.EqualTo(request.Address));
+                BoardRuntime resumed = InvokeSetup(manager, continued, restored, player);
+                Assert.That(GeneratedLayout(manager), Is.EqualTo(baseline));
+                Assert.That(GameplayLayout(resumed), Is.EqualTo(authoritative));
+                yield return null;
+            }
+            finally
+            {
+                UnityEngine.Random.state = previousRandom;
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator LegacyRngPreservesSeededPlacementAfterV3RoundTrip()
+        {
+            Component manager = CreateBoardManager();
+            SetField(manager, "columns", 8);
+            SetField(manager, "rows", 8);
+            SetCount(manager, "foodCount", 3, 3);
+            SetField(manager, "groundFoodTiles", new[] { CreateObject("Legacy Food", 0, 0) });
+            RunState run = new RunState("legacy-layout", 54321,
+                new RunStateConfiguration(100, 100, 0, "forest.start"),
+                RunState.LegacyRandomAlgorithmId, RunState.LegacyRandomAlgorithmVersion);
+            BoardRequest request = CreateRequest(run);
+            var reference = new System.Random(request.BoardSeed);
+            var available = new List<GridPosition>();
+            for (int column = 1; column < 7; column++)
+                for (int row = 1; row < 7; row++)
+                    available.Add(new GridPosition(column, row));
+            reference.Next(0, 1);
+            reference.Next(3, 4);
+            var expected = new List<GridPosition>();
+            for (int index = 0; index < 3; index++)
+            {
+                int selected = reference.Next(0, available.Count);
+                expected.Add(available[selected]);
+                available.RemoveAt(selected);
+                reference.Next(0, 1);
+            }
+            GameObject player = CreateObject("Legacy Player", 0, 0);
+            foreach (RunState boundary in new[] { run,
+                PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(run)) })
+            {
+                BoardRuntime runtime = InvokeSetup(manager, request, boundary, player);
+                Assert.That(runtime.BoardState.GetEntities()
+                    .Where(entity => runtime.Views[entity.Id].name.StartsWith("Legacy Food", StringComparison.Ordinal))
+                    .Select(entity => entity.Position), Is.EquivalentTo(expected));
+            }
             yield return null;
         }
 
@@ -432,6 +530,10 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That((bool)InvokeManager(manager, "TryEnsureWorldMap"), Is.True);
             GameSession session = GetProperty<GameSession>(manager, "Session");
             session.StartNewRun("day-one-legend-regression", 54321, new RunStateConfiguration(100, 100, 0, "forest.start"));
+            Assert.That((bool)InvokeManager(manager, "TryEnsureWorldMap"), Is.True);
+            WorldMapService map = GetManagerField<WorldMapService>(manager, "worldMap");
+            Assert.That(map.BeginRouteChoice().IsSuccess, Is.True);
+            Assert.That(map.ChooseRoute("road.start-east-creek").IsSuccess, Is.True);
             Camera camera = CreateObject("Production camera framing", 0, 0).AddComponent<Camera>();
             camera.gameObject.tag = "MainCamera";
             camera.transform.position = new Vector3(3.5f, 3.5f, -10);
@@ -454,6 +556,8 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(runtime, Is.Not.Null);
             Assert.That(runtime.Enemies, Is.Empty);
             Assert.That(dayText.text, Is.EqualTo("Day: 1"));
+            Assert.That(new HallowBlaze.Core.Persistence.Storage.FileSystemSaveStore(persistenceRoot).LoadRun().Data.ActiveLeg.IntroState,
+                Is.EqualTo(DayIntroState.Consumed), "Consumed must be durable before Day 1 is rendered.");
             Assert.That(transition.activeSelf, Is.True);
             Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
             EnemyIntentLegend legend = GetManagerField<EnemyIntentLegend>(manager, "activeIntentLegend");
@@ -540,8 +644,6 @@ namespace HallowBlaze.Tests.PlayMode
                 foreach (BoardOutcome outcome in new[] { BoardOutcome.ExitReached(wrong), BoardOutcome.PlayerDied(wrong, DeathReason.Starvation) })
                     Assert.That((bool)InvokeManager(manager, "HandleBoardOutcome", outcome), Is.False, foreign.ToString());
             }
-            Assert.That((bool)InvokeManager(manager, "HandleBoardOutcome", BoardOutcome.ExitReached(expected)), Is.False,
-                "Matched active-leg orchestration must not silently use legacy route completion before M3.12.");
             Assert.That(run.Status, Is.EqualTo(RunStatus.Active));
             Assert.That(run.Food, Is.EqualTo(100));
             Assert.That(run.Health, Is.EqualTo(100));
@@ -555,12 +657,311 @@ namespace HallowBlaze.Tests.PlayMode
                 ? Directory.GetFiles(persistenceRoot, "*", SearchOption.AllDirectories).ToDictionary(path => path, path => Convert.ToBase64String(File.ReadAllBytes(path)))
                 : new Dictionary<string, string>();
             Assert.That(afterFiles, Is.EquivalentTo(beforeFiles));
+            SetField(manager, "sceneLoader", new Action<string>(_ => { }));
+            Assert.That((bool)InvokeManager(manager, "HandleBoardOutcome", BoardOutcome.ExitReached(expected)), Is.True);
+            Assert.That(run.ActiveLeg.SegmentIndex, Is.EqualTo(1));
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
             yield return null;
         }
 
         private static T GetManagerField<T>(Component manager, string name)
         {
-            return (T)manager.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(manager);
+            return (T)manager.GetType().GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).GetValue(manager);
+        }
+
+        [UnityTest]
+        public IEnumerator RouteTravel_TwoSegmentsHaveOneDayAndFinalDiscovery() => ExerciseProductionTravel(2);
+
+        [UnityTest]
+        public IEnumerator RouteTravel_FiveSegmentsHaveOneDayAndFinalDiscovery() => ExerciseProductionTravel(5);
+
+        [UnityTest]
+        public IEnumerator RouteTravel_StartAndIntroFailuresKeepInputBlockedUntilDurableRetry()
+        {
+            Component manager = CreateTravelManager(2, out GameSession session, out TravelFaultStore store,
+                out UnityEngine.UI.Text dayText, out _);
+            InvokeManager(manager, "BeginRouteChoice");
+            store.FailRun = true;
+            LogAssert.Expect(LogType.Error, "Route choice save failed for Run: IoError");
+            Assert.That((bool)InvokeManager(manager, "ChooseRoute", "road.start-east-creek"), Is.False);
+            Assert.That(session.ActiveRun.ActiveLeg, Is.Null);
+            Assert.That(session.ActiveRun.TraversalSequence, Is.Zero);
+            Assert.That(store.LoadRun().Data.ActiveLeg, Is.Null);
+            Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+            store.FailRun = false;
+            Assert.That((bool)InvokeManager(manager, "RetryTravelCheckpoint"), Is.True);
+            Assert.That(session.ActiveRun.ActiveLeg.LegId, Is.EqualTo("leg.1"));
+            store.FailRun = true;
+            LogAssert.Expect(LogType.Error, "Day intro checkpoint failed: IoError");
+            InvokeManager(manager, "InitGame");
+            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Null);
+            Assert.That(session.ActiveRun.ActiveLeg.IntroState, Is.EqualTo(DayIntroState.Pending));
+            Assert.That(store.LoadRun().Data.ActiveLeg.IntroState, Is.EqualTo(DayIntroState.Pending));
+            Assert.That(GetManagerField<GameObject>(manager, "levelImage").activeSelf, Is.False);
+            InvokeManager(manager, "HideLevelImage");
+            Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+            store.FailRun = false;
+            Assert.That((bool)InvokeManager(manager, "RetryTravelCheckpoint"), Is.True);
+            Assert.That(store.LoadRun().Data.ActiveLeg.IntroState, Is.EqualTo(DayIntroState.Consumed));
+            Assert.That(dayText.text, Is.EqualTo("Day: 1"));
+            Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+            InvokeManager(manager, "HideLevelImage");
+            yield return null;
+            Assert.That(TrySubmit(manager, new WaitCommand(), out Task<CommandSubmission> command), Is.True);
+            while (!command.IsCompleted)
+                yield return null;
+            Assert.That(command.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(99));
+        }
+
+        [UnityTest]
+        public IEnumerator RouteTravel_ContinuePendingAndConsumedKeepsAddressAndSkipsRepeatedIntro()
+        {
+            Component manager = CreateTravelManager(5, out GameSession session, out TravelFaultStore store,
+                out _, out _);
+            InvokeManager(manager, "BeginRouteChoice");
+            InvokeManager(manager, "ChooseRoute", "road.start-east-creek");
+            WorldDefinition world = GetManagerField<WorldDefinition>(manager, "worldDefinition");
+            BoardAddress address = BoardAddressFactory.Create(session.ActiveRun, world);
+            RunLifecycleService lifecycle = GetManagerField<RunLifecycleService>(manager, "lifecycle");
+            lifecycle.ExitToMenu();
+            Assert.That(lifecycle.ContinueRun().IsSuccess, Is.True);
+            InvokeManager(manager, "InitGame");
+            Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address, Is.EqualTo(address));
+            Assert.That(GetManagerField<GameObject>(manager, "levelImage").activeSelf, Is.True);
+            Assert.That(store.LoadRun().Data.ActiveLeg.IntroState, Is.EqualTo(DayIntroState.Consumed));
+            lifecycle.ExitToMenu();
+            Assert.That(lifecycle.ContinueRun().IsSuccess, Is.True);
+            InvokeManager(manager, "InitGame");
+            Assert.That(GetManagerField<GameObject>(manager, "levelImage").activeSelf, Is.False,
+                "Crash after Consumed and before rendering must skip rather than repeat the intro.");
+            Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address, Is.EqualTo(address));
+            yield return null;
+            Assert.That(TrySubmit(manager, new WaitCommand(), out Task<CommandSubmission> command), Is.True);
+            while (!command.IsCompleted)
+                yield return null;
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(99));
+            lifecycle.ExitToMenu();
+            Assert.That(lifecycle.ContinueRun().IsSuccess, Is.True);
+            InvokeManager(manager, "InitGame");
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(100), "Unsaved mid-board action restarts the same boundary.");
+            Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address, Is.EqualTo(address));
+            Assert.That(GetManagerField<GameObject>(manager, "levelImage").activeSelf, Is.False);
+        }
+
+        [UnityTest]
+        public IEnumerator RouteTravel_SegmentAndArrivalFailuresRetryWithoutAnotherTurnOrArrivalSave()
+        {
+            Component manager = CreateTravelManager(2, out GameSession session, out TravelFaultStore store,
+                out _, out _);
+            InvokeManager(manager, "BeginRouteChoice");
+            InvokeManager(manager, "ChooseRoute", "road.start-east-creek");
+            InvokeManager(manager, "InitGame");
+            InvokeManager(manager, "HideLevelImage");
+            yield return null;
+            BoardRequest first = GetProperty<BoardRequest>(manager, "ActiveBoardRequest");
+            store.FailRun = true;
+            LogAssert.Expect(LogType.Error, "Segment checkpoint failed: IoError");
+            yield return MoveToTravelExit(manager);
+            Assert.That(session.ActiveRun.ActiveLeg.SegmentIndex, Is.Zero);
+            Assert.That(store.LoadRun().Data.ActiveLeg.SegmentIndex, Is.Zero);
+            Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+            int resolutions = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount;
+            store.FailRun = false;
+            Assert.That((bool)InvokeManager(manager, "RetryTravelCheckpoint"), Is.True);
+            Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.EqualTo(resolutions));
+            Assert.That(session.ActiveRun.ActiveLeg.SegmentIndex, Is.EqualTo(1));
+            Assert.That((bool)InvokeManager(manager, "HandleBoardOutcome", BoardOutcome.ExitReached(first)), Is.False);
+            InvokeManager(manager, "BlockBoardStartup");
+            InvokeManager(manager, "InitGame");
+            yield return null;
+            store.FailProfile = true;
+            LogAssert.Expect(LogType.Error, "Arrival discovery checkpoint failed: Injected discovery checkpoint failure.");
+            yield return MoveToTravelExit(manager);
+            Assert.That(session.ActiveRun.ActiveLeg, Is.Null);
+            Assert.That(store.LoadRun().Data.TravelHistory, Has.Count.EqualTo(1));
+            Assert.That(store.LoadProfile().Data.GetEdgeDiscoveryState("road.start-east-creek"), Is.EqualTo(EdgeDiscoveryState.Sighted));
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+            Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+            int runSaves = store.RunSaves;
+            store.FailProfile = false;
+            Assert.That((bool)InvokeManager(manager, "RetryTravelCheckpoint"), Is.True);
+            Assert.That(store.RunSaves, Is.EqualTo(runSaves), "Discovery retry must not checkpoint final arrival twice.");
+            Assert.That(session.ActiveRun.TravelHistory, Has.Count.EqualTo(1));
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+            Assert.That(store.LoadProfile().Data.GetNodeDiscoveryState("forest.east-creek"), Is.EqualTo(NodeDiscoveryState.Visited));
+        }
+
+        [UnityTest]
+        public IEnumerator RouteTravel_DeathOnIntermediateBoardCountsOnlyCompletedDays()
+        {
+            Component manager = CreateTravelManager(5, out GameSession session, out TravelFaultStore store,
+                out UnityEngine.UI.Text dayText, out _);
+            InvokeManager(manager, "BeginRouteChoice");
+            InvokeManager(manager, "ChooseRoute", "road.start-east-creek");
+            InvokeManager(manager, "InitGame");
+            InvokeManager(manager, "HideLevelImage");
+            yield return null;
+            yield return MoveToTravelExit(manager);
+            InvokeManager(manager, "BlockBoardStartup");
+            InvokeManager(manager, "InitGame");
+            yield return null;
+            RunState run = session.ActiveRun;
+            session.ConsumeFood(run.Food - 1);
+            Assert.That(TrySubmit(manager, new WaitCommand(), out Task<CommandSubmission> death), Is.True);
+            while (!death.IsCompleted)
+                yield return null;
+            Assert.That(run.ActiveLeg.SegmentIndex, Is.EqualTo(1));
+            Assert.That(run.Status, Is.EqualTo(RunStatus.Dead));
+            Assert.That(session.ActiveRun, Is.Null);
+            Assert.That(store.LoadRun().Type, Is.EqualTo(SaveStoreResultType.Missing));
+            Assert.That(store.LoadProfile().Data.RunSummaries.Single().DaysSurvived, Is.Zero);
+            Assert.That(dayText.text, Does.Contain("Day 1").And.Contain("Completed days: 0"));
+            Assert.That(session.Profile.GetEdgeDiscoveryState("road.start-east-creek"), Is.EqualTo(EdgeDiscoveryState.Sighted));
+            Assert.That(session.Profile.GetNodeDiscoveryState("forest.east-creek"), Is.EqualTo(NodeDiscoveryState.Sighted));
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+        }
+
+        private static IEnumerator MoveToTravelExit(Component manager)
+        {
+            GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").AnimationsEnabled = false;
+            foreach (Direction direction in new[] { Direction.North, Direction.East })
+            {
+                Assert.That(TrySubmit(manager, new MoveCommand(direction), out Task<CommandSubmission> command), Is.True);
+                while (!command.IsCompleted)
+                    yield return null;
+                Assert.That(command.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                yield return null;
+            }
+        }
+
+        private IEnumerator ExerciseProductionTravel(int count)
+        {
+            Component manager = CreateTravelManager(count, out GameSession session, out TravelFaultStore store,
+                out UnityEngine.UI.Text dayText, out Component player);
+            Assert.That((bool)InvokeManager(manager, "BeginRouteChoice"), Is.True);
+            Assert.That((bool)InvokeManager(manager, "ChooseRoute", "road.start-east-creek"), Is.True);
+            Assert.That(store.LoadRun().Data.ActiveLeg.IntroState, Is.EqualTo(DayIntroState.Pending));
+            Assert.That(session.ActiveRun.ReachedCheckpointNodeId, Is.EqualTo("forest.start"));
+            Assert.That(session.Profile.GetEdgeDiscoveryState("road.start-east-creek"), Is.EqualTo(EdgeDiscoveryState.Sighted));
+            InvokeManager(manager, "InitGame");
+            Assert.That(dayText.text, Is.EqualTo("Day: 1"));
+            Assert.That(store.LoadRun().Data.ActiveLeg.IntroState, Is.EqualTo(DayIntroState.Consumed));
+            Assert.That(GetManagerField<GameObject>(manager, "levelImage").activeSelf, Is.True);
+            Assert.That(GetManagerField<UnityEngine.UI.Text>(player, "foodText").gameObject.activeSelf, Is.False);
+            Assert.That(GetManagerField<UnityEngine.UI.Text>(player, "healthText").gameObject.activeSelf, Is.False);
+            Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+            InvokeManager(manager, "HideLevelImage");
+            yield return null;
+
+            for (int index = 0; index < count; index++)
+            {
+                BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+                BoardRequest request = runtime.Request;
+                GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").AnimationsEnabled = false;
+                Assert.That(request.Address.DayNumber, Is.EqualTo(1));
+                Assert.That(session.ActiveRun.ActiveLeg.SegmentIndex, Is.EqualTo(index));
+                Assert.That(runtime.BoardState.GetEntities().Single(entity => entity.Id.Equals(runtime.PlayerId)).Position,
+                    Is.EqualTo(new GridPosition(0, 0)), "Every stable segment boundary starts at its own spawn.");
+                int before = store.RunSaves;
+                foreach (Direction direction in new[] { Direction.North, Direction.East })
+                {
+                    Assert.That(TrySubmit(manager, new MoveCommand(direction), out Task<CommandSubmission> submission), Is.True);
+                    while (!submission.IsCompleted)
+                        yield return null;
+                    Assert.That(submission.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented),
+                        "Segment " + index + ", direction " + direction);
+                    yield return null;
+                }
+                Assert.That(runtime.Controller.IsTerminal, Is.True);
+                Assert.That(runtime.RunState.Food, Is.EqualTo(100 - (index + 1) * 2));
+                Assert.That(store.RunSaves, Is.EqualTo(before + 1));
+                Assert.That((bool)InvokeManager(manager, "HandleBoardOutcome", BoardOutcome.ExitReached(request)), Is.False);
+                Assert.That(store.RunSaves, Is.EqualTo(before + 1), "Duplicate outcome must not save again.");
+                bool final = index == count - 1;
+                Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.EqualTo(final));
+                Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(final ? 1 : 0));
+                Assert.That(session.ActiveRun.ReachedCheckpointNodeId, Is.EqualTo(final ? "forest.east-creek" : "forest.start"));
+                Assert.That(session.Profile.GetNodeDiscoveryState("forest.east-creek"),
+                    Is.EqualTo(final ? NodeDiscoveryState.Visited : NodeDiscoveryState.Sighted));
+                Assert.That(session.Profile.GetEdgeDiscoveryState("road.start-east-creek"),
+                    Is.EqualTo(final ? EdgeDiscoveryState.Traversed : EdgeDiscoveryState.Sighted));
+                if (!final)
+                {
+                    InvokeManager(manager, "BlockBoardStartup");
+                    InvokeManager(manager, "InitGame");
+                    Assert.That(GetManagerField<GameObject>(manager, "levelImage").activeSelf, Is.False);
+                    Assert.That(GetManagerField<UnityEngine.UI.Text>(player, "foodText").gameObject.activeSelf, Is.True);
+                    yield return null;
+                }
+            }
+            Assert.That(session.ActiveRun.TravelHistory.Single().CompletedSegmentCount, Is.EqualTo(count));
+            Assert.That(store.LoadRun().Data.CompletedDayCount, Is.EqualTo(1));
+            Assert.That((bool)InvokeManager(manager, "ChooseRoute", "road.east-creek-old-road"), Is.True);
+            Assert.That(session.ActiveRun.CurrentDay, Is.EqualTo(2));
+            Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(1));
+            Assert.That(session.ActiveRun.ActiveLeg.LegId, Is.EqualTo("leg.2"));
+        }
+
+        private Component CreateTravelManager(int count, out GameSession session, out TravelFaultStore store,
+            out UnityEngine.UI.Text dayText, out Component player)
+        {
+            persistenceRoot = Path.Combine(Path.GetTempPath(), "HB-M312-production-" + Guid.NewGuid().ToString("N"));
+            gameManagerType.GetField("PersistenceRootOverride", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, persistenceRoot);
+            Component board = CreateBoardManager();
+            Component manager = board.gameObject.AddComponent(gameManagerType);
+            TextAsset world = new TextAsset(File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json")));
+            createdAssets.Add(world);
+            SetField(manager, "worldDefinitionJson", world);
+            SetField(manager, "levelStartDelay", 100f);
+            SetField(manager, "sceneLoader", new Action<string>(_ => { }));
+            Assert.That((bool)InvokeManager(manager, "TryEnsureWorldMap"), Is.True);
+            session = GetProperty<GameSession>(manager, "Session");
+            store = new TravelFaultStore(new FileSystemSaveStore(persistenceRoot));
+            var lifecycle = new RunLifecycleService(session, store);
+            SetField(manager, "saveStore", store);
+            SetField(manager, "lifecycle", lifecycle);
+            Assert.That(lifecycle.StartNewRun("production-travel", 54321,
+                new RunStateConfiguration(100, 100, 0, "forest.start")).IsSuccess, Is.True);
+            WorldDefinition original = WorldDefinitionJson.Deserialize(world.text);
+            WorldDefinition fixture = new WorldDefinition(original.WorldDefinitionId, original.Version,
+                original.StartNodeId, original.GoalNodeId, original.Nodes, original.Edges.Select(edge =>
+                    edge.EdgeId == "road.start-east-creek" ? new WorldEdgeDefinition(edge.EdgeId,
+                        edge.FromNodeId, edge.ToNodeId, edge.WorldDirection, edge.ClueKey, edge.Segments.Take(count)) : edge));
+            SetField(manager, "worldDefinition", fixture);
+            SetField(manager, "worldMap", new WorldMapService(fixture, session, store));
+            Assert.That((bool)InvokeManager(manager, "TryEnterCurrentWorldNode"), Is.True);
+            GameObject playerObject = CreateObject("Travel Player", 0, 0);
+            playerObject.tag = "Player";
+            player = playerObject.AddComponent(boardManagerType.Assembly.GetType("PlayerScript", true));
+            SetField(player, "animationsEnabled", false);
+            SetField(player, "foodText", CreateObject("Travel food HUD", 0, 0).AddComponent<UnityEngine.UI.Text>());
+            SetField(player, "healthText", CreateObject("Travel health HUD", 0, 0).AddComponent<UnityEngine.UI.Text>());
+            GameObject transition = CreateObject("LevelImage", 0, 0);
+            GameObject text = CreateObject("LevelText", 0, 0);
+            text.transform.SetParent(transition.transform, false);
+            dayText = text.AddComponent<UnityEngine.UI.Text>();
+            return manager;
+        }
+
+        private sealed class TravelFaultStore : ISaveStore
+        {
+            private readonly ISaveStore inner;
+            public TravelFaultStore(ISaveStore inner) { this.inner = inner; }
+            public bool FailRun { get; set; }
+            public bool FailProfile { get; set; }
+            public int RunSaves { get; private set; }
+            public SaveStoreResult SaveRun(RunState run)
+            {
+                RunSaves++;
+                return FailRun ? SaveStoreResult.IoError("Injected travel checkpoint failure.") : inner.SaveRun(run);
+            }
+            public SaveStoreResult SaveProfile(ProfileState profile) => FailProfile
+                ? SaveStoreResult.IoError("Injected discovery checkpoint failure.") : inner.SaveProfile(profile);
+            public SaveStoreResult<RunState> LoadRun() => inner.LoadRun();
+            public SaveStoreResult<ProfileState> LoadProfile() => inner.LoadProfile();
+            public SaveStoreResult ResetGame(ProfileState profile, RunState run) => inner.ResetGame(profile, run);
+            public SaveStoreResult DeleteRun() => inner.DeleteRun();
         }
 
         private static bool TrySubmit(Component manager, PlayerCommand command, out Task<CommandSubmission> submission)
@@ -596,6 +997,20 @@ namespace HallowBlaze.Tests.PlayMode
             SetField(manager, "enemyTiles", new[] { unused });
             SetField(manager, "exit", exit);
             return manager;
+        }
+
+        private string[] GeneratedLayout(Component manager)
+        {
+            Transform holder = (Transform)boardManagerType.GetField("boardHolder",
+                BindingFlags.Instance | BindingFlags.NonPublic).GetValue(manager);
+            return holder.Cast<Transform>().Select(view => view.name + ":" + (int)view.position.x + ":" + (int)view.position.y)
+                .OrderBy(value => value, StringComparer.Ordinal).ToArray();
+        }
+
+        private static string[] GameplayLayout(BoardRuntime runtime)
+        {
+            return runtime.BoardState.GetEntities().Select(entity => entity.Id + ":" + entity.Definition.Layer + ":" + entity.Position)
+                .OrderBy(value => value, StringComparer.Ordinal).ToArray();
         }
 
         private BoardRuntime InvokeSetup(

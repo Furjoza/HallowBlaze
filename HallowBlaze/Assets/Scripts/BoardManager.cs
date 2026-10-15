@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using HallowBlaze.Core.Board.Primitives;
+using HallowBlaze.Core.Random;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
 using HallowBlaze.Presentation.Runtime;
-using Random = UnityEngine.Random;
 using UnityEngine;
 
 public class BoardManager : MonoBehaviour
@@ -40,7 +40,9 @@ public class BoardManager : MonoBehaviour
 
     private Transform boardHolder;
     private readonly List<Vector3> gridPositions = new List<Vector3>();
-    private System.Random gameplayRandom;
+    private DeterministicRandomStream gameplayRandom;
+    private DeterministicRandomStream cosmeticRandom;
+    private System.Random legacyGameplayRandom;
     private BoardRequest activeRequest;
     private BoardRuntime activeRuntime;
 
@@ -65,7 +67,7 @@ public class BoardManager : MonoBehaviour
             {
                 bool isOuterWall = x == -1 || x == columns || y == -1 || y == rows;
                 GameObject[] choices = isOuterWall ? outerWallTiles : floorTiles;
-                GameObject prefab = choices[Random.Range(0, choices.Length)];
+                GameObject prefab = choices[cosmeticRandom.NextInt(0, choices.Length)];
                 GameObject instance = Instantiate(
                     prefab,
                     new Vector3(x, y, 0f),
@@ -90,7 +92,7 @@ public class BoardManager : MonoBehaviour
                 "generator:no-free-position");
         }
 
-        int randomIndex = gameplayRandom.Next(0, gridPositions.Count);
+        int randomIndex = NextGameplayInt(0, gridPositions.Count);
         Vector3 randomPosition = gridPositions[randomIndex];
         gridPositions.RemoveAt(randomIndex);
         return randomPosition;
@@ -104,14 +106,16 @@ public class BoardManager : MonoBehaviour
         Transform targetHolder,
         ICollection<LegacyBoardView> layout)
     {
-        int objectCount = gameplayRandom.Next(minimum, maximum + 1);
+        int objectCount = legacyGameplayRandom != null
+            ? legacyGameplayRandom.Next(minimum, maximum + 1)
+            : gameplayRandom.NextIntInclusive(minimum, maximum);
         if (objectCount > 0)
             RequirePrefabs(tileArray, contentKind.ToString());
 
         for (int index = 0; index < objectCount; index++)
         {
             Vector3 randomPosition = RandomPosition();
-            GameObject tileChoice = tileArray[gameplayRandom.Next(0, tileArray.Length)];
+            GameObject tileChoice = tileArray[NextGameplayInt(0, tileArray.Length)];
             int? enemyDamage = contentKind == LegacyBoardContentKind.Enemy
                 ? ReadEnemyDamage(tileChoice) : (int?)null;
             GameObject instance = Instantiate(
@@ -126,7 +130,7 @@ public class BoardManager : MonoBehaviour
                 enemyDamage));
 
             if (contentKind == LegacyBoardContentKind.Wall &&
-                gameplayRandom.Next(0, 100) > 90)
+                NextGameplayInt(0, 100) > 90)
             {
                 if (bushFoodTiles == null)
                 {
@@ -148,6 +152,13 @@ public class BoardManager : MonoBehaviour
         }
     }
 
+    private int NextGameplayInt(int minimumInclusive, int maximumExclusive)
+    {
+        return legacyGameplayRandom != null
+            ? legacyGameplayRandom.Next(minimumInclusive, maximumExclusive)
+            : gameplayRandom.NextInt(minimumInclusive, maximumExclusive);
+    }
+
     private static int ReadEnemyDamage(GameObject prefab)
     {
         Enemy enemy = prefab.GetComponent<Enemy>();
@@ -161,6 +172,7 @@ public class BoardManager : MonoBehaviour
     /// Creates and validates the complete legacy layout before publishing one authoritative runtime.
     /// A failed setup destroys its staged views and leaves no active request or runtime.
     /// Enemy variants come from their prefab's explicit 10/20 HP data; initial domain plans exist before activation.
+    /// New runs use independent addressed PCG32 layout/cosmetic streams; v1/v2 migrations retain seeded legacy layout.
     /// </summary>
     /// <param name="request">The immutable run, node, and generation inputs for this board.</param>
     /// <param name="runState">The active run referenced by <paramref name="request"/>.</param>
@@ -187,7 +199,12 @@ public class BoardManager : MonoBehaviour
         }
 
         ReleaseCurrentBoard();
-        gameplayRandom = new System.Random(request.BoardSeed);
+        var provider = new RandomStreamProvider(request.RunSeed);
+        cosmeticRandom = provider.Create(BoardRandomStreams.CosmeticId(request));
+        bool legacy = runState.RandomAlgorithmId == RunState.LegacyRandomAlgorithmId;
+        legacyGameplayRandom = legacy ? new System.Random(request.BoardSeed) : null;
+        gameplayRandom = legacy ? null : new RandomStreamProvider(request.RunSeed,
+            runState.RandomAlgorithmId, runState.RandomAlgorithmVersion).Create(BoardRandomStreams.LayoutId(request));
         Transform stagingHolder = new GameObject("Board").transform;
         stagingHolder.gameObject.SetActive(false);
         var layout = new List<LegacyBoardView>();

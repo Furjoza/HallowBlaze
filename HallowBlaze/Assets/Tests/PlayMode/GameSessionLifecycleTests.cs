@@ -162,10 +162,12 @@ namespace HallowBlaze.Tests.PlayMode
 
             Component manager = GetStaticField(gameManagerType, "instance") as Component;
             Assert.That(manager, Is.Not.Null);
+            yield return StartFirstRoute(manager);
             GameSession session = GetProperty<GameSession>(manager, "Session");
             RunState run = session.ActiveRun;
             Assert.That(run, Is.Not.Null);
-            Assert.That(run.CurrentDay, Is.Zero);
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.CompletedDayCount, Is.Zero);
 
             session.ConsumeFood(14);
             session.TakeDamage(11);
@@ -188,7 +190,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(reloadedManager, Is.SameAs(manager));
             Assert.That(GetProperty<GameSession>(reloadedManager, "Session"), Is.SameAs(session));
             Assert.That(session.ActiveRun, Is.SameAs(run));
-            Assert.That(run.CurrentDay, Is.Zero);
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
             Assert.That(run.Food, Is.EqualTo(86));
             Assert.That(run.Health, Is.EqualTo(89));
             Assert.That(replacementPlayer, Is.Not.Null);
@@ -198,7 +200,8 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
             Assert.That(GetField<Text>(replacementPlayer, "foodText").text, Is.EqualTo("Food: 86"));
             Assert.That(GetField<Text>(replacementPlayer, "healthText").text, Is.EqualTo("Health: 89"));
-            Assert.That(GameObject.Find("LevelText").GetComponent<Text>().text, Is.EqualTo("Day: 1"));
+            Assert.That(GetField<GameObject>(manager, "levelImage").activeSelf, Is.False,
+                "Reload of Consumed must not repeat the intro.");
 
             ProfileState profile = session.Profile;
             GameObject restartButton = GetField<GameObject>(manager, "restartButton");
@@ -237,7 +240,8 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(restartedRun.Food, Is.EqualTo(100));
             Assert.That(restartedRun.Health, Is.EqualTo(100));
             Assert.That(((Behaviour)manager).enabled, Is.True);
-            Assert.That(GameObject.Find("LevelText").GetComponent<Text>().text, Is.EqualTo("Day: 1"));
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Null);
 
             Scene cleanupScene = SceneManager.CreateScene("M1.4 Smoke Cleanup " + Guid.NewGuid().ToString("N"));
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
@@ -255,6 +259,7 @@ namespace HallowBlaze.Tests.PlayMode
 
             Component manager = GetStaticField(gameManagerType, "instance") as Component;
             Assert.That(manager, Is.Not.Null);
+            yield return StartFirstRoute(manager);
             GameSession session = GetProperty<GameSession>(manager, "Session");
             ProfileState profile = session.Profile;
             RunState completedRun = session.ActiveRun;
@@ -309,16 +314,21 @@ namespace HallowBlaze.Tests.PlayMode
             }
 
             [UnityTest]
-        public IEnumerator RealMainSceneRendersResourceHudAboveLevelIntro()
+        public IEnumerator RealMainSceneHidesResourceHudDuringRouteIntro()
         {
             AsyncOperation load = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
             while (!load.isDone)
                 yield return null;
             yield return null;
 
-            GameObject levelImage = GameObject.Find("LevelImage");
-            GameObject foodText = GameObject.Find("FoodText");
-            GameObject healthText = GameObject.Find("HealthText");
+            Component manager = GetStaticField(gameManagerType, "instance") as Component;
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Null);
+            yield return StartFirstRoute(manager);
+            Component player = FindSceneComponent(playerType, "Main");
+            GameObject levelImage = GetField<GameObject>(manager, "levelImage");
+            GameObject foodText = GetField<Text>(player, "foodText").gameObject;
+            GameObject healthText = GetField<Text>(player, "healthText").gameObject;
             Assert.That(levelImage, Is.Not.Null);
             Assert.That(foodText, Is.Not.Null);
             Assert.That(healthText, Is.Not.Null);
@@ -327,8 +337,74 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(resourceCanvas.transform.localScale, Is.EqualTo(Vector3.one));
             Assert.That(foodText.transform.parent, Is.SameAs(levelImage.transform.parent));
             Assert.That(healthText.transform.parent, Is.SameAs(levelImage.transform.parent));
-            Assert.That(foodText.transform.GetSiblingIndex(), Is.GreaterThan(levelImage.transform.GetSiblingIndex()));
-            Assert.That(healthText.transform.GetSiblingIndex(), Is.GreaterThan(levelImage.transform.GetSiblingIndex()));
+            Assert.That(levelImage.activeSelf, Is.True);
+            Assert.That(foodText.activeInHierarchy, Is.False);
+            Assert.That(healthText.activeInHierarchy, Is.False);
+            Assert.That(GetField<Text>(manager, "levelText").text, Is.EqualTo("Day: 1"));
+            Assert.That(new FileSystemSaveStore(persistenceRoot).LoadRun().Data.ActiveLeg.IntroState,
+                Is.EqualTo(DayIntroState.Consumed));
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
+            if (SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null)
+            {
+                string screenshot = Path.Combine(Path.GetTempPath(), "HB-M312-Day1-" + Screen.width + "x" + Screen.height + ".png");
+                Texture2D capture = CaptureProductionCanvas();
+                Assert.That(capture, Is.Not.Null);
+                try
+                {
+                    Assert.That(capture.GetPixels32().Distinct().Count(), Is.GreaterThan(2), "The rendered intro must not be blank.");
+                    File.WriteAllBytes(screenshot, capture.EncodeToPNG());
+                }
+                finally { UnityEngine.Object.DestroyImmediate(capture); }
+                TestContext.WriteLine("Day transition capture: " + screenshot);
+            }
+            Invoke(manager, "HideLevelImage");
+            yield return null;
+            Assert.That(foodText.activeInHierarchy && healthText.activeInHierarchy, Is.True);
+        }
+
+        private static Texture2D CaptureProductionCanvas()
+        {
+            Camera camera = Camera.main;
+            Assert.That(camera, Is.Not.Null);
+            Canvas[] overlays = UnityEngine.Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None)
+                .Where(canvas => canvas.renderMode == RenderMode.ScreenSpaceOverlay).ToArray();
+            Camera[] previousCameras = overlays.Select(canvas => canvas.worldCamera).ToArray();
+            float[] previousDistances = overlays.Select(canvas => canvas.planeDistance).ToArray();
+            RenderTexture previousTarget = camera.targetTexture;
+            RenderTexture previousActive = RenderTexture.active;
+            RenderTexture target = new RenderTexture(Screen.width, Screen.height, 24);
+            target.Create();
+            try
+            {
+                camera.targetTexture = target;
+                foreach (Canvas canvas in overlays)
+                {
+                    canvas.renderMode = RenderMode.ScreenSpaceCamera;
+                    canvas.worldCamera = camera;
+                    canvas.planeDistance = camera.nearClipPlane + 1;
+                }
+                Canvas.ForceUpdateCanvases();
+                camera.Render();
+                RenderTexture.active = target;
+                Texture2D capture = new Texture2D(target.width, target.height, TextureFormat.RGB24, false);
+                capture.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
+                capture.Apply();
+                return capture;
+            }
+            finally
+            {
+                for (int index = 0; index < overlays.Length; index++)
+                {
+                    overlays[index].renderMode = RenderMode.ScreenSpaceOverlay;
+                    overlays[index].worldCamera = previousCameras[index];
+                    overlays[index].planeDistance = previousDistances[index];
+                }
+                camera.targetTexture = previousTarget;
+                RenderTexture.active = previousActive;
+                target.Release();
+                UnityEngine.Object.DestroyImmediate(target);
+                Canvas.ForceUpdateCanvases();
+            }
         }
 
         [UnityTest]
@@ -403,10 +479,11 @@ namespace HallowBlaze.Tests.PlayMode
             yield return null;
 
             Assert.That(firstRun.CurrentDay, Is.EqualTo(1));
-            Assert.That(firstRun.WorldNodeId, Is.EqualTo("forest.west-trail"));
-            Assert.That(firstRun.Route, Is.EqualTo(new[] { "forest.west-trail" }));
+            Assert.That(firstRun.WorldNodeId, Is.EqualTo("forest.start"));
+            Assert.That(firstRun.Route, Is.Empty);
+            Assert.That(firstRun.ActiveLeg.ToNodeId, Is.EqualTo("forest.west-trail"));
             Assert.That(firstSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
-                Is.EqualTo(NodeDiscoveryState.Visited));
+                Is.EqualTo(NodeDiscoveryState.Sighted));
             Assert.That(GetProperty<bool>(firstManager, "IsRouteChoiceActive"), Is.False);
             Assert.That(GetProperty<IReadOnlyList<WorldMapExitOption>>(
                 firstManager,
@@ -426,13 +503,15 @@ namespace HallowBlaze.Tests.PlayMode
             RunState continuedRun = continuedSession.ActiveRun;
             Assert.That(continuedRun.RunId, Is.EqualTo(firstRun.RunId));
             Assert.That(continuedRun.CurrentDay, Is.EqualTo(1));
-            Assert.That(continuedRun.WorldNodeId, Is.EqualTo("forest.west-trail"));
-            Assert.That(continuedRun.Route, Is.EqualTo(new[] { "forest.west-trail" }));
+            Assert.That(continuedRun.WorldNodeId, Is.EqualTo("forest.start"));
+            Assert.That(continuedRun.Route, Is.Empty);
+            Assert.That(continuedRun.ActiveLeg.SegmentIndex, Is.Zero);
             Assert.That(continuedSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
-                Is.EqualTo(NodeDiscoveryState.Visited));
+                Is.EqualTo(NodeDiscoveryState.Sighted));
 
             Component continuedPlayer = FindSceneComponent(playerType, "Main");
             Assert.That(continuedPlayer, Is.Not.Null);
+            continuedSession.RestoreFood(1000);
             yield return PresentExit(continuedManager);
 
             IReadOnlyList<WorldMapExitOption> secondChoices =
@@ -445,6 +524,9 @@ namespace HallowBlaze.Tests.PlayMode
             yield return null;
             yield return null;
 
+            Assert.That(continuedRun.WorldNodeId, Is.EqualTo("forest.west-trail"));
+            Assert.That(continuedRun.ActiveLeg.DayNumber, Is.EqualTo(2));
+            yield return PresentExit(continuedManager);
             Assert.That(continuedRun.CurrentDay, Is.EqualTo(2));
             Assert.That(continuedRun.WorldNodeId, Is.EqualTo("forest.old-road"));
             Assert.That(continuedRun.Route, Is.EqualTo(new[]
@@ -486,6 +568,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
             yield return null;
             yield return null;
+            yield return PresentExit(manager);
 
             Assert.That(firstSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
                 Is.EqualTo(NodeDiscoveryState.Visited));
@@ -515,9 +598,9 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.start"),
                 Is.EqualTo(NodeDiscoveryState.Visited));
             Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
-                Is.EqualTo(NodeDiscoveryState.Unknown));
+                Is.EqualTo(NodeDiscoveryState.Sighted));
             Assert.That(newGameSession.Profile.GetEdgeDiscoveryState("road.start-west-trail"),
-                Is.EqualTo(EdgeDiscoveryState.Unknown));
+                Is.EqualTo(EdgeDiscoveryState.Sighted));
             Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.old-road"),
                 Is.EqualTo(NodeDiscoveryState.Unknown));
             Assert.That(newGameSession.Profile.GetEdgeDiscoveryState("road.west-trail-old-road"),
@@ -546,6 +629,7 @@ namespace HallowBlaze.Tests.PlayMode
 
             Component manager = GetStaticField(gameManagerType, "instance") as Component;
             Assert.That(manager, Is.Not.Null);
+            yield return StartFirstRoute(manager);
             GameSession session = GetProperty<GameSession>(manager, "Session");
             RunState run = session.ActiveRun;
             BoardRequest request = GetProperty<BoardRequest>(manager, "ActiveBoardRequest");
@@ -553,14 +637,14 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(request.RunId, Is.EqualTo(run.RunId));
             Assert.That(request.WorldNodeId, Is.EqualTo(run.WorldNodeId));
             Assert.That(request.CurrentDay, Is.EqualTo(run.CurrentDay));
-            Assert.That(request.BoardSeed, Is.EqualTo(run.GetBoardSeed()));
+            Assert.That(request.Address, Is.EqualTo(BoardAddressFactory.CreateFromState(run)));
 
             BoardRequest staleRequest = new BoardRequest(
-                request.RunId,
+                new BoardAddress(request.RunId, request.Address.LegId, request.Address.EdgeId,
+                    request.Address.SegmentId, request.CurrentDay, request.Address.GenerationConfigurationId,
+                    request.Address.GenerationVersion, unchecked(request.BoardSeed + 1)),
                 request.RunSeed,
                 request.WorldNodeId,
-                request.CurrentDay,
-                unchecked(request.BoardSeed + 1),
                 request.PlaceKind,
                 request.BiomeFamily,
                 request.LegacyDifficultyLevel);
@@ -568,14 +652,18 @@ namespace HallowBlaze.Tests.PlayMode
                 (bool)Invoke(manager, "HandleBoardOutcome", BoardOutcome.ExitReached(staleRequest)),
                 Is.False);
             Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
-            Assert.That(run.CurrentDay, Is.Zero);
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
 
             BoardOutcome exit = BoardOutcome.ExitReached(request);
+            int loads = 0;
+            SetField(manager, "sceneLoader", new Action<string>(_ => loads++));
             Assert.That((bool)Invoke(manager, "HandleBoardOutcome", exit), Is.True);
-            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
-            Assert.That(run.CurrentDay, Is.Zero);
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.ActiveLeg.SegmentIndex, Is.EqualTo(1));
             Assert.That((bool)Invoke(manager, "HandleBoardOutcome", exit), Is.False);
-            Assert.That(run.CurrentDay, Is.Zero);
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(loads, Is.EqualTo(1));
             Invoke(manager, "HideLevelImage");
             Invoke(manager, "SetGameplayInputBlocked", false);
             yield return null;
@@ -599,6 +687,7 @@ namespace HallowBlaze.Tests.PlayMode
 
             Component manager = GetStaticField(gameManagerType, "instance") as Component;
             Assert.That(manager, Is.Not.Null);
+            yield return StartFirstRoute(manager);
             Component boardManager = GetField<Component>(manager, "boardScript");
             Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"), Is.Not.Null);
             Assert.That(GetProperty<BoardRequest>(boardManager, "ActiveRequest"), Is.Not.Null);
@@ -633,6 +722,7 @@ namespace HallowBlaze.Tests.PlayMode
             yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
             yield return null;
             Component manager = GetStaticField(gameManagerType, "instance") as Component;
+            yield return StartFirstRoute(manager);
             BoardRuntime oldRuntime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
             BoardRequest oldRequest = oldRuntime.Request;
             BoardEventPresenter oldPresenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
@@ -666,7 +756,7 @@ namespace HallowBlaze.Tests.PlayMode
         {
             yield return AssertDeathOutcome(
                 DeathReason.Starvation,
-                "you've starved",
+                "starved",
                 "M2.7 Starvation Cleanup");
         }
 
@@ -835,6 +925,7 @@ namespace HallowBlaze.Tests.PlayMode
 
             Component manager = GetStaticField(gameManagerType, "instance") as Component;
             Assert.That(manager, Is.Not.Null);
+            yield return StartFirstRoute(manager);
             GameSession session = GetProperty<GameSession>(manager, "Session");
             RunState completedRun = session.ActiveRun;
             BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
@@ -885,15 +976,49 @@ namespace HallowBlaze.Tests.PlayMode
             return player;
         }
 
+        private static IEnumerator StartFirstRoute(Component manager)
+        {
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+            SetField(manager, "levelStartDelay", 100f);
+            Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-east-creek"), Is.True);
+            float deadline = Time.realtimeSinceStartup + 10;
+            while (GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime") == null && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            yield return null;
+            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Not.Null);
+        }
+
         private static IEnumerator PresentExit(Component manager)
+        {
+            if (GetProperty<bool>(manager, "IsRouteChoiceActive"))
+                yield break;
+            while (GetProperty<GameSession>(manager, "Session").ActiveRun.ActiveLeg != null)
+            {
+                BoardRuntime previous = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+                yield return PresentSegmentExit(manager);
+                float deadline = Time.realtimeSinceStartup + 10;
+                while (!GetProperty<bool>(manager, "IsRouteChoiceActive") &&
+                    ReferenceEquals(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), previous) &&
+                    Time.realtimeSinceStartup < deadline)
+                    yield return null;
+                yield return null;
+                Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Not.Null);
+            }
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+        }
+
+        private static IEnumerator PresentSegmentExit(Component manager)
         {
             BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
             BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
             presenter.AnimationsEnabled = false;
             Invoke(manager, "HideLevelImage");
             yield return null;
-            foreach (Direction direction in FindExitPath(runtime))
+            int steps = 0;
+            while (!runtime.IsDisposed && !runtime.Controller.IsTerminal)
             {
+                Assert.That(++steps, Is.LessThan(100), "The fixed travel fixture must reach its exit.");
+                Direction direction = FindExitPath(runtime).First();
                 KeyCode key = direction.Equals(Direction.North) ? KeyCode.UpArrow :
                     direction.Equals(Direction.East) ? KeyCode.RightArrow :
                     direction.Equals(Direction.South) ? KeyCode.DownArrow : KeyCode.LeftArrow;
@@ -906,7 +1031,6 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(submission.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
                 yield return null;
             }
-            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
         }
 
         private static IReadOnlyList<Direction> FindExitPath(BoardRuntime runtime)

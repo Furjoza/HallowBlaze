@@ -166,7 +166,7 @@ namespace HallowBlaze.Core.Persistence.Storage
             return Load(
                 RunFileName,
                 RunBackupFileName,
-                RunStateDto.CurrentSchemaVersion,
+                RunStateV3Dto.CurrentSchemaVersion,
                 PersistenceJsonSerializer.DeserializeRun);
         }
 

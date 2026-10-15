@@ -97,6 +97,11 @@ namespace HallowBlaze.Tests.PlayMode
 
             Component firstManager = GetStaticField(gameManagerType, "instance") as Component;
             Assert.That(firstManager, Is.Not.Null);
+            Assert.That((bool)Invoke(firstManager, "ChooseRoute", "road.start-east-creek"), Is.True);
+            float deadline = Time.realtimeSinceStartup + 10;
+            while (GetProperty<HallowBlaze.Presentation.Runtime.BoardRuntime>(firstManager, "ActiveBoardRuntime") == null && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            yield return null;
             GameSession firstSession = GetProperty<GameSession>(firstManager, "Session");
             RunState firstRun = firstSession.ActiveRun;
             Assert.That(firstRun, Is.Not.Null);

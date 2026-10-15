@@ -43,22 +43,22 @@ namespace HallowBlaze.Core.Persistence
             return ProfileStateMapper.FromDto(dto);
         }
 
-        /// <summary>Writes a validated schema v2 stable run boundary; profile serialization is unchanged.</summary>
+        /// <summary>Writes a validated schema v3 stable run boundary; profile serialization is unchanged.</summary>
         public static string SerializeRun(RunState run)
         {
             return SerializeTravelRun(run);
         }
 
-        /// <summary>Reads supported v1/v2 run documents through the explicit, run-only migration boundary.</summary>
+        /// <summary>Reads v1/v2/v3 run documents, preserving the original layout RNG through migration.</summary>
         public static RunState DeserializeRun(string json)
         {
             return DeserializeTravelRun(json);
         }
 
-        /// <summary>Writes validated v2 stable travel inputs, not a duplicate address cache or mid-board snapshot.</summary>
-        public static string SerializeTravelRun(RunState run) => Serialize(RunStateV2Mapper.ToDto(run));
+        /// <summary>Writes v3 travel inputs and RNG identity, not an address cache or mid-board cursor snapshot.</summary>
+        public static string SerializeTravelRun(RunState run) => Serialize(RunStateV3Mapper.ToDto(run));
 
-        /// <summary>Strictly reads v2 or migrates evidenced v1 checkpoint data without file/profile mutation.</summary>
+        /// <summary>Strictly reads v3 or migrates v1/v2 with legacy RNG without file/profile mutation.</summary>
         /// <exception cref="PersistenceDataException">Schema, JSON structure or travel invariants are invalid.</exception>
         public static RunState DeserializeTravelRun(string json)
         {
@@ -66,9 +66,14 @@ namespace HallowBlaze.Core.Persistence
             int version = ReadSchemaVersion(document);
             if (version == RunStateDto.CurrentSchemaVersion)
                 return RunStateV2Mapper.FromDto(RunStateV1Migration.Migrate(Deserialize<RunStateDto>(json, version)));
-            DtoValidation.RequireCurrentSchemaVersion(version, RunStateV2Dto.CurrentSchemaVersion);
-            ValidateTravelTokenTypes(document, typeof(RunStateV2Dto), string.Empty);
-            return RunStateV2Mapper.FromDto(Deserialize<RunStateV2Dto>(json, version));
+            if (version == RunStateV2Dto.CurrentSchemaVersion)
+            {
+                ValidateTravelTokenTypes(document, typeof(RunStateV2Dto), string.Empty);
+                return RunStateV2Mapper.FromDto(Deserialize<RunStateV2Dto>(json, version));
+            }
+            DtoValidation.RequireCurrentSchemaVersion(version, RunStateV3Dto.CurrentSchemaVersion);
+            ValidateTravelTokenTypes(document, typeof(RunStateV3Dto), string.Empty);
+            return RunStateV3Mapper.FromDto(Deserialize<RunStateV3Dto>(json, version));
         }
 
         private static void ValidateTravelTokenTypes(JToken token, Type expectedType, string path)

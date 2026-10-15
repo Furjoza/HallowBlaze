@@ -1,5 +1,8 @@
 {
     "name": "HallowBlaze.Core.State",
     "rootNamespace": "HallowBlaze.Core.State",
+    "references": [
+        "HallowBlaze.Core.Random"
+    ],
     "noEngineReferences": true
 }

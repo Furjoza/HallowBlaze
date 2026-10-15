@@ -81,6 +81,16 @@ public class PlayerScript : MovingObject, IRunHud, ITurnFeedback
             healthText.text = "Health: " + health;
     }
 
+    /// <summary>Hides the current resource HUD during route selection and the full-screen day intro.</summary>
+    /// <param name="visible">Whether gameplay resource labels may be shown.</param>
+    public void SetHudVisible(bool visible)
+    {
+        if (foodText != null)
+            foodText.gameObject.SetActive(visible);
+        if (healthText != null)
+            healthText.gameObject.SetActive(visible);
+    }
+
     /// <inheritdoc />
     public void ShowRejection(CommandRejectionCode reason) => Debug.Log("Command rejected: " + reason, this);
 

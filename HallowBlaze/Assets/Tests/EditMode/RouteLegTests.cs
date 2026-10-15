@@ -173,6 +173,109 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
+        public void TravelStart_CheckpointsPendingWithoutArrivalAndRollsBackFailedSave()
+        {
+            GameSession session = new GameSession(new ProfileState("profile.test", "world.test", 1));
+            session.ContinueRun(NewRun());
+            TravelSaveStore store = new TravelSaveStore { FailRunSave = true };
+            RouteTravelService travel = new RouteTravelService(session, World(), store);
+
+            Assert.That(travel.StartRoute("edge").IsFailure, Is.True);
+            Assert.That(session.ActiveRun.ActiveLeg, Is.Null);
+            Assert.That(session.ActiveRun.TraversalSequence, Is.Zero);
+            store.FailRunSave = false;
+            Assert.That(travel.StartRoute("edge").IsSuccess, Is.True);
+            Assert.That(store.SavedLeg.IntroState, Is.EqualTo(DayIntroState.Pending));
+            Assert.That(store.SavedLeg.LegId, Is.EqualTo("leg.1"));
+            Assert.That(session.ActiveRun.ReachedCheckpointNodeId, Is.EqualTo("a"));
+            Assert.That(session.ActiveRun.CompletedDayCount, Is.Zero);
+            Assert.That(session.ActiveRun.CurrentDay, Is.EqualTo(1));
+            Assert.That(session.ActiveRun.TravelHistory, Is.Empty);
+            Assert.That(session.Profile.GetNodeDiscoveryState("b"), Is.EqualTo(NodeDiscoveryState.Unknown));
+            Assert.That(session.Profile.GetEdgeDiscoveryState("edge"), Is.EqualTo(EdgeDiscoveryState.Unknown));
+            Assert.That(store.ProfileSaveCount, Is.Zero);
+            Assert.Throws<InvalidOperationException>(() => travel.StartRoute("edge"));
+            Assert.That(store.RunSaveCount, Is.EqualTo(2));
+        }
+
+        private sealed class TravelSaveStore : ISaveStore
+        {
+            public bool FailRunSave { get; set; }
+            public int RunSaveCount { get; private set; }
+            public int ProfileSaveCount { get; private set; }
+            public ActiveRouteLegState SavedLeg { get; private set; }
+
+            public SaveStoreResult SaveRun(RunState run)
+            {
+                RunSaveCount++;
+                if (FailRunSave)
+                    return SaveStoreResult.IoError();
+                SavedLeg = run.ActiveLeg;
+                return SaveStoreResult.Success();
+            }
+
+            public SaveStoreResult SaveProfile(ProfileState profile)
+            {
+                ProfileSaveCount++;
+                return SaveStoreResult.Success();
+            }
+
+            public SaveStoreResult ResetGame(ProfileState profile, RunState run) => throw new NotSupportedException();
+            public SaveStoreResult<ProfileState> LoadProfile() => throw new NotSupportedException();
+            public SaveStoreResult<RunState> LoadRun() => throw new NotSupportedException();
+            public SaveStoreResult DeleteRun() => throw new NotSupportedException();
+        }
+
+        [TestCase(2)]
+        [TestCase(5)]
+        public void TravelBoundaries_ConsumeBeforeRenderAdvanceOnceAndRollbackFailures(int count)
+        {
+            GameSession session = new GameSession(new ProfileState("profile.test", "world.test", 1));
+            session.ContinueRun(NewRun());
+            TravelSaveStore store = new TravelSaveStore();
+            WorldDefinition world = World(count);
+            RouteTravelService travel = new RouteTravelService(session, world, store);
+            travel.StartRoute("edge");
+            BoardRequest first = BoardRequest.CreateFromRun(session.ActiveRun, world);
+            Assert.That(travel.TryCompleteSegment(first, out _, out _), Is.False);
+            store.FailRunSave = true;
+            Assert.That(travel.ConsumeIntro(out bool failedIntro).IsFailure, Is.True);
+            Assert.That(failedIntro, Is.False);
+            Assert.That(session.ActiveRun.ActiveLeg.IntroState, Is.EqualTo(DayIntroState.Pending));
+            store.FailRunSave = false;
+            Assert.That(travel.ConsumeIntro(out bool showIntro).IsSuccess, Is.True);
+            Assert.That(showIntro, Is.True);
+            Assert.That(store.SavedLeg.IntroState, Is.EqualTo(DayIntroState.Consumed));
+            int saves = store.RunSaveCount;
+            Assert.That(travel.ConsumeIntro(out bool repeatedIntro).IsSuccess, Is.True);
+            Assert.That(repeatedIntro, Is.False);
+            Assert.That(store.RunSaveCount, Is.EqualTo(saves));
+
+            for (int index = 0; index < count; index++)
+            {
+                BoardRequest request = BoardRequest.CreateFromRun(session.ActiveRun, world);
+                store.FailRunSave = true;
+                Assert.That(travel.TryCompleteSegment(request, out SaveStoreResult failed, out bool failedArrival), Is.True);
+                Assert.That(failed.IsFailure, Is.True);
+                Assert.That(failedArrival, Is.False);
+                Assert.That(BoardRequest.CreateFromRun(session.ActiveRun, world).HasSameIdentity(request), Is.True);
+                store.FailRunSave = false;
+                Assert.That(travel.TryCompleteSegment(request, out SaveStoreResult saved, out bool arrived), Is.True);
+                Assert.That(saved.IsSuccess, Is.True);
+                Assert.That(arrived, Is.EqualTo(index == count - 1));
+                saves = store.RunSaveCount;
+                Assert.That(travel.TryCompleteSegment(request, out _, out _), Is.False);
+                Assert.That(store.RunSaveCount, Is.EqualTo(saves));
+                Assert.That(session.ActiveRun.CurrentDay, Is.EqualTo(1));
+                Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(arrived ? 1 : 0));
+                Assert.That(session.ActiveRun.ReachedCheckpointNodeId, Is.EqualTo(arrived ? "b" : "a"));
+            }
+            Assert.That(session.ActiveRun.TravelHistory, Has.Count.EqualTo(1));
+            Assert.That(session.ActiveRun.TravelHistory[0].CompletedSegmentCount, Is.EqualTo(count));
+            Assert.That(store.ProfileSaveCount, Is.Zero);
+        }
+
+        [Test]
         public void IntroConsumption_IsIdentityGuardedAndIdempotent()
         {
             RunState run = NewRun();
