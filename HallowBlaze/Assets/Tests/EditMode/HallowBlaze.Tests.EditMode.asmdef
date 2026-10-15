@@ -13,6 +13,7 @@
         "Newtonsoft.Json.dll"
     ],
     "references": [
+        "HallowBlaze.Core.Generation",
         "HallowBlaze.Core.Random",
         "HallowBlaze.Core.State",
         "HallowBlaze.Core.Session",

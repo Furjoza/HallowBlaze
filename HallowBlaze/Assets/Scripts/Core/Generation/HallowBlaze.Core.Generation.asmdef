@@ -1,0 +1,10 @@
+{
+    "name": "HallowBlaze.Core.Generation",
+    "rootNamespace": "HallowBlaze.Core.Generation",
+    "references": [
+        "HallowBlaze.Core.Board.Primitives",
+        "HallowBlaze.Core.Board.State",
+        "HallowBlaze.Core.State"
+    ],
+    "noEngineReferences": true
+}

@@ -4637,7 +4637,7 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 ## `M4.2` — `BoardBlueprint` i konfiguracja budżetu
 
-**Status:** `Planned`  
+**Status:** `Done` - accepted 2026-10-14 with owner-authorized Lead-only implementation, validation, and self-review. No independent Reviewer verdict is claimed.
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 7.2, 8, 16 i 17.
 
@@ -4662,6 +4662,8 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 **Wpływ na save i kompatybilność:** A future M8.7 diagnostic capture may use the blueprint, but normal between-board saves do not store it. No portable replay format is required here.
 
 **Wymagany handoff:** Przykład jednego blueprintu i mapping pól budżetu na zamierzoną presję.
+
+**Accepted scope (2026-10-14):** Engine-free immutable blueprints/configs, full board identity, deterministic value comparison/fingerprints, independent state construction, transitional state export, generic item/source identities, and derived initial resource manifests. The existing layered exit exports as one logical exit without becoming a resource item. Generation, gameplay, saves, and presentation are unchanged; full EditMode validation and Lead self-review passed under the owner's task-specific combined-role authorization. The [data contract](BoardGeneration.md) documents an example, budget units, and the M4.3/M4.4 boundaries.
 
 ---
 
@@ -6095,7 +6097,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. continue M4 with `M4.2` after the accepted M4.1 changes are committed and a new clean baseline is established, then follow the existing dependency order; the M3.12 and M4.1 review authorizations do not extend to later tasks;
+1. continue M4 with `M4.3` after the accepted M4.2 changes are committed and a new clean baseline is established, then follow the existing dependency order; the M3.12, M4.1, and M4.2 review authorizations do not extend to later tasks;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6105,7 +6107,9 @@ The next safe sequence is:
 
 Accepted M3.6 establishes one production gameplay authority, M3.7/M3.8 provide deterministic retained enemy behavior, M3.9 is owner-approved for PoC, and reduced M3.10 protects concrete turn scenarios. Accepted M3.11 supplies stable traversal/segment identity and compatible save state. Accepted M3.12 activates multi-board travel with the durable intro contract, providing the production address boundaries that M4 consumes. Its missing independent review is explicitly waived for this task only. Deferred portable replay is not a prerequisite.
 
-M4.1 is accepted on 2026-10-14 with versioned independent RNG, compatible run schema v3, and full EditMode `657/657` / graphics PlayMode `111/111`. The owner authorized Lead-only implementation and acceptance for M4.1; no independent review is claimed. M4.2 is the next planned task, not part of this implementation.
+M4.1 is accepted on 2026-10-14 with versioned independent RNG, compatible run schema v3, and full EditMode `657/657` / graphics PlayMode `111/111`. The owner authorized Lead-only implementation and acceptance for M4.1; no independent review is claimed.
+
+M4.2 is accepted on 2026-10-14 with the immutable blueprint/configuration contract, generic item/source metadata, derived initial supply, and transitional state export. The owner separately authorized Lead-only implementation, validation, and self-review for M4.2; no independent review is claimed. M4.3 is the next planned task.
 
 # Zasada aktualizacji roadmapy
 
