@@ -327,7 +327,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(edge.Segments.Select(segment => segment.SegmentId),
                     Is.EqualTo(names.Select(name => "segment." + road + "." + name)));
                 Assert.That(edge.Segments.All(segment => segment.GenerationVersion == 1 &&
-                    segment.GenerationConfigurationId == "legacy.board.v1"), Is.True);
+                    segment.GenerationConfigurationId == "ordinary.board.v1"), Is.True);
             }
             Assert.That(world.Edges.SelectMany(edge => edge.Segments).Select(segment => segment.SegmentId), Is.Unique);
             Assert.That(world.WorldDefinitionId, Is.EqualTo("world-1"));

@@ -11,7 +11,11 @@ namespace HallowBlaze.Core.Session
         /// <summary>Gets the frozen seed encoding domain; changes require explicit compatibility handling.</summary>
         public const string SeedDomain = "hallowblaze.route-board.v1";
 
-        /// <summary>Validates published road/segment/configuration associations and derives the current address.</summary>
+        /// <summary>
+        /// Validates published road/segment/configuration associations and derives the persisted address.
+        /// The explicit legacy v1 to ordinary v1 publication upgrade retains saved legacy identity and seed;
+        /// other configuration drift is rejected, never substituted into an active leg.
+        /// </summary>
         /// <exception cref="ArgumentException">The saved leg references foreign or changed published content.</exception>
         public static BoardAddress Create(RunState run, WorldDefinition world)
         {
@@ -26,10 +30,17 @@ namespace HallowBlaze.Core.Session
                 throw new ArgumentException("Active leg does not match the published road.", nameof(run));
             foreach (RouteSegmentState saved in leg.Segments)
                 if (!world.TryGetSegment(saved.SegmentId, out RouteSegmentDefinition segment, out WorldEdgeDefinition owner) ||
-                    owner.EdgeId != edge.EdgeId || segment.GenerationVersion != saved.GenerationVersion ||
-                    segment.GenerationConfigurationId != saved.GenerationConfigurationId)
+                    owner.EdgeId != edge.EdgeId || !MatchesPublishedGeneration(saved, segment))
                     throw new ArgumentException("Foreign segment generation identity: " + saved.SegmentId, nameof(run));
             return address;
+        }
+
+        private static bool MatchesPublishedGeneration(RouteSegmentState saved, RouteSegmentDefinition published)
+        {
+            return (published.GenerationVersion == saved.GenerationVersion &&
+                published.GenerationConfigurationId == saved.GenerationConfigurationId) ||
+                (saved.GenerationConfigurationId == "legacy.board.v1" && saved.GenerationVersion == 1 &&
+                published.GenerationConfigurationId == "ordinary.board.v1" && published.GenerationVersion == 1);
         }
 
         /// <summary>

@@ -4,6 +4,8 @@ using System.Linq;
 using System.Reflection;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
+using HallowBlaze.Core.Generation;
+using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
 using HallowBlaze.Core.Turns.Contracts;
@@ -64,6 +66,85 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(FoodReward(LegacyBoardContentKind.Soda), Is.EqualTo(20));
             Assert.That(FoodReward(LegacyBoardContentKind.BushFood), Is.EqualTo(10));
             Assert.That(LegacyBoardContentCatalog.DeferredLegacyMutationPaths, Is.Empty);
+        }
+
+        /// <summary>Blueprint composition retains IDs, independent state and catalog enemy rules even after the caller clears its bindings.</summary>
+        [Test]
+        public void BlueprintCompositionRetainsTheModelWithoutDependingOnViewData()
+        {
+            RunState run = new RunState("ordinary-composition", 77, new RunStateConfiguration(100, 100, 3, "forest.start"));
+            run.StartLeg("edge", "forest.start", "destination", new[]
+            {
+                new RouteSegmentState("segment", OrdinaryBoardGenerator.ConfigurationId, 1)
+            });
+            var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed,
+                run.WorldNodeId, "forest", "temperate", 4);
+            BoardValidationCatalog catalog = OrdinaryBoardContent.CreateCatalog();
+            BoardBlueprint blueprint = OrdinaryBoardGenerator.Generate(request.Address,
+                OrdinaryBoardContent.CreateConfiguration(request.Address), catalog, run.RunSeed);
+            var views = blueprint.Entities.Reverse().ToDictionary(entity => entity.Id,
+                entity => CreateView(entity.Definition.ContentId, entity.Position.X, entity.Position.Y));
+            using (BoardRuntime runtime = BlueprintBoardRuntimeComposer.Compose(request, run, blueprint, catalog, views))
+            {
+                Assert.That(runtime.BoardState.GetEntities(), Is.EqualTo(blueprint.Entities));
+                Assert.That(runtime.Views.Keys, Is.EquivalentTo(blueprint.Entities.Select(entity => entity.Id)));
+                Assert.That(runtime.Enemies.Count, Is.EqualTo(2));
+                foreach (ShamblerState enemy in runtime.Enemies)
+                {
+                    BoardEntityState entity = blueprint.Entities.Single(candidate => candidate.Id.Equals(enemy.ActorId));
+                    Assert.That(enemy.Definition.Damage, Is.EqualTo(entity.Definition.ContentId == OrdinaryBoardContent.Enemy10Id ? 10 : 20));
+                    Assert.That(enemy.LockedIntent, Is.Not.Null);
+                }
+                views.Clear();
+                Assert.That(runtime.Views.Count, Is.EqualTo(blueprint.Entities.Count));
+                runtime.BoardState.TryRemove(blueprint.Items[0].EntityId);
+                Assert.That(blueprint.CreateState().Count, Is.EqualTo(blueprint.Entities.Count));
+                Assert.That(run.Food, Is.EqualTo(100));
+                Assert.That(run.Health, Is.EqualTo(100));
+            }
+        }
+
+        /// <summary>Missing, foreign, repeated and misplaced view bindings cannot alter a blueprint or create a runtime.</summary>
+        [TestCase("count", BoardRuntimeDiagnosticCode.InvalidInput)]
+        [TestCase("missing", BoardRuntimeDiagnosticCode.DuplicateEntity)]
+        [TestCase("duplicate", BoardRuntimeDiagnosticCode.DuplicateEntity)]
+        [TestCase("position", BoardRuntimeDiagnosticCode.ViewPositionMismatch)]
+        [TestCase("identity", BoardRuntimeDiagnosticCode.InvalidInput)]
+        public void BlueprintCompositionRejectsChangedViewBindings(string scenario, BoardRuntimeDiagnosticCode expected)
+        {
+            RunState run = new RunState("ordinary-composition", 77, new RunStateConfiguration(100, 100, 0, "forest.start"));
+            run.StartLeg("edge", "forest.start", "destination", new[]
+            {
+                new RouteSegmentState("segment", OrdinaryBoardGenerator.ConfigurationId, 1)
+            });
+            var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed,
+                run.WorldNodeId, "forest", "temperate", 1);
+            BoardValidationCatalog catalog = OrdinaryBoardContent.CreateCatalog();
+            BoardBlueprint blueprint = OrdinaryBoardGenerator.Generate(request.Address,
+                OrdinaryBoardContent.CreateConfiguration(request.Address), catalog, run.RunSeed);
+            var views = blueprint.Entities.ToDictionary(entity => entity.Id,
+                entity => CreateView(entity.Definition.ContentId, entity.Position.X, entity.Position.Y));
+            EntityId first = blueprint.Entities[0].Id;
+            if (scenario == "count") views.Remove(first);
+            if (scenario == "missing") { GameObject view = views[first]; views.Remove(first); views.Add(new EntityId(99999), view); }
+            if (scenario == "duplicate")
+            {
+                BoardEntityState player = blueprint.Entities.Single(entity => entity.Definition.Kind.Equals(EntityKind.Player));
+                BoardEntityState terrain = blueprint.Entities.Single(entity => entity.Definition.Layer == BoardLayer.Terrain &&
+                    entity.Position.Equals(player.Position));
+                views[player.Id] = views[terrain.Id];
+            }
+            if (scenario == "position") views[first].transform.position += Vector3.right;
+            if (scenario == "identity") request = new BoardRequest(new BoardAddress(request.RunId, request.Address.LegId,
+                request.Address.EdgeId, "foreign", 1, OrdinaryBoardGenerator.ConfigurationId, 1, request.BoardSeed),
+                request.RunSeed, run.WorldNodeId, "forest", "temperate", 1);
+            string hash = blueprint.ContentHash;
+            BoardRuntimeCompositionException failure = Assert.Throws<BoardRuntimeCompositionException>(() =>
+                BlueprintBoardRuntimeComposer.Compose(request, run, blueprint, catalog, views));
+            Assert.That(failure.Code, Is.EqualTo(expected));
+            Assert.That(blueprint.ContentHash, Is.EqualTo(hash));
+            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Health, Is.EqualTo(100));
         }
 
         [Test]

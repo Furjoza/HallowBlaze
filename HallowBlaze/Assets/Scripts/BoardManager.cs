@@ -1,11 +1,15 @@
 using System;
 using System.Collections.Generic;
 using HallowBlaze.Core.Board.Primitives;
+using HallowBlaze.Core.Board.State;
+using HallowBlaze.Core.Generation;
+using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.Random;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
 using HallowBlaze.Presentation.Runtime;
 using UnityEngine;
+using EntityId = HallowBlaze.Core.Board.Primitives.EntityId;
 
 public class BoardManager : MonoBehaviour
 {
@@ -45,6 +49,7 @@ public class BoardManager : MonoBehaviour
     private System.Random legacyGameplayRandom;
     private BoardRequest activeRequest;
     private BoardRuntime activeRuntime;
+    private BoardBlueprint activeBlueprint;
 
     private void InitialiseList()
     {
@@ -169,10 +174,12 @@ public class BoardManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Creates and validates the complete legacy layout before publishing one authoritative runtime.
+    /// Creates and validates the addressed layout before publishing one authoritative runtime.
+    /// Ordinary v1 boards generate model-first; checkpoint and legacy v1 boards preserve their original layout path.
     /// A failed setup destroys its staged views and leaves no active request or runtime.
-    /// Enemy variants come from their prefab's explicit 10/20 HP data; initial domain plans exist before activation.
-    /// New runs use independent addressed PCG32 layout/cosmetic streams; v1/v2 migrations retain seeded legacy layout.
+    /// Ordinary enemy rules come from the catalog; legacy variants retain prefab 10/20 HP data.
+    /// Initial domain plans exist before activation.
+    /// Independent addressed layout/cosmetic streams keep presentation draws out of gameplay; v1/v2 migrations retain seeded legacy layout.
     /// </summary>
     /// <param name="request">The immutable run, node, and generation inputs for this board.</param>
     /// <param name="runState">The active run referenced by <paramref name="request"/>.</param>
@@ -181,7 +188,8 @@ public class BoardManager : MonoBehaviour
     /// <exception cref="ArgumentNullException">
     /// <paramref name="request"/> or <paramref name="runState"/> is null.
     /// </exception>
-    /// <exception cref="BoardRuntimeCompositionException">The generated layout is incomplete or invalid.</exception>
+    /// <exception cref="BoardRuntimeCompositionException">Input identity, layout bounds or view mappings are invalid.</exception>
+    /// <exception cref="BoardGenerationException">The ordinary candidate does not pass the independent validator.</exception>
     public BoardRuntime SetupScene(
         BoardRequest request,
         RunState runState,
@@ -191,6 +199,12 @@ public class BoardManager : MonoBehaviour
             throw new ArgumentNullException(nameof(request));
         if (runState == null)
             throw new ArgumentNullException(nameof(runState));
+        ReleaseCurrentBoard();
+        if (request.Address != null && request.Address.GenerationConfigurationId == OrdinaryBoardGenerator.ConfigurationId)
+            return SetupOrdinaryScene(request, runState, playerView);
+        if (request.Address != null && (request.Address.GenerationConfigurationId != "legacy.board.v1" ||
+            request.Address.GenerationVersion != 1))
+            throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, "generator:unsupported-identity");
         if (columns < 1 || rows < 1)
         {
             throw new BoardRuntimeCompositionException(
@@ -198,7 +212,6 @@ public class BoardManager : MonoBehaviour
                 "bounds:" + columns + "x" + rows);
         }
 
-        ReleaseCurrentBoard();
         var provider = new RandomStreamProvider(request.RunSeed);
         cosmeticRandom = provider.Create(BoardRandomStreams.CosmeticId(request));
         bool legacy = runState.RandomAlgorithmId == RunState.LegacyRandomAlgorithmId;
@@ -298,8 +311,11 @@ public class BoardManager : MonoBehaviour
         }
     }
 
-    /// <summary>Gets the request that identifies the currently generated legacy board.</summary>
+    /// <summary>Gets the request that identifies the currently generated board.</summary>
     public BoardRequest ActiveRequest => activeRequest;
+
+    /// <summary>Gets the immutable accepted ordinary blueprint, or null for legacy setup and released/failed boards.</summary>
+    public BoardBlueprint ActiveBlueprint => activeBlueprint;
 
     /// <summary>Gets the complete active runtime, or null when startup failed or the board was released.</summary>
     public BoardRuntime ActiveRuntime => activeRuntime;
@@ -307,6 +323,98 @@ public class BoardManager : MonoBehaviour
     internal void ClearActiveRequest()
     {
         ReleaseCurrentBoard();
+    }
+
+    private BoardRuntime SetupOrdinaryScene(BoardRequest request, RunState runState, GameObject playerView)
+    {
+        if (columns != 8 || rows != 8 || playerView == null ||
+            !BoardOutcomeIdentityGuard.ValidateRequest(request, runState, out _))
+            throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, "ordinary:bounds-player-or-identity");
+        BoardValidationCatalog catalog = OrdinaryBoardContent.CreateCatalog();
+        BoardGenerationConfig config = OrdinaryBoardContent.CreateConfiguration(request.Address);
+        BoardBlueprint blueprint = OrdinaryBoardGenerator.Generate(request.Address, config, catalog, request.RunSeed);
+        RequirePrefabs(floorTiles, nameof(floorTiles));
+        RequirePrefabs(outerWallTiles, nameof(outerWallTiles));
+        if (exit == null)
+            throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, "prefab:Exit");
+        cosmeticRandom = new RandomStreamProvider(request.RunSeed).Create(BoardRandomStreams.CosmeticId(request));
+        Transform stagingHolder = new GameObject("Board").transform;
+        stagingHolder.gameObject.SetActive(false);
+        var views = new Dictionary<EntityId, GameObject>();
+        Vector3 previousPlayerPosition = playerView.transform.position;
+        try
+        {
+            for (int coordinateX = -1; coordinateX <= 8; coordinateX++)
+                for (int coordinateY = -1; coordinateY <= 8; coordinateY++)
+                    if (coordinateX == -1 || coordinateX == 8 || coordinateY == -1 || coordinateY == 8)
+                        Instantiate(outerWallTiles[cosmeticRandom.NextInt(0, outerWallTiles.Length)],
+                            new Vector3(coordinateX, coordinateY, 0), Quaternion.identity, stagingHolder);
+            foreach (BoardEntityState entity in blueprint.Entities)
+            {
+                Vector3 position = new Vector3(entity.Position.X, entity.Position.Y, 0);
+                GameObject view;
+                if (entity.Definition.Kind.Equals(EntityKind.Player))
+                {
+                    SetPlayerPosition(playerView, position);
+                    view = playerView;
+                }
+                else
+                {
+                    GameObject prefab = ResolveOrdinaryPrefab(entity.Definition);
+                    view = Instantiate(prefab, position, Quaternion.identity, stagingHolder);
+                }
+                views.Add(entity.Id, view);
+                if (entity.Definition.Traits.IsExit)
+                    Instantiate(exit, position, Quaternion.identity, stagingHolder);
+            }
+            BoardRuntime runtime = BlueprintBoardRuntimeComposer.Compose(request, runState, blueprint, catalog, views);
+            boardHolder = stagingHolder;
+            activeRequest = request;
+            activeBlueprint = blueprint;
+            activeRuntime = runtime;
+            stagingHolder.gameObject.SetActive(true);
+            return runtime;
+        }
+        catch
+        {
+            SetPlayerPosition(playerView, previousPlayerPosition);
+            DestroyBoardHolder(stagingHolder);
+            throw;
+        }
+    }
+
+    private GameObject ResolveOrdinaryPrefab(BoardEntityDefinition definition)
+    {
+        GameObject[] choices;
+        if (definition.Layer == BoardLayer.Terrain) choices = floorTiles;
+        else if (definition.Layer == BoardLayer.Obstacle) choices = wallTiles;
+        else if (definition.Kind.Equals(EntityKind.Enemy))
+        {
+            int damage = definition.ContentId == OrdinaryBoardContent.Enemy10Id ? 10 : 20;
+            RequirePrefabs(enemyTiles, nameof(enemyTiles));
+            var matching = new List<GameObject>();
+            foreach (GameObject candidate in enemyTiles)
+                if (ReadEnemyDamage(candidate) == damage) matching.Add(candidate);
+            choices = matching.ToArray();
+        }
+        else
+        {
+            RequirePrefabs(groundFoodTiles, nameof(groundFoodTiles));
+            var matching = new List<GameObject>();
+            bool soda = definition.ContentId == "legacy.soda";
+            foreach (GameObject candidate in groundFoodTiles)
+                if (candidate.CompareTag("Soda") == soda) matching.Add(candidate);
+            choices = matching.ToArray();
+        }
+        RequirePrefabs(choices, definition.ContentId);
+        return choices[cosmeticRandom.NextInt(0, choices.Length)];
+    }
+
+    private static void SetPlayerPosition(GameObject playerView, Vector3 position)
+    {
+        Rigidbody2D body = playerView.GetComponent<Rigidbody2D>();
+        if (body != null) body.position = new Vector2(position.x, position.y);
+        playerView.transform.position = position;
     }
 
     private static LegacyBoardContentKind ResolveContentKind(
@@ -359,6 +467,7 @@ public class BoardManager : MonoBehaviour
 
         activeRuntime = null;
         activeRequest = null;
+        activeBlueprint = null;
         if (boardHolder != null)
         {
             DestroyBoardHolder(boardHolder);
