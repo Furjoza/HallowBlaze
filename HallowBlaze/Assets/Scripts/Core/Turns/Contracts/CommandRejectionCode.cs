@@ -40,6 +40,17 @@ namespace HallowBlaze.Core.Turns.Contracts
         /// <summary>
         /// No available interaction at the target location.
         /// </summary>
-        NoInteractionAvailable = 6
+        NoInteractionAvailable = 6,
+
+        /// <summary>The selected equipment cell is outside the two generic slots.</summary>
+        InvalidToolSlot = 7,
+        /// <summary>The selected equipment cell is empty.</summary>
+        EmptyToolSlot = 8,
+        /// <summary>The selected instance has no remaining charges.</summary>
+        ToolDepleted = 9,
+        /// <summary>The equipped identity or charges differ from the preview; no alternative is substituted.</summary>
+        StaleTool = 10,
+        /// <summary>No behavior is registered for this tool definition and selected action.</summary>
+        UnsupportedTool = 11
     }
 }

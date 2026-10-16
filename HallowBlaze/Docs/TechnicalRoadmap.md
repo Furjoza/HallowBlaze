@@ -4980,13 +4980,13 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 ## `M5.3` — `UseToolCommand` i atomowe zużycie charges
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-16)
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 9, 10 i 13.1.
 
 **Rationale:** Narzędzie nie może zużyć ładunku lub tury, jeśli cel stał się nieważny. Walidacja, efekt, hałas, koszt i charge muszą być jednym wynikiem resolvera.
 
-**Obecne zachowanie:** Sloty istnieją, ale nie ma wspólnego kontraktu użycia w turze.
+**Current behavior:** The central resolver supports explicit tool decisions with shared preview/commit validation. Accepted use applies the direct effect, one charge, the current action-cost policy, and configured noise in one result. Rejected or stale decisions leave gameplay state and later phases unchanged. Placeholder tools still have no concrete effects.
 
 **Oczekiwany rezultat:** `UseToolCommand(slot, target)` jest najpierw w pełni walidowane, a accepted result atomowo emituje efekt, noise, charge spend i bieżący policy-driven koszt tury; it does not own a permanent assumption that every future action costs exactly one `Food`.
 
@@ -5002,9 +5002,17 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 **Plan testów:** EditMode pełna macierz walidacji i atomicity; PlayMode preview/confirm/cancel/rapid input.
 
-**Wpływ na save i kompatybilność:** Zmiana charges jest zapisywana w runie na istniejących granicach autosave.
+**Save and compatibility impact:** Accepted charges are stored in `RunState` and serialized at the existing run-save boundaries. Run schema v4 and profile schema v2 are unchanged; no migration or reset is added. The isolated file-save regression confirms the exact instance ID and remaining charges after command execution and reload. Preview selections and commands are not persisted.
 
-**Wymagany handoff:** Chronologiczny event list poprawnego i odrzuconego użycia.
+**Selection and dispatch:** `UseToolCommand` captures the generic slot, run-local instance ID, expected charges, exact target ID/position, and selected action ID. `ToolUseQuery` validates that snapshot and dispatches by definition/action ID through trusted deterministic domain effects. Empty/depleted/invalid slots, replaced instances, changed charges, missing/displaced/distant targets, unsupported behavior, and blocked or decision-required effects reject without fallback. Captured charges invalidate replay of an accepted decision. The same catalog and immutable `ActionCostPolicy` are shared by the runtime, picker and resolver through both composers. The default policy remains one Food for ordinary board commands; tests exercise a different policy without introducing future M9 cost tiers.
+
+**Preview and presentation:** The existing numbered interaction picker also lists explicit tool options with generic slot, direct-effect label, target position, one turn, one charge, current Food cost and noise strength/lifetime. Opening, selection and cancellation remain free. Independent input owners, same-frame hold, rapid-confirm protection, animation parity, terminal disposal and recovery are preserved. New tool events have read-only presentation handlers. Canceling replay after resolution does not refund charges or rerun the command.
+
+**Ordered result:** A nonterminal accepted tool use emits `ToolUsed`, the behavior's direct-effect events, `ToolChargeSpent`, `ActionCostApplied`, and `Noise` when configured strength is positive. `PlayerStarved` follows these events when the accepted cost exhausts Food; that terminal result skips hostile/environment/planning phases. Otherwise the existing controller runs each later phase once and ages only pre-command noise. The controlled test effect produces `ToolUsed -> EntityMoved -> ToolChargeSpent -> ActionCostApplied -> Noise`; the starvation case appends `PlayerStarved`. A rejected decision returns an empty event list, no consumed turn, no resource/charge change, no emission/aging and no later phases.
+
+**Scope boundary:** No production behavior is registered for `axe.basic` or `shovel.basic`; their effects remain M5.4/M5.5. Test-only registered effects exercise the complete resolver/picker path without changing production content. No pickup, bag, pocket, repair, scene, prefab, package or project-settings changes are included.
+
+**Acceptance (2026-10-16):** Started from clean baseline `7de0b2b722b23cc3bc8046773ff20d678c6b78f2` on `M5/2/ItemsItems` in Git root `D:/Repos/HallowBlaze`. The owner explicitly requested direct implementation without Developer delegation and allowed Reviewer use; the card-specific M4.9 exception does not close the human gate or authorize M5.4. Unity 6000.3.21f1 compiled the final implementation. Full EditMode passed 987 tests with only the existing Explicit M4.6 10,000-seed milestone skipped; full graphics-enabled PlayMode passed 143/143 without skips. Final focused domain/persistence tests passed 69/69 and ordered-presentation tests 28/28. Independent Reviewer returned PASS for the domain, picker/input lifetime, and runtime/event-handler integration in bounded read-only reviews; one unanswered integration invocation was replaced by the two smaller completed reviews. Baseline/scope, generated metadata, editor diagnostics and whitespace checks passed. No commit or push was performed.
 
 ---
 
@@ -6130,7 +6138,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further M5 content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized solo implementation/self-review of M5.1 and then M5.2. Both cards are Done; M5.2 passed full EditMode 951 tests plus the existing Explicit skip and graphics PlayMode 138/138. These card-specific exceptions do not close M4.9 or authorize execution of M5.3, which remains Planned. Preserve independent review on later cards unless separately waived;
+1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further M5 content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3 implementation with Reviewer. All three cards are Done; M5.3 passed full EditMode 987 tests plus the existing Explicit skip and graphics PlayMode 143/143, with independent Reviewer PASS across its reviewed scopes. These card-specific exceptions do not close M4.9 or authorize execution of M5.4, which remains Planned. Preserve independent review on later cards unless separately waived;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6160,7 +6168,9 @@ M4.9 started on 2026-10-15 from clean baseline `fb417dc6b12f484f8e329c383311e49e
 
 M5.1 was subsequently completed on 2026-10-15 at the owner's request from clean baseline `c0431c142b7d4611dca1c7c29145af7d80a9fe9a` on `M5/1/CommonInteractionModel`, with direct Lead implementation and self-review only. The owner authorized correction of the diagnosed traversal fixture blocker. Final full EditMode passed 934 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 134/134. The M5.1 card is Done; M4.9 remains Pending. No commit or push was performed.
 
-M5.2 was completed on 2026-10-16 at the owner's explicit request from clean baseline `8e655acb78eef4aa0cbb581ff599156baa561f17` on `M5/2/ItemsItems`, with direct Lead implementation and self-review only. It adds two generic identity-bearing equipment cells, immutable definitions/instances, charge invariants, compatible run schema v4 and a read-only HUD. Full EditMode passed 951 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 138/138. M4.9 remains Pending with no human result and M5.3 remains Planned, not authorized for automatic execution. No independent review verdict, commit, or push is claimed.
+M5.2 was completed on 2026-10-16 at the owner's explicit request from clean baseline `8e655acb78eef4aa0cbb581ff599156baa561f17` on `M5/2/ItemsItems`, with direct Lead implementation and self-review only. It adds two generic identity-bearing equipment cells, immutable definitions/instances, charge invariants, compatible run schema v4 and a read-only HUD. Full EditMode passed 951 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 138/138. M4.9 remains Pending with no human result. No independent review verdict, commit, or push is claimed for M5.2.
+
+M5.3 was completed on 2026-10-16 at the owner's explicit request from clean baseline `7de0b2b722b23cc3bc8046773ff20d678c6b78f2` on `M5/2/ItemsItems`, with direct Lead implementation and no Developer delegation. It adds exact tool decisions, shared preview/dispatch, atomic accepted charge/cost/noise events, stale/replay rejection and presentation through the existing picker. Full EditMode passed 987 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 143/143. Independent Reviewer returned PASS for the domain, picker and runtime integration. Run schema v4 and production axe/shovel effects are unchanged. M4.9 remains Pending; M5.4 remains Planned and is not authorized for automatic execution. No commit or push was performed.
 
 # Zasada aktualizacji roadmapy
 

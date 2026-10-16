@@ -5,6 +5,10 @@ using HallowBlaze.Core.Persistence;
 using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.State;
 using HallowBlaze.Core.Session;
+using HallowBlaze.Core.Board.Primitives;
+using HallowBlaze.Core.Board.State;
+using HallowBlaze.Core.Turns.Contracts;
+using HallowBlaze.Core.Turns.Resolution;
 using NUnit.Framework;
 
 namespace HallowBlaze.Tests.EditMode
@@ -79,6 +83,36 @@ namespace HallowBlaze.Tests.EditMode
             recovered.Data.Reset("fresh-run", 42, new RunStateConfiguration(100, 100, 0, "forest.start"));
             Assert.That(recovered.Data.ToolSlots.All(slot => slot.IsEmpty), Is.True);
             Assert.That(File.ReadAllBytes(Path.Combine(testRootPath, "profile.json")), Is.EqualTo(profileBefore));
+        }
+
+        /// <summary>Accepted charge changes persist at the existing run-save boundary; rejected replay cannot alter that snapshot.</summary>
+        [Test]
+        public void ToolCommandChargesUseExistingSaveBoundaryWithoutSchemaChange()
+        {
+            var store = new FileSystemSaveStore(testRootPath);
+            RunState run = CreateRun("tool-command");
+            run.ClearTool(0);
+            ToolInstanceState tool = run.CreateToolInstance(new ToolDefinition("test.tool", "Test", 3));
+            run.EquipTool(0, tool);
+            var board = new BoardState();
+            var playerId = new EntityId(1);
+            var targetId = new EntityId(2);
+            Assert.That(board.TryAdd(new BoardEntityState(playerId, new BoardEntityDefinition(BoardLayer.Actor,
+                EntityKind.Player, "player", new BoardEntityTraits(false, false, false)), new GridPosition(1, 1))), Is.True);
+            Assert.That(board.TryAdd(new BoardEntityState(targetId, new BoardEntityDefinition(BoardLayer.Item,
+                EntityKind.Item, "test.target", new BoardEntityTraits(false, false, true)), new GridPosition(1, 2))), Is.True);
+            var tools = new ToolUseQuery(new[] { new ToolAction("test.tool", new ContextInteractionAction(), "Interact", 2, 2) });
+            var controller = new TurnController(board, run, playerId, new TurnResolver(tools: tools));
+            UseToolCommand command = tools.GetOptions(board, run, playerId).Single().CreateCommand();
+            Assert.That(controller.Resolve(command).Accepted, Is.True);
+            Assert.That(store.SaveRun(run).IsSuccess, Is.True);
+            RunState restored = new FileSystemSaveStore(testRootPath).LoadRun().Data;
+            Assert.That(restored.ToolSlots[0].Instance.InstanceId, Is.EqualTo(tool.InstanceId));
+            Assert.That(restored.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
+            Assert.That(restored.Food, Is.EqualTo(run.Food));
+            Assert.That(File.ReadAllText(Path.Combine(testRootPath, "run.json")), Does.Contain("\"schemaVersion\": 4"));
+            Assert.That(controller.Resolve(command).Accepted, Is.False);
+            Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
         }
 
         [Test]

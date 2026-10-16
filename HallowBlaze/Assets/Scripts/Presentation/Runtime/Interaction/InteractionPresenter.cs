@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using HallowBlaze.Core.Board.Primitives;
+using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.Turns.Resolution;
 using UnityEngine;
 
@@ -28,6 +29,10 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         public bool IsDisposed { get; private set; }
         /// <summary>Gets the retained query snapshot; preview and cancel never remove its ground entities.</summary>
         public IReadOnlyList<InteractionOption> Options { get; private set; } = Array.Empty<InteractionOption>();
+        /// <summary>Gets detached tool consequences following ordinary interactions in the same explicit picker.</summary>
+        public IReadOnlyList<ToolUseOption> ToolOptions { get; private set; } = Array.Empty<ToolUseOption>();
+        /// <summary>Gets the total number of numbered ordinary and tool options, including disabled choices.</summary>
+        public int OptionCount => Options.Count + ToolOptions.Count;
         /// <summary>Gets the explicit selected index, or -1 before the player chooses.</summary>
         public int SelectedIndex { get; private set; } = -1;
 
@@ -51,7 +56,8 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             if (!CanUse() || IsOpen || releasePending || !coordinator.CanSubmit)
                 return false;
             Options = runtime.Interactions.GetOptions(runtime.BoardState, runtime.RunState, runtime.PlayerId);
-            if (Options.Count == 0)
+            ToolOptions = runtime.Tools.GetOptions(runtime.BoardState, runtime.RunState, runtime.PlayerId);
+            if (OptionCount == 0)
                 return false;
             IsOpen = true;
             SelectedIndex = -1;
@@ -66,7 +72,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         /// <returns>Whether this explicit selection was admitted.</returns>
         public bool Select(int index)
         {
-            if (!CanChoose() || index < 0 || index >= Options.Count || !Options[index].IsAvailable)
+            if (!CanChoose() || index < 0 || index >= OptionCount || !IsAvailable(index))
                 return false;
             SelectedIndex = index;
             DrawMarkers();
@@ -79,7 +85,9 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         {
             if (!CanChoose() || SelectedIndex < 0)
                 return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.NoCommand));
-            var command = Options[SelectedIndex].CreateCommand();
+            PlayerCommand command = SelectedIndex < Options.Count
+                ? (PlayerCommand)Options[SelectedIndex].CreateCommand()
+                : ToolOptions[SelectedIndex - Options.Count].CreateCommand();
             Close(false);
             Task<CommandSubmission> submission = coordinator.SubmitAsync(command);
             HoldRemainderOfFrame();
@@ -122,9 +130,9 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         private void Cycle(int step)
         {
             int next = SelectedIndex < 0 ? (step > 0 ? -1 : 0) : SelectedIndex;
-            for (int count = 0; count < Options.Count; count++)
+            for (int count = 0; count < OptionCount; count++)
             {
-                next = (next + step + Options.Count) % Options.Count;
+                next = (next + step + OptionCount) % OptionCount;
                 if (Select(next)) return;
             }
         }
@@ -150,15 +158,15 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             GUILayout.BeginArea(new Rect(Screen.width - width - 8f, 60f, width, Mathf.Max(100f, Screen.height - 100f)), GUI.skin.box);
             GUILayout.Label("Interaction");
             scroll = GUILayout.BeginScrollView(scroll);
-            for (int index = 0; index < Options.Count; index++)
+            var optionStyle = new GUIStyle(GUI.skin.button) { wordWrap = true, alignment = TextAnchor.MiddleLeft };
+            for (int index = 0; index < OptionCount; index++)
             {
-                InteractionOption option = Options[index];
-                GUI.enabled = option.IsAvailable;
-                string label = (index == SelectedIndex ? "> " : "") + (index + 1) + ". " +
-                    ActionLabel(option.ActionId) + " (" + option.TargetPosition.X + ", " + option.TargetPosition.Y + ")";
-                if (GUILayout.Button(label, GUILayout.MinHeight(32f))) Select(index);
+                GUI.enabled = IsAvailable(index);
+                string label = (index == SelectedIndex ? "> " : "") + (index + 1) + ". " + GetOptionLabel(index);
+                if (GUILayout.Button(label, optionStyle, GUILayout.MinHeight(index < Options.Count ? 32f : 72f))) Select(index);
                 GUI.enabled = true;
-                if (!option.IsAvailable) GUILayout.Label(option.Availability.ToString());
+                if (!IsAvailable(index)) GUILayout.Label(index < Options.Count ? Options[index].Availability.ToString() :
+                    ToolOptions[index - Options.Count].RejectionCode.ToString());
             }
             GUILayout.EndScrollView();
             GUI.enabled = SelectedIndex >= 0;
@@ -177,20 +185,40 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         private static string ActionLabel(string actionId) => actionId == "collect" ? "Collect" :
             actionId == "push" ? "Push" : actionId == "interact" ? "Interact" : actionId;
 
+        /// <summary>Reads the exact displayed consequence, including slot, charge, current food cost and noise before confirmation.</summary>
+        public string GetOptionLabel(int index)
+        {
+            if (index < 0 || index >= OptionCount) throw new ArgumentOutOfRangeException(nameof(index));
+            GridPosition position = TargetPosition(index);
+            string target = " (" + position.X + ", " + position.Y + ")";
+            if (index < Options.Count) return ActionLabel(Options[index].ActionId) + target;
+            ToolUseOption option = ToolOptions[index - Options.Count];
+            return "Tool " + (option.SlotIndex + 1) + ": " + option.EffectLabel + target +
+                "\n1 turn; Food -" + option.FoodCost + "; Charge -" + option.ChargeCost +
+                " (" + option.ExpectedCharges + " left); Noise " + option.NoiseStrength +
+                (option.NoiseStrength == 0 ? "" : " / " + option.NoiseLifetimeTurns + " turns");
+        }
+
+        private bool IsAvailable(int index) => index < Options.Count ? Options[index].IsAvailable :
+            ToolOptions[index - Options.Count].IsAvailable;
+
+        private GridPosition TargetPosition(int index) => index < Options.Count ? Options[index].TargetPosition :
+            ToolOptions[index - Options.Count].TargetPosition;
+
         private void DrawMarkers()
         {
             ClearMarkers();
             if (material == null)
                 material = new Material(Shader.Find("Sprites/Default")) { hideFlags = HideFlags.HideAndDontSave };
             var slots = new Dictionary<GridPosition, int>();
-            for (int index = 0; index < Options.Count; index++)
+            for (int index = 0; index < OptionCount; index++)
             {
-                InteractionOption option = Options[index];
-                if (!option.IsAvailable) continue;
+                if (!IsAvailable(index)) continue;
+                GridPosition targetPosition = TargetPosition(index);
                 var marker = new GameObject("Interaction target " + (index + 1)) { hideFlags = HideFlags.DontSave };
                 markers.Add(marker);
                 marker.transform.SetParent(transform, false);
-                marker.transform.position = new Vector3(option.TargetPosition.X, option.TargetPosition.Y, -0.2f);
+                marker.transform.position = new Vector3(targetPosition.X, targetPosition.Y, -0.2f);
                 LineRenderer line = marker.AddComponent<LineRenderer>();
                 line.sharedMaterial = material;
                 line.useWorldSpace = false;
@@ -203,11 +231,11 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 line.startColor = line.endColor = Color.white;
                 line.sortingLayerName = EnemyIntentView.GlyphSortingLayer;
                 line.sortingOrder = EnemyIntentView.GlyphSortingOrder + 2;
-                slots.TryGetValue(option.TargetPosition, out int slot);
-                slots[option.TargetPosition] = slot + 1;
+                slots.TryGetValue(targetPosition, out int slot);
+                slots[targetPosition] = slot + 1;
                 var label = new GameObject("Target number");
                 label.transform.SetParent(marker.transform, false);
-                label.transform.localPosition = new Vector3(0f, 0.22f - slot * 0.22f, -0.01f);
+                label.transform.localPosition = new Vector3(slot % 2 == 0 ? -0.16f : 0.16f, 0.22f - slot / 2 * 0.22f, -0.01f);
                 TextMesh text = label.AddComponent<TextMesh>();
                 text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
                 text.fontSize = 48;
@@ -234,6 +262,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             IsOpen = false;
             SelectedIndex = -1;
             Options = Array.Empty<InteractionOption>();
+            ToolOptions = Array.Empty<ToolUseOption>();
             ClearMarkers();
             if (coordinator != null) coordinator.Gate.SetBlocked(PresentationInputBlock.Interaction, false);
             if (immediateRelease) releasePending = false;
