@@ -14,14 +14,16 @@ namespace HallowBlaze.Core.Turns.Resolution
     public sealed class TurnResolver : IPlayerPhaseResolver
     {
         private const int ActionFoodCost = 1;
-        private const long MaxInteractionDistance = 1;
         private readonly ActionNoiseProfile noiseProfile;
+        private readonly InteractionQuery interactions;
 
         /// <summary>Creates a resolver with an optional immutable noise profile; null preserves silent action behavior.</summary>
         /// <param name="noiseProfile">Action emission budgets, or null for no emission. Rejections never emit noise.</param>
-        public TurnResolver(ActionNoiseProfile noiseProfile = null)
+        /// <param name="interactions">Shared read-only action catalog; null uses the default interaction hooks.</param>
+        public TurnResolver(ActionNoiseProfile noiseProfile = null, InteractionQuery interactions = null)
         {
             this.noiseProfile = noiseProfile;
+            this.interactions = interactions ?? new InteractionQuery();
         }
 
         /// <summary>Validates and resolves one player command.</summary>
@@ -160,17 +162,23 @@ namespace HallowBlaze.Core.Turns.Resolution
             BoardEntityState player,
             InteractCommand command)
         {
-            if (!boardState.TryGetEntity(command.TargetId, out BoardEntityState target))
-                return new RejectedTurnResult(CommandRejectionCode.InvalidTarget);
-            if (player.Position.ManhattanDistance(target.Position) > MaxInteractionDistance)
-                return new RejectedTurnResult(CommandRejectionCode.InvalidTarget);
-            if (!target.Definition.Traits.IsInteractable)
-                return new RejectedTurnResult(CommandRejectionCode.NoInteractionAvailable);
+            InteractionAvailability availability = interactions.Validate(boardState, runState, player.Id, command,
+                out BoardEntityState target, out IInteractionAction action);
+            if (availability != InteractionAvailability.Available)
+            {
+                CommandRejectionCode reason = availability == InteractionAvailability.InvalidTarget ||
+                    availability == InteractionAvailability.OutOfRange ? CommandRejectionCode.InvalidTarget :
+                    availability == InteractionAvailability.InvalidState ? CommandRejectionCode.InvalidState :
+                    availability == InteractionAvailability.Blocked ? CommandRejectionCode.Blocked :
+                    CommandRejectionCode.NoInteractionAvailable;
+                return new RejectedTurnResult(reason);
+            }
 
             var events = new List<GameEvent>
             {
                 new InteractionPerformedEvent(player.Id, target.Id)
             };
+            action.Apply(boardState, runState, player, target, events);
             ApplyCost(runState, player.Id, events);
             if (runState.Food == 0)
                 events.Add(new PlayerStarvedEvent(player.Id));

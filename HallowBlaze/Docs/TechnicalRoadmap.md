@@ -4861,7 +4861,7 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 ## `M4.9` — Bramka czytelności intentów i hałasu
 
-**Status:** `Planned`  
+**Status:** `Active` - preparation ready on 2026-10-15; human sessions and gate decision pending.
 **Priorytet:** P1  
 **Powiązany kontrakt:** bramka intentów z sekcji 22.
 
@@ -4887,6 +4887,8 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 **Wymagany handoff:** Zanonimizowana tabela wyników, obserwacje i dokładna rekomendacja dalszego działania.
 
+**Preparation (2026-10-15):** [The M4.9 protocol](Validation/M4.9.md) preregisters 5-8 moderated sessions, separate first-contact/learned responses, counterbalanced forms, whole-phase prediction locking, error categories and explicit decision thresholds. A test-only fixture exports two forms of four Shambler cases, four Listener cases and a two-branch deliberate-lure choice using production composition/resolution/presenters, without production changes. Full graphics-enabled PlayMode **125/125** and final focused export **2/2** passed. Independent technical and protocol preparation reviews returned **PASS**, with scoring ambiguities resolved. Eighteen blind images, twenty moderator outcome images and empty response templates are external technical materials, not participant evidence. Formal participants **0**, locked responses **0**; the human gate remains **Pending**, not Proceed or Done. The owner requested direct Lead implementation without Developer delegation and retained independent review. M5 content is not authorized by this preparation.
+
 ### Bramka M4
 
 M4 is accepted when 10,000 active-configuration seeds produce no invalid boards, explicit generator/enemy/noise scenarios are repeatable, global RNG does not control gameplay, and testers can predict Shambler/Listener behavior and intentionally use noise. Portable replay is not required unless M8.7 has separately been accepted.
@@ -4897,33 +4899,46 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 ---
 
-## `M5.1` — Wspólny model celowanej interakcji
+## `M5.1` - Common targeted interaction model
 
-**Status:** `Planned`  
-**Priorytet:** P1  
-**Powiązany kontrakt:** sekcje 9, 13.1 i 18.
+**Status:** `Done` - accepted 2026-10-15 after direct Lead implementation, owner-authorized self-review, full EditMode and graphics-enabled PlayMode validation, and correction of the traversal test fixture. No independent review verdict is claimed.
+**Priority:** P1
+**Related contract:** sections 9, 10, 13.1 and 18.
 
-**Rationale:** Siekiera, łopata, pickup i pchanie nie powinny tworzyć czterech osobnych ścieżek inputu. Wspólny model celu pozwala walidować akcję przed kosztem i jasno pokazać możliwe pola.
+**Rationale:** Axe, shovel, pickup and push must not introduce separate target-selection and input paths. A common target model validates the selected action before charging and exposes every legal choice.
 
-**Obecne zachowanie:** Interakcje wynikają głównie z wejścia na collider i metod konkretnego komponentu.
+**Starting behavior:** `InteractCommand(TargetId)` and the central resolver already provided an adjacent feedback-only interaction. PC target selection and a shared option/availability query were missing; the earlier collider-oriented description was historical.
 
-**Oczekiwany rezultat:** `InteractionQuery` zwraca legalne akcje/cel, a `InteractCommand` jednoznacznie wskazuje wybraną możliwość; brak legalnego celu nie zużywa tury. Query and modal preview retain the exact ground-entity identity and never remove or mutate it before an accepted command commits.
+**Expected outcome:** `InteractionQuery` returns actions on explicit targets, and `InteractCommand` identifies the selected possibility. No legal target means no turn cost. Query and modal preview retain the exact ground-entity identity and never remove or mutate it before an accepted command commits.
 
-**Zakres:** Query model, target IDs/positions, kody dostępności, podstawowe collect/push hooki i presenter podświetlenia. The option model may represent a future decision-required pickup without implementing the M9 `Use now / Store / Leave` flow.
+**Scope:** Query model, target IDs/positions, availability codes, basic collect/push hooks and a highlight presenter. The option model may represent a future decision-required pickup without implementing the M9 `Use now / Store / Leave` flow.
 
-**Non-goals:** Bez narzędzi, rozbudowanego inventory, menu radialnego, craftingu i automatycznego wyboru „najlepszej” interakcji.
+**Non-goals:** Tools, expanded inventory, radial menus, crafting, automatic selection of a preferred interaction, and changes to ordinary automatic-food collection.
 
-**Zależności:** Bramka M4.
+**Dependencies:** M4 gate. The owner requested M5.1 implementation after being informed that M4.9 remains Pending, and requested direct Lead implementation/self-review without Developer or independent Reviewer. This execution exception is recorded only for M5.1; it neither supplies human evidence nor accepts M4 or authorizes subsequent M5 cards.
 
-**Dozwolony obszar plików:** Core Interaction/Turns/Board, Presentation/Interaction i testy.
+**Allowed file area:** Core Interaction/Turns/Board, Presentation/Interaction and tests, plus the minimal existing GameManager/presentation/input wiring needed to connect the picker to the production gate. No scenes, prefabs, saves, package changes or project settings are required.
 
-**Kryteria akceptacji:** Query nie mutuje stanu; komenda odwołuje się do stabilnego celu; invalid/stale target jest darmowy; cancel/preview leaves the same ground instance in `BoardState`; wszystkie legalne cele są widoczne bez polegania tylko na kolorze.
+**Acceptance criteria:** Query does not mutate state; the command identifies a stable target; invalid/stale targets are free; cancel/preview leave the same ground instance in `BoardState`; all legal targets are visible without relying only on color.
 
-**Plan testów:** EditMode empty/single/multiple/stale target; PlayMode selection, cancel i disabled animation.
+**Test plan:** EditMode empty/single/multiple/stale target, shared availability checks and accepted/rejected turn phases; PlayMode selection, cancel, animation parity, numbered rendered targets, terminal disposal, and production movement/pause gating.
 
-**Wpływ na save i kompatybilność:** Brak nowego trwałego stanu.
+**Save and compatibility:** No new persisted state. The legacy `InteractCommand(TargetId)` constructor remains compatible; query-built commands also capture action ID and target position. Ordinary automatic food remains movement-owned.
 
-**Wymagany handoff:** Tabela typ celu → legalna komenda → koszt oraz przykład konfliktu wielu interakcji.
+**Implementation:** One board-owned `InteractionQuery` is shared with `TurnResolver`. Immutable options are ordered by target ID and action ID. Confirmation revalidates target identity, position, range, applicability and effect preconditions before effects, the existing action cost, noise and enemy phases. `DecisionRequired` options cannot commit without a future complete decision. The board-owned PC picker opens with E, uses explicit list/arrow selection and confirmation, and cancels for free. White numbered outlines identify all legal options; the selected outline changes shape as well as its label. Its separate input owner survives GameManager gate refreshes, blocks rapid double submission and prevents Escape cancellation from also opening pause. Terminal outcomes cannot reacquire a disposed picker's block.
+
+| Target type | Explicit command/action | Accepted cost |
+| --- | --- | --- |
+| Interactive entity without a food reward | `InteractCommand(id, position, "interact")` | One turn and the current central action food cost; feedback-only compatibility hook. |
+| Explicitly interactive food item | `InteractCommand(id, position, "collect")` | Remove the exact item and restore its reward first, then one turn and the central food cost. Ordinary automatic food is unchanged. |
+| Authored obstacle opted into the push hook | `InteractCommand(id, position, "push")` | Move only the target one cardinal cell away, then one turn and the central food cost. Destination must be in bounds with walkable non-exit terrain and no obstacle, actor or item. No production push content is added. |
+| Invalid, displaced, unsupported, blocked or decision-required selection | Rejected; preview/cancel submit nothing | No turn, food, tool consumption, noise emission/aging or enemy phase. |
+
+**Multiple-choice example:** An adjacent opted-in crate can expose both `interact` and `push`, while another adjacent entity exposes its own option. Every available option is numbered and listed; no action is selected automatically, and confirmation executes only the selected target/action pair.
+
+**Traversal fixture correction:** The earlier full PlayMode run exposed a variable-input lifecycle test: a GUID-based run ID changes addressed board seeds, while its shortest-path bot treats current enemy cells as permanent walls and ignores attack risk. A bounded diagnostic reproduced both blocked-bot paths and a fatal action despite abundant food; temporary probes were removed. At the owner's request, the lifecycle scenario now starts from a fixed persisted run identity and uses combat-free 3x3 segment fixtures through the existing runtime composition/publication boundary. The actual production command path, scene reloads, route choices, save boundaries, discovery, and Continue remain exercised. Assertions retain the same address after Continue, require two completed days, unchanged HP, exactly four charged moves per segment, and matching persisted resources. A missing or unexpectedly finalized run now produces an explicit assertion rather than a null dereference. This test-only correction does not change generation, combat, or save rules, and does not replace their separate scenario coverage.
+
+**Acceptance (2026-10-15):** Unity 6000.3.21f1 compiled the final state. Full EditMode passed 934 tests with only the existing Explicit M4.6 10,000-seed milestone skipped. Full graphics-enabled PlayMode passed 134/134 with no skipped tests, including the repaired traversal scenario, explicit missing-run regression, numbered-marker pixel checks, animation parity, terminal picker disposal, and production movement/pause gating. The focused traversal regressions passed 2/2 before the full run. Lead self-review retained the original route/discovery/save assertions and found no remaining M5.1 blocker. Developer and independent Reviewer delegation were explicitly waived by the owner for this card only. M4.9 remains Pending; no human-playtest result, independent review verdict, commit, or push is claimed.
 
 ---
 
@@ -6109,7 +6124,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. continue M4 with `M4.9` after the accepted M4.8 changes are committed and a new clean baseline is established; this is a moderated human-playtest gate, not a task that automated tests alone can close. Follow the existing dependency order and preserve independent review; the M3.12 and M4.1-M4.5 review waivers do not extend to later tasks, and M4.6-M4.8 received independent review;
+1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further M5 content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately requested and accepted direct implementation/self-review of M5.1, including the diagnosed traversal fixture correction; M5.1 is Done with full EditMode 934 passed plus the existing Explicit skip and graphics PlayMode 134/134. This exception neither closes M4.9 nor authorizes M5.2. Preserve independent review on later cards unless separately waived;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6133,7 +6148,11 @@ M4.6 is accepted on 2026-10-15 with repeatable daily/milestone seed gates, full 
 
 M4.7 is accepted on 2026-10-15 with deterministic board-owned noise, atomic accepted-action emission, explicit command-based expiration and a shared hearing/debug footprint. Full EditMode passed 895 tests with the existing Explicit M4.6 milestone skipped; graphics-enabled PlayMode passed 120/120. Independent Reviewer returned PASS. Listener reaction was subsequently implemented in M4.8.
 
-M4.8 is accepted on 2026-10-15 with latest-heard board memory, fixed Investigate opportunities, shared Shambler/Listener initiative and explicit authored runtime/display mapping. Full EditMode passed 921 tests with the existing Explicit M4.6 milestone skipped; graphics-enabled PlayMode passed 123/123. Independent Reviewer returned PASS across all reviewed implementation scopes. Direct Lead implementation followed the owner's current instruction; no Developer PASS is claimed. Published generation content and saves remain unchanged. M4.9 is the next planned task and requires moderated human prediction/readability evidence.
+M4.8 is accepted on 2026-10-15 with latest-heard board memory, fixed Investigate opportunities, shared Shambler/Listener initiative and explicit authored runtime/display mapping. Full EditMode passed 921 tests with the existing Explicit M4.6 milestone skipped; graphics-enabled PlayMode passed 123/123. Independent Reviewer returned PASS across all reviewed implementation scopes. Direct Lead implementation followed the owner's current instruction; no Developer PASS is claimed. Published generation content and saves remain unchanged.
+
+M4.9 started on 2026-10-15 from clean baseline `fb417dc6b12f484f8e329c383311e49e654683f1` on `M4/9/NoiseGate`. Protocol and test-only capture materials are ready with independent preparation Reviewer PASS, full graphics PlayMode 125/125 and final focused export 2/2. No human sessions have run and no Proceed/Revise/Stop result is claimed. That preparation did not authorize M5 or accept M4 from automated checks; the later owner-authorized M5.1 exception is recorded below. The human gate still requires moderated prediction/readability evidence.
+
+M5.1 was subsequently completed on 2026-10-15 at the owner's request from clean baseline `c0431c142b7d4611dca1c7c29145af7d80a9fe9a` on `M5/1/CommonInteractionModel`, with direct Lead implementation and self-review only. The owner authorized correction of the diagnosed traversal fixture blocker. Final full EditMode passed 934 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 134/134. The M5.1 card is Done; M4.9 remains Pending and M5.2 remains Planned. No commit or push was performed.
 
 # Zasada aktualizacji roadmapy
 

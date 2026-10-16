@@ -162,7 +162,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         requestedLaunchMode = RunLaunchMode.Continue;
     }
 
-    /// <summary>Gets whether a nonterminal board may open pause without interrupting a terminal outcome.</summary>
+    /// <summary>Gets whether a nonterminal board may open pause without stealing a target draft or its cancel key frame.</summary>
     public bool CanPauseGameplay
     {
         get
@@ -177,6 +177,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
                 && !boardOutcomeHandled
                 && activeBoardRuntime != null
                 && !activeBoardRuntime.IsDisposed
+                && activeBoardPresenter != null
+                && (activeBoardPresenter.Coordinator.Gate.Blocks & PresentationInputBlock.Interaction) == PresentationInputBlock.None
                 && !activeBoardRuntime.Controller.IsTerminal;
         }
     }
@@ -541,7 +543,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         activeIntentOwner.transform.SetParent(transform, false);
         activeIntents = activeIntentOwner.AddComponent<EnemyIntentPresenter>();
         activeBoardPresenter = new BoardEventPresenter(runtime, activePlayerView, activePlayerView,
-            this, ReportPresentationDiagnostic, activePlayerView.moveTime, activeIntents);
+            this, ReportPresentationDiagnostic, activePlayerView.moveTime, activeIntents,
+            () => !IsGameplayInputBlocked && Time.frameCount > gameplayInputResumeFrame &&
+                activePlayerView != null && activePlayerView.isActiveAndEnabled);
         activeBoardPresenter.AnimationsEnabled = activePlayerView.animationsEnabled;
         activeBoardPresenter.SynchronizeFromState();
         intentViewport = new Vector2(Screen.width, Screen.height);

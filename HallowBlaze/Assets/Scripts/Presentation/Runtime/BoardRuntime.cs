@@ -54,8 +54,9 @@ namespace HallowBlaze.Presentation.Runtime
             foreach (ListenerState listener in readOnlyListeners)
                 boardState.RegisterListener(listener.ActorId);
             enemyPhases.PlanInitialIntents(boardState, playerId);
+            Interactions = new InteractionQuery();
             controller = new TurnController(boardState, runState, playerId,
-                new TurnResolver(ActionNoiseProfile.Prototype), enemyPhases.Handlers);
+                new TurnResolver(ActionNoiseProfile.Prototype, Interactions), enemyPhases.Handlers);
         }
 
         /// <summary>Gets whether this runtime has released its controller and view bindings.</summary>
@@ -96,6 +97,9 @@ namespace HallowBlaze.Presentation.Runtime
 
         /// <summary>Gets the stable board-local identifier assigned to the player.</summary>
         public EntityId PlayerId { get; }
+
+        /// <summary>Gets the immutable action catalog shared by target preview and the sole resolver.</summary>
+        public InteractionQuery Interactions { get; }
 
         /// <summary>Gets the single command resolver owned for this board lifetime.</summary>
         /// <exception cref="ObjectDisposedException">The board runtime has been disposed.</exception>

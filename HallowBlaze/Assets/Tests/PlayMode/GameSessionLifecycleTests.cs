@@ -439,9 +439,15 @@ namespace HallowBlaze.Tests.PlayMode
             yield return SceneManager.UnloadSceneAsync("Main");
         }
 
+        /// <summary>Verifies real scene travel and save boundaries on fixed-identity, combat-free traversal fixtures.</summary>
         [UnityTest]
         public IEnumerator ExplicitRouteChoicesAdvanceAcrossAContinuedSession()
         {
+            var fixtureSession = new GameSession(new ProfileState("route-lifecycle-profile", "world-1", 1));
+            var fixtureLifecycle = new RunLifecycleService(fixtureSession, new FileSystemSaveStore(persistenceRoot));
+            Assert.That(fixtureLifecycle.StartNewRun("route-lifecycle-run", 12346,
+                new RunStateConfiguration(100, 100, 0, "forest.start")).IsSuccess, Is.True);
+            InvokeStatic(gameManagerType, "RequestContinue");
             AsyncOperation firstLoad = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
             while (!firstLoad.isDone)
                 yield return null;
@@ -452,11 +458,13 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetField<TextAsset>(firstManager, "worldDefinitionJson"), Is.Not.Null);
             GameSession firstSession = GetProperty<GameSession>(firstManager, "Session");
             RunState firstRun = firstSession.ActiveRun;
+            Assert.That(firstRun.RunId, Is.EqualTo("route-lifecycle-run"));
+            Assert.That(firstRun.RunSeed, Is.EqualTo(12346));
             Assert.That(firstSession.Profile.GetNodeDiscoveryState("forest.start"),
                 Is.EqualTo(NodeDiscoveryState.Visited));
             Component firstPlayer = FindSceneComponent(playerType, "Main");
             Assert.That(firstPlayer, Is.Not.Null);
-            yield return PresentExit(firstManager);
+            yield return PresentExit(firstManager, useTraversalFixture: true);
 
             IReadOnlyList<WorldMapExitOption> firstChoices =
                 GetProperty<IReadOnlyList<WorldMapExitOption>>(firstManager, "RouteChoices");
@@ -482,6 +490,8 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(firstRun.WorldNodeId, Is.EqualTo("forest.start"));
             Assert.That(firstRun.Route, Is.Empty);
             Assert.That(firstRun.ActiveLeg.ToNodeId, Is.EqualTo("forest.west-trail"));
+            int firstSegmentCount = firstRun.ActiveLeg.Segments.Count;
+            BoardAddress continuedAddress = BoardAddressFactory.CreateFromState(firstRun);
             Assert.That(firstSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
                 Is.EqualTo(NodeDiscoveryState.Sighted));
             Assert.That(GetProperty<bool>(firstManager, "IsRouteChoiceActive"), Is.False);
@@ -506,13 +516,14 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(continuedRun.WorldNodeId, Is.EqualTo("forest.start"));
             Assert.That(continuedRun.Route, Is.Empty);
             Assert.That(continuedRun.ActiveLeg.SegmentIndex, Is.Zero);
+            Assert.That(GetProperty<BoardRuntime>(continuedManager, "ActiveBoardRuntime").Request.Address,
+                Is.EqualTo(continuedAddress));
             Assert.That(continuedSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
                 Is.EqualTo(NodeDiscoveryState.Sighted));
 
             Component continuedPlayer = FindSceneComponent(playerType, "Main");
             Assert.That(continuedPlayer, Is.Not.Null);
-            continuedSession.RestoreFood(1000);
-            yield return PresentExit(continuedManager);
+            yield return PresentExit(continuedManager, useTraversalFixture: true);
 
             IReadOnlyList<WorldMapExitOption> secondChoices =
                 GetProperty<IReadOnlyList<WorldMapExitOption>>(continuedManager, "RouteChoices");
@@ -526,7 +537,8 @@ namespace HallowBlaze.Tests.PlayMode
 
             Assert.That(continuedRun.WorldNodeId, Is.EqualTo("forest.west-trail"));
             Assert.That(continuedRun.ActiveLeg.DayNumber, Is.EqualTo(2));
-            yield return PresentExit(continuedManager);
+            int secondSegmentCount = continuedRun.ActiveLeg.Segments.Count;
+            yield return PresentExit(continuedManager, useTraversalFixture: true);
             Assert.That(continuedRun.CurrentDay, Is.EqualTo(2));
             Assert.That(continuedRun.WorldNodeId, Is.EqualTo("forest.old-road"));
             Assert.That(continuedRun.Route, Is.EqualTo(new[]
@@ -534,6 +546,10 @@ namespace HallowBlaze.Tests.PlayMode
                 "forest.west-trail",
                 "forest.old-road"
             }));
+            Assert.That(continuedRun.CompletedDayCount, Is.EqualTo(2));
+            Assert.That(continuedRun.Health, Is.EqualTo(100));
+            Assert.That(continuedRun.Food, Is.EqualTo(100 - 4 * (firstSegmentCount + secondSegmentCount)),
+                "Every fixture segment must execute four accepted moves through the production controller.");
             Assert.That(continuedSession.Profile.GetNodeDiscoveryState("forest.old-road"),
                 Is.EqualTo(NodeDiscoveryState.Visited));
             SaveStoreResult<RunState> checkpoint =
@@ -542,6 +558,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(checkpoint.Data.CurrentDay, Is.EqualTo(2));
             Assert.That(checkpoint.Data.WorldNodeId, Is.EqualTo("forest.old-road"));
             Assert.That(checkpoint.Data.Route, Is.EqualTo(continuedRun.Route));
+            Assert.That(checkpoint.Data.Food, Is.EqualTo(continuedRun.Food));
 
             Scene cleanupScene = SceneManager.CreateScene(
                 "M2.5 Route Cleanup " + Guid.NewGuid().ToString("N"));
@@ -988,14 +1005,30 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Not.Null);
         }
 
-        private static IEnumerator PresentExit(Component manager)
+        /// <summary>A missing or already finalized run produces a useful assertion instead of a null dereference.</summary>
+        [Test]
+        public void TraversalWithoutActiveRunReportsExplicitFailure()
+        {
+            Component manager = CreateManager("Traversal without active run");
+            IEnumerator traversal = PresentExit(manager);
+            AssertionException failure = Assert.Throws<AssertionException>(() => traversal.MoveNext());
+            Assert.That(failure.Message, Does.Contain("Traversal requires an active run"));
+        }
+
+        private static IEnumerator PresentExit(Component manager, bool useTraversalFixture = false)
         {
             if (GetProperty<bool>(manager, "IsRouteChoiceActive"))
                 yield break;
-            while (GetProperty<GameSession>(manager, "Session").ActiveRun.ActiveLeg != null)
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            RunState run = session.ActiveRun;
+            Assert.That(run, Is.Not.Null, "Traversal requires an active run; it must not continue after death or completion.");
+            while (run.ActiveLeg != null)
             {
+                if (useTraversalFixture)
+                    PublishTraversalFixture(manager);
                 BoardRuntime previous = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
                 yield return PresentSegmentExit(manager);
+                Assert.That(session.ActiveRun, Is.SameAs(run), "Traversal ended the run instead of reaching the segment exit.");
                 float deadline = Time.realtimeSinceStartup + 10;
                 while (!GetProperty<bool>(manager, "IsRouteChoiceActive") &&
                     ReferenceEquals(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), previous) &&
@@ -1005,6 +1038,36 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Not.Null);
             }
             Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+        }
+
+        private static void PublishTraversalFixture(Component manager)
+        {
+            BoardRuntime generated = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            BoardRequest request = generated.Request;
+            RunState run = generated.RunState;
+            GameObject player = generated.Views[generated.PlayerId];
+            player.transform.position = new Vector3(0, 0, player.transform.position.z);
+            var root = new GameObject("Lifecycle traversal fixture");
+            var layout = new List<LegacyBoardView>();
+            for (int horizontal = 0; horizontal < 3; horizontal++)
+                for (int vertical = 0; vertical < 3; vertical++)
+                {
+                    var floor = new GameObject("Fixture floor");
+                    floor.transform.SetParent(root.transform, false);
+                    floor.transform.position = new Vector3(horizontal, vertical, 0);
+                    layout.Add(new LegacyBoardView(floor, LegacyBoardContentKind.Floor, new GridPosition(horizontal, vertical)));
+                }
+            var exit = new GameObject("Fixture exit");
+            exit.transform.SetParent(root.transform, false);
+            exit.transform.position = new Vector3(2, 2, 0);
+            layout.Add(new LegacyBoardView(exit, LegacyBoardContentKind.Exit, new GridPosition(2, 2)));
+            layout.Add(new LegacyBoardView(player, LegacyBoardContentKind.Player, new GridPosition(0, 0)));
+            BoardRuntime fixture = LegacyBoardRuntimeComposer.Compose(request, run, new GridBounds(0, 0, 2, 2), layout);
+            Invoke(manager, "PublishBoardRuntime", fixture);
+            Assert.That(generated.IsDisposed, Is.True);
+            Assert.That(fixture.Request, Is.SameAs(request));
+            Assert.That(fixture.RunState, Is.SameAs(run));
+            Assert.That(fixture.Enemies, Is.Empty);
         }
 
         private static IEnumerator PresentSegmentExit(Component manager)
@@ -1029,6 +1092,8 @@ namespace HallowBlaze.Tests.PlayMode
                 while (!submission.IsCompleted)
                     yield return null;
                 Assert.That(submission.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                Assert.That(submission.Result.Result.Events.Any(gameEvent => gameEvent is PlayerDiedEvent || gameEvent is PlayerStarvedEvent),
+                    Is.False, "Traversal encountered a fatal action instead of a segment exit.");
                 yield return null;
             }
         }
