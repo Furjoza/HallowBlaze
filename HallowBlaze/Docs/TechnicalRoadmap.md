@@ -4899,45 +4899,58 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 ---
 
-## `M5.1` — Wspólny model celowanej interakcji
+## `M5.1` - Common targeted interaction model
 
-**Status:** `Planned`  
-**Priorytet:** P1  
-**Powiązany kontrakt:** sekcje 9, 13.1 i 18.
+**Status:** `Done` - accepted 2026-10-15 after direct Lead implementation, owner-authorized self-review, full EditMode and graphics-enabled PlayMode validation, and correction of the traversal test fixture. No independent review verdict is claimed.
+**Priority:** P1
+**Related contract:** sections 9, 10, 13.1 and 18.
 
-**Rationale:** Siekiera, łopata, pickup i pchanie nie powinny tworzyć czterech osobnych ścieżek inputu. Wspólny model celu pozwala walidować akcję przed kosztem i jasno pokazać możliwe pola.
+**Rationale:** Axe, shovel, pickup and push must not introduce separate target-selection and input paths. A common target model validates the selected action before charging and exposes every legal choice.
 
-**Obecne zachowanie:** Interakcje wynikają głównie z wejścia na collider i metod konkretnego komponentu.
+**Starting behavior:** `InteractCommand(TargetId)` and the central resolver already provided an adjacent feedback-only interaction. PC target selection and a shared option/availability query were missing; the earlier collider-oriented description was historical.
 
-**Oczekiwany rezultat:** `InteractionQuery` zwraca legalne akcje/cel, a `InteractCommand` jednoznacznie wskazuje wybraną możliwość; brak legalnego celu nie zużywa tury. Query and modal preview retain the exact ground-entity identity and never remove or mutate it before an accepted command commits.
+**Expected outcome:** `InteractionQuery` returns actions on explicit targets, and `InteractCommand` identifies the selected possibility. No legal target means no turn cost. Query and modal preview retain the exact ground-entity identity and never remove or mutate it before an accepted command commits.
 
-**Zakres:** Query model, target IDs/positions, kody dostępności, podstawowe collect/push hooki i presenter podświetlenia. The option model may represent a future decision-required pickup without implementing the M9 `Use now / Store / Leave` flow.
+**Scope:** Query model, target IDs/positions, availability codes, basic collect/push hooks and a highlight presenter. The option model may represent a future decision-required pickup without implementing the M9 `Use now / Store / Leave` flow.
 
-**Non-goals:** Bez narzędzi, rozbudowanego inventory, menu radialnego, craftingu i automatycznego wyboru „najlepszej” interakcji.
+**Non-goals:** Tools, expanded inventory, radial menus, crafting, automatic selection of a preferred interaction, and changes to ordinary automatic-food collection.
 
-**Zależności:** Bramka M4.
+**Dependencies:** M4 gate. The owner requested M5.1 implementation after being informed that M4.9 remains Pending, and requested direct Lead implementation/self-review without Developer or independent Reviewer. This execution exception is recorded only for M5.1; it neither supplies human evidence nor accepts M4 or authorizes subsequent M5 cards.
 
-**Dozwolony obszar plików:** Core Interaction/Turns/Board, Presentation/Interaction i testy.
+**Allowed file area:** Core Interaction/Turns/Board, Presentation/Interaction and tests, plus the minimal existing GameManager/presentation/input wiring needed to connect the picker to the production gate. No scenes, prefabs, saves, package changes or project settings are required.
 
-**Kryteria akceptacji:** Query nie mutuje stanu; komenda odwołuje się do stabilnego celu; invalid/stale target jest darmowy; cancel/preview leaves the same ground instance in `BoardState`; wszystkie legalne cele są widoczne bez polegania tylko na kolorze.
+**Acceptance criteria:** Query does not mutate state; the command identifies a stable target; invalid/stale targets are free; cancel/preview leave the same ground instance in `BoardState`; all legal targets are visible without relying only on color.
 
-**Plan testów:** EditMode empty/single/multiple/stale target; PlayMode selection, cancel i disabled animation.
+**Test plan:** EditMode empty/single/multiple/stale target, shared availability checks and accepted/rejected turn phases; PlayMode selection, cancel, animation parity, numbered rendered targets, terminal disposal, and production movement/pause gating.
 
-**Wpływ na save i kompatybilność:** Brak nowego trwałego stanu.
+**Save and compatibility:** No new persisted state. The legacy `InteractCommand(TargetId)` constructor remains compatible; query-built commands also capture action ID and target position. Ordinary automatic food remains movement-owned.
 
-**Wymagany handoff:** Tabela typ celu → legalna komenda → koszt oraz przykład konfliktu wielu interakcji.
+**Implementation:** One board-owned `InteractionQuery` is shared with `TurnResolver`. Immutable options are ordered by target ID and action ID. Confirmation revalidates target identity, position, range, applicability and effect preconditions before effects, the existing action cost, noise and enemy phases. `DecisionRequired` options cannot commit without a future complete decision. The board-owned PC picker opens with E, uses explicit list/arrow selection and confirmation, and cancels for free. White numbered outlines identify all legal options; the selected outline changes shape as well as its label. Its separate input owner survives GameManager gate refreshes, blocks rapid double submission and prevents Escape cancellation from also opening pause. Terminal outcomes cannot reacquire a disposed picker's block.
+
+| Target type | Explicit command/action | Accepted cost |
+| --- | --- | --- |
+| Interactive entity without a food reward | `InteractCommand(id, position, "interact")` | One turn and the current central action food cost; feedback-only compatibility hook. |
+| Explicitly interactive food item | `InteractCommand(id, position, "collect")` | Remove the exact item and restore its reward first, then one turn and the central food cost. Ordinary automatic food is unchanged. |
+| Authored obstacle opted into the push hook | `InteractCommand(id, position, "push")` | Move only the target one cardinal cell away, then one turn and the central food cost. Destination must be in bounds with walkable non-exit terrain and no obstacle, actor or item. No production push content is added. |
+| Invalid, displaced, unsupported, blocked or decision-required selection | Rejected; preview/cancel submit nothing | No turn, food, tool consumption, noise emission/aging or enemy phase. |
+
+**Multiple-choice example:** An adjacent opted-in crate can expose both `interact` and `push`, while another adjacent entity exposes its own option. Every available option is numbered and listed; no action is selected automatically, and confirmation executes only the selected target/action pair.
+
+**Traversal fixture correction:** The earlier full PlayMode run exposed a variable-input lifecycle test: a GUID-based run ID changes addressed board seeds, while its shortest-path bot treats current enemy cells as permanent walls and ignores attack risk. A bounded diagnostic reproduced both blocked-bot paths and a fatal action despite abundant food; temporary probes were removed. At the owner's request, the lifecycle scenario now starts from a fixed persisted run identity and uses combat-free 3x3 segment fixtures through the existing runtime composition/publication boundary. The actual production command path, scene reloads, route choices, save boundaries, discovery, and Continue remain exercised. Assertions retain the same address after Continue, require two completed days, unchanged HP, exactly four charged moves per segment, and matching persisted resources. A missing or unexpectedly finalized run now produces an explicit assertion rather than a null dereference. This test-only correction does not change generation, combat, or save rules, and does not replace their separate scenario coverage.
+
+**Acceptance (2026-10-15):** Unity 6000.3.21f1 compiled the final state. Full EditMode passed 934 tests with only the existing Explicit M4.6 10,000-seed milestone skipped. Full graphics-enabled PlayMode passed 134/134 with no skipped tests, including the repaired traversal scenario, explicit missing-run regression, numbered-marker pixel checks, animation parity, terminal picker disposal, and production movement/pause gating. The focused traversal regressions passed 2/2 before the full run. Lead self-review retained the original route/discovery/save assertions and found no remaining M5.1 blocker. Developer and independent Reviewer delegation were explicitly waived by the owner for this card only. M4.9 remains Pending; no human-playtest result, independent review verdict, commit, or push is claimed.
 
 ---
 
 ## `M5.2` — Dwa sloty i stan instancji narzędzia
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-16)
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcja 13.1.
 
 **Rationale:** Dwa generic equipment slots tworzą czytelny koszt okazji. They remain separate from the future spatial backpack rather than acting as a substitute for or becoming cells inside it. Definition, run instance, and authored atlas source need different identities.
 
-**Obecne zachowanie:** Run nie ma docelowego modelu slotów, definicji tool contentu ani ograniczonych użyć.
+**Current behavior:** `RunState` owns exactly two generic equipment cells backed by immutable tool-instance snapshots. Shared definitions, instance identity, charge invariants, explicit equip/replace/remove, compatible persistence, and read-only HUD are implemented. Tool pickup, turn-based use, and effects remain outside this card.
 
 **Oczekiwany rezultat:** `ToolDefinition` ma stabilne ID i niezmienne dane, `ToolInstanceState` has a run-local instance ID, definition ID, and charges, while `RunState` owns exactly two generic slots. A future `toolSourceId` identifies where an instance came from and is never used as the instance ID.
 
@@ -4953,21 +4966,27 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 **Plan testów:** EditMode equip/replace/empty/charges/copy; PlayMode HUD po reload sceny.
 
-**Wpływ na save i kompatybilność:** Run DTO otrzymuje sloty i stable tool IDs; wymaga migracji schema z pustymi slotami.
+**Save and compatibility impact:** The current run writer uses schema v4 with two nullable equipment cells, stable definition/instance IDs, charges, and the durable instance allocator. Readers retain v1-v3 support: empty legacy cells stay empty; occupied legacy cells retain their definition and charges and receive deterministic `tool.N` instance IDs in slot order. Migration does not reset the run, refill tools, rewrite a file on read, change layout RNG/travel identity, or alter profile schema v2. Backup recovery preserves equipment and allocator gaps.
 
-**Wymagany handoff:** Model definition vs instance oraz zachowanie nieznanego tool ID przy load.
+**Definition and instance contract:** `ToolDefinition` is shared immutable content; remaining charges live only in immutable `ToolInstanceState` snapshots. The run allocates monotonically numbered run-local `tool.N` IDs, rejects duplicate equipment, and preserves the allocator after removal or replacement. `EquipTool` requires an empty cell; explicit `ReplaceTool` and `RemoveTool` return the displaced instance. Zero charges remain an occupied slot. A new run clears both slots and its allocator without touching profile knowledge. The future authored `toolSourceId` is not an instance ID and is not introduced by this card.
+
+**Content and presentation:** Authored `axe.basic` and `shovel.basic` placeholders each start with three charges; these are provisional content values, not implemented tool effects or final balance. Both cells accept either definition. The read-only HUD observes the active run, refreshes after changes, recreates after scene reload/Continue, and is hidden during Day/setup and terminal/route-choice presentation. Its reserved top band does not cover the inspectable board. No tool is automatically granted and no tool-use command, pickup decision, backpack, or pocket is added.
+
+**Unknown definition policy:** A syntactically valid unknown definition ID retains its slot, instance ID and exact nonnegative charges through load/save/recovery; it is neither dropped, substituted, nor refilled. The HUD displays `Unknown tool` and its remaining charges. Content lookup owns future availability; malformed equipment is rejected through the existing controlled persistence failure path.
+
+**Acceptance (2026-10-16):** Started from clean baseline `8e655acb78eef4aa0cbb581ff599156baa561f17` on `M5/2/ItemsItems` in Git root `D:/Repos/HallowBlaze`. Unity 6000.3.21f1 compiled the final implementation. Full EditMode passed 951 tests with only the existing Explicit M4.6 10,000-seed milestone skipped; full graphics-enabled PlayMode passed 138/138 without skips. Coverage includes immutable ownership, equip/replace/remove, invalid/depleted charges, atomic restore, allocator gaps/overflow, v1-v4 migration, unknown IDs, isolated file round-trip/backup recovery/profile preservation, real scene reload/Continue, HUD lifetime, and nonblank label pixels at 1280x720 and 320x640. Lead self-review, editor diagnostics, metadata-pair and diff checks found no remaining M5.2 blocker. The owner explicitly requested solo work and continuation of M5.2 despite the still-Pending M4.9 human gate; no independent review or human-playtest verdict is claimed. No commit or push was performed, and this exception does not authorize M5.3.
 
 ---
 
 ## `M5.3` — `UseToolCommand` i atomowe zużycie charges
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-16)
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 9, 10 i 13.1.
 
 **Rationale:** Narzędzie nie może zużyć ładunku lub tury, jeśli cel stał się nieważny. Walidacja, efekt, hałas, koszt i charge muszą być jednym wynikiem resolvera.
 
-**Obecne zachowanie:** Sloty istnieją, ale nie ma wspólnego kontraktu użycia w turze.
+**Current behavior:** The central resolver supports explicit tool decisions with shared preview/commit validation. Accepted use applies the direct effect, one charge, the current action-cost policy, and configured noise in one result. Rejected or stale decisions leave gameplay state and later phases unchanged. Placeholder tools still have no concrete effects.
 
 **Oczekiwany rezultat:** `UseToolCommand(slot, target)` jest najpierw w pełni walidowane, a accepted result atomowo emituje efekt, noise, charge spend i bieżący policy-driven koszt tury; it does not own a permanent assumption that every future action costs exactly one `Food`.
 
@@ -4983,21 +5002,29 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 **Plan testów:** EditMode pełna macierz walidacji i atomicity; PlayMode preview/confirm/cancel/rapid input.
 
-**Wpływ na save i kompatybilność:** Zmiana charges jest zapisywana w runie na istniejących granicach autosave.
+**Save and compatibility impact:** Accepted charges are stored in `RunState` and serialized at the existing run-save boundaries. Run schema v4 and profile schema v2 are unchanged; no migration or reset is added. The isolated file-save regression confirms the exact instance ID and remaining charges after command execution and reload. Preview selections and commands are not persisted.
 
-**Wymagany handoff:** Chronologiczny event list poprawnego i odrzuconego użycia.
+**Selection and dispatch:** `UseToolCommand` captures the generic slot, run-local instance ID, expected charges, exact target ID/position, and selected action ID. `ToolUseQuery` validates that snapshot and dispatches by definition/action ID through trusted deterministic domain effects. Empty/depleted/invalid slots, replaced instances, changed charges, missing/displaced/distant targets, unsupported behavior, and blocked or decision-required effects reject without fallback. Captured charges invalidate replay of an accepted decision. The same catalog and immutable `ActionCostPolicy` are shared by the runtime, picker and resolver through both composers. The default policy remains one Food for ordinary board commands; tests exercise a different policy without introducing future M9 cost tiers.
+
+**Preview and presentation:** The existing numbered interaction picker also lists explicit tool options with generic slot, direct-effect label, target position, one turn, one charge, current Food cost and noise strength/lifetime. Opening, selection and cancellation remain free. Independent input owners, same-frame hold, rapid-confirm protection, animation parity, terminal disposal and recovery are preserved. New tool events have read-only presentation handlers. Canceling replay after resolution does not refund charges or rerun the command.
+
+**Ordered result:** A nonterminal accepted tool use emits `ToolUsed`, the behavior's direct-effect events, `ToolChargeSpent`, `ActionCostApplied`, and `Noise` when configured strength is positive. `PlayerStarved` follows these events when the accepted cost exhausts Food; that terminal result skips hostile/environment/planning phases. Otherwise the existing controller runs each later phase once and ages only pre-command noise. The controlled test effect produces `ToolUsed -> EntityMoved -> ToolChargeSpent -> ActionCostApplied -> Noise`; the starvation case appends `PlayerStarved`. A rejected decision returns an empty event list, no consumed turn, no resource/charge change, no emission/aging and no later phases.
+
+**Scope boundary:** No production behavior is registered for `axe.basic` or `shovel.basic`; their effects remain M5.4/M5.5. Test-only registered effects exercise the complete resolver/picker path without changing production content. No pickup, bag, pocket, repair, scene, prefab, package or project-settings changes are included.
+
+**Acceptance (2026-10-16):** Started from clean baseline `7de0b2b722b23cc3bc8046773ff20d678c6b78f2` on `M5/2/ItemsItems` in Git root `D:/Repos/HallowBlaze`. The owner explicitly requested direct implementation without Developer delegation and allowed Reviewer use; the card-specific M4.9 exception does not close the human gate or authorize M5.4. Unity 6000.3.21f1 compiled the final implementation. Full EditMode passed 987 tests with only the existing Explicit M4.6 10,000-seed milestone skipped; full graphics-enabled PlayMode passed 143/143 without skips. Final focused domain/persistence tests passed 69/69 and ordered-presentation tests 28/28. Independent Reviewer returned PASS for the domain, picker/input lifetime, and runtime/event-handler integration in bounded read-only reviews; one unanswered integration invocation was replaced by the two smaller completed reviews. Baseline/scope, generated metadata, editor diagnostics and whitespace checks passed. No commit or push was performed.
 
 ---
 
 ## `M5.4` — Siekiera: szybsza trasa za duży hałas
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-16)
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 12, 13.2 i 13.4.
 
 **Rationale:** Samo „szybciej usuwa krzak” jest płaską premią. Duży hałas zamienia oszczędność czasu w przestrzenne ryzyko i łączy siekierę z Listenerem.
 
-**Obecne zachowanie:** Przeszkody mogą mieć HP w widoku, ale nie istnieje domenowy kontrast ręczne karczowanie vs użycie axe.
+**Current behavior:** Opted-in soft obstacles have board-owned clearing progress and two explicit actions: tool-free manual work and a faster, louder axe cut. Production content opts in only `legacy.wall`; boundary decoration, unrelated trees, stone and actors are not axe targets. Legacy `Wall.hp` no longer decides this path's progress or removal.
 
 **Oczekiwany rezultat:** Krzew/miękka drewniana przeszkoda ma wolną alternatywę bez narzędzia; axe usuwa ją szybciej, zużywa charge i emituje czytelny głośny noise.
 
@@ -5013,21 +5040,34 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 **Plan testów:** EditMode explicit cost/charge/noise command sequences; PlayMode obstacle interaction with/without an axe and Listener response. Portable replay is additional coverage only after M8.7 acceptance.
 
-**Wpływ na save i kompatybilność:** Tool charges w runie; fact discovery w profilu może wymagać rozszerzenia/migracji listy stabilnych fact IDs.
+**Save and compatibility impact:** Run schema v4 already stores the changed axe charges at existing run-save boundaries. Profile schema v2 already accepts stable fact IDs and now retains `AXE_CREATES_LOUD_NOISE` without a schema bump or reset. The fact is checkpointed only after presenting its actual axe-noise event; preview, rejection, equipment ownership and manual work do not discover it. Knowledge never enables the action. Clearing progress belongs to `BoardState`, is independently cloned, and is removed with its obstacle; a reconstructed board starts fresh under the existing no-mid-board-save contract. New runs clear equipment, not profile knowledge. Published layout/RNG identities and generation budgets remain unchanged.
 
-**Wymagany handoff:** Porównanie kosztu obu rozwiązań i nagranie/screenshot czytelności noise.
+**Configured trade-off:** `Assets/GameData/Tools/Resources/AxeClearing.json` is the shared source for both alternatives. It requires at least two manual actions for a fresh supported obstacle and a strictly louder axe emission. Current prototype values are:
+
+| Alternative on a fresh obstacle | Accepted turns | Food under the current policy | Charges | Noise per action | New noise lifetime |
+| --- | --- | --- | --- | --- | --- |
+| Clear by hand | 3 | 3 | 0 | Strength 1 | 2 subsequent accepted commands |
+| `axe.basic` / `chop` | 1 | 1 | 1 | Strength 6 | 2 subsequent accepted commands |
+
+Manual work persists between actions and the axe completes whatever work remains. If only one manual action remains, the axe no longer saves another turn; the manual preview states that remaining count rather than implying a nonexistent advantage. Each accepted action uses the shared cost policy and one normal hostile opportunity, unless it ends the board. A single blocked corridor can still be cleared and exited with empty tool slots.
+
+**Events and observation:** Manual clearing emits `InteractionPerformed -> ObstacleWorked -> ActionCostApplied -> Noise` when configured strength is positive. Axe use emits `ToolUsed -> ObstacleWorked -> ToolChargeSpent -> ActionCostApplied -> Noise`. Completion removes authoritative obstacle occupancy before noise propagation, so the new footprint can pass through the cleared cell. The Listener remembers the exact `BoardNoise` carried by that event and shown by presentation, executes its previously announced intent first, then plans its next investigation. Rejected empty/depleted/stale/displaced/unsupported selections do not change work, charges, food, noise age, facts or enemy opportunities.
+
+**Presentation and evidence:** The numbered picker shows manual remaining work and both alternatives' turn/Food/charge/noise consequences before confirmation. Non-color work fractions, the authored damaged sprite/chop clip, hidden cleared views, current equipment charges and the existing strength/lifetime footprint show the result without relying on animation or audio. PlayMode captures with real project sprite assets and the HUD are generated outside the repository as `%TEMP%/HB-M54-manual.png` and `%TEMP%/HB-M54-axe.png`; assertions verify nonblank glyph pixels and exact displayed/heard footprint cells. The actual audio adapter is tested without changing legacy HP. Recovery reads progress without replaying audio; terminal/disposal paths release the owned labels.
+
+**Acceptance (2026-10-16):** Started from clean baseline `1bce2b7625950af57ff914953e72d84c95d23f80` on `M5/4/Axe` in Git root `D:/Repos/HallowBlaze`. The owner's explicit M5.4 continuation authorizes this card despite the still-Pending M4.9 human gate; no human result or automatic M5.5 authorization is claimed. Direct Lead implementation used no Developer delegation. Unity 6000.3.21f1 compiled the final implementation. Full EditMode passed 1001 tests with only the existing Explicit M4.6 10,000-seed milestone skipped; full graphics-enabled PlayMode passed 152/152 without skips. Final focused domain/board/noise checks passed 30/30, production axe presentation/audio/save/capture scenarios passed 8/8, and neighboring content/presentation checks passed 33/33. Independent Reviewer returned PASS for domain/Listener behavior, presentation/audio/lifecycle, and content/runtime/knowledge persistence. Baseline, generated metadata, editor diagnostics, scope and whitespace checks passed. No scene, prefab, settings, package or generator files were modified; no commit or push was performed. Pickup/replacement remains M5.6, shovel behavior M5.5, and barricades remain outside this card.
 
 ---
 
 ## `M5.5` — Łopata: schowek i dół
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-16).
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 13.3 i 13.4.
 
 **Rationale:** Łopata ma łączyć eksplorację z manipulowaniem planszą, a nie wyłącznie skracać animację zbierania. Schowek daje korzyść ekonomiczną, dół daje taktyczną kontrolę pola.
 
-**Obecne zachowanie:** Brak oznaczonych schowków, domenowego digging progress i tymczasowej pułapki na zombie.
+**Implemented behavior:** Explicit `legacy.buried-food` caches share board-owned progress: three manual actions or one shovel action reveal one `shovel.cache-ration` item. The item retains its source entity ID and stable board-local `cache.reward.<entity-id>` instance ID; the pre-M9 adapter collects that exact item before charge/action cost. An uncollected reward remains board state. Only explicitly authored `shovel.diggable` terrain supports pits; ordinary floors are not inferred as diggable.
 
 **Oczekiwany rezultat:** A marked cache has a slow alternative or explicitly optional reward; the shovel reveals it quickly. The reward is represented by one concrete stable item definition/instance rather than a raw `RestoreFood` call. Before M9, a compatibility adapter may resolve that item immediately under O-003; M9.5 replaces the adapter with the shared item decision. The second shovel use creates a temporary pit for a supported archetype.
 
@@ -5047,17 +5087,30 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 **Wymagany handoff:** Macierz zastosowanie → korzyść → koszt/ryzyko → alternatywa bez narzędzia.
 
+**Application matrix:**
+
+| Application | Benefit | Cost / risk | Tool-free alternative |
+| --- | --- | --- | --- |
+| Marked cache | One concrete Food +10 item in one action instead of three | One turn, Food -1, one charge; noise strength 2 / lifetime 2 | Three manual actions, Food -1 and the same noise per action; optional reward may also be left unexplored |
+| Pit on explicitly authored ground | A Shambler actually entering the cell waits until pit expiry, without damage | One turn, Food -1, one charge; noise 2 / 2; visible pit survives four subsequent accepted commands | Keep using the walkable route or avoid the enemy; no mandatory objective or exit requires a pit |
+
+**Lifetime and observation:** Fresh pits retain all four turns on the creation command. Only pre-command pits age after acceptance, before locked enemy execution; rejection ages nothing. Expiry clears the hold, but a published Wait still executes before normal planning resumes. Player and Listener movement is unaffected. Presentation shows `CACHE n/3`, `PIT Tn` and `WAIT`, plus existing charge/cost/noise previews. Only replaying an actual `ShamblerTrappedEvent` observes and durably records `PIT_TRAPS_SHAMBLER`; creation, preview, cancellation and unpresented domain resolution do not. Facts never enable these rules.
+
+**Scope and compatibility:** Run schema v4 / profile schema v2 remain unchanged. Charges and observed facts use existing save boundaries; pits, cache progress, reward tombstones and uncollected items are transient `BoardState` with independent clone collections. No automatic equipment, pickup/replacement, atlas source IDs, scenes, prefabs, generator placement/version changes, settings or packages were added. Explicit authored ground is opt-in; published generators remain unchanged.
+
+**Acceptance:** Completed from clean `9505c75447a3d9c8a17f198de959699b95a6b6ed` on `M5/5/Shovel`, Git root `D:/Repos/HallowBlaze`, by direct Lead implementation at the owner's request without Developer delegation. Unity 6000.3.21f1 passed full EditMode 1030 tests with only the existing Explicit milestone skipped, full graphics PlayMode 157/157, final focused domain/composition 59/59 and shovel presentation 5/5. Independent Reviewer returned PASS for cache/reward, pit/enemy and presentation/integration; a bounded recheck resolved unsupported dead-code claims and confirmed resolver ordering. Asset/meta, scope, diagnostics and whitespace checks passed. The owner's card-specific authorization does not close M4.9 or authorize M5.6. No commit or push was performed.
+
 ---
 
 ## `M5.6` — Conscious tool pickup and slot replacement
 
-**Status:** `Planned` — O-003 resolved 2026-09-27
+**Status:** `Done` (2026-10-16); O-003 remains resolved as of 2026-09-27.
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 13.1, 18 i O-003.
 
 **Rationale:** Przy dwóch pełnych slotach znalezione narzędzie tworzy ważny wybór, ale przypadkowa zamiana byłaby karą za wejście na pole. O-003 now fixes the pre-M9 split: food remains automatic and transitional, while a tool requires conscious pickup and routing to the separate equipment bar.
 
-**Obecne zachowanie:** Nie ma docelowego flow podnoszenia tool instance ani modalnej zamiany.
+**Implemented behavior:** A board-owned `GroundToolState` separates the entity, run-allocated instance, content definition, remaining charges and optional authored source. The existing target picker offers conscious equipment pickup. The first free generic slot is selected automatically only after confirmation. Full equipment opens a comparison of both slots with `Replace` and `Leave`; a complete `PickupToolCommand` retains the exact ground snapshot, position and selected slot identity/definition/charges. Revalidation rejects invalid, stale or replayed choices before mutation.
 
 **Oczekiwany rezultat:** A consciously accepted tool pickup automatically fills a free generic tool slot. With both slots occupied it presents `Replace` or `Leave`; cancel/leave is free, the ground instance remains, and no equipped tool is silently destroyed. Transitional automatic food remains unchanged until M9.
 
@@ -5077,11 +5130,28 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 **Wymagany handoff:** Reference resolved O-003, provide the full tool modal flow, and list the seams intentionally reserved for M9 without implementing them.
 
+**Accepted replacement outcome:** The owner requested autonomous decisions when asked about the displaced tool. M5.6 uses a lossless exchange, recorded in contract section 13.1: the incoming instance occupies exactly one chosen slot and the old tool remains at the original ground entity/cell with its existing ID and charges. It does not inherit the incoming source ID. This is an equipment exchange, not an implementation of carried-item discard or a generic drop command.
+
+**Modal flow:**
+
+1. `E` opens the free shared picker with the ground tool's definition, charges and current action consequences. Movement onto the tile never collects it.
+2. Confirming a pickup with free capacity transfers the same instance into the first free slot as one accepted command.
+3. With full equipment, the first confirmation only opens the free comparison. The player explicitly selects one of the two slot snapshots, then confirms `Replace`; choosing a slot alone resolves nothing.
+4. Accepted pickup/exchange costs one normal action and Food -1 under the current policy, spends/refills no charge and emits the existing interaction noise, strength 4 / lifetime 2. It does not allocate a new tool ID. The normal controller runs later phases once unless the action is terminal.
+5. `Leave`, Escape, cancellation, incomplete full-slot refusal and invalid/stale decisions are free. The same ground instance remains. The modal and remainder-of-frame input ownership prevent accidental movement, repeated submission and duplication; independent pause/modal blocks survive closure.
+
+**Integration and compatibility:** Both runtime composers accept explicit existing tool-instance bindings without allocating or equipping them. Blueprint bindings additionally validate entity/definition and authored source parity; invalid, unallocated, already-equipped or duplicate bindings cannot publish a partial runtime. Existing versioned generators, placements, prefabs and scenes are unchanged. Ground labels and the equipment HUD read current definitions/charges, including the old tool after exchange. Run schema v4 preserves resulting equipment identities, charges and allocator; profile schema v2 is unchanged. Ground tools remain transient board state at existing reconstruction/save boundaries. O-003 automatic food still resolves before movement cost. No tool-source knowledge or mechanical fact is inferred from pickup.
+
+**Reserved seams:** M9 owns the shared consumable `Use now` / `Store` / `Leave` decision, bag/pockets, placement and carried-item discard, including migration of the shovel-cache reward adapter. This card adds none of those behaviors and does not change transitional automatic food. M7.5 remains responsible for fixed-source discovery and atlas knowledge.
+
+**Acceptance:** Completed from clean `9e1a6f0df5726b4d0eee81dd525afad18a2d10fa` on `M5/6/ToolPickUp`, Git root `D:/Repos/HallowBlaze`, by direct Lead implementation without Developer delegation. After the review correction preserving authored entity traits, Unity 6000.3.21f1 passed full EditMode 1061 tests with only the existing Explicit milestone skipped and full graphics PlayMode 163/163. Focused transfer/composition passed 54/54; the correction/state gate passed 33/33; pickup PlayMode passed 6/6, including actual scene unload, isolated save/reload, modal/input scenarios and desktop/portrait pixel checks. Independent Reviewer returned PASS for domain, picker/modal, composers and replay/lifetime after bounded sequential retries for provider failures. Scope, metadata, diagnostics and whitespace checks passed. M4.9 remains Pending without human results; this card-specific owner authorization does not authorize M5.7. No commit or push was performed.
+
 ---
 
 ## `M5.7` — Field Notes dla faktów systemowych
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-16)
+
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 4, 5.4, 13.4 i 18.
 
@@ -5107,6 +5177,28 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 **Wymagany handoff:** Rejestr facts: ID, warunek odkrycia, tekst, system źródłowy.
 
+### Implementation Outcome - 2026-10-16
+
+The owner explicitly authorized M5.7 from clean baseline `ceadef295a903f781f8fe718e7e2ae9669ab01cd`
+on `M5/7/FieldNotes`. Direct Lead implementation added immutable fact definitions, typed presented
+observations, idempotent `FactDiscovery`, a durable checkpoint/retry boundary and a profile-owned
+Field Notes reader. The [authored registry](Testing.md#m57-field-notes) records the exact ID,
+condition, working English title/text, icon and mechanical source system for axe noise, a trapped
+Shambler and an executed Listener investigation. Unknown rules never create rows or hints; missing
+definitions retain their saved IDs with a neutral placeholder. Notes and feedback persist through
+death/new runs, while explicit New Game replaces the profile. Reading is free and uses an
+independent input owner; resize remains live while the post-death GameManager is disabled.
+
+Unity 6000.3.21f1 passed full EditMode 1069 tests with only the existing Explicit generation
+milestone skipped and final graphics PlayMode 169/169. Focused state/persistence passed 106/106,
+presentation gate 32/32 and Field Notes 6/6, including production event replay, unpresented-output
+rejection, animation parity, checkpoint compatibility, death/new-run/New-Game and nonblank
+1280x720 / 320x480 renders. Independent Reviewer returned PASS for domain/persistence, observation
+triggers, UI/lifecycle and the final post-death resize delta. Scope, diagnostics, metadata/GUID,
+registry documentation and whitespace checks passed. Profile schema v2/run schema v4, published
+generators, scenes, prefabs, settings and packages are unchanged. M4.9 remains Pending without
+human results; this card does not close a human gate or authorize M6.1. No commit or push was made.
+
 ### Bramka M5
 
 M5 jest zaliczony, gdy oba narzędzia tworzą różne decyzje, każde ma koszt lub ryzyko, brak narzędzia nie tworzy losowego softlocka, a odkryte fakty przeżywają śmierć bez zdradzania niepoznanych mechanik.
@@ -5119,13 +5211,14 @@ M5 jest zaliczony, gdy oba narzędzia tworzą różne decyzje, każde ma koszt l
 
 ## `M6.1` — Format ręcznie przygotowanego szablonu landmarku
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-16)
+
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 7.1, 14 i 16.
 
 **Rationale:** Pierwsza zagadka ma być kuratorowana i automatycznie sprawdzalna, nie generowana jak pełny Sokoban. Szablon danych pozwala tworzyć warianty bez osobnej minigry i bez ręcznej logiki sceny.
 
-**Obecne zachowanie:** Brak typu node `Landmark`, formatu zagadki i mappingu do wspólnego BoardState.
+**Starting behavior:** The world already supports a textual `landmark` place kind, but lacked an authored template format, validated segment assignment and conversion to the shared blueprint/state contract.
 
 **Oczekiwany rezultat:** `LandmarkTemplate` opisuje blueprint, cele/rezultaty, dozwolone warianty i wymagania walidacji przy użyciu stable IDs. Template identity is independent from node identity and can be assigned to a stable route segment.
 
@@ -5144,6 +5237,42 @@ M5 jest zaliczony, gdy oba narzędzia tworzą różne decyzje, każde ma koszt l
 **Wpływ na save i kompatybilność:** Run data identifies the landmark by its active `BoardAddress` plus stable template/variant ID and records the outcome at the completed-board boundary. Future replay uses the same identity after M8.7 acceptance. Destination node arrival remains the route-flow consequence of completing the final segment; no node ID is used as board identity.
 
 **Wymagany handoff:** Schemat szablonu i przykład dwóch outcomes bez implementowania rozwiązania.
+
+### Implementation Outcome - 2026-10-16
+
+The owner explicitly authorized M6.1 before the planned M4.9 human sessions, without accepting
+that pending gate or authorizing later cards. Implementation started from clean baseline
+`f81799c928fc3b015989ddf603a79092024e61b9` on `M6/1/ManualBoardSchema`, Git root
+`D:/Repos/HallowBlaze`, with direct Lead implementation and no Developer delegation.
+
+`Core.Generation.Landmarks` now owns immutable template/variant/outcome declarations, a strict
+authoring schema v1 loader against the existing content catalog, and validated final-segment
+assignments. It builds the same `BoardBlueprint` and independent `BoardState` as ordinary boards,
+retaining the exact full `BoardAddress` alongside template ID/version and variant ID. Missing or
+conflicting content, goals, sources, IDs, versions and placements reject before publication.
+A mandatory tool requirement must identify a matching, observable initial spawn in every allowed
+variant, statically accessible before an exit; optional tool-dependent outcomes need no promise.
+This structural check is not a dynamic puzzle solver or proof of tactical survival.
+
+The [schema and two-outcome example](BoardGeneration.md#m61-authored-landmark-templates) use a
+separate sanity world: five edge-based days, eight boards, and the final of two inbound day-five
+segments assigned to `landmark.sanity` / `base`. `arrival.safe` and `arrival.alternate` are named
+tool-free exit declarations, not executed solutions, rewards or saved outcomes. The fixture is
+not registered in production gameplay. Run v4 round-trip reconstructs the same addressed fixture
+against its frozen assignment; profile v2 is unchanged. M6.4 activation still requires compatible
+explicit selected template/variant and completed-outcome persistence before a real puzzle can
+ship; no mid-board save or automatic migration is introduced by this format-only card.
+
+Unity 6000.3.21f1 passed final full EditMode 1108 tests with only the existing Explicit generation
+milestone skipped, full graphics PlayMode 169/169 and final landmark tests 39/39. Coverage includes
+catalog/reference failures, immutable and deterministic reconstruction, whole-graph validation,
+the ordinary validator, concrete per-variant tool guarantees, fixed-source parity and existing
+run-save/address compatibility. Independent Reviewer returned PASS for model/loader/structure and
+segment/fixture/compatibility scope. Nonblocking source/optional-guarantee test suggestions were
+covered before the final full EditMode run. Scope, metadata/GUID, editor diagnostics, documentation
+and whitespace checks passed. Existing world/generator publications, scenes, prefabs, settings,
+packages and persistence DTOs are unchanged. M4.9 remains Pending; M6.2 remains Planned and is not
+automatically authorized. No commit or push was performed.
 
 ---
 
@@ -6111,7 +6240,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before advancing to M5 content. Technical preparation passed, but zero participants is not a closed human gate. Preserve independent review; the M3.12 and M4.1-M4.5 review waivers do not extend to later tasks;
+1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized the bounded M6.1 authoring foundation before the planned human sessions. M6.1 is Done with full EditMode 1108 tests plus the existing Explicit skip, graphics PlayMode 169/169 and independent Reviewer PASS. These card-specific exceptions do not close M4.9 or authorize execution of M6.2, which remains Planned. Preserve independent review on later cards unless separately waived;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6137,7 +6266,23 @@ M4.7 is accepted on 2026-10-15 with deterministic board-owned noise, atomic acce
 
 M4.8 is accepted on 2026-10-15 with latest-heard board memory, fixed Investigate opportunities, shared Shambler/Listener initiative and explicit authored runtime/display mapping. Full EditMode passed 921 tests with the existing Explicit M4.6 milestone skipped; graphics-enabled PlayMode passed 123/123. Independent Reviewer returned PASS across all reviewed implementation scopes. Direct Lead implementation followed the owner's current instruction; no Developer PASS is claimed. Published generation content and saves remain unchanged.
 
-M4.9 started on 2026-10-15 from clean baseline `fb417dc6b12f484f8e329c383311e49e654683f1` on `M4/9/NoiseGate`. Protocol and test-only capture materials are ready with independent preparation Reviewer PASS, full graphics PlayMode 125/125 and final focused export 2/2. No human sessions have run and no Proceed/Revise/Stop result is claimed. The active task is to collect moderated prediction/readability evidence, not to start M5 or mark M4 accepted from automated checks.
+M4.9 started on 2026-10-15 from clean baseline `fb417dc6b12f484f8e329c383311e49e654683f1` on `M4/9/NoiseGate`. Protocol and test-only capture materials are ready with independent preparation Reviewer PASS, full graphics PlayMode 125/125 and final focused export 2/2. No human sessions have run and no Proceed/Revise/Stop result is claimed. That preparation did not authorize M5 or accept M4 from automated checks; the later owner-authorized M5.1 exception is recorded below. The human gate still requires moderated prediction/readability evidence.
+
+M5.1 was subsequently completed on 2026-10-15 at the owner's request from clean baseline `c0431c142b7d4611dca1c7c29145af7d80a9fe9a` on `M5/1/CommonInteractionModel`, with direct Lead implementation and self-review only. The owner authorized correction of the diagnosed traversal fixture blocker. Final full EditMode passed 934 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 134/134. The M5.1 card is Done; M4.9 remains Pending. No commit or push was performed.
+
+M5.2 was completed on 2026-10-16 at the owner's explicit request from clean baseline `8e655acb78eef4aa0cbb581ff599156baa561f17` on `M5/2/ItemsItems`, with direct Lead implementation and self-review only. It adds two generic identity-bearing equipment cells, immutable definitions/instances, charge invariants, compatible run schema v4 and a read-only HUD. Full EditMode passed 951 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 138/138. M4.9 remains Pending with no human result. No independent review verdict, commit, or push is claimed for M5.2.
+
+M5.3 was completed on 2026-10-16 at the owner's explicit request from clean baseline `7de0b2b722b23cc3bc8046773ff20d678c6b78f2` on `M5/2/ItemsItems`, with direct Lead implementation and no Developer delegation. It adds exact tool decisions, shared preview/dispatch, atomic accepted charge/cost/noise events, stale/replay rejection and presentation through the existing picker. Full EditMode passed 987 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 143/143. Independent Reviewer returned PASS for the domain, picker and runtime integration. Run schema v4 and production axe/shovel effects were unchanged by M5.3. M4.9 remains Pending. No commit or push was performed.
+
+M5.4 was completed on 2026-10-16 at the owner's explicit request from clean baseline `1bce2b7625950af57ff914953e72d84c95d23f80` on `M5/4/Axe`, with direct Lead implementation and independent Reviewer PASS across domain, presentation and integration. Board-owned progress supports three manual actions or one charge-consuming axe action, with authored strength 1 versus 6 and exact Listener/UI noise identity. The observed axe-noise fact persists in profile schema v2; run schema v4 is unchanged. Full EditMode passed 1001 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 152/152. M4.9 remains Pending with no human result. At that closeout, M5.5 remained Planned and required the later explicit owner request recorded below. No commit or push was performed.
+
+M5.5 was completed on 2026-10-16 at the owner's explicit request from clean baseline `9505c75447a3d9c8a17f198de959699b95a6b6ed` on `M5/5/Shovel`, with direct Lead implementation and independent Reviewer PASS. Marked caches offer three manual actions or one shovel action, producing one identity-bearing reward before the transitional transfer and action cost. Explicit diggable ground supports a visible four-command pit that holds only a Shambler after actual entry; the observed trap fact persists in the profile. Full EditMode passed 1030 tests with the existing Explicit milestone skipped; graphics PlayMode passed 157/157. Run/profile schemas and published generators are unchanged. M4.9 remains Pending without a human result. At that closeout, M5.6 remained Planned and required the later explicit owner request recorded below. No commit or push was performed.
+
+M5.6 was completed on 2026-10-16 at the owner's explicit request from clean baseline `9e1a6f0df5726b4d0eee81dd525afad18a2d10fa` on `M5/6/ToolPickUp`, with direct Lead implementation and independent Reviewer PASS. Conscious pickup fills the first free slot; full equipment requires a modal comparison and confirmed lossless exchange, preserving the old instance on the ground. Leave/cancel/stale/refusal are free, rapid input cannot duplicate the transfer, and food remains automatic under resolved O-003. Run schema v4 / profile schema v2 and published generators are unchanged. Full EditMode passed 1061 tests with the existing Explicit milestone skipped; graphics PlayMode passed 163/163. M4.9 remains Pending without human results. At that closeout, M5.7 remained Planned and required the later explicit owner request recorded below. No commit or push was performed.
+
+M5.7 was completed on 2026-10-16 at the owner's explicit request from clean baseline `ceadef295a903f781f8fe718e7e2ae9669ab01cd` on `M5/7/FieldNotes`, with direct Lead implementation and independent Reviewer PASS. Three typed presented consequences record durable profile facts once before feedback; the reader exposes only recorded text/icons, with safe missing-content placeholders and separate input ownership. Death and a new run retain knowledge; explicit New Game resets it. Full EditMode passed 1069 tests with the existing Explicit milestone skipped; final graphics PlayMode passed 169/169. Run/profile schemas, generators and serialized scenes/settings remain unchanged. M4.9 remains Pending without human results. At that closeout, M6.1 remained Planned and required the later explicit owner request recorded below. No commit or push was performed.
+
+M6.1 was completed on 2026-10-16 at the owner's explicit request from clean baseline `f81799c928fc3b015989ddf603a79092024e61b9` on `M6/1/ManualBoardSchema`, with direct Lead implementation and independent Reviewer PASS. Immutable authored templates, strict schema v1 loading, structural/tool-guarantee validation and final-segment assignments share the existing blueprint/state/address contracts. A separate five-day/eight-board sanity graph declares two tool-free outcomes without activating puzzle mechanics, rewards or outcome persistence. Final full EditMode passed 1108 tests with the existing Explicit milestone skipped; graphics PlayMode passed 169/169; final focused landmark cases passed 39/39. Published world/generators, run/profile schemas and scene/settings/package state are unchanged. M4.9 remains Pending without human results; M6.2 remains Planned and is not automatically authorized. No commit or push was performed.
 
 # Zasada aktualizacji roadmapy
 

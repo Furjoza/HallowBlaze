@@ -24,10 +24,13 @@ namespace HallowBlaze.Presentation.Runtime
         /// <param name="blueprint">Initial model matching the request's full address.</param>
         /// <param name="catalog">Authoritative definitions and supported enemy rules.</param>
         /// <param name="views">Exactly one unique, positioned view per entity ID; decorative objects are not bindings.</param>
+        /// <param name="tools">Optional explicit tool dispatch and current action-cost policy; null leaves placeholders without effects.</param>
+        /// <param name="groundTools">Optional existing run-allocated tool instances matching authored item entities; no generation or equipment mutation.</param>
         /// <returns>A complete runtime whose initial state reproduces the blueprint.</returns>
         /// <exception cref="BoardRuntimeCompositionException">Identity, blueprint validation or view parity fails.</exception>
         public static BoardRuntime Compose(BoardRequest request, RunState run, BoardBlueprint blueprint,
-            BoardValidationCatalog catalog, IReadOnlyDictionary<EntityId, GameObject> views)
+            BoardValidationCatalog catalog, IReadOnlyDictionary<EntityId, GameObject> views, ToolUseQuery tools = null,
+            IEnumerable<GroundToolState> groundTools = null)
         {
             if (request == null || run == null || blueprint == null || catalog == null || views == null ||
                 !BoardOutcomeIdentityGuard.ValidateRequest(request, run, out _) || !blueprint.Address.Equals(request.Address))
@@ -58,7 +61,18 @@ namespace HallowBlaze.Presentation.Runtime
                     enemies.Add(new ShamblerState(entity.Id, rule));
                 }
             }
-            return new BoardRuntime(request, run, blueprint.CreateState(), playerId, bindings, enemies);
+            BoardState board = blueprint.CreateState();
+            foreach (GroundToolState ground in groundTools ?? Array.Empty<GroundToolState>())
+            {
+                BoardItemSpawn spawn = null;
+                if (ground != null)
+                    foreach (BoardItemSpawn candidate in blueprint.Items)
+                        if (candidate.EntityId.Equals(ground.EntityId)) { spawn = candidate; break; }
+                if (ground == null || !run.CanReceiveTool(0, new ToolInstanceState(ground.InstanceId, ground.DefinitionId, ground.Charges)) ||
+                    spawn == null || spawn.SourceId != ground.SourceId || !board.TryBindGroundTool(ground))
+                    throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, "blueprint:invalid-ground-tool");
+            }
+            return new BoardRuntime(request, run, board, playerId, bindings, enemies, tools: tools);
         }
     }
 }

@@ -282,6 +282,108 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(run.ToolSlots[0].IsEmpty, Is.True);
         }
 
+        /// <summary>Definitions are reusable content; immutable equipped snapshots and identity allocation belong to each run.</summary>
+        [Test]
+        public void ToolDefinitionsAndInstancesRemainIndependentAcrossRunsAndSnapshots()
+        {
+            var definition = new ToolDefinition("axe.basic", "Axe", 3);
+            RunState first = CreateRun();
+            RunState second = CreateRun();
+            ToolInstanceState firstTool = first.CreateToolInstance(definition);
+            ToolInstanceState secondTool = second.CreateToolInstance(definition);
+            first.EquipTool(0, firstTool);
+            second.EquipTool(1, secondTool);
+            Assert.That(first.TrySpendToolCharge(0, firstTool.InstanceId), Is.True);
+            Assert.That(first.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
+            Assert.That(firstTool.Charges, Is.EqualTo(3));
+            Assert.That(second.ToolSlots[1].Instance.Charges, Is.EqualTo(3));
+            Assert.That(definition.MaximumCharges, Is.EqualTo(3));
+            Assert.That(firstTool.DefinitionId, Is.EqualTo(definition.Id));
+            Assert.That(firstTool.InstanceId, Is.Not.EqualTo(definition.Id));
+            Assert.That(first.Health, Is.EqualTo(100));
+            Assert.That(first.Food, Is.EqualTo(100));
+            Assert.Throws<NotSupportedException>(() => ((IList<ToolSlotState>)first.ToolSlots).Clear());
+        }
+
+        /// <summary>Replacing and removing return exact old instances and never reuse IDs or allow duplicate equipment.</summary>
+        [Test]
+        public void ToolReplacementRemovalAndResetPreserveOwnershipAndAllocator()
+        {
+            RunState run = CreateRun();
+            var definition = new ToolDefinition("tool.generic", "Tool", 1);
+            ToolInstanceState first = run.CreateToolInstance(definition);
+            ToolInstanceState second = run.CreateToolInstance(definition);
+            run.EquipTool(0, first);
+            Assert.Throws<InvalidOperationException>(() => run.EquipTool(0, second));
+            Assert.Throws<ArgumentException>(() => run.EquipTool(1, first));
+            Assert.That(run.ReplaceTool(0, second), Is.SameAs(first));
+            Assert.That(run.RemoveTool(0), Is.SameAs(second));
+            Assert.That(run.RemoveTool(0), Is.Null);
+            ToolInstanceState third = run.CreateToolInstance(definition);
+            Assert.That(third.InstanceId, Is.EqualTo("tool.3"));
+            run.EquipTool(1, third);
+            run.Reset("new-run", 42, CreateConfiguration());
+            Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
+            Assert.That(run.ToolInstanceSequence, Is.Zero);
+        }
+
+        /// <summary>Stale/depleted/empty spending is effect-free and zero charges remain a nonempty slot.</summary>
+        [Test]
+        public void ToolChargesRejectInvalidValuesAndCannotBecomeNegative()
+        {
+            RunState run = CreateRun();
+            var definition = new ToolDefinition("shovel.basic", "Shovel", 1);
+            ToolInstanceState instance = run.CreateToolInstance(definition);
+            run.EquipTool(0, instance);
+            Assert.That(run.TrySpendToolCharge(0, "different"), Is.False);
+            Assert.That(run.TrySpendToolCharge(1, instance.InstanceId), Is.False);
+            Assert.That(run.TrySpendToolCharge(0, instance.InstanceId), Is.True);
+            Assert.That(run.TrySpendToolCharge(0, instance.InstanceId), Is.False);
+            Assert.That(run.ToolSlots[0].Instance.Charges, Is.Zero);
+            Assert.That(run.ToolSlots[0].IsEmpty, Is.False);
+            Assert.Throws<ArgumentOutOfRangeException>(() => new ToolInstanceState("tool.1", definition.Id, -1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new ToolDefinition("tool", "Tool", 0));
+            Assert.Throws<ArgumentException>(() => new ToolInstanceState(" ", definition.Id, 0));
+            Assert.Throws<ArgumentException>(() => run.ReplaceTool(0, new ToolInstanceState("source.atlas", definition.Id, 1)));
+        }
+
+        /// <summary>Restore validates all equipment before mutation and detaches the caller's array.</summary>
+        [Test]
+        public void ToolRestoreRejectsPartialStateAndCopiesEquipmentCells()
+        {
+            RunState run = CreateRun();
+            ToolInstanceState tool = run.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 3));
+            run.EquipTool(0, tool);
+            Assert.Throws<ArgumentException>(() => run.RestoreToolState(1, new[] { tool, tool }));
+            Assert.Throws<ArgumentException>(() => run.RestoreToolState(0, new[] { tool, (ToolInstanceState)null }));
+            Assert.Throws<ArgumentException>(() => run.RestoreToolState(1, new[] { tool }));
+            Assert.That(run.ToolSlots[0].Instance, Is.SameAs(tool));
+            Assert.That(run.ToolSlots[1].IsEmpty, Is.True);
+            Assert.That(run.ToolInstanceSequence, Is.EqualTo(1));
+            var source = new[] { (ToolInstanceState)null, tool };
+            run.RestoreToolState(3, source);
+            source[1] = null;
+            Assert.That(run.ToolSlots[1].Instance, Is.SameAs(tool));
+            Assert.That(run.CreateToolInstance(new ToolDefinition("shovel.basic", "Shovel", 2)).InstanceId, Is.EqualTo("tool.4"));
+        }
+
+        /// <summary>Allocator overflow and terminal-state operations cannot create or modify equipment.</summary>
+        [Test]
+        public void ToolAllocatorOverflowAndTerminalMutationsAreEffectFree()
+        {
+            RunState run = CreateRun();
+            var definition = new ToolDefinition("axe.basic", "Axe", 3);
+            run.RestoreToolState(int.MaxValue, new ToolInstanceState[RunState.ToolSlotCount]);
+            Assert.Throws<OverflowException>(() => run.CreateToolInstance(definition));
+            Assert.That(run.ToolInstanceSequence, Is.EqualTo(int.MaxValue));
+            Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
+            run.MarkDead();
+            Assert.Throws<InvalidOperationException>(() => run.CreateToolInstance(definition));
+            Assert.Throws<InvalidOperationException>(() => run.RemoveTool(0));
+            Assert.Throws<InvalidOperationException>(() => run.TrySpendToolCharge(0, "tool.1"));
+            Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
+        }
+
         [Test]
         public void ToolStateAndSlotIndexRejectInvalidValues()
         {

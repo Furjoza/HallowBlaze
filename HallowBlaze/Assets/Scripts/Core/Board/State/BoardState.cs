@@ -20,6 +20,12 @@ namespace HallowBlaze.Core.Board.State
 
         private readonly Dictionary<EntityId, BoardEntityState> entitiesById;
         private readonly Dictionary<BoardLayer, Dictionary<GridPosition, EntityId>> entityIdsByLayer;
+        private readonly Dictionary<EntityId, int> obstacleWork = new Dictionary<EntityId, int>();
+        private readonly Dictionary<EntityId, BoardPit> pits = new Dictionary<EntityId, BoardPit>();
+        private readonly Dictionary<EntityId, int> cacheWork = new Dictionary<EntityId, int>();
+        private readonly Dictionary<EntityId, CacheRewardItem> cacheRewards = new Dictionary<EntityId, CacheRewardItem>();
+        private readonly Dictionary<EntityId, GroundToolState> groundTools = new Dictionary<EntityId, GroundToolState>();
+        private long nextPitId;
         private readonly List<BoardNoise> activeNoises;
         private readonly Dictionary<EntityId, BoardNoise> listenerNoises = new Dictionary<EntityId, BoardNoise>();
         private long nextNoiseId;
@@ -92,8 +98,199 @@ namespace HallowBlaze.Core.Board.State
             Dictionary<GridPosition, EntityId> layer = entityIdsByLayer[entity.Definition.Layer];
             layer.Remove(entity.Position);
             entitiesById.Remove(id);
+            obstacleWork.Remove(id);
+            cacheWork.Remove(id);
+            groundTools.Remove(id);
+            pits.Remove(id);
+            ReleasePitActor(id);
             listenerNoises.Remove(id);
             return true;
+        }
+
+        /// <summary>Adds one concrete tool together with its matching item entity; duplicate instance IDs are rejected without mutation.</summary>
+        public bool TryAddGroundTool(BoardEntityState entity, GroundToolState tool)
+        {
+            if (entity == null || tool == null || !entity.Id.Equals(tool.EntityId) ||
+                entity.Definition.Layer != BoardLayer.Item || !entity.Definition.Kind.Equals(EntityKind.Item) ||
+                entity.Definition.AutomaticFoodReward != 0 || entity.Definition.Traits.IsExit ||
+                entity.Definition.ContentId != tool.DefinitionId) return false;
+            foreach (GroundToolState existing in groundTools.Values)
+                if (existing.InstanceId == tool.InstanceId) return false;
+            if (!TryAdd(entity)) return false;
+            groundTools.Add(entity.Id, tool);
+            return true;
+        }
+
+        /// <summary>Reads the exact immutable tool owned by this board without transferring it or changing its charges.</summary>
+        public bool TryGetGroundTool(EntityId id, out GroundToolState tool) => groundTools.TryGetValue(id, out tool);
+
+        /// <summary>Binds an already authored item entity to one concrete run-allocated tool without adding or moving an entity.</summary>
+        public bool TryBindGroundTool(GroundToolState tool)
+        {
+            if (tool == null || !TryGetEntity(tool.EntityId, out BoardEntityState entity) ||
+                entity.Definition.Layer != BoardLayer.Item || !entity.Definition.Kind.Equals(EntityKind.Item) ||
+                entity.Definition.AutomaticFoodReward != 0 || entity.Definition.Traits.IsExit ||
+                entity.Definition.ContentId != tool.DefinitionId || groundTools.ContainsKey(tool.EntityId)) return false;
+            foreach (GroundToolState existing in groundTools.Values)
+                if (existing.InstanceId == tool.InstanceId) return false;
+            groundTools.Add(tool.EntityId, tool);
+            return true;
+        }
+
+        /// <summary>Exchanges a validated ground tool for the displaced equipped instance at the same binding and position.</summary>
+        /// <param name="expected">The exact currently owned immutable ground snapshot.</param>
+        /// <param name="replacement">The displaced tool; source metadata must describe that tool, not the picked-up source.</param>
+        /// <returns>False without mutation if the expected ground instance changed or replacement identity is duplicated.</returns>
+        public bool TryExchangeGroundTool(GroundToolState expected, GroundToolState replacement)
+        {
+            if (expected == null || replacement == null || !expected.EntityId.Equals(replacement.EntityId) ||
+                !groundTools.TryGetValue(expected.EntityId, out GroundToolState current) || !ReferenceEquals(current, expected) ||
+                !TryGetEntity(expected.EntityId, out BoardEntityState entity)) return false;
+            foreach (GroundToolState other in groundTools.Values)
+                if (other.InstanceId == replacement.InstanceId) return false;
+            entitiesById[entity.Id] = new BoardEntityState(entity.Id,
+                new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, replacement.DefinitionId, entity.Definition.Traits), entity.Position);
+            groundTools[entity.Id] = replacement;
+            return true;
+        }
+
+        /// <summary>Reads board-local clearing progress; untouched or removed obstacles have no accumulated work.</summary>
+        public int GetObstacleWork(EntityId id) => obstacleWork.TryGetValue(id, out int work) ? work : 0;
+
+        /// <summary>Applies validated clearing work and removes the obstacle when its configured requirement is reached.</summary>
+        /// <param name="id">Exact obstacle instance; actors, items and terrain cannot be cleared through this operation.</param>
+        /// <param name="work">Positive work applied by one accepted action.</param>
+        /// <param name="requiredWork">Positive immutable content requirement shared by manual and tool actions.</param>
+        /// <param name="remainingWork">Remaining work on success, zero when cleared or rejected.</param>
+        /// <returns>False for a missing or non-obstacle entity, with no mutation; otherwise true.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Work or requirement is not positive.</exception>
+        public bool TryWorkObstacle(EntityId id, int work, int requiredWork, out int remainingWork)
+        {
+            if (work <= 0) throw new ArgumentOutOfRangeException(nameof(work));
+            if (requiredWork <= 0) throw new ArgumentOutOfRangeException(nameof(requiredWork));
+            remainingWork = 0;
+            if (!TryGetEntity(id, out BoardEntityState obstacle) || obstacle.Definition.Layer != BoardLayer.Obstacle)
+                return false;
+            int completed = Math.Min(GetObstacleWork(id), requiredWork);
+            remainingWork = Math.Max(0, requiredWork - completed - Math.Min(work, requiredWork));
+            if (remainingWork == 0) TryRemove(id);
+            else obstacleWork[id] = requiredWork - remainingWork;
+            return true;
+        }
+
+        /// <summary>Reads work already spent on a marked cache; revealing or removing it clears partial work.</summary>
+        public int GetCacheWork(EntityId id) => cacheWork.TryGetValue(id, out int work) ? work : 0;
+
+        /// <summary>Reads whether this exact source has ever created its one reward on this board, including after collection.</summary>
+        public bool HasRevealedCache(EntityId id) => cacheRewards.ContainsKey(id);
+
+        /// <summary>Reads the same concrete revealed reward only while that exact definition/identity is still on the ground.</summary>
+        public bool TryGetCacheReward(EntityId id, out CacheRewardItem reward)
+        {
+            reward = null;
+            if (!cacheRewards.TryGetValue(id, out CacheRewardItem candidate) || !TryGetEntity(id, out BoardEntityState entity) ||
+                !entity.Definition.Equals(candidate.Entity.Definition)) return false;
+            reward = candidate;
+            return true;
+        }
+
+        /// <summary>Applies one validated excavation step and atomically replaces a completed marker with one concrete item.</summary>
+        /// <param name="cacheId">The marked item source; revealed sources cannot create a second reward.</param>
+        /// <param name="work">Positive work for this accepted step.</param>
+        /// <param name="requiredWork">Positive authored total shared by manual and shovel alternatives.</param>
+        /// <param name="rewardDefinition">Non-exit item content, separate from the cache marker definition.</param>
+        /// <param name="reward">The exact newly revealed item on completion, otherwise null.</param>
+        /// <returns>False without mutation for a missing/invalid/already revealed source.</returns>
+        public bool TryWorkCache(EntityId cacheId, int work, int requiredWork, BoardEntityDefinition rewardDefinition,
+            out CacheRewardItem reward)
+        {
+            if (work <= 0) throw new ArgumentOutOfRangeException(nameof(work));
+            if (requiredWork <= 0) throw new ArgumentOutOfRangeException(nameof(requiredWork));
+            if (rewardDefinition == null) throw new ArgumentNullException(nameof(rewardDefinition));
+            reward = null;
+            if (!TryGetEntity(cacheId, out BoardEntityState cache) || cache.Definition.Layer != BoardLayer.Item ||
+                cache.Definition.Traits.IsExit || HasRevealedCache(cacheId) || rewardDefinition.Layer != BoardLayer.Item ||
+                rewardDefinition.Traits.IsExit || rewardDefinition.ContentId == cache.Definition.ContentId)
+                return false;
+            int remaining = requiredWork - Math.Min(requiredWork, GetCacheWork(cacheId));
+            if (work < remaining) { cacheWork[cacheId] = requiredWork - remaining + work; return true; }
+            reward = new CacheRewardItem(cache, rewardDefinition);
+            cacheWork.Remove(cacheId);
+            cacheRewards.Add(cacheId, reward);
+            entitiesById[cacheId] = reward.Entity;
+            return true;
+        }
+
+        /// <summary>Creates one visible pit only on free walkable non-exit terrain; no entity, terrain or resource is removed.</summary>
+        /// <param name="terrainId">Exact terrain selected by a validated digging action.</param>
+        /// <param name="lifetimeTurns">Positive number of subsequent accepted commands before expiration.</param>
+        /// <returns>False without mutation if the terrain or any occupancy precondition is invalid.</returns>
+        public bool TryCreatePit(EntityId terrainId, int lifetimeTurns)
+        {
+            if (lifetimeTurns <= 0) throw new ArgumentOutOfRangeException(nameof(lifetimeTurns));
+            if (!CanCreatePit(terrainId)) return false;
+            BoardEntityState terrain = entitiesById[terrainId];
+            pits.Add(terrainId, new BoardPit(nextPitId++, terrainId, terrain.Position, lifetimeTurns));
+            return true;
+        }
+
+        /// <summary>Checks pit occupancy and allocator preconditions without changing terrain or creating a pit.</summary>
+        public bool CanCreatePit(EntityId terrainId) => TryGetEntity(terrainId, out BoardEntityState terrain) &&
+            terrain.Definition.Layer == BoardLayer.Terrain && terrain.Definition.Traits.IsWalkable && !terrain.Definition.Traits.IsExit &&
+            !pits.ContainsKey(terrainId) && !TryGetEntity(BoardLayer.Actor, terrain.Position, out _) &&
+            !TryGetEntity(BoardLayer.Item, terrain.Position, out _) && !TryGetEntity(BoardLayer.Obstacle, terrain.Position, out _) &&
+            nextPitId < long.MaxValue;
+
+        /// <summary>Reads detached immutable pit snapshots in creation order; a fresh board has none.</summary>
+        public IReadOnlyList<BoardPit> GetPits()
+        {
+            var result = new List<BoardPit>(pits.Values);
+            result.Sort((left, right) => left.Id.CompareTo(right.Id));
+            return result.AsReadOnly();
+        }
+
+        /// <summary>Reads the visible pit attached to the exact terrain cell, without creating or refreshing it.</summary>
+        public bool TryGetPit(GridPosition position, out BoardPit pit)
+        {
+            pit = null;
+            return TryGetEntity(BoardLayer.Terrain, position, out BoardEntityState terrain) && pits.TryGetValue(terrain.Id, out pit);
+        }
+
+        /// <summary>Records a supported Shambler's actual entry; only its executor calls this, never Listener or player movement.</summary>
+        /// <returns>True only for a live enemy on an unoccupied pit, without damage or changing cadence.</returns>
+        public bool TryTrapShambler(EntityId actorId, out BoardPit trapped)
+        {
+            trapped = null;
+            if (!TryGetEntity(actorId, out BoardEntityState actor) || actor.Definition.Layer != BoardLayer.Actor ||
+                !actor.Definition.Kind.Equals(EntityKind.Enemy) || !TryGetPit(actor.Position, out BoardPit pit) ||
+                pit.TrappedActorId.HasValue)
+                return false;
+            trapped = new BoardPit(pit.Id, pit.TerrainId, pit.Position, pit.RemainingTurns, actorId);
+            pits[pit.TerrainId] = trapped;
+            return true;
+        }
+
+        /// <summary>Reads whether the same supported actor still occupies a live pit; displacement/removal releases it.</summary>
+        public bool IsTrappedShambler(EntityId actorId) => TryGetEntity(actorId, out BoardEntityState actor) &&
+            TryGetPit(actor.Position, out BoardPit pit) && pit.TrappedActorId.HasValue && pit.TrappedActorId.Value.Equals(actorId);
+
+        private void ReleasePitActor(EntityId actorId)
+        {
+            foreach (BoardPit pit in GetPits())
+                if (pit.TrappedActorId.HasValue && pit.TrappedActorId.Value.Equals(actorId))
+                    pits[pit.TerrainId] = new BoardPit(pit.Id, pit.TerrainId, pit.Position, pit.RemainingTurns);
+        }
+
+        /// <summary>Ages only pits that existed before an accepted command; fresh pits keep their full published lifetime.</summary>
+        /// <param name="throughId">Last pit ID captured before command resolution; negative values age nothing.</param>
+        public void AdvancePitLifetime(long throughId)
+        {
+            foreach (BoardPit pit in GetPits())
+            {
+                if (pit.Id > throughId) continue;
+                if (pit.RemainingTurns == 1) pits.Remove(pit.TerrainId);
+                else pits[pit.TerrainId] = new BoardPit(pit.Id, pit.TerrainId, pit.Position, pit.RemainingTurns - 1, pit.TrappedActorId);
+            }
         }
 
         /// <summary>
@@ -119,6 +316,8 @@ namespace HallowBlaze.Core.Board.State
                 return false;
 
             BoardEntityState movedEntity = entity.WithPosition(destination);
+            pits.Remove(id);
+            ReleasePitActor(id);
             layer.Remove(entity.Position);
             layer.Add(destination, id);
             entitiesById[id] = movedEntity;
@@ -198,6 +397,17 @@ namespace HallowBlaze.Core.Board.State
             {
                 clone.activeNoises.Add(noise);
             }
+            foreach (var progress in obstacleWork)
+                clone.obstacleWork.Add(progress.Key, progress.Value);
+            foreach (var pit in pits)
+                clone.pits.Add(pit.Key, pit.Value);
+            foreach (var progress in cacheWork)
+                clone.cacheWork.Add(progress.Key, progress.Value);
+            foreach (var reward in cacheRewards)
+                clone.cacheRewards.Add(reward.Key, reward.Value);
+            foreach (var tool in groundTools)
+                clone.groundTools.Add(tool.Key, tool.Value);
+            clone.nextPitId = nextPitId;
             clone.nextNoiseId = nextNoiseId;
             foreach (var listener in listenerNoises)
                 clone.listenerNoises.Add(listener.Key, listener.Value);

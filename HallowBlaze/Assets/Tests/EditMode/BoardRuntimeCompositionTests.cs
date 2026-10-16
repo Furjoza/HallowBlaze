@@ -48,7 +48,9 @@ namespace HallowBlaze.Tests.EditMode
                 LegacyBoardContentKind.BuriedFood,
                 LegacyBoardContentKind.Aid,
                 LegacyBoardContentKind.Enemy,
-                LegacyBoardContentKind.Listener
+                LegacyBoardContentKind.Listener,
+                LegacyBoardContentKind.DiggableGround,
+                LegacyBoardContentKind.Tool
             };
 
             CollectionAssert.AreEquivalent(
@@ -72,6 +74,64 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(listener.Layer, Is.EqualTo(BoardLayer.Actor));
             Assert.That(listener.EntityKind, Is.EqualTo(EntityKind.Enemy));
             Assert.That(LegacyBoardContentCatalog.DeferredLegacyMutationPaths, Is.Empty);
+        }
+
+        /// <summary>Blueprint tool bindings preserve instance/source identity and reject duplicate, foreign or already-equipped instances before publication.</summary>
+        [TestCase("valid")]
+        [TestCase("duplicate")]
+        [TestCase("unallocated")]
+        [TestCase("equipped")]
+        [TestCase("source")]
+        [TestCase("missing-binding")]
+        public void BlueprintCompositionValidatesConcreteGroundTools(string scenario)
+        {
+            var run = new RunState("pickup-blueprint", 56, new RunStateConfiguration(100, 20, 0, "forest.start"));
+            run.StartLeg("edge", "forest.start", "destination", new[] { new RouteSegmentState("segment", "pickup.fixture", 1) });
+            var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed, run.WorldNodeId, "forest", "temperate", 1);
+            var floor = new BoardEntityDefinition(BoardLayer.Terrain, new EntityKind("terrain"), "test.floor", new BoardEntityTraits(true, false, false));
+            var blocked = new BoardEntityDefinition(BoardLayer.Terrain, new EntityKind("terrain"), "test.blocked");
+            var exit = new BoardEntityDefinition(BoardLayer.Terrain, new EntityKind("terrain"), "test.exit", new BoardEntityTraits(true, true, false));
+            var player = new BoardEntityDefinition(BoardLayer.Actor, EntityKind.Player, "test.player");
+            var toolDefinition = new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, "shovel.basic");
+            var config = new BoardGenerationConfig("pickup.fixture", 1, new GenerationRange(1, 63), new GenerationRange(0, 64),
+                new GenerationRange(0, 0), new GenerationRange(0, 0), 0, 0,
+                new[] { floor.ContentId, blocked.ContentId, exit.ContentId, player.ContentId, toolDefinition.ContentId },
+                new[] { new ResourceGenerationBudget("tools", new GenerationRange(1, 1)) });
+            var entities = new List<BoardEntityState>();
+            for (int horizontal = 0; horizontal < 8; horizontal++)
+            for (int vertical = 0; vertical < 8; vertical++)
+                entities.Add(new BoardEntityState(new EntityId(100 + horizontal * 8 + vertical),
+                    horizontal == 7 && vertical == 7 ? exit : horizontal == 0 && vertical == 7 ? blocked : floor,
+                    new GridPosition(horizontal, vertical)));
+            entities.Add(new BoardEntityState(new EntityId(1), player, new GridPosition(0, 0)));
+            entities.Add(new BoardEntityState(new EntityId(3), toolDefinition, new GridPosition(1, 0)));
+            var blueprint = new BoardBlueprint(request.Address, config, entities,
+                new[] { new BoardItemSpawn("spawn.shovel", new EntityId(3), "shovel.basic", "tools", "source.shovel") });
+            var catalog = new BoardValidationCatalog(new[] { floor, blocked, exit, player, toolDefinition },
+                new[] { new KeyValuePair<string, string>("shovel.basic", "tools") },
+                new[] { new KeyValuePair<string, string>("source.shovel", "shovel.basic") });
+            var views = entities.ToDictionary(entity => entity.Id, entity => CreateView(entity.Definition.ContentId, entity.Position.X, entity.Position.Y));
+            ToolInstanceState instance = run.CreateToolInstance(new ToolDefinition("shovel.basic", "Shovel", 3));
+            if (scenario == "equipped") run.EquipTool(0, instance);
+            var ground = new GroundToolState(new EntityId(scenario == "missing-binding" ? 9999 : 3),
+                scenario == "unallocated" ? "tool.999" : instance.InstanceId, instance.DefinitionId, instance.Charges,
+                scenario == "source" ? "other.source" : "source.shovel");
+            GroundToolState[] bindings = scenario == "duplicate" ? new[] { ground, ground } : new[] { ground };
+            if (scenario == "valid")
+            {
+                using (BoardRuntime runtime = BlueprintBoardRuntimeComposer.Compose(request, run, blueprint, catalog, views, groundTools: bindings))
+                {
+                    Assert.That(runtime.BoardState.TryGetGroundTool(new EntityId(3), out GroundToolState actual), Is.True);
+                    Assert.That(actual, Is.SameAs(ground));
+                    Assert.That(runtime.Pickups.GetOptions(runtime.BoardState, run, runtime.PlayerId).Single().Tool, Is.SameAs(ground));
+                    Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
+                }
+            }
+            else Assert.Throws<BoardRuntimeCompositionException>(() =>
+                BlueprintBoardRuntimeComposer.Compose(request, run, blueprint, catalog, views, groundTools: bindings));
+            Assert.That(run.ToolInstanceSequence, Is.EqualTo(1));
+            Assert.That(run.Food, Is.EqualTo(20));
+            Assert.That(blueprint.CreateState().TryGetGroundTool(new EntityId(3), out _), Is.False);
         }
 
         /// <summary>Blueprint composition retains IDs, independent state and catalog enemy rules even after the caller clears its bindings.</summary>

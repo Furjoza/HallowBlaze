@@ -54,6 +54,12 @@ namespace HallowBlaze.Core.Turns.Resolution
                 return;
             }
 
+            if (boardState.IsTrappedShambler(actor.Id))
+            {
+                events.Add(new EntityWaitedEvent(actor.Id));
+                return;
+            }
+
             if (intent.Kind == EnemyIntentKind.Move)
             {
                 GridPosition destination = intent.TargetPosition.Value;
@@ -64,6 +70,8 @@ namespace HallowBlaze.Core.Turns.Resolution
                         boardState.TryMove(actor.Id, destination))
                     {
                         events.Add(new EntityMovedEvent(actor.Id, actor.Position, destination));
+                        if (boardState.TryTrapShambler(actor.Id, out BoardPit pit))
+                            events.Add(new ShamblerTrappedEvent(pit));
                         return;
                     }
                     if (intent.AttackOnPlayerEntry && HasRecordedPlayer(boardState, intent))

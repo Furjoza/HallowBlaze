@@ -45,6 +45,8 @@ namespace HallowBlaze.Core.Turns.Resolution
                     !board.TryGetEntity(BoardLayer.Actor, destination, out _) && board.TryMove(actor.Id, destination))
                 {
                     events.Add(new EntityMovedEvent(actor.Id, actor.Position, destination));
+                    events.Add(new ListenerInvestigatedEvent(actor.Id, actor.Position, destination,
+                        intent.NoiseId.Value, intent.InvestigationTarget.Value));
                     return;
                 }
             }

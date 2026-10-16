@@ -24,13 +24,15 @@ namespace HallowBlaze.Presentation.Runtime
         /// <param name="runState">The active run referenced by the request.</param>
         /// <param name="bounds">Inclusive bounds for all mapped gameplay content.</param>
         /// <param name="views">The complete generated layout, including presentation-only views.</param>
+        /// <param name="tools">Optional explicit tool dispatch and action-cost policy; null gives placeholders no effects.</param>
         /// <returns>A complete, unpublished runtime ready for atomic ownership transfer.</returns>
         /// <exception cref="BoardRuntimeCompositionException">The request or generated layout is invalid.</exception>
         public static BoardRuntime Compose(
             BoardRequest request,
             RunState runState,
             GridBounds bounds,
-            IEnumerable<LegacyBoardView> views)
+            IEnumerable<LegacyBoardView> views,
+            ToolUseQuery tools = null)
         {
             ValidateIdentity(request, runState);
             if (views == null)
@@ -71,6 +73,14 @@ namespace HallowBlaze.Presentation.Runtime
                 }
                 else if (descriptor.EnemyDamage.HasValue)
                     throw Diagnostic(BoardRuntimeDiagnosticCode.InvalidInput, "damage-without-enemy:" + descriptor.Kind);
+                if (descriptor.Kind == LegacyBoardContentKind.Tool)
+                {
+                    if (!runState.CanReceiveTool(0, descriptor.Tool) || descriptor.SourceId != null &&
+                        (string.IsNullOrWhiteSpace(descriptor.SourceId) || descriptor.SourceId != descriptor.SourceId.Trim()))
+                        throw Diagnostic(BoardRuntimeDiagnosticCode.InvalidInput, "tool:unallocated-equipped-or-invalid-source");
+                }
+                else if (descriptor.Tool != null || descriptor.SourceId != null)
+                    throw Diagnostic(BoardRuntimeDiagnosticCode.InvalidInput, "tool-data-without-tool:" + descriptor.Kind);
                 if (content.Classification == LegacyBoardContentClassification.PresentationOnly)
                     continue;
                 if (content.Classification == LegacyBoardContentClassification.IntentionallyDisabled)
@@ -128,6 +138,8 @@ namespace HallowBlaze.Presentation.Runtime
                 MappedView mappedView = mapped[index];
                 var id = new EntityId(index + 1L);
                 BoardEntityDefinition definition = mappedView.Content.CreateBoardDefinition();
+                if (mappedView.Descriptor.Tool != null)
+                    definition = new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, mappedView.Descriptor.Tool.DefinitionId);
                 if (mappedView.Descriptor.Kind == LegacyBoardContentKind.Floor &&
                     exitPositions.Contains(mappedView.Descriptor.Position))
                 {
@@ -146,6 +158,13 @@ namespace HallowBlaze.Presentation.Runtime
                 }
 
                 registry.Add(id, mappedView.Descriptor.View);
+                if (mappedView.Descriptor.Tool != null)
+                {
+                    var instance = mappedView.Descriptor.Tool;
+                    if (!boardState.TryBindGroundTool(new GroundToolState(id, instance.InstanceId, instance.DefinitionId,
+                        instance.Charges, mappedView.Descriptor.SourceId)))
+                        throw Diagnostic(BoardRuntimeDiagnosticCode.DuplicateEntity, "tool-instance:" + instance.InstanceId);
+                }
                 if (mappedView.Descriptor.Kind == LegacyBoardContentKind.Player)
                     playerId = id;
                 else if (mappedView.Descriptor.Kind == LegacyBoardContentKind.Enemy)
@@ -154,7 +173,7 @@ namespace HallowBlaze.Presentation.Runtime
                     listeners.Add(new ListenerState(id, new ListenerDefinition()));
             }
 
-            return new BoardRuntime(request, runState, boardState, playerId, registry, enemies, listeners);
+            return new BoardRuntime(request, runState, boardState, playerId, registry, enemies, listeners, tools);
         }
 
         private static void ValidateIdentity(BoardRequest request, RunState runState)

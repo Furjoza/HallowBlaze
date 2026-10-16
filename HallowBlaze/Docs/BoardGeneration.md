@@ -34,6 +34,94 @@ M4.3 validates static reachability, catalogs, budgets, and the supported opening
 M4.4 generates and presents only a validated blueprint. Construction and raw-candidate validation
 share one structural rule implementation rather than competing checks.
 
+## M6.1 Authored Landmark Templates
+
+`HallowBlaze.Core.Generation.Landmarks` adds an engine-free authoring path over the same
+`BoardBlueprint` and `BoardState`. It does not invoke the ordinary generator, add a second
+occupancy model, resolve puzzle goals, or grant rewards. M6.1 supports the existing 8x8 bounds;
+larger authored boards are not silently squeezed into this format.
+
+`LandmarkTemplateJson.Deserialize(json, catalog)` reads schema v1 against an externally supplied
+`BoardValidationCatalog`. It returns an immutable `LandmarkTemplate` with a stable template ID,
+positive content version, explicit generation configuration, at least one named variant and at
+least two named outcomes, including a mandatory goal. It rejects duplicate/unknown fields,
+incorrect field casing, scalar coercion, unsupported schemas, duplicate IDs, invalid layer/content
+references, inconsistent item/family/source bindings, invalid board structure and missing goals.
+Malformed input fails before publication; it is not repaired or replaced by ordinary generation.
+JSON errors identify their field path; layout/goal errors include template and variant identity.
+
+### Authoring Schema
+
+The complete loadable example is [sanity-template.json](../Assets/GameData/Landmarks/sanity-template.json).
+Every field below is required unless marked optional. Integers are Int32; IDs/names must be
+nonblank strings without surrounding whitespace. Lists are explicit, including empty item or
+resource-budget lists. Property names, layer names and textual identities are case-sensitive.
+
+| Object | Fields | Contract |
+| --- | --- | --- |
+| Root | `schemaVersion`, `templateId`, `templateVersion`, `configuration`, `variants`, `outcomes` | Authoring schema 1; template identity is independent of any world node or segment. |
+| Configuration | `id`, `version`, `pathLength`, `branchPoints`, `obstacleCount`, `enemyCount`, `maximumConcurrentThreats`, `minimumSafeStartMoves`, `allowedContentIds`, `resourceBudgets` | Existing `BoardGenerationConfig` contract; each range has integer `minimum`/`maximum`. Configuration ID/version must match the eventual `BoardAddress`. |
+| Resource budget | `resourceFamilyId`, `itemCount` | Known family and the existing inclusive item-count range, not resource restoration amounts. |
+| Variant | `id`, `entities`, `items` | Distinct stable ID; explicit detached layout. No rotation, random selection or procedural puzzle creation is inferred. |
+| Entity | `id`, `layer`, `contentId`, `x`, `y` | Board-local entity ID and exact existing catalog definition for `Terrain`, `Obstacle`, `Item` or `Actor`; no serialized traits, prefab or Unity ID. |
+| Item | `instanceId`, `entityId`, `itemDefinitionId`, `resourceFamilyId`, `initiallyObservable`; optional nullable `sourceId` | Same generic spawn/binding rules as ordinary blueprints. A fixed source must resolve to this definition. |
+| Outcome | `id`, `name`, `exitEntityId`, `optional`; optional nullable `requiredToolDefinitionId`, `guaranteedToolInstanceId` | Names a future result and a walkable terrain-exit marker present in every variant. It is not an executed outcome or a solution script. |
+
+All public collections are read-only snapshots. Variant/outcome keys, rather than array indices,
+identify content; the blueprint normalizes entity/item order. Repeated construction with the
+same inputs is deterministic and does not consume gameplay or cosmetic RNG. Blueprint hashing
+retains every address field and is still the existing comparison encoding, not portable replay.
+
+### Goals And Tool Guarantees
+
+An optional outcome may declare a required tool without promising it. A mandatory outcome may
+not depend on random loot: a declared tool requirement must identify one concrete initial
+`BoardItemSpawn` by `guaranteedToolInstanceId` in **every** permitted variant. Its definition must
+match the requirement, resolve to the `tools` family, be allowed and initially observable. Its
+cell must be statically reachable from the start without a tool, blocking obstacle or prior exit.
+Merely naming a tool, claiming a source, or putting it behind its own exit is not a guarantee.
+This static check ignores actor pressure and is not proof of tactical survival or puzzle solvability.
+
+Structural template validation uses the existing blueprint rules. It does not prove target-budget
+compliance or dynamically solve gates, boulders and plates. The open sanity fixture also passes
+the ordinary `BoardValidator`, including tool-free exit reachability and its explicit budgets.
+M6.2/M6.3 own mechanical rules; M6.4 owns meaningful costs/rewards and executed outcomes;
+M6.5/M6.6 own solving and curated variants. The two sanity declarations are:
+
+| Outcome ID | Working name | Terrain goal | Requirement |
+| --- | --- | --- | --- |
+| `arrival.safe` | Safe arrival | Entity `2`, cell `(6,6)` | Mandatory, tool-free |
+| `arrival.alternate` | Alternate arrival | Entity `3`, cell `(6,1)` | Optional, tool-free |
+
+These are plumbing examples, not two validated final puzzle solutions or accepted balance.
+
+### Segment Assignment And Compatibility
+
+[sanity-world.json](../Assets/GameData/Landmarks/sanity-world.json) is a separate authoring fixture,
+not a replacement for the published prototype world. Its five directed roads contain eight boards
+in total. The fifth inbound road contains an ordinary entry segment and final landmark segment
+`segment.sanity.day5.arrival`; the destination already has `placeKind: landmark`.
+
+[sanity-placement.json](../Assets/GameData/Landmarks/sanity-placement.json) uses authoring schema 1
+with required `worldDefinitionId`, `worldVersion`, `segmentId`, `templateId`, `templateVersion`
+and `variantId`. `DeserializePlacement(json, world, template)` validates both publication versions,
+an existing source and landmark destination, final inbound segment, matching generation
+configuration and a permitted variant. Node IDs, ordinal positions and `day % 5` never route to a
+landmark. The assignment does not add an extra day or mark arrival before the final board ends.
+
+`placement.CreateBoard(actualAddress)` rejects a different edge/segment/configuration and returns
+`LandmarkBoard`: template ID/version, variant ID and the ordinary blueprint with the exact full
+address. `Blueprint.CreateState()` builds independent runtime state. Named outcomes remain
+declarations; reaching an exit through the current resolver does not yet persist a named result.
+
+M6.1 adds no run/profile DTO fields, migration, reset or mid-board save. Existing run v4 travel
+data round-trips the fixture's active segment/configuration/seed and reconstructs the same board
+against the same frozen placement. M6.4 activation must persist explicit selected template/variant
+and completed outcome identity at the completed-board boundary; M6.6 must pin random selection,
+not reroll it on load. Those runtime save changes require compatible versioning before activation.
+Do not change a published mapping/layout under the same generation contract. The authoring
+fixture is not registered with `GameManager`, the scene bootstrap or ordinary fallback selection.
+
 ## Generic items and initial supply
 
 `BoardItemSpawn` binds one non-exit item-layer entity to one textual instance ID,
