@@ -1,5 +1,37 @@
 # HallowBlaze Testing
 
+## M5.5 Shovel
+
+Marked `legacy.buried-food` caches require three manual actions or one shovel use. Completion
+creates one concrete `shovel.cache-ration` item with a source entity and stable board-local
+instance ID before the pre-M9 compatibility adapter collects it. Food +10 precedes action cost;
+overflow rejects before work, reveal or charge mutation. The same reward can remain ground
+state without changing its identity when immediate transfer is disabled.
+
+Only explicitly authored `LegacyBoardContentKind.DiggableGround` / `shovel.diggable` terrain
+supports pits. Published generator configurations do not place this new content automatically.
+A fresh visible pit retains four subsequent accepted commands; pre-command pits age before
+enemy execution, never on rejection. Actual Shambler entry holds it until expiry without damage.
+An already announced Wait still executes when the pit expires. Player and Listener movement
+remain unaffected, so the exit never requires a shovel. Creation alone grants no knowledge;
+only ordered presentation of `ShamblerTrappedEvent` records `PIT_TRAPS_SHAMBLER`.
+
+Run focused checks sequentially against the active project:
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter 'HallowBlaze.Tests.EditMode.ShovelTests;HallowBlaze.Tests.EditMode.BoardStateTests;HallowBlaze.Tests.EditMode.BoardRuntimeCompositionTests' --output "$env:TEMP/HB-M55-domain.xml" -- -nographics -logFile "$env:TEMP/HB-M55-domain.log"
+unity test $project --mode PlayMode --filter HallowBlaze.Tests.PlayMode.ShovelPresentationTests --output "$env:TEMP/HB-M55-view.xml" -- -logFile "$env:TEMP/HB-M55-view.log"
+```
+
+The graphics gate exercises both cache routes and animation modes, visible work/lifetime/charge
+labels, ordered observation, isolated profile/run round-trips and reset. Pixel-checked real-sprite
+captures are written outside the project as `%TEMP%/HB-M55-cache.png` and `%TEMP%/HB-M55-pit.png`.
+Full EditMode and graphics PlayMode also protect the existing axe, Listener, picker and lifecycle
+paths. Require fresh nonzero XML with zero failures. These automated checks do not close M4.9's
+human prediction/readability gate. Pits and uncollected cache rewards remain transient board state;
+run schema v4 and profile schema v2 are unchanged.
+
 ## M4.8 Listener
 
 **Rule:** The Listener remembers the latest noise audible at emission and takes the announced

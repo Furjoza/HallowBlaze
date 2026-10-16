@@ -24,13 +24,15 @@ namespace HallowBlaze.Presentation.Runtime
         /// <param name="runState">The active run referenced by the request.</param>
         /// <param name="bounds">Inclusive bounds for all mapped gameplay content.</param>
         /// <param name="views">The complete generated layout, including presentation-only views.</param>
+        /// <param name="tools">Optional explicit tool dispatch and action-cost policy; null gives placeholders no effects.</param>
         /// <returns>A complete, unpublished runtime ready for atomic ownership transfer.</returns>
         /// <exception cref="BoardRuntimeCompositionException">The request or generated layout is invalid.</exception>
         public static BoardRuntime Compose(
             BoardRequest request,
             RunState runState,
             GridBounds bounds,
-            IEnumerable<LegacyBoardView> views)
+            IEnumerable<LegacyBoardView> views,
+            ToolUseQuery tools = null)
         {
             ValidateIdentity(request, runState);
             if (views == null)
@@ -154,7 +156,7 @@ namespace HallowBlaze.Presentation.Runtime
                     listeners.Add(new ListenerState(id, new ListenerDefinition()));
             }
 
-            return new BoardRuntime(request, runState, boardState, playerId, registry, enemies, listeners);
+            return new BoardRuntime(request, runState, boardState, playerId, registry, enemies, listeners, tools);
         }
 
         private static void ValidateIdentity(BoardRequest request, RunState runState)
