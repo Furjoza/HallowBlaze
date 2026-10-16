@@ -29,7 +29,7 @@ namespace HallowBlaze.Presentation.Runtime
         public static InteractionQuery CreateInteractions(ObstacleClearingRules rules) => new InteractionQuery(new IInteractionAction[]
             { new ContextInteractionAction(), new CollectInteractionAction(), new ClearObstacleAction(rules, false) });
 
-        /// <summary>Registers chopping only for the stable axe definition; the shovel remains without an effect.</summary>
+        /// <summary>Creates the axe-only catalog; the combined runtime catalog also registers separate shovel content.</summary>
         public static ToolUseQuery CreateTools(ObstacleClearingRules rules) => new ToolUseQuery(new[]
         {
             new ToolAction(ObstacleClearingRules.AxeDefinitionId, new ClearObstacleAction(rules, true), "Chop: clear obstacle",

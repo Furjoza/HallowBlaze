@@ -48,7 +48,8 @@ namespace HallowBlaze.Tests.EditMode
                 LegacyBoardContentKind.BuriedFood,
                 LegacyBoardContentKind.Aid,
                 LegacyBoardContentKind.Enemy,
-                LegacyBoardContentKind.Listener
+                LegacyBoardContentKind.Listener,
+                LegacyBoardContentKind.DiggableGround
             };
 
             CollectionAssert.AreEquivalent(

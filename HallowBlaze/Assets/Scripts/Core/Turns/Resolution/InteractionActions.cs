@@ -10,11 +10,16 @@ namespace HallowBlaze.Core.Turns.Resolution
     /// <summary>Preserves the existing feedback-only interaction for explicitly interactive non-food entities.</summary>
     public sealed class ContextInteractionAction : IInteractionAction
     {
+        private readonly string excludedContentId;
+
+        /// <summary>Preserves generic feedback except for content owned by an explicitly registered action.</summary>
+        public ContextInteractionAction(string excludedContentId = null) { this.excludedContentId = excludedContentId; }
+
         /// <inheritdoc />
         public string Id => "interact";
         /// <inheritdoc />
         public bool Supports(BoardEntityState target) => target.Definition.Traits.IsInteractable &&
-            target.Definition.AutomaticFoodReward == 0;
+            target.Definition.AutomaticFoodReward == 0 && target.Definition.ContentId != excludedContentId;
         /// <inheritdoc />
         public InteractionAvailability Evaluate(BoardState board, RunState run, BoardEntityState player, BoardEntityState target)
             => InteractionAvailability.Available;

@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace HallowBlaze.Presentation.Runtime
 {
-    /// <summary>Identifies every content category emitted by the current legacy board generator.</summary>
+    /// <summary>Identifies generated and explicitly authored content accepted by the legacy runtime composer.</summary>
     public enum LegacyBoardContentKind
     {
         /// <summary>Represents content for which no supported classification exists.</summary>
@@ -37,7 +37,7 @@ namespace HallowBlaze.Presentation.Runtime
         /// <summary>A bush food pickup restoring ten Food.</summary>
         BushFood,
 
-        /// <summary>A buried carrot requiring an explicit legacy gathering action.</summary>
+        /// <summary>A visibly marked cache with a slow manual alternative and faster shovel excavation.</summary>
         BuriedFood,
 
         /// <summary>A legacy health pickup.</summary>
@@ -47,7 +47,10 @@ namespace HallowBlaze.Presentation.Runtime
         Enemy,
 
         /// <summary>An explicitly authored noise-only Listener, never inferred from a Shambler damage variant.</summary>
-        Listener
+        Listener,
+
+        /// <summary>Explicitly authored walkable ground supporting visible temporary shovel pits, never inferred from ordinary floors.</summary>
+        DiggableGround
     }
 
     /// <summary>Describes how one legacy content category participates in the authoritative runtime.</summary>
@@ -236,7 +239,9 @@ namespace HallowBlaze.Presentation.Runtime
                     "legacy.aid",
                     new BoardEntityTraits(false, false, true)),
                 Mapped(LegacyBoardContentKind.Enemy, BoardLayer.Actor, EntityKind.Enemy, "legacy.enemy"),
-                Mapped(LegacyBoardContentKind.Listener, BoardLayer.Actor, EntityKind.Enemy, "enemy.listener")
+                Mapped(LegacyBoardContentKind.Listener, BoardLayer.Actor, EntityKind.Enemy, "enemy.listener"),
+                Mapped(LegacyBoardContentKind.DiggableGround, BoardLayer.Terrain, new EntityKind("terrain"), "shovel.diggable",
+                    new BoardEntityTraits(true, false, false))
             });
 
         private static readonly IReadOnlyDictionary<LegacyBoardContentKind, LegacyBoardContentDefinition> byKind =

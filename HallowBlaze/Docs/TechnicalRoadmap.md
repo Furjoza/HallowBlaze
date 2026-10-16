@@ -5061,13 +5061,13 @@ Manual work persists between actions and the axe completes whatever work remains
 
 ## `M5.5` — Łopata: schowek i dół
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-16).
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 13.3 i 13.4.
 
 **Rationale:** Łopata ma łączyć eksplorację z manipulowaniem planszą, a nie wyłącznie skracać animację zbierania. Schowek daje korzyść ekonomiczną, dół daje taktyczną kontrolę pola.
 
-**Obecne zachowanie:** Brak oznaczonych schowków, domenowego digging progress i tymczasowej pułapki na zombie.
+**Implemented behavior:** Explicit `legacy.buried-food` caches share board-owned progress: three manual actions or one shovel action reveal one `shovel.cache-ration` item. The item retains its source entity ID and stable board-local `cache.reward.<entity-id>` instance ID; the pre-M9 adapter collects that exact item before charge/action cost. An uncollected reward remains board state. Only explicitly authored `shovel.diggable` terrain supports pits; ordinary floors are not inferred as diggable.
 
 **Oczekiwany rezultat:** A marked cache has a slow alternative or explicitly optional reward; the shovel reveals it quickly. The reward is represented by one concrete stable item definition/instance rather than a raw `RestoreFood` call. Before M9, a compatibility adapter may resolve that item immediately under O-003; M9.5 replaces the adapter with the shared item decision. The second shovel use creates a temporary pit for a supported archetype.
 
@@ -5086,6 +5086,19 @@ Manual work persists between actions and the axe completes whatever work remains
 **Wpływ na save i kompatybilność:** Charges/facts as in M5.4; pit and an uncollected revealed cache item are `BoardState`. M9.5 later owns the item transfer choice without changing the cache/source identity.
 
 **Wymagany handoff:** Macierz zastosowanie → korzyść → koszt/ryzyko → alternatywa bez narzędzia.
+
+**Application matrix:**
+
+| Application | Benefit | Cost / risk | Tool-free alternative |
+| --- | --- | --- | --- |
+| Marked cache | One concrete Food +10 item in one action instead of three | One turn, Food -1, one charge; noise strength 2 / lifetime 2 | Three manual actions, Food -1 and the same noise per action; optional reward may also be left unexplored |
+| Pit on explicitly authored ground | A Shambler actually entering the cell waits until pit expiry, without damage | One turn, Food -1, one charge; noise 2 / 2; visible pit survives four subsequent accepted commands | Keep using the walkable route or avoid the enemy; no mandatory objective or exit requires a pit |
+
+**Lifetime and observation:** Fresh pits retain all four turns on the creation command. Only pre-command pits age after acceptance, before locked enemy execution; rejection ages nothing. Expiry clears the hold, but a published Wait still executes before normal planning resumes. Player and Listener movement is unaffected. Presentation shows `CACHE n/3`, `PIT Tn` and `WAIT`, plus existing charge/cost/noise previews. Only replaying an actual `ShamblerTrappedEvent` observes and durably records `PIT_TRAPS_SHAMBLER`; creation, preview, cancellation and unpresented domain resolution do not. Facts never enable these rules.
+
+**Scope and compatibility:** Run schema v4 / profile schema v2 remain unchanged. Charges and observed facts use existing save boundaries; pits, cache progress, reward tombstones and uncollected items are transient `BoardState` with independent clone collections. No automatic equipment, pickup/replacement, atlas source IDs, scenes, prefabs, generator placement/version changes, settings or packages were added. Explicit authored ground is opt-in; published generators remain unchanged.
+
+**Acceptance:** Completed from clean `9505c75447a3d9c8a17f198de959699b95a6b6ed` on `M5/5/Shovel`, Git root `D:/Repos/HallowBlaze`, by direct Lead implementation at the owner's request without Developer delegation. Unity 6000.3.21f1 passed full EditMode 1030 tests with only the existing Explicit milestone skipped, full graphics PlayMode 157/157, final focused domain/composition 59/59 and shovel presentation 5/5. Independent Reviewer returned PASS for cache/reward, pit/enemy and presentation/integration; a bounded recheck resolved unsupported dead-code claims and confirmed resolver ordering. Asset/meta, scope, diagnostics and whitespace checks passed. The owner's card-specific authorization does not close M4.9 or authorize M5.6. No commit or push was performed.
 
 ---
 
@@ -6151,7 +6164,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further M5 content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4 implementation with Reviewer. All four cards are Done; M5.4 passed full EditMode 1001 tests plus the existing Explicit skip and graphics PlayMode 152/152, with independent Reviewer PASS across its reviewed scopes. These card-specific exceptions do not close M4.9 or authorize execution of M5.5, which remains Planned. Preserve independent review on later cards unless separately waived;
+1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further M5 content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5 implementation with Reviewer. All five cards are Done; M5.5 passed full EditMode 1030 tests plus the existing Explicit skip and graphics PlayMode 157/157, with independent Reviewer PASS across its reviewed scopes. These card-specific exceptions do not close M4.9 or authorize execution of M5.6, which remains Planned. Preserve independent review on later cards unless separately waived;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6185,7 +6198,9 @@ M5.2 was completed on 2026-10-16 at the owner's explicit request from clean base
 
 M5.3 was completed on 2026-10-16 at the owner's explicit request from clean baseline `7de0b2b722b23cc3bc8046773ff20d678c6b78f2` on `M5/2/ItemsItems`, with direct Lead implementation and no Developer delegation. It adds exact tool decisions, shared preview/dispatch, atomic accepted charge/cost/noise events, stale/replay rejection and presentation through the existing picker. Full EditMode passed 987 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 143/143. Independent Reviewer returned PASS for the domain, picker and runtime integration. Run schema v4 and production axe/shovel effects were unchanged by M5.3. M4.9 remains Pending. No commit or push was performed.
 
-M5.4 was completed on 2026-10-16 at the owner's explicit request from clean baseline `1bce2b7625950af57ff914953e72d84c95d23f80` on `M5/4/Axe`, with direct Lead implementation and independent Reviewer PASS across domain, presentation and integration. Board-owned progress supports three manual actions or one charge-consuming axe action, with authored strength 1 versus 6 and exact Listener/UI noise identity. The observed axe-noise fact persists in profile schema v2; run schema v4 is unchanged. Full EditMode passed 1001 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 152/152. M4.9 remains Pending with no human result; M5.5 remains Planned, not authorized for automatic execution. No commit or push was performed.
+M5.4 was completed on 2026-10-16 at the owner's explicit request from clean baseline `1bce2b7625950af57ff914953e72d84c95d23f80` on `M5/4/Axe`, with direct Lead implementation and independent Reviewer PASS across domain, presentation and integration. Board-owned progress supports three manual actions or one charge-consuming axe action, with authored strength 1 versus 6 and exact Listener/UI noise identity. The observed axe-noise fact persists in profile schema v2; run schema v4 is unchanged. Full EditMode passed 1001 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 152/152. M4.9 remains Pending with no human result. At that closeout, M5.5 remained Planned and required the later explicit owner request recorded below. No commit or push was performed.
+
+M5.5 was completed on 2026-10-16 at the owner's explicit request from clean baseline `9505c75447a3d9c8a17f198de959699b95a6b6ed` on `M5/5/Shovel`, with direct Lead implementation and independent Reviewer PASS. Marked caches offer three manual actions or one shovel action, producing one identity-bearing reward before the transitional transfer and action cost. Explicit diggable ground supports a visible four-command pit that holds only a Shambler after actual entry; the observed trap fact persists in the profile. Full EditMode passed 1030 tests with the existing Explicit milestone skipped; graphics PlayMode passed 157/157. Run/profile schemas and published generators are unchanged. M4.9 remains Pending without a human result; M5.6 remains Planned and is not automatically authorized. No commit or push was performed.
 
 # Zasada aktualizacji roadmapy
 

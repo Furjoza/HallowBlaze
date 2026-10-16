@@ -21,6 +21,10 @@ namespace HallowBlaze.Core.Board.State
         private readonly Dictionary<EntityId, BoardEntityState> entitiesById;
         private readonly Dictionary<BoardLayer, Dictionary<GridPosition, EntityId>> entityIdsByLayer;
         private readonly Dictionary<EntityId, int> obstacleWork = new Dictionary<EntityId, int>();
+        private readonly Dictionary<EntityId, BoardPit> pits = new Dictionary<EntityId, BoardPit>();
+        private readonly Dictionary<EntityId, int> cacheWork = new Dictionary<EntityId, int>();
+        private readonly Dictionary<EntityId, CacheRewardItem> cacheRewards = new Dictionary<EntityId, CacheRewardItem>();
+        private long nextPitId;
         private readonly List<BoardNoise> activeNoises;
         private readonly Dictionary<EntityId, BoardNoise> listenerNoises = new Dictionary<EntityId, BoardNoise>();
         private long nextNoiseId;
@@ -94,6 +98,9 @@ namespace HallowBlaze.Core.Board.State
             layer.Remove(entity.Position);
             entitiesById.Remove(id);
             obstacleWork.Remove(id);
+            cacheWork.Remove(id);
+            pits.Remove(id);
+            ReleasePitActor(id);
             listenerNoises.Remove(id);
             return true;
         }
@@ -122,6 +129,121 @@ namespace HallowBlaze.Core.Board.State
             return true;
         }
 
+        /// <summary>Reads work already spent on a marked cache; revealing or removing it clears partial work.</summary>
+        public int GetCacheWork(EntityId id) => cacheWork.TryGetValue(id, out int work) ? work : 0;
+
+        /// <summary>Reads whether this exact source has ever created its one reward on this board, including after collection.</summary>
+        public bool HasRevealedCache(EntityId id) => cacheRewards.ContainsKey(id);
+
+        /// <summary>Reads the same concrete revealed reward only while that exact definition/identity is still on the ground.</summary>
+        public bool TryGetCacheReward(EntityId id, out CacheRewardItem reward)
+        {
+            reward = null;
+            if (!cacheRewards.TryGetValue(id, out CacheRewardItem candidate) || !TryGetEntity(id, out BoardEntityState entity) ||
+                !entity.Definition.Equals(candidate.Entity.Definition)) return false;
+            reward = candidate;
+            return true;
+        }
+
+        /// <summary>Applies one validated excavation step and atomically replaces a completed marker with one concrete item.</summary>
+        /// <param name="cacheId">The marked item source; revealed sources cannot create a second reward.</param>
+        /// <param name="work">Positive work for this accepted step.</param>
+        /// <param name="requiredWork">Positive authored total shared by manual and shovel alternatives.</param>
+        /// <param name="rewardDefinition">Non-exit item content, separate from the cache marker definition.</param>
+        /// <param name="reward">The exact newly revealed item on completion, otherwise null.</param>
+        /// <returns>False without mutation for a missing/invalid/already revealed source.</returns>
+        public bool TryWorkCache(EntityId cacheId, int work, int requiredWork, BoardEntityDefinition rewardDefinition,
+            out CacheRewardItem reward)
+        {
+            if (work <= 0) throw new ArgumentOutOfRangeException(nameof(work));
+            if (requiredWork <= 0) throw new ArgumentOutOfRangeException(nameof(requiredWork));
+            if (rewardDefinition == null) throw new ArgumentNullException(nameof(rewardDefinition));
+            reward = null;
+            if (!TryGetEntity(cacheId, out BoardEntityState cache) || cache.Definition.Layer != BoardLayer.Item ||
+                cache.Definition.Traits.IsExit || HasRevealedCache(cacheId) || rewardDefinition.Layer != BoardLayer.Item ||
+                rewardDefinition.Traits.IsExit || rewardDefinition.ContentId == cache.Definition.ContentId)
+                return false;
+            int remaining = requiredWork - Math.Min(requiredWork, GetCacheWork(cacheId));
+            if (work < remaining) { cacheWork[cacheId] = requiredWork - remaining + work; return true; }
+            reward = new CacheRewardItem(cache, rewardDefinition);
+            cacheWork.Remove(cacheId);
+            cacheRewards.Add(cacheId, reward);
+            entitiesById[cacheId] = reward.Entity;
+            return true;
+        }
+
+        /// <summary>Creates one visible pit only on free walkable non-exit terrain; no entity, terrain or resource is removed.</summary>
+        /// <param name="terrainId">Exact terrain selected by a validated digging action.</param>
+        /// <param name="lifetimeTurns">Positive number of subsequent accepted commands before expiration.</param>
+        /// <returns>False without mutation if the terrain or any occupancy precondition is invalid.</returns>
+        public bool TryCreatePit(EntityId terrainId, int lifetimeTurns)
+        {
+            if (lifetimeTurns <= 0) throw new ArgumentOutOfRangeException(nameof(lifetimeTurns));
+            if (!CanCreatePit(terrainId)) return false;
+            BoardEntityState terrain = entitiesById[terrainId];
+            pits.Add(terrainId, new BoardPit(nextPitId++, terrainId, terrain.Position, lifetimeTurns));
+            return true;
+        }
+
+        /// <summary>Checks pit occupancy and allocator preconditions without changing terrain or creating a pit.</summary>
+        public bool CanCreatePit(EntityId terrainId) => TryGetEntity(terrainId, out BoardEntityState terrain) &&
+            terrain.Definition.Layer == BoardLayer.Terrain && terrain.Definition.Traits.IsWalkable && !terrain.Definition.Traits.IsExit &&
+            !pits.ContainsKey(terrainId) && !TryGetEntity(BoardLayer.Actor, terrain.Position, out _) &&
+            !TryGetEntity(BoardLayer.Item, terrain.Position, out _) && !TryGetEntity(BoardLayer.Obstacle, terrain.Position, out _) &&
+            nextPitId < long.MaxValue;
+
+        /// <summary>Reads detached immutable pit snapshots in creation order; a fresh board has none.</summary>
+        public IReadOnlyList<BoardPit> GetPits()
+        {
+            var result = new List<BoardPit>(pits.Values);
+            result.Sort((left, right) => left.Id.CompareTo(right.Id));
+            return result.AsReadOnly();
+        }
+
+        /// <summary>Reads the visible pit attached to the exact terrain cell, without creating or refreshing it.</summary>
+        public bool TryGetPit(GridPosition position, out BoardPit pit)
+        {
+            pit = null;
+            return TryGetEntity(BoardLayer.Terrain, position, out BoardEntityState terrain) && pits.TryGetValue(terrain.Id, out pit);
+        }
+
+        /// <summary>Records a supported Shambler's actual entry; only its executor calls this, never Listener or player movement.</summary>
+        /// <returns>True only for a live enemy on an unoccupied pit, without damage or changing cadence.</returns>
+        public bool TryTrapShambler(EntityId actorId, out BoardPit trapped)
+        {
+            trapped = null;
+            if (!TryGetEntity(actorId, out BoardEntityState actor) || actor.Definition.Layer != BoardLayer.Actor ||
+                !actor.Definition.Kind.Equals(EntityKind.Enemy) || !TryGetPit(actor.Position, out BoardPit pit) ||
+                pit.TrappedActorId.HasValue)
+                return false;
+            trapped = new BoardPit(pit.Id, pit.TerrainId, pit.Position, pit.RemainingTurns, actorId);
+            pits[pit.TerrainId] = trapped;
+            return true;
+        }
+
+        /// <summary>Reads whether the same supported actor still occupies a live pit; displacement/removal releases it.</summary>
+        public bool IsTrappedShambler(EntityId actorId) => TryGetEntity(actorId, out BoardEntityState actor) &&
+            TryGetPit(actor.Position, out BoardPit pit) && pit.TrappedActorId.HasValue && pit.TrappedActorId.Value.Equals(actorId);
+
+        private void ReleasePitActor(EntityId actorId)
+        {
+            foreach (BoardPit pit in GetPits())
+                if (pit.TrappedActorId.HasValue && pit.TrappedActorId.Value.Equals(actorId))
+                    pits[pit.TerrainId] = new BoardPit(pit.Id, pit.TerrainId, pit.Position, pit.RemainingTurns);
+        }
+
+        /// <summary>Ages only pits that existed before an accepted command; fresh pits keep their full published lifetime.</summary>
+        /// <param name="throughId">Last pit ID captured before command resolution; negative values age nothing.</param>
+        public void AdvancePitLifetime(long throughId)
+        {
+            foreach (BoardPit pit in GetPits())
+            {
+                if (pit.Id > throughId) continue;
+                if (pit.RemainingTurns == 1) pits.Remove(pit.TerrainId);
+                else pits[pit.TerrainId] = new BoardPit(pit.Id, pit.TerrainId, pit.Position, pit.RemainingTurns - 1, pit.TrappedActorId);
+            }
+        }
+
         /// <summary>
         /// Moves an entity within its current layer when the destination is legal and unoccupied.
         /// A rejected move leaves both indexes and the entity state unchanged.
@@ -145,6 +267,8 @@ namespace HallowBlaze.Core.Board.State
                 return false;
 
             BoardEntityState movedEntity = entity.WithPosition(destination);
+            pits.Remove(id);
+            ReleasePitActor(id);
             layer.Remove(entity.Position);
             layer.Add(destination, id);
             entitiesById[id] = movedEntity;
@@ -226,6 +350,13 @@ namespace HallowBlaze.Core.Board.State
             }
             foreach (var progress in obstacleWork)
                 clone.obstacleWork.Add(progress.Key, progress.Value);
+            foreach (var pit in pits)
+                clone.pits.Add(pit.Key, pit.Value);
+            foreach (var progress in cacheWork)
+                clone.cacheWork.Add(progress.Key, progress.Value);
+            foreach (var reward in cacheRewards)
+                clone.cacheRewards.Add(reward.Key, reward.Value);
+            clone.nextPitId = nextPitId;
             clone.nextNoiseId = nextNoiseId;
             foreach (var listener in listenerNoises)
                 clone.listenerNoises.Add(listener.Key, listener.Value);

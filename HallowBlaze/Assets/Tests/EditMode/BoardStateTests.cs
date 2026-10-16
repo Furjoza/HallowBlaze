@@ -164,6 +164,32 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(board.GetObstacleWork(obstacle.Id), Is.Zero);
         }
 
+        /// <summary>Pits preserve ordinary traversal, reject occupied terrain and keep independent clone lifetimes.</summary>
+        [Test]
+        public void PitsAreVisibleBoardOwnedSnapshotsWithExplicitLifetime()
+        {
+            var board = new BoardState();
+            var terrain = new BoardEntityState(new EntityId(1), new BoardEntityDefinition(BoardLayer.Terrain,
+                new EntityKind("terrain"), "diggable", new BoardEntityTraits(true, false, false)), new GridPosition(1, 1));
+            Assert.That(board.TryAdd(terrain), Is.True);
+            Assert.That(board.TryCreatePit(terrain.Id, 3), Is.True);
+            Assert.That(board.TryCreatePit(terrain.Id, 3), Is.False);
+            Assert.That(board.TryGetPit(terrain.Position, out BoardPit pit), Is.True);
+            Assert.That(pit.RemainingTurns, Is.EqualTo(3));
+            BoardState clone = board.Clone();
+            clone.AdvancePitLifetime(pit.Id);
+            Assert.That(clone.GetPits()[0].RemainingTurns, Is.EqualTo(2));
+            Assert.That(board.GetPits()[0].RemainingTurns, Is.EqualTo(3));
+            clone.AdvancePitLifetime(pit.Id);
+            clone.AdvancePitLifetime(pit.Id);
+            Assert.That(clone.GetPits(), Is.Empty);
+            Assert.That(clone.TryGetEntity(terrain.Id, out BoardEntityState retained), Is.True);
+            Assert.That(retained.Definition.Traits.IsWalkable, Is.True);
+            Assert.That(board.TryRemove(terrain.Id), Is.True);
+            Assert.That(board.GetPits(), Is.Empty);
+            Assert.That(board.TryCreatePit(terrain.Id, 3), Is.False);
+        }
+
         /// <summary>
         /// The board-state domain assembly has no Unity runtime dependency.
         /// </summary>
