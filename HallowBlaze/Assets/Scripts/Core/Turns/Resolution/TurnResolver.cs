@@ -13,15 +13,19 @@ namespace HallowBlaze.Core.Turns.Resolution
     /// </summary>
     public sealed class TurnResolver : IPlayerPhaseResolver
     {
-        private const int ActionFoodCost = 1;
-        private const long MaxInteractionDistance = 1;
         private readonly ActionNoiseProfile noiseProfile;
+        private readonly InteractionQuery interactions;
+        private readonly ToolUseQuery tools;
 
         /// <summary>Creates a resolver with an optional immutable noise profile; null preserves silent action behavior.</summary>
         /// <param name="noiseProfile">Action emission budgets, or null for no emission. Rejections never emit noise.</param>
-        public TurnResolver(ActionNoiseProfile noiseProfile = null)
+        /// <param name="interactions">Shared read-only action catalog; null uses the default interaction hooks.</param>
+        /// <param name="tools">Shared tool dispatch, previews and central action-cost policy; null leaves tool effects unregistered.</param>
+        public TurnResolver(ActionNoiseProfile noiseProfile = null, InteractionQuery interactions = null, ToolUseQuery tools = null)
         {
             this.noiseProfile = noiseProfile;
+            this.interactions = interactions ?? new InteractionQuery();
+            this.tools = tools ?? new ToolUseQuery();
         }
 
         /// <summary>Validates and resolves one player command.</summary>
@@ -64,11 +68,13 @@ namespace HallowBlaze.Core.Turns.Resolution
                 case InteractCommand interactCommand:
                     result = ResolveInteract(boardState, runState, player, interactCommand);
                     break;
+                case UseToolCommand toolCommand:
+                    result = ResolveUseTool(boardState, runState, player, toolCommand);
+                    break;
                 default:
                     return new RejectedTurnResult(CommandRejectionCode.InvalidCommand);
             }
-            int strength = command is MoveCommand ? noiseProfile?.MovementStrength ?? 0 :
-                command is InteractCommand ? noiseProfile?.InteractionStrength ?? 0 : 0;
+            int strength = command is MoveCommand ? noiseProfile?.MovementStrength ?? 0 : 0;
             if (!result.Accepted || strength == 0)
                 return result;
             boardState.TryGetEntity(playerId, out BoardEntityState currentPlayer);
@@ -160,20 +166,49 @@ namespace HallowBlaze.Core.Turns.Resolution
             BoardEntityState player,
             InteractCommand command)
         {
-            if (!boardState.TryGetEntity(command.TargetId, out BoardEntityState target))
-                return new RejectedTurnResult(CommandRejectionCode.InvalidTarget);
-            if (player.Position.ManhattanDistance(target.Position) > MaxInteractionDistance)
-                return new RejectedTurnResult(CommandRejectionCode.InvalidTarget);
-            if (!target.Definition.Traits.IsInteractable)
-                return new RejectedTurnResult(CommandRejectionCode.NoInteractionAvailable);
+            InteractionAvailability availability = interactions.Validate(boardState, runState, player.Id, command,
+                out BoardEntityState target, out IInteractionAction action);
+            if (availability != InteractionAvailability.Available)
+            {
+                CommandRejectionCode reason = availability == InteractionAvailability.InvalidTarget ||
+                    availability == InteractionAvailability.OutOfRange ? CommandRejectionCode.InvalidTarget :
+                    availability == InteractionAvailability.InvalidState ? CommandRejectionCode.InvalidState :
+                    availability == InteractionAvailability.Blocked ? CommandRejectionCode.Blocked :
+                    CommandRejectionCode.NoInteractionAvailable;
+                return new RejectedTurnResult(reason);
+            }
 
             var events = new List<GameEvent>
             {
                 new InteractionPerformedEvent(player.Id, target.Id)
             };
+            action.Apply(boardState, runState, player, target, events);
             ApplyCost(runState, player.Id, events);
+            var consequences = action as IInteractionConsequences;
+            int strength = consequences?.NoiseStrength ?? noiseProfile?.InteractionStrength ?? 0;
+            if (strength > 0)
+                events.Add(new NoiseEvent(boardState.EmitNoise(player.Id, player.Position, strength,
+                    consequences?.NoiseLifetimeTurns ?? noiseProfile.LifetimeTurns)));
             if (runState.Food == 0)
                 events.Add(new PlayerStarvedEvent(player.Id));
+            return new AcceptedTurnResult(events);
+        }
+
+        private TurnResult ResolveUseTool(BoardState boardState, RunState runState, BoardEntityState player, UseToolCommand command)
+        {
+            CommandRejectionCode rejection = tools.Validate(boardState, runState, player.Id, command,
+                out BoardEntityState target, out ToolAction action);
+            if (rejection != CommandRejectionCode.None) return new RejectedTurnResult(rejection);
+            var events = new List<GameEvent> { new ToolUsedEvent(player.Id, command, action.DefinitionId) };
+            action.Behavior.Apply(boardState, runState, player, target, events);
+            if (!runState.TrySpendToolCharge(command.SlotIndex, command.InstanceId))
+                throw new InvalidOperationException("Validated tool charges changed during a synchronous effect.");
+            events.Add(new ToolChargeSpentEvent(player.Id, command));
+            ApplyCost(runState, player.Id, events);
+            if (action.NoiseStrength > 0)
+                events.Add(new NoiseEvent(boardState.EmitNoise(player.Id, player.Position,
+                    action.NoiseStrength, action.NoiseLifetimeTurns), action.ObservedNoiseFactId));
+            if (runState.Food == 0) events.Add(new PlayerStarvedEvent(player.Id));
             return new AcceptedTurnResult(events);
         }
 
@@ -198,8 +233,8 @@ namespace HallowBlaze.Core.Turns.Resolution
             EntityId playerId,
             ICollection<GameEvent> events)
         {
-            runState.ConsumeFood(ActionFoodCost);
-            events.Add(new ActionCostAppliedEvent(playerId, ActionFoodCost));
+            runState.ConsumeFood(tools.ActionCosts.FoodCost);
+            events.Add(new ActionCostAppliedEvent(playerId, tools.ActionCosts.FoodCost));
         }
     }
 }

@@ -24,10 +24,11 @@ namespace HallowBlaze.Presentation.Runtime
         /// <param name="blueprint">Initial model matching the request's full address.</param>
         /// <param name="catalog">Authoritative definitions and supported enemy rules.</param>
         /// <param name="views">Exactly one unique, positioned view per entity ID; decorative objects are not bindings.</param>
+        /// <param name="tools">Optional explicit tool dispatch and current action-cost policy; null leaves placeholders without effects.</param>
         /// <returns>A complete runtime whose initial state reproduces the blueprint.</returns>
         /// <exception cref="BoardRuntimeCompositionException">Identity, blueprint validation or view parity fails.</exception>
         public static BoardRuntime Compose(BoardRequest request, RunState run, BoardBlueprint blueprint,
-            BoardValidationCatalog catalog, IReadOnlyDictionary<EntityId, GameObject> views)
+            BoardValidationCatalog catalog, IReadOnlyDictionary<EntityId, GameObject> views, ToolUseQuery tools = null)
         {
             if (request == null || run == null || blueprint == null || catalog == null || views == null ||
                 !BoardOutcomeIdentityGuard.ValidateRequest(request, run, out _) || !blueprint.Address.Equals(request.Address))
@@ -58,7 +59,7 @@ namespace HallowBlaze.Presentation.Runtime
                     enemies.Add(new ShamblerState(entity.Id, rule));
                 }
             }
-            return new BoardRuntime(request, run, blueprint.CreateState(), playerId, bindings, enemies);
+            return new BoardRuntime(request, run, blueprint.CreateState(), playerId, bindings, enemies, tools: tools);
         }
     }
 }

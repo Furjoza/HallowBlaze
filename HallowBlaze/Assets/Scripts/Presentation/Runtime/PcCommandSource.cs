@@ -8,7 +8,7 @@ namespace HallowBlaze.Presentation.Runtime
 {
     /// <summary>
     /// Samples PC key-down edges at most once per frame, producing one complete cardinal move or explicit Wait.
-    /// Ambiguous chords are free no-command samples. No input is buffered and no target interaction is bound.
+    /// Ambiguous chords are free no-command samples. No input is buffered; E belongs to the board target picker.
     /// </summary>
     public sealed class PcCommandSource : ICommandSource
     {
@@ -53,6 +53,8 @@ namespace HallowBlaze.Presentation.Runtime
             if (sampledFrame == frame)
                 return false;
             sampledFrame = frame;
+            if (keyDown(KeyCode.E))
+                return false;
             Func<PlayerCommand> selected = null;
             foreach (var binding in bindings)
             {

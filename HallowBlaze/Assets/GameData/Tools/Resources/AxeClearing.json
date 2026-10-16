@@ -1,0 +1,7 @@
+{
+  "obstacleContentIds": ["legacy.wall"],
+  "requiredWork": 3,
+  "manualNoiseStrength": 1,
+  "axeNoiseStrength": 6,
+  "noiseLifetimeTurns": 2
+}

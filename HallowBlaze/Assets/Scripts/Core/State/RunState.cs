@@ -17,6 +17,7 @@ namespace HallowBlaze.Core.State
     /// <summary>Owns one run's resources, travel and persisted RNG identity, independently of profile knowledge.</summary>
     public sealed class RunState
     {
+        /// <summary>Exactly two generic equipment slots, independent of backpack or pocket capacity.</summary>
         public const int ToolSlotCount = 2;
 
         /// <summary>Identifies the seeded System.Random layout used by schema v1/v2 saves.</summary>
@@ -77,7 +78,10 @@ namespace HallowBlaze.Core.State
         public int Health { get; private set; }
         public int Food { get; private set; }
         public RunStatus Status { get; private set; }
+        /// <summary>Gets read-only generic equipment; instances are immutable and charges are owned by this run.</summary>
         public IReadOnlyList<ToolSlotState> ToolSlots => toolSlotsView;
+        /// <summary>Gets the durable instance allocator; clearing or replacing tools never reuses an ID.</summary>
+        public int ToolInstanceSequence { get; private set; }
         /// <summary>Gets a detached node-only compatibility projection of structured history.</summary>
         public IReadOnlyList<string> Route => travelHistory.ConvertAll(entry => entry.ToNodeId).AsReadOnly();
 
@@ -95,6 +99,7 @@ namespace HallowBlaze.Core.State
             CompletedDayCount = configuration.InitialDay;
             ActiveLeg = null;
             TraversalSequence = 0;
+            ToolInstanceSequence = 0;
             WorldNodeId = configuration.InitialWorldNodeId;
             Health = configuration.InitialHealth;
             Food = configuration.InitialFood;
@@ -296,6 +301,45 @@ namespace HallowBlaze.Core.State
                 throw new InvalidOperationException("Checkpoint-only APIs cannot mutate an active leg.");
         }
 
+        /// <summary>Allocates one run-local instance with the definition's initial charges, without equipping or spending a turn.</summary>
+        /// <param name="definition">Shared immutable content; charges are copied, never stored back in this definition.</param>
+        /// <returns>A detached immutable instance allocated by this run.</returns>
+        /// <exception cref="OverflowException">The persisted instance sequence is exhausted.</exception>
+        public ToolInstanceState CreateToolInstance(ToolDefinition definition)
+        {
+            EnsureActive();
+            if (definition == null) throw new ArgumentNullException(nameof(definition));
+            return AllocateTool(definition.Id, definition.MaximumCharges);
+        }
+
+        /// <summary>Equips an allocated instance only into an empty slot; replacement requires an explicit operation.</summary>
+        /// <exception cref="InvalidOperationException">The run is terminal or the slot is occupied.</exception>
+        /// <exception cref="ArgumentException">The instance was not allocated by this run or is already equipped.</exception>
+        public void EquipTool(int slotIndex, ToolInstanceState instance)
+        {
+            EnsureActive();
+            ValidateSlotIndex(slotIndex);
+            if (!toolSlots[slotIndex].IsEmpty) throw new InvalidOperationException("Replacing an occupied tool requires ReplaceTool.");
+            ValidateToolInstance(slotIndex, instance);
+            toolSlots[slotIndex] = new ToolSlotState(instance);
+        }
+
+        /// <summary>Explicitly replaces a slot and returns the displaced immutable instance; no item is silently destroyed.</summary>
+        /// <param name="slotIndex">One of the two generic equipment cells.</param>
+        /// <param name="instance">An allocated instance not equipped in the other slot.</param>
+        /// <returns>The displaced instance, or null for an empty cell. The caller owns its subsequent transfer decision.</returns>
+        public ToolInstanceState ReplaceTool(int slotIndex, ToolInstanceState instance)
+        {
+            EnsureActive();
+            ValidateSlotIndex(slotIndex);
+            ValidateToolInstance(slotIndex, instance);
+            ToolInstanceState displaced = toolSlots[slotIndex].Instance;
+            toolSlots[slotIndex] = new ToolSlotState(instance);
+            return displaced;
+        }
+
+        /// <summary>Compatibility adapter for legacy callers; assigns identity and explicitly replaces the specified slot.</summary>
+        /// <remarks>Gameplay pickup must use the explicit instance/replace flow; this adapter does not resolve a turn.</remarks>
         public void EquipTool(int slotIndex, ToolSlotState tool)
         {
             EnsureActive();
@@ -303,15 +347,84 @@ namespace HallowBlaze.Core.State
             if (tool.IsEmpty)
                 throw new ArgumentException("Use ClearTool to empty a slot.", nameof(tool));
 
-            toolSlots[slotIndex] = tool;
+            ToolInstanceState instance = tool.Instance ?? AllocateTool(tool.ToolId, tool.RemainingUses);
+            ReplaceTool(slotIndex, instance);
         }
 
-        public void ClearTool(int slotIndex)
+        /// <summary>Removes and returns one equipped instance without resetting its allocator or touching profile knowledge.</summary>
+        /// <returns>The displaced instance, or null when already empty; this operation does not resolve a turn.</returns>
+        public ToolInstanceState RemoveTool(int slotIndex)
         {
             EnsureActive();
             ValidateSlotIndex(slotIndex);
+            ToolInstanceState removed = toolSlots[slotIndex].Instance;
             toolSlots[slotIndex] = ToolSlotState.Empty;
+            return removed;
         }
+
+        /// <summary>Clears one generic cell; kept for legacy callers that do not need the removed instance.</summary>
+        public void ClearTool(int slotIndex)
+        {
+            RemoveTool(slotIndex);
+        }
+
+        /// <summary>Replaces only the matching instance's charge snapshot; stale, empty or depleted slots remain unchanged.</summary>
+        /// <param name="slotIndex">The generic equipment cell.</param>
+        /// <param name="expectedInstanceId">The identity whose charge precondition was checked.</param>
+        /// <returns>Whether exactly one charge was spent. Commands own turn costs and effects separately.</returns>
+        public bool TrySpendToolCharge(int slotIndex, string expectedInstanceId)
+        {
+            EnsureActive();
+            ValidateSlotIndex(slotIndex);
+            ToolInstanceState instance = toolSlots[slotIndex].Instance;
+            if (instance == null || instance.InstanceId != expectedInstanceId || !instance.TrySpendCharge(out ToolInstanceState next))
+                return false;
+            toolSlots[slotIndex] = new ToolSlotState(next);
+            return true;
+        }
+
+        private ToolInstanceState AllocateTool(string definitionId, int charges)
+        {
+            int next = checked(ToolInstanceSequence + 1);
+            var instance = new ToolInstanceState(ToolIdFor(next), definitionId, charges);
+            ToolInstanceSequence = next;
+            return instance;
+        }
+
+        /// <summary>Restores exactly two detached equipment cells and their durable allocator, including terminal save boundaries.</summary>
+        /// <param name="sequence">Nonnegative last allocated run-local number; it may exceed all surviving IDs.</param>
+        /// <param name="instances">Exactly two entries; null entries are empty slots, unknown definitions are retained.</param>
+        /// <exception cref="ArgumentException">Count, duplicate IDs or allocator membership is invalid; no state changes.</exception>
+        public void RestoreToolState(int sequence, IEnumerable<ToolInstanceState> instances)
+        {
+            if (instances == null) throw new ArgumentNullException(nameof(instances));
+            var copy = new List<ToolInstanceState>(instances);
+            if (sequence < 0 || copy.Count != ToolSlotCount)
+                throw new ArgumentException("Equipment requires two cells and a nonnegative allocator.");
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (ToolInstanceState instance in copy)
+                if (instance != null && (!IsAllocatedToolId(instance.InstanceId, sequence) || !ids.Add(instance.InstanceId)))
+                    throw new ArgumentException("Equipment contains a duplicate or unallocated instance.");
+            for (int index = 0; index < ToolSlotCount; index++)
+                toolSlots[index] = copy[index] == null ? ToolSlotState.Empty : new ToolSlotState(copy[index]);
+            ToolInstanceSequence = sequence;
+        }
+
+        private void ValidateToolInstance(int slotIndex, ToolInstanceState instance)
+        {
+            if (instance == null) throw new ArgumentNullException(nameof(instance));
+            if (!IsAllocatedToolId(instance.InstanceId, ToolInstanceSequence))
+                throw new ArgumentException("The instance identity was not allocated by this run.", nameof(instance));
+            for (int index = 0; index < ToolSlotCount; index++)
+                if (index != slotIndex && toolSlots[index].Instance?.InstanceId == instance.InstanceId)
+                    throw new ArgumentException("An instance cannot occupy two equipment slots.", nameof(instance));
+        }
+
+        private static string ToolIdFor(int sequence) => "tool." + sequence.ToString(CultureInfo.InvariantCulture);
+
+        private static bool IsAllocatedToolId(string id, int maximum) => id.StartsWith("tool.", StringComparison.Ordinal) &&
+            int.TryParse(id.Substring(5), NumberStyles.None, CultureInfo.InvariantCulture, out int sequence) &&
+            sequence > 0 && sequence <= maximum && id == ToolIdFor(sequence);
 
         public void MarkDead()
         {
