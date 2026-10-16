@@ -116,7 +116,8 @@ namespace HallowBlaze.Core.Turns.Resolution
                 return options.AsReadOnly();
             foreach (BoardEntityState target in board.GetEntities())
             {
-                if (target.Id.Equals(playerId) || player.Position.ManhattanDistance(target.Position) > 1)
+                if (target.Id.Equals(playerId) || player.Position.ManhattanDistance(target.Position) > 1 ||
+                    board.TryGetGroundTool(target.Id, out _))
                     continue;
                 foreach (IInteractionAction action in actions.Values)
                     if (action.Supports(target))
@@ -147,6 +148,7 @@ namespace HallowBlaze.Core.Turns.Resolution
                 return InteractionAvailability.InvalidTarget;
             if (player.Position.ManhattanDistance(target.Position) > 1)
                 return InteractionAvailability.OutOfRange;
+            if (board.TryGetGroundTool(target.Id, out _)) return InteractionAvailability.DecisionRequired;
             if (!actions.TryGetValue(command.ActionId, out action) || !action.Supports(target))
                 return InteractionAvailability.Unsupported;
             return action.Evaluate(board, run, player, target);

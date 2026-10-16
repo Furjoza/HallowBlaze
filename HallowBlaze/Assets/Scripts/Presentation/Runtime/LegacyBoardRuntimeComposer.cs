@@ -73,6 +73,14 @@ namespace HallowBlaze.Presentation.Runtime
                 }
                 else if (descriptor.EnemyDamage.HasValue)
                     throw Diagnostic(BoardRuntimeDiagnosticCode.InvalidInput, "damage-without-enemy:" + descriptor.Kind);
+                if (descriptor.Kind == LegacyBoardContentKind.Tool)
+                {
+                    if (!runState.CanReceiveTool(0, descriptor.Tool) || descriptor.SourceId != null &&
+                        (string.IsNullOrWhiteSpace(descriptor.SourceId) || descriptor.SourceId != descriptor.SourceId.Trim()))
+                        throw Diagnostic(BoardRuntimeDiagnosticCode.InvalidInput, "tool:unallocated-equipped-or-invalid-source");
+                }
+                else if (descriptor.Tool != null || descriptor.SourceId != null)
+                    throw Diagnostic(BoardRuntimeDiagnosticCode.InvalidInput, "tool-data-without-tool:" + descriptor.Kind);
                 if (content.Classification == LegacyBoardContentClassification.PresentationOnly)
                     continue;
                 if (content.Classification == LegacyBoardContentClassification.IntentionallyDisabled)
@@ -130,6 +138,8 @@ namespace HallowBlaze.Presentation.Runtime
                 MappedView mappedView = mapped[index];
                 var id = new EntityId(index + 1L);
                 BoardEntityDefinition definition = mappedView.Content.CreateBoardDefinition();
+                if (mappedView.Descriptor.Tool != null)
+                    definition = new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, mappedView.Descriptor.Tool.DefinitionId);
                 if (mappedView.Descriptor.Kind == LegacyBoardContentKind.Floor &&
                     exitPositions.Contains(mappedView.Descriptor.Position))
                 {
@@ -148,6 +158,13 @@ namespace HallowBlaze.Presentation.Runtime
                 }
 
                 registry.Add(id, mappedView.Descriptor.View);
+                if (mappedView.Descriptor.Tool != null)
+                {
+                    var instance = mappedView.Descriptor.Tool;
+                    if (!boardState.TryBindGroundTool(new GroundToolState(id, instance.InstanceId, instance.DefinitionId,
+                        instance.Charges, mappedView.Descriptor.SourceId)))
+                        throw Diagnostic(BoardRuntimeDiagnosticCode.DuplicateEntity, "tool-instance:" + instance.InstanceId);
+                }
                 if (mappedView.Descriptor.Kind == LegacyBoardContentKind.Player)
                     playerId = id;
                 else if (mappedView.Descriptor.Kind == LegacyBoardContentKind.Enemy)

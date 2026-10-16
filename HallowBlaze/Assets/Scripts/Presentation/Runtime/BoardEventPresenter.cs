@@ -89,13 +89,21 @@ namespace HallowBlaze.Presentation.Runtime
             attacks = new EnemyAttackPresenter(runtime, hud, feedback, moveDuration);
             ObstacleDisplay = new ObstacleWorkPresenter(runtime);
             DiggingDisplay = new ShovelWorkPresenter(runtime);
+            GroundToolsDisplay = new GroundToolPresenter(runtime);
             var noiseOwner = new GameObject("Board noise debug") { hideFlags = HideFlags.DontSave };
             NoiseDisplay = noiseOwner.AddComponent<BoardNoisePresenter>();
             NoiseDisplay.Bind(runtime.BoardState, () => disposed || runtime.IsDisposed || runtime.Controller.IsTerminal
                 ? null : runtime.BoardState);
             Dispatcher = new OrderedEventDispatcher(diagnostic, SynchronizeFromState);
             Coordinator = new CommandPresentationCoordinator(runtime, new PresentationGate(), Dispatcher,
-                feedback.ShowRejection, result => { RefreshIntents(); NoiseDisplay.Refresh(); ObstacleDisplay.Refresh(); DiggingDisplay.Refresh(); });
+                feedback.ShowRejection, result =>
+                {
+                    RefreshIntents();
+                    NoiseDisplay.Refresh();
+                    ObstacleDisplay.Refresh();
+                    DiggingDisplay.Refresh();
+                    GroundToolsDisplay.Refresh();
+                });
             var interactionOwner = new GameObject("Board interaction") { hideFlags = HideFlags.DontSave };
             InteractionDisplay = interactionOwner.AddComponent<InteractionPresenter>();
             InteractionDisplay.Bind(runtime, Coordinator, interactionInputAllowed);
@@ -107,6 +115,12 @@ namespace HallowBlaze.Presentation.Runtime
             Dispatcher.Register<InteractionPerformedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<ToolUsedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<ToolChargeSpentEvent>((gameEvent, token) => ShowFeedback(gameEvent));
+            Dispatcher.Register<ToolPickedUpEvent>((gameEvent, token) =>
+            {
+                GroundToolsDisplay.Refresh();
+                RefreshHud();
+                return ShowFeedback(gameEvent);
+            });
             Dispatcher.Register<ObstacleWorkedEvent>((gameEvent, token) =>
             {
                 ObstacleDisplay.Present(gameEvent);
@@ -161,6 +175,8 @@ namespace HallowBlaze.Presentation.Runtime
         public ObstacleWorkPresenter ObstacleDisplay { get; }
         /// <summary>Gets the owned marked-cache, diggable-ground and temporary-pit overlay with non-color lifetime/hold labels.</summary>
         public ShovelWorkPresenter DiggingDisplay { get; }
+        /// <summary>Gets the owned exact-definition/charge display for ground tools and displaced replacements.</summary>
+        public GroundToolPresenter GroundToolsDisplay { get; }
         /// <summary>Gets or sets whether movement and attacks animate; false uses the same handlers with zero visual delay.</summary>
         public bool AnimationsEnabled { get; set; } = true;
         /// <summary>Gets movement duration in unscaled seconds; zero completes synchronously in either mode.</summary>
@@ -181,6 +197,7 @@ namespace HallowBlaze.Presentation.Runtime
                 NoiseDisplay.Dispose();
                 ObstacleDisplay.Dispose();
                 DiggingDisplay.Dispose();
+                GroundToolsDisplay.Dispose();
                 return;
             }
             var errors = new List<Exception>();
@@ -205,6 +222,8 @@ namespace HallowBlaze.Presentation.Runtime
             try { ObstacleDisplay.Refresh(); }
             catch (Exception error) { errors.Add(error); }
             try { DiggingDisplay.Refresh(); }
+            catch (Exception error) { errors.Add(error); }
+            try { GroundToolsDisplay.Refresh(); }
             catch (Exception error) { errors.Add(error); }
             if (errors.Count != 0)
                 throw new AggregateException("Registered views or HUD could not be fully synchronized.", errors);
@@ -324,6 +343,7 @@ namespace HallowBlaze.Presentation.Runtime
             InteractionDisplay.Dispose();
             ObstacleDisplay.Dispose();
             DiggingDisplay.Dispose();
+            GroundToolsDisplay.Dispose();
             outcomes.TryNotify(runtime.Request, gameEvent);
             return Task.CompletedTask;
         }
@@ -350,6 +370,7 @@ namespace HallowBlaze.Presentation.Runtime
             InteractionDisplay.Dispose();
             ObstacleDisplay.Dispose();
             DiggingDisplay.Dispose();
+            GroundToolsDisplay.Dispose();
             if (InteractionDisplay != null)
             {
                 if (Application.isPlaying)

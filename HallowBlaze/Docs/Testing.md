@@ -1,5 +1,39 @@
 # HallowBlaze Testing
 
+## M5.6 Conscious Tool Pickup
+
+Only concrete board-owned tools enter the equipment picker; movement never collects them.
+An accepted pickup fills the first free generic slot. With full equipment, opening the comparison
+and selecting a slot are free drafts; only confirmed `Replace` submits a complete command.
+The old tool remains at the original ground binding with the same ID and charges, without
+inheriting the incoming authored source ID. `Leave`, Escape, cancellation, stale choices and
+full-slot refusal preserve ground/equipment without cost. Preview/pickup allocates no new ID,
+spends no charge and never refills a depleted tool. O-003 automatic food remains reward-before-cost.
+
+Run focused verification sequentially from the active Unity project root:
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter 'HallowBlaze.Tests.EditMode.ToolPickupTests;HallowBlaze.Tests.EditMode.BoardRuntimeCompositionTests' --output "$env:TEMP/HB-M56-domain.xml" -- -nographics -logFile "$env:TEMP/HB-M56-domain.log"
+unity test $project --mode PlayMode --filter HallowBlaze.Tests.PlayMode.ToolPickupPresentationTests --output "$env:TEMP/HB-M56-view.xml" -- -logFile "$env:TEMP/HB-M56-view.log"
+```
+
+Domain cases cover first-free and full-slot transfer, exact source/instance identity, stale and
+round-trip replay, duplicate/unallocated/already-equipped bindings, invalid targets, clone,
+depleted tools, single noise/cost, authored traits, isolated run save round-trip and unchanged
+automatic food. Composition covers both legacy descriptors and explicit blueprint/source bindings.
+PlayMode uses the production picker/coordinator and checks comparisons, independent input blocks,
+free cancellation/Leave, rapid confirmation, stale replacement, animation parity and actual scene
+unload followed by save/reload and HUD recomposition. Pixel checks render current ground/equipment
+labels at 960x540 and 320x640, writing `%TEMP%/HB-M56-exchange-<width>x<height>.png` outside the project.
+These captures cover the ground/HUD, not the IMGUI modal itself; modal labels and behavior are
+checked through the real picker. Full EditMode and graphics-enabled PlayMode remain regression gates.
+Require fresh nonzero XML with zero failures, not only a CLI completion message.
+
+Run schema v4 and profile schema v2 are unchanged. Ground instances remain transient board state;
+no mid-board save system, source knowledge, consumable modal, bag/pockets or generic discard/drop
+is implemented here. This automated gate does not replace M4.9 human prediction/readability evidence.
+
 ## M5.5 Shovel
 
 Marked `legacy.buried-food` caches require three manual actions or one shovel use. Completion

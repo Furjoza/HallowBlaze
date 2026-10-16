@@ -5104,13 +5104,13 @@ Manual work persists between actions and the axe completes whatever work remains
 
 ## `M5.6` — Conscious tool pickup and slot replacement
 
-**Status:** `Planned` — O-003 resolved 2026-09-27
+**Status:** `Done` (2026-10-16); O-003 remains resolved as of 2026-09-27.
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 13.1, 18 i O-003.
 
 **Rationale:** Przy dwóch pełnych slotach znalezione narzędzie tworzy ważny wybór, ale przypadkowa zamiana byłaby karą za wejście na pole. O-003 now fixes the pre-M9 split: food remains automatic and transitional, while a tool requires conscious pickup and routing to the separate equipment bar.
 
-**Obecne zachowanie:** Nie ma docelowego flow podnoszenia tool instance ani modalnej zamiany.
+**Implemented behavior:** A board-owned `GroundToolState` separates the entity, run-allocated instance, content definition, remaining charges and optional authored source. The existing target picker offers conscious equipment pickup. The first free generic slot is selected automatically only after confirmation. Full equipment opens a comparison of both slots with `Replace` and `Leave`; a complete `PickupToolCommand` retains the exact ground snapshot, position and selected slot identity/definition/charges. Revalidation rejects invalid, stale or replayed choices before mutation.
 
 **Oczekiwany rezultat:** A consciously accepted tool pickup automatically fills a free generic tool slot. With both slots occupied it presents `Replace` or `Leave`; cancel/leave is free, the ground instance remains, and no equipped tool is silently destroyed. Transitional automatic food remains unchanged until M9.
 
@@ -5129,6 +5129,22 @@ Manual work persists between actions and the axe completes whatever work remains
 **Wpływ na save i kompatybilność:** Run DTO zachowuje wynik zamiany; brak nowych danych profilu.
 
 **Wymagany handoff:** Reference resolved O-003, provide the full tool modal flow, and list the seams intentionally reserved for M9 without implementing them.
+
+**Accepted replacement outcome:** The owner requested autonomous decisions when asked about the displaced tool. M5.6 uses a lossless exchange, recorded in contract section 13.1: the incoming instance occupies exactly one chosen slot and the old tool remains at the original ground entity/cell with its existing ID and charges. It does not inherit the incoming source ID. This is an equipment exchange, not an implementation of carried-item discard or a generic drop command.
+
+**Modal flow:**
+
+1. `E` opens the free shared picker with the ground tool's definition, charges and current action consequences. Movement onto the tile never collects it.
+2. Confirming a pickup with free capacity transfers the same instance into the first free slot as one accepted command.
+3. With full equipment, the first confirmation only opens the free comparison. The player explicitly selects one of the two slot snapshots, then confirms `Replace`; choosing a slot alone resolves nothing.
+4. Accepted pickup/exchange costs one normal action and Food -1 under the current policy, spends/refills no charge and emits the existing interaction noise, strength 4 / lifetime 2. It does not allocate a new tool ID. The normal controller runs later phases once unless the action is terminal.
+5. `Leave`, Escape, cancellation, incomplete full-slot refusal and invalid/stale decisions are free. The same ground instance remains. The modal and remainder-of-frame input ownership prevent accidental movement, repeated submission and duplication; independent pause/modal blocks survive closure.
+
+**Integration and compatibility:** Both runtime composers accept explicit existing tool-instance bindings without allocating or equipping them. Blueprint bindings additionally validate entity/definition and authored source parity; invalid, unallocated, already-equipped or duplicate bindings cannot publish a partial runtime. Existing versioned generators, placements, prefabs and scenes are unchanged. Ground labels and the equipment HUD read current definitions/charges, including the old tool after exchange. Run schema v4 preserves resulting equipment identities, charges and allocator; profile schema v2 is unchanged. Ground tools remain transient board state at existing reconstruction/save boundaries. O-003 automatic food still resolves before movement cost. No tool-source knowledge or mechanical fact is inferred from pickup.
+
+**Reserved seams:** M9 owns the shared consumable `Use now` / `Store` / `Leave` decision, bag/pockets, placement and carried-item discard, including migration of the shovel-cache reward adapter. This card adds none of those behaviors and does not change transitional automatic food. M7.5 remains responsible for fixed-source discovery and atlas knowledge.
+
+**Acceptance:** Completed from clean `9e1a6f0df5726b4d0eee81dd525afad18a2d10fa` on `M5/6/ToolPickUp`, Git root `D:/Repos/HallowBlaze`, by direct Lead implementation without Developer delegation. After the review correction preserving authored entity traits, Unity 6000.3.21f1 passed full EditMode 1061 tests with only the existing Explicit milestone skipped and full graphics PlayMode 163/163. Focused transfer/composition passed 54/54; the correction/state gate passed 33/33; pickup PlayMode passed 6/6, including actual scene unload, isolated save/reload, modal/input scenarios and desktop/portrait pixel checks. Independent Reviewer returned PASS for domain, picker/modal, composers and replay/lifetime after bounded sequential retries for provider failures. Scope, metadata, diagnostics and whitespace checks passed. M4.9 remains Pending without human results; this card-specific owner authorization does not authorize M5.7. No commit or push was performed.
 
 ---
 
@@ -6164,7 +6180,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further M5 content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5 implementation with Reviewer. All five cards are Done; M5.5 passed full EditMode 1030 tests plus the existing Explicit skip and graphics PlayMode 157/157, with independent Reviewer PASS across its reviewed scopes. These card-specific exceptions do not close M4.9 or authorize execution of M5.6, which remains Planned. Preserve independent review on later cards unless separately waived;
+1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further M5 content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6 implementation with Reviewer. All six cards are Done; M5.6 passed full EditMode 1061 tests plus the existing Explicit skip and graphics PlayMode 163/163, with independent Reviewer PASS across its reviewed scopes. These card-specific exceptions do not close M4.9 or authorize execution of M5.7, which remains Planned. Preserve independent review on later cards unless separately waived;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6200,7 +6216,9 @@ M5.3 was completed on 2026-10-16 at the owner's explicit request from clean base
 
 M5.4 was completed on 2026-10-16 at the owner's explicit request from clean baseline `1bce2b7625950af57ff914953e72d84c95d23f80` on `M5/4/Axe`, with direct Lead implementation and independent Reviewer PASS across domain, presentation and integration. Board-owned progress supports three manual actions or one charge-consuming axe action, with authored strength 1 versus 6 and exact Listener/UI noise identity. The observed axe-noise fact persists in profile schema v2; run schema v4 is unchanged. Full EditMode passed 1001 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 152/152. M4.9 remains Pending with no human result. At that closeout, M5.5 remained Planned and required the later explicit owner request recorded below. No commit or push was performed.
 
-M5.5 was completed on 2026-10-16 at the owner's explicit request from clean baseline `9505c75447a3d9c8a17f198de959699b95a6b6ed` on `M5/5/Shovel`, with direct Lead implementation and independent Reviewer PASS. Marked caches offer three manual actions or one shovel action, producing one identity-bearing reward before the transitional transfer and action cost. Explicit diggable ground supports a visible four-command pit that holds only a Shambler after actual entry; the observed trap fact persists in the profile. Full EditMode passed 1030 tests with the existing Explicit milestone skipped; graphics PlayMode passed 157/157. Run/profile schemas and published generators are unchanged. M4.9 remains Pending without a human result; M5.6 remains Planned and is not automatically authorized. No commit or push was performed.
+M5.5 was completed on 2026-10-16 at the owner's explicit request from clean baseline `9505c75447a3d9c8a17f198de959699b95a6b6ed` on `M5/5/Shovel`, with direct Lead implementation and independent Reviewer PASS. Marked caches offer three manual actions or one shovel action, producing one identity-bearing reward before the transitional transfer and action cost. Explicit diggable ground supports a visible four-command pit that holds only a Shambler after actual entry; the observed trap fact persists in the profile. Full EditMode passed 1030 tests with the existing Explicit milestone skipped; graphics PlayMode passed 157/157. Run/profile schemas and published generators are unchanged. M4.9 remains Pending without a human result. At that closeout, M5.6 remained Planned and required the later explicit owner request recorded below. No commit or push was performed.
+
+M5.6 was completed on 2026-10-16 at the owner's explicit request from clean baseline `9e1a6f0df5726b4d0eee81dd525afad18a2d10fa` on `M5/6/ToolPickUp`, with direct Lead implementation and independent Reviewer PASS. Conscious pickup fills the first free slot; full equipment requires a modal comparison and confirmed lossless exchange, preserving the old instance on the ground. Leave/cancel/stale/refusal are free, rapid input cannot duplicate the transfer, and food remains automatic under resolved O-003. Run schema v4 / profile schema v2 and published generators are unchanged. Full EditMode passed 1061 tests with the existing Explicit milestone skipped; graphics PlayMode passed 163/163. M4.9 remains Pending without human results; M5.7 remains Planned and is not automatically authorized. No commit or push was performed.
 
 # Zasada aktualizacji roadmapy
 

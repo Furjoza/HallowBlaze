@@ -51,6 +51,8 @@ namespace HallowBlaze.Core.Turns.Contracts
         /// <summary>The equipped identity or charges differ from the preview; no alternative is substituted.</summary>
         StaleTool = 10,
         /// <summary>No behavior is registered for this tool definition and selected action.</summary>
-        UnsupportedTool = 11
+        UnsupportedTool = 11,
+        /// <summary>Both equipment slots are occupied and no complete replacement decision was submitted.</summary>
+        ToolSlotsFull = 12
     }
 }
