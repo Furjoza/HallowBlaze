@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "templateId": "landmark.sanity",
+  "templateVersion": 1,
+  "configuration": {
+    "id": "landmark.sanity.board",
+    "version": 1,
+    "pathLength": { "minimum": 5, "maximum": 10 },
+    "branchPoints": { "minimum": 32, "maximum": 32 },
+    "obstacleCount": { "minimum": 0, "maximum": 0 },
+    "enemyCount": { "minimum": 0, "maximum": 0 },
+    "maximumConcurrentThreats": 0,
+    "minimumSafeStartMoves": 2,
+    "allowedContentIds": ["floor", "player", "exit"],
+    "resourceBudgets": []
+  },
+  "outcomes": [
+    { "id": "arrival.safe", "name": "Safe arrival", "exitEntityId": 2, "optional": false },
+    { "id": "arrival.alternate", "name": "Alternate arrival", "exitEntityId": 3, "optional": true }
+  ],
+  "variants": [
+    {
+      "id": "base",
+      "entities": [
+        { "id": 1, "layer": "Actor", "contentId": "player", "x": 1, "y": 1 },
+        { "id": 2, "layer": "Terrain", "contentId": "exit", "x": 6, "y": 6 },
+        { "id": 3, "layer": "Terrain", "contentId": "exit", "x": 6, "y": 1 },
+        { "id": 100, "layer": "Terrain", "contentId": "floor", "x": 1, "y": 1 },
+        { "id": 101, "layer": "Terrain", "contentId": "floor", "x": 2, "y": 1 },
+        { "id": 102, "layer": "Terrain", "contentId": "floor", "x": 3, "y": 1 },
+        { "id": 103, "layer": "Terrain", "contentId": "floor", "x": 4, "y": 1 },
+        { "id": 104, "layer": "Terrain", "contentId": "floor", "x": 5, "y": 1 },
+        { "id": 105, "layer": "Terrain", "contentId": "floor", "x": 1, "y": 2 },
+        { "id": 106, "layer": "Terrain", "contentId": "floor", "x": 2, "y": 2 },
+        { "id": 107, "layer": "Terrain", "contentId": "floor", "x": 3, "y": 2 },
+        { "id": 108, "layer": "Terrain", "contentId": "floor", "x": 4, "y": 2 },
+        { "id": 109, "layer": "Terrain", "contentId": "floor", "x": 5, "y": 2 },
+        { "id": 110, "layer": "Terrain", "contentId": "floor", "x": 6, "y": 2 },
+        { "id": 111, "layer": "Terrain", "contentId": "floor", "x": 1, "y": 3 },
+        { "id": 112, "layer": "Terrain", "contentId": "floor", "x": 2, "y": 3 },
+        { "id": 113, "layer": "Terrain", "contentId": "floor", "x": 3, "y": 3 },
+        { "id": 114, "layer": "Terrain", "contentId": "floor", "x": 4, "y": 3 },
+        { "id": 115, "layer": "Terrain", "contentId": "floor", "x": 5, "y": 3 },
+        { "id": 116, "layer": "Terrain", "contentId": "floor", "x": 6, "y": 3 },
+        { "id": 117, "layer": "Terrain", "contentId": "floor", "x": 1, "y": 4 },
+        { "id": 118, "layer": "Terrain", "contentId": "floor", "x": 2, "y": 4 },
+        { "id": 119, "layer": "Terrain", "contentId": "floor", "x": 3, "y": 4 },
+        { "id": 120, "layer": "Terrain", "contentId": "floor", "x": 4, "y": 4 },
+        { "id": 121, "layer": "Terrain", "contentId": "floor", "x": 5, "y": 4 },
+        { "id": 122, "layer": "Terrain", "contentId": "floor", "x": 6, "y": 4 },
+        { "id": 123, "layer": "Terrain", "contentId": "floor", "x": 1, "y": 5 },
+        { "id": 124, "layer": "Terrain", "contentId": "floor", "x": 2, "y": 5 },
+        { "id": 125, "layer": "Terrain", "contentId": "floor", "x": 3, "y": 5 },
+        { "id": 126, "layer": "Terrain", "contentId": "floor", "x": 4, "y": 5 },
+        { "id": 127, "layer": "Terrain", "contentId": "floor", "x": 5, "y": 5 },
+        { "id": 128, "layer": "Terrain", "contentId": "floor", "x": 6, "y": 5 },
+        { "id": 129, "layer": "Terrain", "contentId": "floor", "x": 1, "y": 6 },
+        { "id": 130, "layer": "Terrain", "contentId": "floor", "x": 2, "y": 6 },
+        { "id": 131, "layer": "Terrain", "contentId": "floor", "x": 3, "y": 6 },
+        { "id": 132, "layer": "Terrain", "contentId": "floor", "x": 4, "y": 6 },
+        { "id": 133, "layer": "Terrain", "contentId": "floor", "x": 5, "y": 6 }
+      ],
+      "items": []
+    }
+  ]
+}

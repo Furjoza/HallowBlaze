@@ -7,7 +7,9 @@
         "HallowBlaze.Core.Random",
         "HallowBlaze.Core.State",
         "HallowBlaze.Core.Turns.Contracts",
-        "HallowBlaze.Core.Turns.Resolution"
+        "HallowBlaze.Core.Turns.Resolution",
+        "HallowBlaze.Core.World",
+        "Unity.Newtonsoft.Json"
     ],
     "noEngineReferences": true
 }

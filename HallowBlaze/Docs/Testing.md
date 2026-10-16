@@ -1,5 +1,38 @@
 # HallowBlaze Testing
 
+## M6.1 Landmark Authoring
+
+The engine-free template loader uses externally supplied `BoardValidationCatalog` definitions;
+it never infers traits from names, reads a prefab or mutates the active run/profile. See the
+[schema and sanity fixture](BoardGeneration.md#m61-authored-landmark-templates) for fields,
+two named goal declarations, the mandatory-tool guarantee and the deferred activation boundary.
+
+Run the focused data and compatibility gate from the active Unity project:
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter 'HallowBlaze.Tests.EditMode.LandmarkTemplateTests;HallowBlaze.Tests.EditMode.BoardBlueprintTests;HallowBlaze.Tests.EditMode.WorldDefinitionTests' --output "$env:TEMP/HB-M61-structural.xml" -- -nographics -logFile "$env:TEMP/HB-M61-structural.log"
+```
+
+Cases compare authored and ordinary blueprints, state export/reconstruction and immutable input
+ownership. Invalid schemas/types/casing, duplicate keys/IDs, unresolved content/goals, foreign
+placements and configuration drift reject before publication. A mandatory tool must be a concrete,
+matching, observable and statically accessible spawn in every allowed variant, without crossing
+an exit first. An optional tool-dependent outcome remains legal without a guarantee. This check
+does not solve a future dynamic puzzle or claim tactical survival.
+
+The separate fixture world passes graph validation for five edge-based days with eight boards;
+the final road has an ordinary entry and a landmark arrival segment. The test uses actual
+`RunState` travel and `BoardAddressFactory`, then current run v4 JSON round-trip to reconstruct the
+same fixture blueprint/template/variant. The open fixture passes the existing board validator
+with two tool-free exits and explicit budgets. Published world/generator content and run/profile
+schemas remain unchanged. Named outcomes are declarations, not persisted completion results;
+M6.4 owns activation and its compatible outcome-save boundary, M6.5/M6.6 solving and playtests.
+
+Full EditMode protects the shared generation assembly and its unchanged ordinary-board encoding;
+graphics PlayMode protects existing runtime composition and gameplay. Require fresh nonzero XML
+with zero failures, not only a CLI completion line. No M4.9 human result is inferred from this gate.
+
 ## M5.7 Field Notes
 
 The immutable authored registry is `Assets/GameData/Facts/Resources/SystemFacts.json`.

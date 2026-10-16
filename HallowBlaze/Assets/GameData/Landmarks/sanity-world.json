@@ -1,0 +1,32 @@
+{
+  "worldDefinitionId": "world.landmark-sanity",
+  "version": 1,
+  "startNodeId": "sanity.start",
+  "goalNodeId": "sanity.landmark",
+  "nodes": [
+    { "nodeId": "sanity.start", "atlasX": 0, "atlasY": 0, "distanceLayer": 0, "placeKind": "shelter", "biomeFamilyKey": "temperate-forest" },
+    { "nodeId": "sanity.day1", "atlasX": 0, "atlasY": 1, "distanceLayer": 1, "placeKind": "trail", "biomeFamilyKey": "temperate-forest" },
+    { "nodeId": "sanity.day2", "atlasX": 0, "atlasY": 2, "distanceLayer": 2, "placeKind": "trail", "biomeFamilyKey": "temperate-forest" },
+    { "nodeId": "sanity.day3", "atlasX": 0, "atlasY": 3, "distanceLayer": 3, "placeKind": "trail", "biomeFamilyKey": "temperate-forest" },
+    { "nodeId": "sanity.day4", "atlasX": 0, "atlasY": 4, "distanceLayer": 4, "placeKind": "trail", "biomeFamilyKey": "temperate-forest" },
+    { "nodeId": "sanity.landmark", "atlasX": 0, "atlasY": 5, "distanceLayer": 5, "placeKind": "landmark", "biomeFamilyKey": "temperate-forest" }
+  ],
+  "edges": [
+    { "edgeId": "road.sanity.day1", "fromNodeId": "sanity.start", "toNodeId": "sanity.day1", "direction": "north", "clueKey": "clue.sanity.trail",
+      "segments": [ { "segmentId": "segment.sanity.day1", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 2 } ] },
+    { "edgeId": "road.sanity.day2", "fromNodeId": "sanity.day1", "toNodeId": "sanity.day2", "direction": "north", "clueKey": "clue.sanity.trail",
+      "segments": [
+        { "segmentId": "segment.sanity.day2.entry", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 2 },
+        { "segmentId": "segment.sanity.day2.arrival", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 2 } ] },
+    { "edgeId": "road.sanity.day3", "fromNodeId": "sanity.day2", "toNodeId": "sanity.day3", "direction": "north", "clueKey": "clue.sanity.trail",
+      "segments": [ { "segmentId": "segment.sanity.day3", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 2 } ] },
+    { "edgeId": "road.sanity.day4", "fromNodeId": "sanity.day3", "toNodeId": "sanity.day4", "direction": "north", "clueKey": "clue.sanity.trail",
+      "segments": [
+        { "segmentId": "segment.sanity.day4.entry", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 2 },
+        { "segmentId": "segment.sanity.day4.arrival", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 2 } ] },
+    { "edgeId": "road.sanity.day5", "fromNodeId": "sanity.day4", "toNodeId": "sanity.landmark", "direction": "north", "clueKey": "clue.sanity.landmark",
+      "segments": [
+        { "segmentId": "segment.sanity.day5.entry", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 2 },
+        { "segmentId": "segment.sanity.day5.arrival", "generationConfigurationId": "landmark.sanity.board", "generationVersion": 1 } ] }
+  ]
+}
