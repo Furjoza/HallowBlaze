@@ -63,6 +63,21 @@ namespace HallowBlaze.Tests.PlayMode
                 "{\"id\":\"same\",\"displayName\":\"Shovel\",\"maximumCharges\":3}]}"));
         }
 
+        /// <summary>Production clearing content opts in only soft wood and preserves an explicit cheaper/quieter manual alternative.</summary>
+        [Test]
+        public void AxeClearingContentHasOneStableDefinitionAndValidatedManualAlternative()
+        {
+            var rules = AxeContent.LoadRules();
+            Assert.That(rules.ObstacleContentIds, Is.EqualTo(new[] { "legacy.wall" }));
+            Assert.That(rules.RequiredWork, Is.EqualTo(3));
+            Assert.That(rules.AxeNoiseStrength, Is.GreaterThan(rules.ManualNoiseStrength));
+            Assert.That(rules.NoiseLifetimeTurns, Is.EqualTo(2));
+            Assert.That(ToolContentCatalog.Load().ContainsKey("axe.basic"), Is.True);
+            Assert.Throws<ArgumentOutOfRangeException>(() => AxeContent.ReadRules(
+                "{\"obstacleContentIds\":[\"wood\"],\"requiredWork\":1,\"manualNoiseStrength\":1,\"axeNoiseStrength\":6,\"noiseLifetimeTurns\":2}"));
+            Assert.Throws<ArgumentNullException>(() => AxeContent.ReadRules("{}"));
+        }
+
         /// <summary>Both populated slot labels render in a bounded top band at desktop and narrow portrait dimensions.</summary>
         [TestCase(1280, 720)]
         [TestCase(320, 640)]

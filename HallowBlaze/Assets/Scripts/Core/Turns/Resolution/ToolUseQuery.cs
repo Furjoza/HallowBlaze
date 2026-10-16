@@ -16,8 +16,9 @@ namespace HallowBlaze.Core.Turns.Resolution
         /// <param name="effectLabel">Concise consequence shown before confirmation.</param>
         /// <param name="noiseStrength">Nonnegative path-budget strength; zero means silent.</param>
         /// <param name="noiseLifetimeTurns">Positive lifetime of emitted noise.</param>
+        /// <param name="observedNoiseFactId">Optional knowledge recorded after presenting this actual noise, never an unlock condition.</param>
         public ToolAction(string definitionId, IInteractionAction behavior, string effectLabel,
-            int noiseStrength, int noiseLifetimeTurns)
+            int noiseStrength, int noiseLifetimeTurns, string observedNoiseFactId = null)
         {
             if (string.IsNullOrWhiteSpace(definitionId) || definitionId != definitionId.Trim())
                 throw new ArgumentException("A tool definition ID is required.", nameof(definitionId));
@@ -27,10 +28,14 @@ namespace HallowBlaze.Core.Turns.Resolution
             if (string.IsNullOrWhiteSpace(effectLabel)) throw new ArgumentException("An effect label is required.", nameof(effectLabel));
             if (noiseStrength < 0) throw new ArgumentOutOfRangeException(nameof(noiseStrength));
             if (noiseLifetimeTurns <= 0) throw new ArgumentOutOfRangeException(nameof(noiseLifetimeTurns));
+            if (observedNoiseFactId != null && (noiseStrength == 0 || string.IsNullOrWhiteSpace(observedNoiseFactId) ||
+                observedNoiseFactId != observedNoiseFactId.Trim()))
+                throw new ArgumentException("A noise fact requires an audible consequence and a stable ID.", nameof(observedNoiseFactId));
             DefinitionId = definitionId;
             EffectLabel = effectLabel;
             NoiseStrength = noiseStrength;
             NoiseLifetimeTurns = noiseLifetimeTurns;
+            ObservedNoiseFactId = observedNoiseFactId;
         }
 
         /// <summary>Gets the immutable content identity used for dispatch.</summary>
@@ -43,6 +48,8 @@ namespace HallowBlaze.Core.Turns.Resolution
         public int NoiseStrength { get; }
         /// <summary>Gets the positive lifetime of newly emitted noise.</summary>
         public int NoiseLifetimeTurns { get; }
+        /// <summary>Gets optional knowledge discovered only when the emitted consequence is presented.</summary>
+        public string ObservedNoiseFactId { get; }
     }
 
     /// <summary>Detached consequence preview retaining the exact tool, charges, target, behavior and current cost.</summary>

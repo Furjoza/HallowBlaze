@@ -191,7 +191,13 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             if (index < 0 || index >= OptionCount) throw new ArgumentOutOfRangeException(nameof(index));
             GridPosition position = TargetPosition(index);
             string target = " (" + position.X + ", " + position.Y + ")";
-            if (index < Options.Count) return ActionLabel(Options[index].ActionId) + target;
+            if (index < Options.Count)
+            {
+                InteractionOption interaction = Options[index];
+                if (interaction.EffectLabel == null) return ActionLabel(interaction.ActionId) + target;
+                return interaction.EffectLabel + target + "\n1 turn; Food -" + runtime.Tools.ActionCosts.FoodCost +
+                    "; Charge 0; Noise " + interaction.NoiseStrength + " / " + interaction.NoiseLifetimeTurns + " turns";
+            }
             ToolUseOption option = ToolOptions[index - Options.Count];
             return "Tool " + (option.SlotIndex + 1) + ": " + option.EffectLabel + target +
                 "\n1 turn; Food -" + option.FoodCost + "; Charge -" + option.ChargeCost +

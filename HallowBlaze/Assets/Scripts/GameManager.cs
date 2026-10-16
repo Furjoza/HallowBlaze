@@ -549,7 +549,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         activeBoardPresenter = new BoardEventPresenter(runtime, activePlayerView, activePlayerView,
             this, ReportPresentationDiagnostic, activePlayerView.moveTime, activeIntents,
             () => !IsGameplayInputBlocked && Time.frameCount > gameplayInputResumeFrame &&
-                activePlayerView != null && activePlayerView.isActiveAndEnabled);
+                activePlayerView != null && activePlayerView.isActiveAndEnabled, ObservePresentedFact);
         activeBoardPresenter.AnimationsEnabled = activePlayerView.animationsEnabled;
         activeBoardPresenter.SynchronizeFromState();
         intentViewport = new Vector2(Screen.width, Screen.height);
@@ -674,6 +674,14 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             Destroy(activeIntentOwner);
         }
         activeIntentOwner = null;
+    }
+
+    private void ObservePresentedFact(string factId)
+    {
+        session.Profile.DiscoverFact(factId);
+        SaveStoreResult result = saveStore.SaveProfile(session.Profile);
+        if (result.IsFailure)
+            throw new InvalidOperationException("Observed fact checkpoint failed: " + result.ErrorMessage);
     }
 
     private void ReportPresentationDiagnostic(PresentationDiagnostic diagnostic)
