@@ -37,7 +37,8 @@ namespace HallowBlaze.Presentation.Runtime
             EntityId playerId,
             Dictionary<EntityId, GameObject> views,
             IEnumerable<ShamblerState> enemies,
-            IEnumerable<ListenerState> listeners = null)
+            IEnumerable<ListenerState> listeners = null,
+            ToolUseQuery tools = null)
         {
             this.request = request ?? throw new ArgumentNullException(nameof(request));
             this.runState = runState ?? throw new ArgumentNullException(nameof(runState));
@@ -54,8 +55,13 @@ namespace HallowBlaze.Presentation.Runtime
             foreach (ListenerState listener in readOnlyListeners)
                 boardState.RegisterListener(listener.ActorId);
             enemyPhases.PlanInitialIntents(boardState, playerId);
+            ClearingRules = AxeContent.LoadRules();
+            DiggingRules = ShovelContent.LoadRules();
+            Interactions = ShovelContent.CreateInteractions(ClearingRules, DiggingRules);
+            Tools = tools ?? ShovelContent.CreateTools(ClearingRules, DiggingRules);
+            Pickups = new ToolPickupQuery();
             controller = new TurnController(boardState, runState, playerId,
-                new TurnResolver(ActionNoiseProfile.Prototype), enemyPhases.Handlers);
+                new TurnResolver(ActionNoiseProfile.Prototype, Interactions, Tools, Pickups), enemyPhases.Handlers);
         }
 
         /// <summary>Gets whether this runtime has released its controller and view bindings.</summary>
@@ -96,6 +102,21 @@ namespace HallowBlaze.Presentation.Runtime
 
         /// <summary>Gets the stable board-local identifier assigned to the player.</summary>
         public EntityId PlayerId { get; }
+
+        /// <summary>Gets the immutable action catalog shared by target preview and the sole resolver.</summary>
+        public InteractionQuery Interactions { get; }
+
+        /// <summary>Gets immutable opt-in soft obstacle rules shared by manual/axe actions and progress presentation.</summary>
+        public ObstacleClearingRules ClearingRules { get; }
+
+        /// <summary>Gets immutable explicit cache/pit rules shared by preview, resolver and visible remaining-work/lifetime labels.</summary>
+        public ShovelRules DiggingRules { get; }
+
+        /// <summary>Gets the exact tool behavior catalog and cost policy shared by preview and the sole resolver.</summary>
+        public ToolUseQuery Tools { get; }
+
+        /// <summary>Gets the same conscious equipment-transfer rules used by the picker and central resolver.</summary>
+        public ToolPickupQuery Pickups { get; }
 
         /// <summary>Gets the single command resolver owned for this board lifetime.</summary>
         /// <exception cref="ObjectDisposedException">The board runtime has been disposed.</exception>

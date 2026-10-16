@@ -1,5 +1,71 @@
 # HallowBlaze Testing
 
+## M5.6 Conscious Tool Pickup
+
+Only concrete board-owned tools enter the equipment picker; movement never collects them.
+An accepted pickup fills the first free generic slot. With full equipment, opening the comparison
+and selecting a slot are free drafts; only confirmed `Replace` submits a complete command.
+The old tool remains at the original ground binding with the same ID and charges, without
+inheriting the incoming authored source ID. `Leave`, Escape, cancellation, stale choices and
+full-slot refusal preserve ground/equipment without cost. Preview/pickup allocates no new ID,
+spends no charge and never refills a depleted tool. O-003 automatic food remains reward-before-cost.
+
+Run focused verification sequentially from the active Unity project root:
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter 'HallowBlaze.Tests.EditMode.ToolPickupTests;HallowBlaze.Tests.EditMode.BoardRuntimeCompositionTests' --output "$env:TEMP/HB-M56-domain.xml" -- -nographics -logFile "$env:TEMP/HB-M56-domain.log"
+unity test $project --mode PlayMode --filter HallowBlaze.Tests.PlayMode.ToolPickupPresentationTests --output "$env:TEMP/HB-M56-view.xml" -- -logFile "$env:TEMP/HB-M56-view.log"
+```
+
+Domain cases cover first-free and full-slot transfer, exact source/instance identity, stale and
+round-trip replay, duplicate/unallocated/already-equipped bindings, invalid targets, clone,
+depleted tools, single noise/cost, authored traits, isolated run save round-trip and unchanged
+automatic food. Composition covers both legacy descriptors and explicit blueprint/source bindings.
+PlayMode uses the production picker/coordinator and checks comparisons, independent input blocks,
+free cancellation/Leave, rapid confirmation, stale replacement, animation parity and actual scene
+unload followed by save/reload and HUD recomposition. Pixel checks render current ground/equipment
+labels at 960x540 and 320x640, writing `%TEMP%/HB-M56-exchange-<width>x<height>.png` outside the project.
+These captures cover the ground/HUD, not the IMGUI modal itself; modal labels and behavior are
+checked through the real picker. Full EditMode and graphics-enabled PlayMode remain regression gates.
+Require fresh nonzero XML with zero failures, not only a CLI completion message.
+
+Run schema v4 and profile schema v2 are unchanged. Ground instances remain transient board state;
+no mid-board save system, source knowledge, consumable modal, bag/pockets or generic discard/drop
+is implemented here. This automated gate does not replace M4.9 human prediction/readability evidence.
+
+## M5.5 Shovel
+
+Marked `legacy.buried-food` caches require three manual actions or one shovel use. Completion
+creates one concrete `shovel.cache-ration` item with a source entity and stable board-local
+instance ID before the pre-M9 compatibility adapter collects it. Food +10 precedes action cost;
+overflow rejects before work, reveal or charge mutation. The same reward can remain ground
+state without changing its identity when immediate transfer is disabled.
+
+Only explicitly authored `LegacyBoardContentKind.DiggableGround` / `shovel.diggable` terrain
+supports pits. Published generator configurations do not place this new content automatically.
+A fresh visible pit retains four subsequent accepted commands; pre-command pits age before
+enemy execution, never on rejection. Actual Shambler entry holds it until expiry without damage.
+An already announced Wait still executes when the pit expires. Player and Listener movement
+remain unaffected, so the exit never requires a shovel. Creation alone grants no knowledge;
+only ordered presentation of `ShamblerTrappedEvent` records `PIT_TRAPS_SHAMBLER`.
+
+Run focused checks sequentially against the active project:
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter 'HallowBlaze.Tests.EditMode.ShovelTests;HallowBlaze.Tests.EditMode.BoardStateTests;HallowBlaze.Tests.EditMode.BoardRuntimeCompositionTests' --output "$env:TEMP/HB-M55-domain.xml" -- -nographics -logFile "$env:TEMP/HB-M55-domain.log"
+unity test $project --mode PlayMode --filter HallowBlaze.Tests.PlayMode.ShovelPresentationTests --output "$env:TEMP/HB-M55-view.xml" -- -logFile "$env:TEMP/HB-M55-view.log"
+```
+
+The graphics gate exercises both cache routes and animation modes, visible work/lifetime/charge
+labels, ordered observation, isolated profile/run round-trips and reset. Pixel-checked real-sprite
+captures are written outside the project as `%TEMP%/HB-M55-cache.png` and `%TEMP%/HB-M55-pit.png`.
+Full EditMode and graphics PlayMode also protect the existing axe, Listener, picker and lifecycle
+paths. Require fresh nonzero XML with zero failures. These automated checks do not close M4.9's
+human prediction/readability gate. Pits and uncollected cache rewards remain transient board state;
+run schema v4 and profile schema v2 are unchanged.
+
 ## M4.8 Listener
 
 **Rule:** The Listener remembers the latest noise audible at emission and takes the announced

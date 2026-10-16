@@ -8,15 +8,21 @@ namespace HallowBlaze.Core.Turns.Contracts
     {
         /// <summary>Wraps the original board-owned emission without recomputing its footprint.</summary>
         /// <param name="noise">The immutable source, position, strength, lifetime and audible cells at emission.</param>
+        /// <param name="observedFactId">Optional stable fact documented only after this consequence is presented.</param>
         /// <exception cref="ArgumentNullException">The noise is null.</exception>
-        public NoiseEvent(BoardNoise noise)
+        public NoiseEvent(BoardNoise noise, string observedFactId = null)
         {
             Noise = noise ?? throw new ArgumentNullException(nameof(noise));
+            if (observedFactId != null && (string.IsNullOrWhiteSpace(observedFactId) || observedFactId != observedFactId.Trim()))
+                throw new ArgumentException("An observed fact requires a stable ID.", nameof(observedFactId));
+            ObservedFactId = observedFactId;
         }
 
         /// <inheritdoc />
         public override string EventType => "Noise";
         /// <summary>Gets the original emission; remaining lifetime in current BoardState may subsequently be lower.</summary>
         public BoardNoise Noise { get; }
+        /// <summary>Gets optional observation metadata; emitting or previewing this event does not mutate a profile.</summary>
+        public string ObservedFactId { get; }
     }
 }

@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
+using HallowBlaze.Core.State;
 using UnityEngine;
 
 namespace HallowBlaze.Presentation.Runtime
 {
-    /// <summary>Identifies every content category emitted by the current legacy board generator.</summary>
+    /// <summary>Identifies generated and explicitly authored content accepted by the legacy runtime composer.</summary>
     public enum LegacyBoardContentKind
     {
         /// <summary>Represents content for which no supported classification exists.</summary>
@@ -37,7 +38,7 @@ namespace HallowBlaze.Presentation.Runtime
         /// <summary>A bush food pickup restoring ten Food.</summary>
         BushFood,
 
-        /// <summary>A buried carrot requiring an explicit legacy gathering action.</summary>
+        /// <summary>A visibly marked cache with a slow manual alternative and faster shovel excavation.</summary>
         BuriedFood,
 
         /// <summary>A legacy health pickup.</summary>
@@ -47,7 +48,13 @@ namespace HallowBlaze.Presentation.Runtime
         Enemy,
 
         /// <summary>An explicitly authored noise-only Listener, never inferred from a Shambler damage variant.</summary>
-        Listener
+        Listener,
+
+        /// <summary>Explicitly authored walkable ground supporting visible temporary shovel pits, never inferred from ordinary floors.</summary>
+        DiggableGround,
+
+        /// <summary>An explicitly authored concrete tool requiring conscious equipment transfer, never automatic food collection.</summary>
+        Tool
     }
 
     /// <summary>Describes how one legacy content category participates in the authoritative runtime.</summary>
@@ -120,14 +127,18 @@ namespace HallowBlaze.Presentation.Runtime
         /// <param name="position">The board-local grid position represented by the view.</param>
         /// <param name="enemyDamage">Explicit 10/20 HP variant data for enemies; null for other content.
         /// Composition rejects enemies with missing or unsupported damage.</param>
+        /// <param name="tool">Existing run-allocated instance required only for Tool content; composition never allocates or equips it.</param>
+        /// <param name="sourceId">Optional stable authored tool-source ID; no atlas observation is inferred here.</param>
         /// <exception cref="ArgumentNullException"><paramref name="view"/> is null.</exception>
         public LegacyBoardView(GameObject view, LegacyBoardContentKind kind, GridPosition position,
-            int? enemyDamage = null)
+            int? enemyDamage = null, ToolInstanceState tool = null, string sourceId = null)
         {
             View = view != null ? view : throw new ArgumentNullException(nameof(view));
             Kind = kind;
             Position = position;
             EnemyDamage = enemyDamage;
+            Tool = tool;
+            SourceId = sourceId;
         }
 
         /// <summary>Gets the generated or scene-owned Unity view.</summary>
@@ -141,6 +152,10 @@ namespace HallowBlaze.Presentation.Runtime
 
         /// <summary>Gets explicit enemy variant damage in HP, or null for non-enemy content.</summary>
         public int? EnemyDamage { get; }
+        /// <summary>Gets the exact existing tool instance borrowed for unpublished board composition.</summary>
+        public ToolInstanceState Tool { get; }
+        /// <summary>Gets optional authored source metadata, separate from the concrete tool identity.</summary>
+        public string SourceId { get; }
     }
 
     /// <summary>Defines how one legacy category maps to domain content or presentation-only state.</summary>
@@ -236,7 +251,10 @@ namespace HallowBlaze.Presentation.Runtime
                     "legacy.aid",
                     new BoardEntityTraits(false, false, true)),
                 Mapped(LegacyBoardContentKind.Enemy, BoardLayer.Actor, EntityKind.Enemy, "legacy.enemy"),
-                Mapped(LegacyBoardContentKind.Listener, BoardLayer.Actor, EntityKind.Enemy, "enemy.listener")
+                Mapped(LegacyBoardContentKind.Listener, BoardLayer.Actor, EntityKind.Enemy, "enemy.listener"),
+                Mapped(LegacyBoardContentKind.DiggableGround, BoardLayer.Terrain, new EntityKind("terrain"), "shovel.diggable",
+                    new BoardEntityTraits(true, false, false)),
+                Mapped(LegacyBoardContentKind.Tool, BoardLayer.Item, EntityKind.Item, "tool.ground")
             });
 
         private static readonly IReadOnlyDictionary<LegacyBoardContentKind, LegacyBoardContentDefinition> byKind =

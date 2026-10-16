@@ -141,6 +141,55 @@ namespace HallowBlaze.Tests.EditMode
                 new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, " food "));
         }
 
+        /// <summary>Clearing progress belongs to one board; clones and removed/recreated obstacles cannot share it.</summary>
+        [Test]
+        public void ObstacleWorkIsBoardOwnedAndClearsOccupancyWithoutAffectingClones()
+        {
+            var board = new BoardState();
+            BoardEntityState obstacle = CreateEntity(10, BoardLayer.Obstacle, new GridPosition(1, 1));
+            Assert.That(board.TryAdd(obstacle), Is.True);
+            Assert.That(board.TryWorkObstacle(obstacle.Id, 1, 3, out int remaining), Is.True);
+            Assert.That(remaining, Is.EqualTo(2));
+            BoardState clone = board.Clone();
+            Assert.That(clone.TryWorkObstacle(obstacle.Id, 2, 3, out remaining), Is.True);
+            Assert.That(remaining, Is.Zero);
+            Assert.That(clone.TryGetEntity(BoardLayer.Obstacle, obstacle.Position, out _), Is.False);
+            Assert.That(board.GetObstacleWork(obstacle.Id), Is.EqualTo(1));
+            Assert.That(board.TryGetEntity(obstacle.Id, out _), Is.True);
+            Assert.That(board.TryRemove(obstacle.Id), Is.True);
+            Assert.That(board.TryAdd(obstacle), Is.True);
+            Assert.That(board.GetObstacleWork(obstacle.Id), Is.Zero);
+            Assert.That(board.TryWorkObstacle(new EntityId(99), 1, 3, out _), Is.False);
+            Assert.Throws<ArgumentOutOfRangeException>(() => board.TryWorkObstacle(obstacle.Id, 0, 3, out _));
+            Assert.That(board.GetObstacleWork(obstacle.Id), Is.Zero);
+        }
+
+        /// <summary>Pits preserve ordinary traversal, reject occupied terrain and keep independent clone lifetimes.</summary>
+        [Test]
+        public void PitsAreVisibleBoardOwnedSnapshotsWithExplicitLifetime()
+        {
+            var board = new BoardState();
+            var terrain = new BoardEntityState(new EntityId(1), new BoardEntityDefinition(BoardLayer.Terrain,
+                new EntityKind("terrain"), "diggable", new BoardEntityTraits(true, false, false)), new GridPosition(1, 1));
+            Assert.That(board.TryAdd(terrain), Is.True);
+            Assert.That(board.TryCreatePit(terrain.Id, 3), Is.True);
+            Assert.That(board.TryCreatePit(terrain.Id, 3), Is.False);
+            Assert.That(board.TryGetPit(terrain.Position, out BoardPit pit), Is.True);
+            Assert.That(pit.RemainingTurns, Is.EqualTo(3));
+            BoardState clone = board.Clone();
+            clone.AdvancePitLifetime(pit.Id);
+            Assert.That(clone.GetPits()[0].RemainingTurns, Is.EqualTo(2));
+            Assert.That(board.GetPits()[0].RemainingTurns, Is.EqualTo(3));
+            clone.AdvancePitLifetime(pit.Id);
+            clone.AdvancePitLifetime(pit.Id);
+            Assert.That(clone.GetPits(), Is.Empty);
+            Assert.That(clone.TryGetEntity(terrain.Id, out BoardEntityState retained), Is.True);
+            Assert.That(retained.Definition.Traits.IsWalkable, Is.True);
+            Assert.That(board.TryRemove(terrain.Id), Is.True);
+            Assert.That(board.GetPits(), Is.Empty);
+            Assert.That(board.TryCreatePit(terrain.Id, 3), Is.False);
+        }
+
         /// <summary>
         /// The board-state domain assembly has no Unity runtime dependency.
         /// </summary>
