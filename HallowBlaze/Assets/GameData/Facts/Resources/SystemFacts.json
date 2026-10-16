@@ -1,0 +1,28 @@
+{
+  "facts": [
+    {
+      "id": "AXE_CREATES_LOUD_NOISE",
+      "observation": "AxeNoisePresented",
+      "title": "A loud shortcut",
+      "description": "The axe clears soft wood quickly, but its loud noise travels farther than working by hand.",
+      "iconId": "axe",
+      "sourceSystem": "Tools / Noise"
+    },
+    {
+      "id": "PIT_TRAPS_SHAMBLER",
+      "observation": "ShamblerTrappedPresented",
+      "title": "Held by the ground",
+      "description": "A Shambler that steps into a pit waits there until the pit expires. The pit causes no damage.",
+      "iconId": "pit",
+      "sourceSystem": "Shovel / Shambler"
+    },
+    {
+      "id": "LISTENER_FOLLOWS_NOISE",
+      "observation": "ListenerInvestigationPresented",
+      "title": "Following the sound",
+      "description": "The Listener follows a heard noise toward its source. Its announced step stays fixed; a new sound can change the next plan.",
+      "iconId": "hearing",
+      "sourceSystem": "Listener / Noise"
+    }
+  ]
+}

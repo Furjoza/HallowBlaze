@@ -1,0 +1,10 @@
+{
+  "cacheContentId": "legacy.buried-food",
+  "diggableTerrainId": "shovel.diggable",
+  "cacheWork": 3,
+  "rewardDefinitionId": "shovel.cache-ration",
+  "rewardFood": 10,
+  "pitLifetimeTurns": 4,
+  "noiseStrength": 2,
+  "noiseLifetimeTurns": 2
+}

@@ -831,6 +831,7 @@ The two slots remain a separate equipment bar after M9. They are not cells in th
 - Zamiana narzędzia jest świadomą, modalną decyzją.
 - W vertical slice nie ma craftingu, drzewka ulepszeń ani rozbudowanych napraw.
 - A conscious tool pickup routes the tool instance to a free generic tool slot; with both slots occupied, the player chooses `Replace` or `Leave` and nothing is destroyed silently.
+- In the M5.6 equipment flow, confirmed `Replace` exchanges the selected equipped tool with the concrete ground tool. The displaced tool remains at the same ground entity/cell with its original instance ID and charges; it does not inherit the picked-up tool's authored source ID. This is not a generic carried-item discard or drop command. `Leave`, cancellation and stale decisions preserve the existing ground instance and equipment for free. Pickup never spends or refills a tool charge.
 
 ### 13.2. Siekiera
 
@@ -857,6 +858,28 @@ Samo „szybciej” jest mało interesujące. Hałas zamienia oszczędność cza
 #### Decyzja
 
 Pierwsze zaobserwowanie konsekwencji może odkryć fakt, np. `AXE_CREATES_LOUD_NOISE` lub `PIT_TRAPS_SHAMBLER`.
+
+#### Accepted Field Notes Contract - M5.7
+
+Mechanical knowledge belongs to the profile, not the reader or the current run. Only ordered
+presentation of an actual consequence emits a supported `FactObservation`: axe noise after its
+footprint is shown, a Shambler after actual pit entry is shown, or a Listener's executed
+investigation after its movement is shown. Planning, preview, cancellation, rejection, pit
+creation alone and unpresented resolver output do not discover facts. Each stable fact ID creates
+one `FactDiscovery`; gameplay rules never require this knowledge to work.
+
+The profile checkpoint precedes discovery feedback. Failed writes retain pending discoveries for
+retry without a second discovery event. Existing profile schema v2 IDs remain authoritative and
+already known facts do not replay discovery feedback on load. Death and a new run preserve notes;
+only explicit New Game replaces the profile. Missing definitions use a neutral placeholder and
+retain their saved IDs.
+
+Field Notes reads only recorded entries with working English text and distinct icons. It contains
+no unknown checklist, hidden rule identifiers, source-location hints, completion percentage,
+tutorial or stat bonus. Its own input block makes reading free without releasing pause or other
+modal ownership. Mechanical `FactDiscovery` is not M7.5 `ToolSourceSighted`; source-system labels
+describe provenance, not atlas locations. The authored registry and exact observation/text mapping
+are documented in [Testing](Testing.md#m57-field-notes).
 
 #### Rationale — dlaczego
 

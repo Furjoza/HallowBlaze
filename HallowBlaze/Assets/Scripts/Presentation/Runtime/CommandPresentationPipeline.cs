@@ -17,7 +17,11 @@ namespace HallowBlaze.Presentation.Runtime
         /// <summary>A modal owns input while building or canceling a draft.</summary>
         Modal = 2,
         /// <summary>The owning view or lifecycle has disabled input.</summary>
-        Disabled = 4
+        Disabled = 4,
+        /// <summary>A target picker owns a free draft independently of pause and route modals.</summary>
+        Interaction = 8,
+        /// <summary>The read-only Field Notes screen owns input independently of pause and other modals.</summary>
+        FieldNotes = 16
     }
 
     /// <summary>Transient ownership of the one admitted submission.</summary>
@@ -47,7 +51,8 @@ namespace HallowBlaze.Presentation.Runtime
         public void SetBlocked(PresentationInputBlock reason, bool blocked)
         {
             const PresentationInputBlock all = PresentationInputBlock.Setup |
-                PresentationInputBlock.Modal | PresentationInputBlock.Disabled;
+                PresentationInputBlock.Modal | PresentationInputBlock.Disabled | PresentationInputBlock.Interaction |
+                PresentationInputBlock.FieldNotes;
             if (reason == PresentationInputBlock.None || (reason & ~all) != 0)
                 throw new ArgumentOutOfRangeException(nameof(reason));
             Blocks = blocked ? Blocks | reason : Blocks & ~reason;
