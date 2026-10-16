@@ -5150,7 +5150,8 @@ Manual work persists between actions and the axe completes whatever work remains
 
 ## `M5.7` — Field Notes dla faktów systemowych
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-16)
+
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 4, 5.4, 13.4 i 18.
 
@@ -5175,6 +5176,28 @@ Manual work persists between actions and the axe completes whatever work remains
 **Wpływ na save i kompatybilność:** Profil zapisuje stable fact IDs; brakująca definicja ma kontrolowany placeholder, nie niszczy profilu.
 
 **Wymagany handoff:** Rejestr facts: ID, warunek odkrycia, tekst, system źródłowy.
+
+### Implementation Outcome - 2026-10-16
+
+The owner explicitly authorized M5.7 from clean baseline `ceadef295a903f781f8fe718e7e2ae9669ab01cd`
+on `M5/7/FieldNotes`. Direct Lead implementation added immutable fact definitions, typed presented
+observations, idempotent `FactDiscovery`, a durable checkpoint/retry boundary and a profile-owned
+Field Notes reader. The [authored registry](Testing.md#m57-field-notes) records the exact ID,
+condition, working English title/text, icon and mechanical source system for axe noise, a trapped
+Shambler and an executed Listener investigation. Unknown rules never create rows or hints; missing
+definitions retain their saved IDs with a neutral placeholder. Notes and feedback persist through
+death/new runs, while explicit New Game replaces the profile. Reading is free and uses an
+independent input owner; resize remains live while the post-death GameManager is disabled.
+
+Unity 6000.3.21f1 passed full EditMode 1069 tests with only the existing Explicit generation
+milestone skipped and final graphics PlayMode 169/169. Focused state/persistence passed 106/106,
+presentation gate 32/32 and Field Notes 6/6, including production event replay, unpresented-output
+rejection, animation parity, checkpoint compatibility, death/new-run/New-Game and nonblank
+1280x720 / 320x480 renders. Independent Reviewer returned PASS for domain/persistence, observation
+triggers, UI/lifecycle and the final post-death resize delta. Scope, diagnostics, metadata/GUID,
+registry documentation and whitespace checks passed. Profile schema v2/run schema v4, published
+generators, scenes, prefabs, settings and packages are unchanged. M4.9 remains Pending without
+human results; this card does not close a human gate or authorize M6.1. No commit or push was made.
 
 ### Bramka M5
 
@@ -6180,7 +6203,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further M5 content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6 implementation with Reviewer. All six cards are Done; M5.6 passed full EditMode 1061 tests plus the existing Explicit skip and graphics PlayMode 163/163, with independent Reviewer PASS across its reviewed scopes. These card-specific exceptions do not close M4.9 or authorize execution of M5.7, which remains Planned. Preserve independent review on later cards unless separately waived;
+1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer. All seven cards are Done; M5.7 passed full EditMode 1069 tests plus the existing Explicit skip and graphics PlayMode 169/169, with independent Reviewer PASS across its reviewed scopes. These card-specific exceptions do not close M4.9 or authorize execution of M6.1, which remains Planned. Preserve independent review on later cards unless separately waived;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6218,7 +6241,9 @@ M5.4 was completed on 2026-10-16 at the owner's explicit request from clean base
 
 M5.5 was completed on 2026-10-16 at the owner's explicit request from clean baseline `9505c75447a3d9c8a17f198de959699b95a6b6ed` on `M5/5/Shovel`, with direct Lead implementation and independent Reviewer PASS. Marked caches offer three manual actions or one shovel action, producing one identity-bearing reward before the transitional transfer and action cost. Explicit diggable ground supports a visible four-command pit that holds only a Shambler after actual entry; the observed trap fact persists in the profile. Full EditMode passed 1030 tests with the existing Explicit milestone skipped; graphics PlayMode passed 157/157. Run/profile schemas and published generators are unchanged. M4.9 remains Pending without a human result. At that closeout, M5.6 remained Planned and required the later explicit owner request recorded below. No commit or push was performed.
 
-M5.6 was completed on 2026-10-16 at the owner's explicit request from clean baseline `9e1a6f0df5726b4d0eee81dd525afad18a2d10fa` on `M5/6/ToolPickUp`, with direct Lead implementation and independent Reviewer PASS. Conscious pickup fills the first free slot; full equipment requires a modal comparison and confirmed lossless exchange, preserving the old instance on the ground. Leave/cancel/stale/refusal are free, rapid input cannot duplicate the transfer, and food remains automatic under resolved O-003. Run schema v4 / profile schema v2 and published generators are unchanged. Full EditMode passed 1061 tests with the existing Explicit milestone skipped; graphics PlayMode passed 163/163. M4.9 remains Pending without human results; M5.7 remains Planned and is not automatically authorized. No commit or push was performed.
+M5.6 was completed on 2026-10-16 at the owner's explicit request from clean baseline `9e1a6f0df5726b4d0eee81dd525afad18a2d10fa` on `M5/6/ToolPickUp`, with direct Lead implementation and independent Reviewer PASS. Conscious pickup fills the first free slot; full equipment requires a modal comparison and confirmed lossless exchange, preserving the old instance on the ground. Leave/cancel/stale/refusal are free, rapid input cannot duplicate the transfer, and food remains automatic under resolved O-003. Run schema v4 / profile schema v2 and published generators are unchanged. Full EditMode passed 1061 tests with the existing Explicit milestone skipped; graphics PlayMode passed 163/163. M4.9 remains Pending without human results. At that closeout, M5.7 remained Planned and required the later explicit owner request recorded below. No commit or push was performed.
+
+M5.7 was completed on 2026-10-16 at the owner's explicit request from clean baseline `ceadef295a903f781f8fe718e7e2ae9669ab01cd` on `M5/7/FieldNotes`, with direct Lead implementation and independent Reviewer PASS. Three typed presented consequences record durable profile facts once before feedback; the reader exposes only recorded text/icons, with safe missing-content placeholders and separate input ownership. Death and a new run retain knowledge; explicit New Game resets it. Full EditMode passed 1069 tests with the existing Explicit milestone skipped; final graphics PlayMode passed 169/169. Run/profile schemas, generators and serialized scenes/settings remain unchanged. M4.9 remains Pending without human results; M6.1 remains Planned and is not automatically authorized. No commit or push was performed.
 
 # Zasada aktualizacji roadmapy
 

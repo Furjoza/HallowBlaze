@@ -28,7 +28,10 @@ namespace HallowBlaze.Tests.EditMode
             var events = new List<GameEvent>();
             batch.Handlers.ExecuteLockedIntents(board, CreateRun(), new EntityId(1), events);
             Assert.That(((EntityMovedEvent)events[0]).EntityId, Is.EqualTo(first.ActorId));
-            Assert.That(((EntityWaitedEvent)events[1]).EntityId, Is.EqualTo(second.ActorId));
+            Assert.That(((ListenerInvestigatedEvent)events[1]).ActorId, Is.EqualTo(first.ActorId));
+            Assert.That(((ListenerInvestigatedEvent)events[1]).NoiseId, Is.EqualTo(noise.Id));
+            Assert.That(((EntityWaitedEvent)events[2]).EntityId, Is.EqualTo(second.ActorId));
+            Assert.That(events.Count, Is.EqualTo(3));
             Assert.That(board.TryGetEntity(second.ActorId, out BoardEntityState blocked), Is.True);
             Assert.That(blocked.Position, Is.EqualTo(new GridPosition(3, 2)));
         }
@@ -53,7 +56,9 @@ namespace HallowBlaze.Tests.EditMode
             var events = new List<GameEvent>();
             batch.Handlers.ExecuteLockedIntents(board, CreateRun(), new EntityId(1), events);
             Assert.That(((EntityMovedEvent)events[0]).EntityId, Is.EqualTo(new EntityId(2)));
-            Assert.That(((EntityWaitedEvent)events[1]).EntityId, Is.EqualTo(new EntityId(3)));
+            Assert.That(((EntityWaitedEvent)events[listenerFirst ? 2 : 1]).EntityId, Is.EqualTo(new EntityId(3)));
+            Assert.That(events.OfType<ListenerInvestigatedEvent>().Count(), Is.EqualTo(listenerFirst ? 1 : 0));
+            if (listenerFirst) Assert.That(((ListenerInvestigatedEvent)events[1]).ActorId, Is.EqualTo(listener.ActorId));
         }
 
         /// <summary>A real interaction lures the Listener toward the old source after the player leaves, with no extra action cost.</summary>
