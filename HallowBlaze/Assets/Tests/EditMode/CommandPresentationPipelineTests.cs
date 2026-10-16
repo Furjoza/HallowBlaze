@@ -393,7 +393,11 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(separate.CanSubmit, Is.False);
             separate.SetBlocked(PresentationInputBlock.Modal, false);
             Assert.That(separate.CanSubmit, Is.True);
-            Assert.Throws<ArgumentOutOfRangeException>(() => separate.SetBlocked((PresentationInputBlock)8, true));
+            separate.SetBlocked(PresentationInputBlock.Interaction, true);
+            Assert.That(separate.CanSubmit, Is.False);
+            separate.SetBlocked(PresentationInputBlock.Interaction, false);
+            Assert.That(separate.CanSubmit, Is.True);
+            Assert.Throws<ArgumentOutOfRangeException>(() => separate.SetBlocked((PresentationInputBlock)16, true));
         }
 
         [Test]
@@ -479,6 +483,15 @@ namespace HallowBlaze.Tests.EditMode
             var ambiguous = new PcCommandSource(candidate => candidate == KeyCode.W || candidate == KeyCode.D, () => 1);
             Assert.That(coordinator.SubmitFromAsync(absent).Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
             Assert.That(coordinator.SubmitFromAsync(ambiguous).Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+            Assert.That(coordinator.ResolutionCount, Is.Zero);
+            Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+        }
+
+        [Test]
+        public void PcSource_OpeningInteractionDoesNotAlsoMoveOrWait()
+        {
+            var source = new PcCommandSource(key => key == KeyCode.E || key == KeyCode.W || key == KeyCode.Space, () => 1);
+            Assert.That(coordinator.SubmitFromAsync(source).Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
             Assert.That(coordinator.ResolutionCount, Is.Zero);
             Assert.That(runtime.RunState.Food, Is.EqualTo(100));
         }
