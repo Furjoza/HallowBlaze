@@ -20,6 +20,7 @@ namespace HallowBlaze.Core.Board.State
 
         private readonly Dictionary<EntityId, BoardEntityState> entitiesById;
         private readonly Dictionary<BoardLayer, Dictionary<GridPosition, EntityId>> entityIdsByLayer;
+        private readonly Dictionary<EntityId, int> obstacleWork = new Dictionary<EntityId, int>();
         private readonly List<BoardNoise> activeNoises;
         private readonly Dictionary<EntityId, BoardNoise> listenerNoises = new Dictionary<EntityId, BoardNoise>();
         private long nextNoiseId;
@@ -92,7 +93,32 @@ namespace HallowBlaze.Core.Board.State
             Dictionary<GridPosition, EntityId> layer = entityIdsByLayer[entity.Definition.Layer];
             layer.Remove(entity.Position);
             entitiesById.Remove(id);
+            obstacleWork.Remove(id);
             listenerNoises.Remove(id);
+            return true;
+        }
+
+        /// <summary>Reads board-local clearing progress; untouched or removed obstacles have no accumulated work.</summary>
+        public int GetObstacleWork(EntityId id) => obstacleWork.TryGetValue(id, out int work) ? work : 0;
+
+        /// <summary>Applies validated clearing work and removes the obstacle when its configured requirement is reached.</summary>
+        /// <param name="id">Exact obstacle instance; actors, items and terrain cannot be cleared through this operation.</param>
+        /// <param name="work">Positive work applied by one accepted action.</param>
+        /// <param name="requiredWork">Positive immutable content requirement shared by manual and tool actions.</param>
+        /// <param name="remainingWork">Remaining work on success, zero when cleared or rejected.</param>
+        /// <returns>False for a missing or non-obstacle entity, with no mutation; otherwise true.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Work or requirement is not positive.</exception>
+        public bool TryWorkObstacle(EntityId id, int work, int requiredWork, out int remainingWork)
+        {
+            if (work <= 0) throw new ArgumentOutOfRangeException(nameof(work));
+            if (requiredWork <= 0) throw new ArgumentOutOfRangeException(nameof(requiredWork));
+            remainingWork = 0;
+            if (!TryGetEntity(id, out BoardEntityState obstacle) || obstacle.Definition.Layer != BoardLayer.Obstacle)
+                return false;
+            int completed = Math.Min(GetObstacleWork(id), requiredWork);
+            remainingWork = Math.Max(0, requiredWork - completed - Math.Min(work, requiredWork));
+            if (remainingWork == 0) TryRemove(id);
+            else obstacleWork[id] = requiredWork - remainingWork;
             return true;
         }
 
@@ -198,6 +224,8 @@ namespace HallowBlaze.Core.Board.State
             {
                 clone.activeNoises.Add(noise);
             }
+            foreach (var progress in obstacleWork)
+                clone.obstacleWork.Add(progress.Key, progress.Value);
             clone.nextNoiseId = nextNoiseId;
             foreach (var listener in listenerNoises)
                 clone.listenerNoises.Add(listener.Key, listener.Value);

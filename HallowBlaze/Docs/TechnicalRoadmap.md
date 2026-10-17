@@ -5018,13 +5018,13 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 ## `M5.4` — Siekiera: szybsza trasa za duży hałas
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-16)
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 12, 13.2 i 13.4.
 
 **Rationale:** Samo „szybciej usuwa krzak” jest płaską premią. Duży hałas zamienia oszczędność czasu w przestrzenne ryzyko i łączy siekierę z Listenerem.
 
-**Obecne zachowanie:** Przeszkody mogą mieć HP w widoku, ale nie istnieje domenowy kontrast ręczne karczowanie vs użycie axe.
+**Current behavior:** Opted-in soft obstacles have board-owned clearing progress and two explicit actions: tool-free manual work and a faster, louder axe cut. Production content opts in only `legacy.wall`; boundary decoration, unrelated trees, stone and actors are not axe targets. Legacy `Wall.hp` no longer decides this path's progress or removal.
 
 **Oczekiwany rezultat:** Krzew/miękka drewniana przeszkoda ma wolną alternatywę bez narzędzia; axe usuwa ją szybciej, zużywa charge i emituje czytelny głośny noise.
 
@@ -5040,9 +5040,22 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 **Plan testów:** EditMode explicit cost/charge/noise command sequences; PlayMode obstacle interaction with/without an axe and Listener response. Portable replay is additional coverage only after M8.7 acceptance.
 
-**Wpływ na save i kompatybilność:** Tool charges w runie; fact discovery w profilu może wymagać rozszerzenia/migracji listy stabilnych fact IDs.
+**Save and compatibility impact:** Run schema v4 already stores the changed axe charges at existing run-save boundaries. Profile schema v2 already accepts stable fact IDs and now retains `AXE_CREATES_LOUD_NOISE` without a schema bump or reset. The fact is checkpointed only after presenting its actual axe-noise event; preview, rejection, equipment ownership and manual work do not discover it. Knowledge never enables the action. Clearing progress belongs to `BoardState`, is independently cloned, and is removed with its obstacle; a reconstructed board starts fresh under the existing no-mid-board-save contract. New runs clear equipment, not profile knowledge. Published layout/RNG identities and generation budgets remain unchanged.
 
-**Wymagany handoff:** Porównanie kosztu obu rozwiązań i nagranie/screenshot czytelności noise.
+**Configured trade-off:** `Assets/GameData/Tools/Resources/AxeClearing.json` is the shared source for both alternatives. It requires at least two manual actions for a fresh supported obstacle and a strictly louder axe emission. Current prototype values are:
+
+| Alternative on a fresh obstacle | Accepted turns | Food under the current policy | Charges | Noise per action | New noise lifetime |
+| --- | --- | --- | --- | --- | --- |
+| Clear by hand | 3 | 3 | 0 | Strength 1 | 2 subsequent accepted commands |
+| `axe.basic` / `chop` | 1 | 1 | 1 | Strength 6 | 2 subsequent accepted commands |
+
+Manual work persists between actions and the axe completes whatever work remains. If only one manual action remains, the axe no longer saves another turn; the manual preview states that remaining count rather than implying a nonexistent advantage. Each accepted action uses the shared cost policy and one normal hostile opportunity, unless it ends the board. A single blocked corridor can still be cleared and exited with empty tool slots.
+
+**Events and observation:** Manual clearing emits `InteractionPerformed -> ObstacleWorked -> ActionCostApplied -> Noise` when configured strength is positive. Axe use emits `ToolUsed -> ObstacleWorked -> ToolChargeSpent -> ActionCostApplied -> Noise`. Completion removes authoritative obstacle occupancy before noise propagation, so the new footprint can pass through the cleared cell. The Listener remembers the exact `BoardNoise` carried by that event and shown by presentation, executes its previously announced intent first, then plans its next investigation. Rejected empty/depleted/stale/displaced/unsupported selections do not change work, charges, food, noise age, facts or enemy opportunities.
+
+**Presentation and evidence:** The numbered picker shows manual remaining work and both alternatives' turn/Food/charge/noise consequences before confirmation. Non-color work fractions, the authored damaged sprite/chop clip, hidden cleared views, current equipment charges and the existing strength/lifetime footprint show the result without relying on animation or audio. PlayMode captures with real project sprite assets and the HUD are generated outside the repository as `%TEMP%/HB-M54-manual.png` and `%TEMP%/HB-M54-axe.png`; assertions verify nonblank glyph pixels and exact displayed/heard footprint cells. The actual audio adapter is tested without changing legacy HP. Recovery reads progress without replaying audio; terminal/disposal paths release the owned labels.
+
+**Acceptance (2026-10-16):** Started from clean baseline `1bce2b7625950af57ff914953e72d84c95d23f80` on `M5/4/Axe` in Git root `D:/Repos/HallowBlaze`. The owner's explicit M5.4 continuation authorizes this card despite the still-Pending M4.9 human gate; no human result or automatic M5.5 authorization is claimed. Direct Lead implementation used no Developer delegation. Unity 6000.3.21f1 compiled the final implementation. Full EditMode passed 1001 tests with only the existing Explicit M4.6 10,000-seed milestone skipped; full graphics-enabled PlayMode passed 152/152 without skips. Final focused domain/board/noise checks passed 30/30, production axe presentation/audio/save/capture scenarios passed 8/8, and neighboring content/presentation checks passed 33/33. Independent Reviewer returned PASS for domain/Listener behavior, presentation/audio/lifecycle, and content/runtime/knowledge persistence. Baseline, generated metadata, editor diagnostics, scope and whitespace checks passed. No scene, prefab, settings, package or generator files were modified; no commit or push was performed. Pickup/replacement remains M5.6, shovel behavior M5.5, and barricades remain outside this card.
 
 ---
 
@@ -6138,7 +6151,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further M5 content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3 implementation with Reviewer. All three cards are Done; M5.3 passed full EditMode 987 tests plus the existing Explicit skip and graphics PlayMode 143/143, with independent Reviewer PASS across its reviewed scopes. These card-specific exceptions do not close M4.9 or authorize execution of M5.4, which remains Planned. Preserve independent review on later cards unless separately waived;
+1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further M5 content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4 implementation with Reviewer. All four cards are Done; M5.4 passed full EditMode 1001 tests plus the existing Explicit skip and graphics PlayMode 152/152, with independent Reviewer PASS across its reviewed scopes. These card-specific exceptions do not close M4.9 or authorize execution of M5.5, which remains Planned. Preserve independent review on later cards unless separately waived;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6170,7 +6183,9 @@ M5.1 was subsequently completed on 2026-10-15 at the owner's request from clean 
 
 M5.2 was completed on 2026-10-16 at the owner's explicit request from clean baseline `8e655acb78eef4aa0cbb581ff599156baa561f17` on `M5/2/ItemsItems`, with direct Lead implementation and self-review only. It adds two generic identity-bearing equipment cells, immutable definitions/instances, charge invariants, compatible run schema v4 and a read-only HUD. Full EditMode passed 951 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 138/138. M4.9 remains Pending with no human result. No independent review verdict, commit, or push is claimed for M5.2.
 
-M5.3 was completed on 2026-10-16 at the owner's explicit request from clean baseline `7de0b2b722b23cc3bc8046773ff20d678c6b78f2` on `M5/2/ItemsItems`, with direct Lead implementation and no Developer delegation. It adds exact tool decisions, shared preview/dispatch, atomic accepted charge/cost/noise events, stale/replay rejection and presentation through the existing picker. Full EditMode passed 987 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 143/143. Independent Reviewer returned PASS for the domain, picker and runtime integration. Run schema v4 and production axe/shovel effects are unchanged. M4.9 remains Pending; M5.4 remains Planned and is not authorized for automatic execution. No commit or push was performed.
+M5.3 was completed on 2026-10-16 at the owner's explicit request from clean baseline `7de0b2b722b23cc3bc8046773ff20d678c6b78f2` on `M5/2/ItemsItems`, with direct Lead implementation and no Developer delegation. It adds exact tool decisions, shared preview/dispatch, atomic accepted charge/cost/noise events, stale/replay rejection and presentation through the existing picker. Full EditMode passed 987 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 143/143. Independent Reviewer returned PASS for the domain, picker and runtime integration. Run schema v4 and production axe/shovel effects were unchanged by M5.3. M4.9 remains Pending. No commit or push was performed.
+
+M5.4 was completed on 2026-10-16 at the owner's explicit request from clean baseline `1bce2b7625950af57ff914953e72d84c95d23f80` on `M5/4/Axe`, with direct Lead implementation and independent Reviewer PASS across domain, presentation and integration. Board-owned progress supports three manual actions or one charge-consuming axe action, with authored strength 1 versus 6 and exact Listener/UI noise identity. The observed axe-noise fact persists in profile schema v2; run schema v4 is unchanged. Full EditMode passed 1001 tests with the existing Explicit milestone skipped; full graphics PlayMode passed 152/152. M4.9 remains Pending with no human result; M5.5 remains Planned, not authorized for automatic execution. No commit or push was performed.
 
 # Zasada aktualizacji roadmapy
 

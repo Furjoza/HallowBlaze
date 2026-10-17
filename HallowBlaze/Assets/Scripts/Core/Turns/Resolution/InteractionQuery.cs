@@ -29,12 +29,16 @@ namespace HallowBlaze.Core.Turns.Resolution
     /// <summary>Immutable preview of one action on the exact ground entity; it never owns or removes that entity.</summary>
     public sealed class InteractionOption
     {
-        internal InteractionOption(BoardEntityState target, string actionId, InteractionAvailability availability)
+        internal InteractionOption(BoardEntityState target, string actionId, InteractionAvailability availability,
+            IInteractionConsequences consequences = null, BoardState board = null)
         {
             TargetId = target.Id;
             TargetPosition = target.Position;
             ActionId = actionId;
             Availability = availability;
+            EffectLabel = consequences?.DescribeEffect(board, target);
+            NoiseStrength = consequences?.NoiseStrength;
+            NoiseLifetimeTurns = consequences?.NoiseLifetimeTurns;
         }
 
         /// <summary>Gets the exact board-local instance, not its content definition.</summary>
@@ -45,6 +49,12 @@ namespace HallowBlaze.Core.Turns.Resolution
         public string ActionId { get; }
         /// <summary>Gets the reason this snapshot is available or disabled.</summary>
         public InteractionAvailability Availability { get; }
+        /// <summary>Gets optional direct-effect/progress text, or null for the existing contextual labels.</summary>
+        public string EffectLabel { get; }
+        /// <summary>Gets explicit noise strength when authored by the action, including zero for silence.</summary>
+        public int? NoiseStrength { get; }
+        /// <summary>Gets the configured lifetime for the optional explicit noise.</summary>
+        public int? NoiseLifetimeTurns { get; }
         /// <summary>Gets whether this snapshot may be submitted without a further decision.</summary>
         public bool IsAvailable => Availability == InteractionAvailability.Available;
 
@@ -110,7 +120,8 @@ namespace HallowBlaze.Core.Turns.Resolution
                     continue;
                 foreach (IInteractionAction action in actions.Values)
                     if (action.Supports(target))
-                        options.Add(new InteractionOption(target, action.Id, action.Evaluate(board, run, player, target)));
+                        options.Add(new InteractionOption(target, action.Id, action.Evaluate(board, run, player, target),
+                            action as IInteractionConsequences, board));
             }
             return options.AsReadOnly();
         }

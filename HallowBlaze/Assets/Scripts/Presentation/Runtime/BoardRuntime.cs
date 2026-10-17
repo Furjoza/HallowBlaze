@@ -55,8 +55,9 @@ namespace HallowBlaze.Presentation.Runtime
             foreach (ListenerState listener in readOnlyListeners)
                 boardState.RegisterListener(listener.ActorId);
             enemyPhases.PlanInitialIntents(boardState, playerId);
-            Interactions = new InteractionQuery();
-            Tools = tools ?? new ToolUseQuery();
+            ClearingRules = AxeContent.LoadRules();
+            Interactions = AxeContent.CreateInteractions(ClearingRules);
+            Tools = tools ?? AxeContent.CreateTools(ClearingRules);
             controller = new TurnController(boardState, runState, playerId,
                 new TurnResolver(ActionNoiseProfile.Prototype, Interactions, Tools), enemyPhases.Handlers);
         }
@@ -102,6 +103,9 @@ namespace HallowBlaze.Presentation.Runtime
 
         /// <summary>Gets the immutable action catalog shared by target preview and the sole resolver.</summary>
         public InteractionQuery Interactions { get; }
+
+        /// <summary>Gets immutable opt-in soft obstacle rules shared by manual/axe actions and progress presentation.</summary>
+        public ObstacleClearingRules ClearingRules { get; }
 
         /// <summary>Gets the exact tool behavior catalog and cost policy shared by preview and the sole resolver.</summary>
         public ToolUseQuery Tools { get; }

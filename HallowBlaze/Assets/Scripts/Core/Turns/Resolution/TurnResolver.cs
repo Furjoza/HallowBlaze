@@ -74,8 +74,7 @@ namespace HallowBlaze.Core.Turns.Resolution
                 default:
                     return new RejectedTurnResult(CommandRejectionCode.InvalidCommand);
             }
-            int strength = command is MoveCommand ? noiseProfile?.MovementStrength ?? 0 :
-                command is InteractCommand ? noiseProfile?.InteractionStrength ?? 0 : 0;
+            int strength = command is MoveCommand ? noiseProfile?.MovementStrength ?? 0 : 0;
             if (!result.Accepted || strength == 0)
                 return result;
             boardState.TryGetEntity(playerId, out BoardEntityState currentPlayer);
@@ -185,6 +184,11 @@ namespace HallowBlaze.Core.Turns.Resolution
             };
             action.Apply(boardState, runState, player, target, events);
             ApplyCost(runState, player.Id, events);
+            var consequences = action as IInteractionConsequences;
+            int strength = consequences?.NoiseStrength ?? noiseProfile?.InteractionStrength ?? 0;
+            if (strength > 0)
+                events.Add(new NoiseEvent(boardState.EmitNoise(player.Id, player.Position, strength,
+                    consequences?.NoiseLifetimeTurns ?? noiseProfile.LifetimeTurns)));
             if (runState.Food == 0)
                 events.Add(new PlayerStarvedEvent(player.Id));
             return new AcceptedTurnResult(events);
@@ -203,7 +207,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             ApplyCost(runState, player.Id, events);
             if (action.NoiseStrength > 0)
                 events.Add(new NoiseEvent(boardState.EmitNoise(player.Id, player.Position,
-                    action.NoiseStrength, action.NoiseLifetimeTurns)));
+                    action.NoiseStrength, action.NoiseLifetimeTurns), action.ObservedNoiseFactId));
             if (runState.Food == 0) events.Add(new PlayerStarvedEvent(player.Id));
             return new AcceptedTurnResult(events);
         }
