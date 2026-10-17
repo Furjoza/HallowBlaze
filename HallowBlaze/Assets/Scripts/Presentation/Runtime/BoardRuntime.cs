@@ -59,8 +59,9 @@ namespace HallowBlaze.Presentation.Runtime
             DiggingRules = ShovelContent.LoadRules();
             Interactions = ShovelContent.CreateInteractions(ClearingRules, DiggingRules);
             Tools = tools ?? ShovelContent.CreateTools(ClearingRules, DiggingRules);
+            Pickups = new ToolPickupQuery();
             controller = new TurnController(boardState, runState, playerId,
-                new TurnResolver(ActionNoiseProfile.Prototype, Interactions, Tools), enemyPhases.Handlers);
+                new TurnResolver(ActionNoiseProfile.Prototype, Interactions, Tools, Pickups), enemyPhases.Handlers);
         }
 
         /// <summary>Gets whether this runtime has released its controller and view bindings.</summary>
@@ -113,6 +114,9 @@ namespace HallowBlaze.Presentation.Runtime
 
         /// <summary>Gets the exact tool behavior catalog and cost policy shared by preview and the sole resolver.</summary>
         public ToolUseQuery Tools { get; }
+
+        /// <summary>Gets the same conscious equipment-transfer rules used by the picker and central resolver.</summary>
+        public ToolPickupQuery Pickups { get; }
 
         /// <summary>Gets the single command resolver owned for this board lifetime.</summary>
         /// <exception cref="ObjectDisposedException">The board runtime has been disposed.</exception>

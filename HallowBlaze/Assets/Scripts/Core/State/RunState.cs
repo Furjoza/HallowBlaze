@@ -410,6 +410,16 @@ namespace HallowBlaze.Core.State
             ToolInstanceSequence = sequence;
         }
 
+        /// <summary>Checks ownership and duplicate-slot constraints for an exact pickup without mutating equipment or allocating an ID.</summary>
+        public bool CanReceiveTool(int slotIndex, ToolInstanceState instance)
+        {
+            if (Status != RunStatus.Active || slotIndex < 0 || slotIndex >= ToolSlotCount || instance == null ||
+                !IsAllocatedToolId(instance.InstanceId, ToolInstanceSequence)) return false;
+            foreach (ToolSlotState slot in toolSlots)
+                if (slot.Instance?.InstanceId == instance.InstanceId) return false;
+            return true;
+        }
+
         private void ValidateToolInstance(int slotIndex, ToolInstanceState instance)
         {
             if (instance == null) throw new ArgumentNullException(nameof(instance));

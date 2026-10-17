@@ -24,6 +24,7 @@ namespace HallowBlaze.Core.Board.State
         private readonly Dictionary<EntityId, BoardPit> pits = new Dictionary<EntityId, BoardPit>();
         private readonly Dictionary<EntityId, int> cacheWork = new Dictionary<EntityId, int>();
         private readonly Dictionary<EntityId, CacheRewardItem> cacheRewards = new Dictionary<EntityId, CacheRewardItem>();
+        private readonly Dictionary<EntityId, GroundToolState> groundTools = new Dictionary<EntityId, GroundToolState>();
         private long nextPitId;
         private readonly List<BoardNoise> activeNoises;
         private readonly Dictionary<EntityId, BoardNoise> listenerNoises = new Dictionary<EntityId, BoardNoise>();
@@ -99,9 +100,57 @@ namespace HallowBlaze.Core.Board.State
             entitiesById.Remove(id);
             obstacleWork.Remove(id);
             cacheWork.Remove(id);
+            groundTools.Remove(id);
             pits.Remove(id);
             ReleasePitActor(id);
             listenerNoises.Remove(id);
+            return true;
+        }
+
+        /// <summary>Adds one concrete tool together with its matching item entity; duplicate instance IDs are rejected without mutation.</summary>
+        public bool TryAddGroundTool(BoardEntityState entity, GroundToolState tool)
+        {
+            if (entity == null || tool == null || !entity.Id.Equals(tool.EntityId) ||
+                entity.Definition.Layer != BoardLayer.Item || !entity.Definition.Kind.Equals(EntityKind.Item) ||
+                entity.Definition.AutomaticFoodReward != 0 || entity.Definition.Traits.IsExit ||
+                entity.Definition.ContentId != tool.DefinitionId) return false;
+            foreach (GroundToolState existing in groundTools.Values)
+                if (existing.InstanceId == tool.InstanceId) return false;
+            if (!TryAdd(entity)) return false;
+            groundTools.Add(entity.Id, tool);
+            return true;
+        }
+
+        /// <summary>Reads the exact immutable tool owned by this board without transferring it or changing its charges.</summary>
+        public bool TryGetGroundTool(EntityId id, out GroundToolState tool) => groundTools.TryGetValue(id, out tool);
+
+        /// <summary>Binds an already authored item entity to one concrete run-allocated tool without adding or moving an entity.</summary>
+        public bool TryBindGroundTool(GroundToolState tool)
+        {
+            if (tool == null || !TryGetEntity(tool.EntityId, out BoardEntityState entity) ||
+                entity.Definition.Layer != BoardLayer.Item || !entity.Definition.Kind.Equals(EntityKind.Item) ||
+                entity.Definition.AutomaticFoodReward != 0 || entity.Definition.Traits.IsExit ||
+                entity.Definition.ContentId != tool.DefinitionId || groundTools.ContainsKey(tool.EntityId)) return false;
+            foreach (GroundToolState existing in groundTools.Values)
+                if (existing.InstanceId == tool.InstanceId) return false;
+            groundTools.Add(tool.EntityId, tool);
+            return true;
+        }
+
+        /// <summary>Exchanges a validated ground tool for the displaced equipped instance at the same binding and position.</summary>
+        /// <param name="expected">The exact currently owned immutable ground snapshot.</param>
+        /// <param name="replacement">The displaced tool; source metadata must describe that tool, not the picked-up source.</param>
+        /// <returns>False without mutation if the expected ground instance changed or replacement identity is duplicated.</returns>
+        public bool TryExchangeGroundTool(GroundToolState expected, GroundToolState replacement)
+        {
+            if (expected == null || replacement == null || !expected.EntityId.Equals(replacement.EntityId) ||
+                !groundTools.TryGetValue(expected.EntityId, out GroundToolState current) || !ReferenceEquals(current, expected) ||
+                !TryGetEntity(expected.EntityId, out BoardEntityState entity)) return false;
+            foreach (GroundToolState other in groundTools.Values)
+                if (other.InstanceId == replacement.InstanceId) return false;
+            entitiesById[entity.Id] = new BoardEntityState(entity.Id,
+                new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, replacement.DefinitionId, entity.Definition.Traits), entity.Position);
+            groundTools[entity.Id] = replacement;
             return true;
         }
 
@@ -356,6 +405,8 @@ namespace HallowBlaze.Core.Board.State
                 clone.cacheWork.Add(progress.Key, progress.Value);
             foreach (var reward in cacheRewards)
                 clone.cacheRewards.Add(reward.Key, reward.Value);
+            foreach (var tool in groundTools)
+                clone.groundTools.Add(tool.Key, tool.Value);
             clone.nextPitId = nextPitId;
             clone.nextNoiseId = nextNoiseId;
             foreach (var listener in listenerNoises)

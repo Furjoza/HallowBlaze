@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.Turns.Resolution;
+using HallowBlaze.Core.State;
 using UnityEngine;
 
 namespace HallowBlaze.Presentation.Runtime.Interaction
@@ -22,6 +23,10 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         private Material material;
         private Vector2 scroll;
         private bool releasePending;
+        private IReadOnlyDictionary<string, ToolDefinition> toolCatalog;
+        private ToolPickupOption replacement;
+        private PickupToolCommand replacementChoice;
+        private string[] replacementLabels = Array.Empty<string>();
 
         /// <summary>Gets whether a free selection draft currently owns input.</summary>
         public bool IsOpen { get; private set; }
@@ -31,8 +36,14 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         public IReadOnlyList<InteractionOption> Options { get; private set; } = Array.Empty<InteractionOption>();
         /// <summary>Gets detached tool consequences following ordinary interactions in the same explicit picker.</summary>
         public IReadOnlyList<ToolUseOption> ToolOptions { get; private set; } = Array.Empty<ToolUseOption>();
-        /// <summary>Gets the total number of numbered ordinary and tool options, including disabled choices.</summary>
-        public int OptionCount => Options.Count + ToolOptions.Count;
+        /// <summary>Gets detached ground-tool choices following ordinary interactions and tool use.</summary>
+        public IReadOnlyList<ToolPickupOption> PickupOptions { get; private set; } = Array.Empty<ToolPickupOption>();
+        /// <summary>Gets whether an explicit replacement comparison owns this draft without submitting a turn.</summary>
+        public bool IsReplacing => replacement != null;
+        /// <summary>Gets detached definition/charge comparisons for both generic slots while replacing.</summary>
+        public IReadOnlyList<string> ReplacementLabels => Array.AsReadOnly(replacementLabels);
+        /// <summary>Gets the total number of numbered interactions, tool uses and pickups, including disabled choices.</summary>
+        public int OptionCount => Options.Count + ToolOptions.Count + PickupOptions.Count;
         /// <summary>Gets the explicit selected index, or -1 before the player chooses.</summary>
         public int SelectedIndex { get; private set; } = -1;
 
@@ -47,6 +58,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             this.runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
             this.inputAllowed = inputAllowed ?? (() => true);
+            toolCatalog = ToolContentCatalog.Load();
         }
 
         /// <summary>Opens all adjacent options without choosing a preferred action or submitting a command.</summary>
@@ -57,6 +69,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 return false;
             Options = runtime.Interactions.GetOptions(runtime.BoardState, runtime.RunState, runtime.PlayerId);
             ToolOptions = runtime.Tools.GetOptions(runtime.BoardState, runtime.RunState, runtime.PlayerId);
+            PickupOptions = runtime.Pickups.GetOptions(runtime.BoardState, runtime.RunState, runtime.PlayerId);
             if (OptionCount == 0)
                 return false;
             IsOpen = true;
@@ -72,7 +85,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         /// <returns>Whether this explicit selection was admitted.</returns>
         public bool Select(int index)
         {
-            if (!CanChoose() || index < 0 || index >= OptionCount || !IsAvailable(index))
+            if (!CanChoose() || IsReplacing || index < 0 || index >= OptionCount || !IsAvailable(index))
                 return false;
             SelectedIndex = index;
             DrawMarkers();
@@ -85,14 +98,48 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         {
             if (!CanChoose() || SelectedIndex < 0)
                 return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.NoCommand));
-            PlayerCommand command = SelectedIndex < Options.Count
-                ? (PlayerCommand)Options[SelectedIndex].CreateCommand()
-                : ToolOptions[SelectedIndex - Options.Count].CreateCommand();
+            PlayerCommand command;
+            int pickupIndex = SelectedIndex - Options.Count - ToolOptions.Count;
+            if (pickupIndex >= 0)
+            {
+                ToolPickupOption pickup = PickupOptions[pickupIndex];
+                if (pickup.RequiresReplacement)
+                {
+                    if (replacement == null)
+                    {
+                        replacement = pickup;
+                        replacementChoice = null;
+                        replacementLabels = new string[RunState.ToolSlotCount];
+                        foreach (PickupToolCommand choice in pickup.Choices)
+                            replacementLabels[choice.SlotIndex] = "Tool " + (choice.SlotIndex + 1) + ": " +
+                                DescribeTool(choice.ExpectedSlotDefinitionId, choice.ExpectedSlotCharges) + " -> " +
+                                DescribeTool(choice.Tool.DefinitionId, choice.Tool.Charges) + "\nOld tool remains here";
+                        return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.NoCommand));
+                    }
+                    if (replacementChoice == null) return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.NoCommand));
+                    command = replacementChoice;
+                }
+                else command = pickup.Choices[0];
+            }
+            else command = SelectedIndex < Options.Count ? (PlayerCommand)Options[SelectedIndex].CreateCommand() :
+                ToolOptions[SelectedIndex - Options.Count].CreateCommand();
             Close(false);
             Task<CommandSubmission> submission = coordinator.SubmitAsync(command);
             HoldRemainderOfFrame();
             return submission;
         }
+
+        /// <summary>Selects one exact occupied-slot snapshot; confirming is still required and no turn is resolved here.</summary>
+        public bool SelectReplacement(int slotIndex)
+        {
+            if (!CanChoose() || replacement == null) return false;
+            foreach (PickupToolCommand choice in replacement.Choices)
+                if (choice.SlotIndex == slotIndex) { replacementChoice = choice; return true; }
+            return false;
+        }
+
+        /// <summary>Leaves the exact same ground instance and equipment unchanged, closing this free draft.</summary>
+        public void Leave() => Cancel();
 
         /// <summary>Discards the preview for free, preserving the exact ground entities and all other input owners.</summary>
         public void Cancel()
@@ -120,6 +167,13 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                     return;
                 }
                 if (Input.GetKeyDown(KeyCode.Escape)) { Cancel(); return; }
+                if (IsReplacing)
+                {
+                    if (Input.GetKeyDown(KeyCode.Tab) || Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.UpArrow))
+                        SelectReplacement(replacementChoice == null ? 0 : 1 - replacementChoice.SlotIndex);
+                    else if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) await ConfirmAsync();
+                    return;
+                }
                 if (Input.GetKeyDown(KeyCode.Tab) || Input.GetKeyDown(KeyCode.DownArrow)) Cycle(1);
                 else if (Input.GetKeyDown(KeyCode.UpArrow)) Cycle(-1);
                 else if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) await ConfirmAsync();
@@ -155,7 +209,27 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         {
             if (!CanChoose()) return;
             float width = Mathf.Min(300f, Screen.width - 16f);
-            GUILayout.BeginArea(new Rect(Screen.width - width - 8f, 60f, width, Mathf.Max(100f, Screen.height - 100f)), GUI.skin.box);
+            float top = ToolHudPresenter.ReservedHeight + 8f;
+            GUILayout.BeginArea(new Rect(Screen.width - width - 8f, top, width, Mathf.Max(100f, Screen.height - top - 16f)), GUI.skin.box);
+            if (IsReplacing)
+            {
+                GUILayout.Label("Replace tool");
+                GUILayout.Label(DescribeTool(replacement.Tool.DefinitionId, replacement.Tool.Charges));
+                scroll = GUILayout.BeginScrollView(scroll);
+                var comparisonStyle = new GUIStyle(GUI.skin.button) { wordWrap = true, alignment = TextAnchor.MiddleLeft };
+                foreach (PickupToolCommand choice in replacement.Choices)
+                    if (GUILayout.Button((replacementChoice == choice ? "> " : "") + replacementLabels[choice.SlotIndex],
+                        comparisonStyle, GUILayout.MinHeight(90f))) SelectReplacement(choice.SlotIndex);
+                GUILayout.EndScrollView();
+                GUILayout.Label("1 turn; Food -" + runtime.Tools.ActionCosts.FoodCost + "; Noise " +
+                    ActionNoiseProfile.Prototype.InteractionStrength + " / " + ActionNoiseProfile.Prototype.LifetimeTurns + " turns");
+                GUI.enabled = replacementChoice != null;
+                if (GUILayout.Button("Replace", GUILayout.Height(32f))) ConfirmFromGui();
+                GUI.enabled = true;
+                if (GUILayout.Button("Leave", GUILayout.Height(32f))) Leave();
+                GUILayout.EndArea();
+                return;
+            }
             GUILayout.Label("Interaction");
             scroll = GUILayout.BeginScrollView(scroll);
             var optionStyle = new GUIStyle(GUI.skin.button) { wordWrap = true, alignment = TextAnchor.MiddleLeft };
@@ -166,7 +240,8 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 if (GUILayout.Button(label, optionStyle, GUILayout.MinHeight(index < Options.Count ? 32f : 72f))) Select(index);
                 GUI.enabled = true;
                 if (!IsAvailable(index)) GUILayout.Label(index < Options.Count ? Options[index].Availability.ToString() :
-                    ToolOptions[index - Options.Count].RejectionCode.ToString());
+                    index < Options.Count + ToolOptions.Count ? ToolOptions[index - Options.Count].RejectionCode.ToString() :
+                    CommandRejectionCode.InvalidState.ToString());
             }
             GUILayout.EndScrollView();
             GUI.enabled = SelectedIndex >= 0;
@@ -198,6 +273,14 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 return interaction.EffectLabel + target + "\n1 turn; Food -" + runtime.Tools.ActionCosts.FoodCost +
                     "; Charge 0; Noise " + interaction.NoiseStrength + " / " + interaction.NoiseLifetimeTurns + " turns";
             }
+            if (index >= Options.Count + ToolOptions.Count)
+            {
+                ToolPickupOption pickup = PickupOptions[index - Options.Count - ToolOptions.Count];
+                return "Pick up " + DescribeTool(pickup.Tool.DefinitionId, pickup.Tool.Charges) + target +
+                    (pickup.RequiresReplacement ? "\nReplace / Leave" : "\nTool " + (pickup.Choices.Count == 0 ? "?" : (pickup.Choices[0].SlotIndex + 1).ToString())) +
+                    "\n1 turn; Food -" + runtime.Tools.ActionCosts.FoodCost + "; Charge 0; Noise " +
+                    ActionNoiseProfile.Prototype.InteractionStrength + " / " + ActionNoiseProfile.Prototype.LifetimeTurns + " turns";
+            }
             ToolUseOption option = ToolOptions[index - Options.Count];
             return "Tool " + (option.SlotIndex + 1) + ": " + option.EffectLabel + target +
                 "\n1 turn; Food -" + option.FoodCost + "; Charge -" + option.ChargeCost +
@@ -205,11 +288,16 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 (option.NoiseStrength == 0 ? "" : " / " + option.NoiseLifetimeTurns + " turns");
         }
 
+        private string DescribeTool(string definitionId, int charges) =>
+            (toolCatalog.TryGetValue(definitionId, out ToolDefinition definition) ? definition.DisplayName : definitionId) + " (" + charges + " charges)";
+
         private bool IsAvailable(int index) => index < Options.Count ? Options[index].IsAvailable :
-            ToolOptions[index - Options.Count].IsAvailable;
+            index < Options.Count + ToolOptions.Count ? ToolOptions[index - Options.Count].IsAvailable :
+            PickupOptions[index - Options.Count - ToolOptions.Count].Choices.Count > 0;
 
         private GridPosition TargetPosition(int index) => index < Options.Count ? Options[index].TargetPosition :
-            ToolOptions[index - Options.Count].TargetPosition;
+            index < Options.Count + ToolOptions.Count ? ToolOptions[index - Options.Count].TargetPosition :
+            PickupOptions[index - Options.Count - ToolOptions.Count].Position;
 
         private void DrawMarkers()
         {
@@ -269,6 +357,10 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             SelectedIndex = -1;
             Options = Array.Empty<InteractionOption>();
             ToolOptions = Array.Empty<ToolUseOption>();
+            PickupOptions = Array.Empty<ToolPickupOption>();
+            replacement = null;
+            replacementChoice = null;
+            replacementLabels = Array.Empty<string>();
             ClearMarkers();
             if (coordinator != null) coordinator.Gate.SetBlocked(PresentationInputBlock.Interaction, false);
             if (immediateRelease) releasePending = false;

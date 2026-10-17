@@ -16,16 +16,20 @@ namespace HallowBlaze.Core.Turns.Resolution
         private readonly ActionNoiseProfile noiseProfile;
         private readonly InteractionQuery interactions;
         private readonly ToolUseQuery tools;
+        private readonly ToolPickupQuery pickups;
 
         /// <summary>Creates a resolver with an optional immutable noise profile; null preserves silent action behavior.</summary>
         /// <param name="noiseProfile">Action emission budgets, or null for no emission. Rejections never emit noise.</param>
         /// <param name="interactions">Shared read-only action catalog; null uses the default interaction hooks.</param>
         /// <param name="tools">Shared tool dispatch, previews and central action-cost policy; null leaves tool effects unregistered.</param>
-        public TurnResolver(ActionNoiseProfile noiseProfile = null, InteractionQuery interactions = null, ToolUseQuery tools = null)
+        /// <param name="pickups">Shared conscious equipment transfer query; null creates the same default rules.</param>
+        public TurnResolver(ActionNoiseProfile noiseProfile = null, InteractionQuery interactions = null, ToolUseQuery tools = null,
+            ToolPickupQuery pickups = null)
         {
             this.noiseProfile = noiseProfile;
             this.interactions = interactions ?? new InteractionQuery();
             this.tools = tools ?? new ToolUseQuery();
+            this.pickups = pickups ?? new ToolPickupQuery();
         }
 
         /// <summary>Validates and resolves one player command.</summary>
@@ -70,6 +74,9 @@ namespace HallowBlaze.Core.Turns.Resolution
                     break;
                 case UseToolCommand toolCommand:
                     result = ResolveUseTool(boardState, runState, player, toolCommand);
+                    break;
+                case PickupToolCommand pickupCommand:
+                    result = ResolvePickupTool(boardState, runState, player, pickupCommand);
                     break;
                 default:
                     return new RejectedTurnResult(CommandRejectionCode.InvalidCommand);
@@ -209,6 +216,26 @@ namespace HallowBlaze.Core.Turns.Resolution
                 events.Add(new NoiseEvent(boardState.EmitNoise(player.Id, player.Position,
                     action.NoiseStrength, action.NoiseLifetimeTurns), action.ObservedNoiseFactId));
             if (runState.Food == 0) events.Add(new PlayerStarvedEvent(player.Id));
+            return new AcceptedTurnResult(events);
+        }
+
+        private TurnResult ResolvePickupTool(BoardState board, RunState run, BoardEntityState player, PickupToolCommand command)
+        {
+            CommandRejectionCode rejection = pickups.Validate(board, run, player.Id, command, out GroundToolState ground);
+            if (rejection != CommandRejectionCode.None) return new RejectedTurnResult(rejection);
+            ToolInstanceState old = run.ToolSlots[command.SlotIndex].Instance;
+            GroundToolState displaced = old == null ? null : new GroundToolState(ground.EntityId, old.InstanceId, old.DefinitionId, old.Charges);
+            bool transferred = old == null ? board.TryRemove(ground.EntityId) : board.TryExchangeGroundTool(ground, displaced);
+            if (!transferred) throw new InvalidOperationException("Validated ground tool changed during synchronous transfer.");
+            var incoming = new ToolInstanceState(ground.InstanceId, ground.DefinitionId, ground.Charges);
+            if (old == null) run.EquipTool(command.SlotIndex, incoming);
+            else run.ReplaceTool(command.SlotIndex, incoming);
+            var events = new List<GameEvent> { new ToolPickedUpEvent(player.Id, command, displaced) };
+            if (old == null) events.Add(new ItemCollectedEvent(player.Id, ground.EntityId));
+            ApplyCost(run, player.Id, events);
+            if (noiseProfile != null && noiseProfile.InteractionStrength > 0)
+                events.Add(new NoiseEvent(board.EmitNoise(player.Id, player.Position, noiseProfile.InteractionStrength, noiseProfile.LifetimeTurns)));
+            if (run.Food == 0) events.Add(new PlayerStarvedEvent(player.Id));
             return new AcceptedTurnResult(events);
         }
 
