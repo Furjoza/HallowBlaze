@@ -194,8 +194,11 @@ namespace HallowBlaze.Core.Turns.Resolution
             var consequences = action as IInteractionConsequences;
             int strength = consequences?.NoiseStrength ?? noiseProfile?.InteractionStrength ?? 0;
             if (strength > 0)
-                events.Add(new NoiseEvent(boardState.EmitNoise(player.Id, player.Position, strength,
+            {
+                boardState.TryGetEntity(player.Id, out BoardEntityState currentPlayer);
+                events.Add(new NoiseEvent(boardState.EmitNoise(player.Id, currentPlayer.Position, strength,
                     consequences?.NoiseLifetimeTurns ?? noiseProfile.LifetimeTurns)));
+            }
             if (runState.Food == 0)
                 events.Add(new PlayerStarvedEvent(player.Id));
             return new AcceptedTurnResult(events);

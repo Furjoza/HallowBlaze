@@ -1,5 +1,71 @@
 # HallowBlaze Testing
 
+## M6.2 Boulder Pushing
+
+Only the exact `BoulderPushAction.Definition` (`landmark.boulder`, blocking interactive
+obstacle) opts into `push-boulder`. Both runtime composers use the same interaction catalog
+and resolver. The old opt-in `push` hook remains target-only for compatibility; it is not
+the boulder action. Neither contextual feedback nor axe/shovel strength is a push alternative.
+Published generators and scenes do not acquire new placements through this card.
+
+`BoardState.CanPush` is a pure preflight. `TryPush` checks the complete operation before
+replacing both immutable snapshots and actor/obstacle indices. The player advances into the
+boulder's former cell and the boulder moves exactly one cardinal cell away. No view, physics,
+RNG, resource charge or later phase participates in that commit.
+
+| Condition | Result |
+| --- | --- |
+| Existing player and explicitly supported adjacent cardinal boulder | Eligible for remaining checks |
+| Missing participant, wrong layer, diagonal or same-cell target | Reject, unchanged state |
+| Destination outside bounds or coordinate overflow | Reject, unchanged state |
+| Terrain missing, non-walkable or an exit under the boulder or its destination | Reject, unchanged state |
+| Actor or item on the boulder's current cell | Reject; no collision or collection on player advance |
+| Any obstacle, actor or item at the destination | Reject; no chain, crushing or automatic collection |
+| Both terrain cells walkable non-exits and required layers empty | Commit both positions atomically |
+| Walkable authored plate-like terrain | Same occupancy rule; no plate activation or gate behavior before M6.3 |
+| Captured target moved/disappeared, or destination became blocked after preview | Reject without cost, noise aging or later phases |
+| Picker cancel or repeated confirm without a new selection | No additional command or cost |
+
+The resolver applies the shared ordinary action-cost policy once (currently one Food),
+spends no tool charge, and emits the existing interaction noise (strength 4, lifetime 2)
+from the advanced player's cell against the new occupancy. Player-phase event order is:
+
+```text
+InteractionPerformed -> BoulderPushed -> ActionCostApplied -> Noise -> [PlayerStarved]
+```
+
+`BoulderPushedEvent` carries both origins and destinations as one grouped effect, not two
+independent moves. Existing pre-command noise/pit aging and terminal handling remain
+controller-owned. If nonterminal, locked enemies, environment and next planning run once
+in their existing order. A retained enemy step into the moved boulder emits `EntityWaited`
+without replanning; a fresh path query immediately reads the new occupancy/player cell.
+Starvation retains the committed push but skips later phases. Rejection preserves resources,
+entity snapshots, noise lifetimes and enemy opportunities.
+
+The presenter interpolates both registered views with one shared progress value, or snaps
+both with animations disabled. Replay cancellation recovers both from committed state;
+it does not refund or resolve again. The one-cell `Assets/Prefabs/Tiles/Boulder.prefab`
+contains only Transform and SpriteRenderer. Its PNG and metadata are Unity-authored;
+`HallowBlaze/Authoring/Rebuild Boulder View` is an explicit opt-in Editor operation, never
+normal gameplay or test setup. The domain never infers rules from this sprite or prefab.
+
+Run focused checks sequentially from the active Unity project, with graphics for PlayMode:
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter 'HallowBlaze.Tests.EditMode.BoulderPushTests;HallowBlaze.Tests.EditMode.BoulderPrefabTests;HallowBlaze.Tests.EditMode.BoardRuntimeCompositionTests' --output "$env:TEMP/HB-M62-state.xml" -- -nographics -logFile "$env:TEMP/HB-M62-state.log"
+unity test $project --mode PlayMode --filter HallowBlaze.Tests.PlayMode.BoulderPushPresentationTests --output "$env:TEMP/HB-M62-presentation.xml" -- -logFile "$env:TEMP/HB-M62-presentation.log"
+```
+
+Coverage includes all four directions, bounds/overflow, missing/blocked terrain, actors/items,
+single-chain rejection, clone ownership, stale/replayed commands, cost/noise/terminal ordering,
+immediate path queries, retained enemy blocking, both composers, synchronized animation,
+rapid input, independent modal ownership and cancellation recovery. Real-sprite pixel/framing
+checks write before/after captures outside the project as
+`%TEMP%/HB-M62-push-<before|after>-<width>x<height>.png` at 1280x720 and 320x640.
+Require full EditMode and graphics PlayMode plus fresh nonzero XML with zero failures.
+Run v4/profile v2 are unchanged; there is no mid-board save, M6.3 activation or M4.9 human verdict.
+
 ## M6.1 Landmark Authoring
 
 The engine-free template loader uses externally supplied `BoardValidationCatalog` definitions;

@@ -116,6 +116,7 @@ namespace HallowBlaze.Presentation.Runtime
                 intents.Bind(runtime.BoardState, () => disposed || runtime.IsDisposed || runtime.Controller.IsTerminal
                     ? null : runtime.BoardState);
             Dispatcher.Register<EntityMovedEvent>(MoveAsync);
+            Dispatcher.Register<BoulderPushedEvent>(PushAsync);
             Dispatcher.Register<EntityWaitedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<InteractionPerformedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<ToolUsedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
@@ -321,6 +322,46 @@ namespace HallowBlaze.Presentation.Runtime
             if (!runtime.BoardState.TryGetEntity(gameEvent.EntityId, out entity) || !entity.Position.Equals(gameEvent.To))
                 throw new InvalidOperationException("Authoritative position changed during presentation: " + gameEvent.EntityId);
             feedback.ShowEvent(gameEvent);
+        }
+
+        private async Task PushAsync(BoulderPushedEvent gameEvent, CancellationToken token)
+        {
+            GameObject playerView = RequireView(gameEvent.PlayerId);
+            GameObject boulderView = RequireView(gameEvent.BoulderId);
+            ValidatePushPositions(gameEvent);
+            Vector3 playerOrigin = playerView.transform.position;
+            Vector3 boulderOrigin = boulderView.transform.position;
+            Vector3 playerTarget = Position(gameEvent.PlayerTo, playerOrigin.z);
+            Vector3 boulderTarget = Position(gameEvent.BoulderTo, boulderOrigin.z);
+            if (AnimationsEnabled && MoveDuration > 0f)
+            {
+                float elapsed = 0f;
+                while (elapsed < MoveDuration)
+                {
+                    await Task.Yield();
+                    token.ThrowIfCancellationRequested();
+                    if (runtime.IsDisposed || playerView == null || boulderView == null)
+                        throw new InvalidOperationException("A push participant was disposed during presentation.");
+                    elapsed += Time.unscaledDeltaTime;
+                    float progress = Mathf.Clamp01(elapsed / MoveDuration);
+                    playerView.transform.position = Vector3.Lerp(playerOrigin, playerTarget, progress);
+                    boulderView.transform.position = Vector3.Lerp(boulderOrigin, boulderTarget, progress);
+                }
+            }
+            token.ThrowIfCancellationRequested();
+            playerView.transform.position = playerTarget;
+            boulderView.transform.position = boulderTarget;
+            ValidatePushPositions(gameEvent);
+            feedback.ShowEvent(gameEvent);
+        }
+
+        private void ValidatePushPositions(BoulderPushedEvent gameEvent)
+        {
+            if (!runtime.BoardState.TryGetEntity(gameEvent.PlayerId, out BoardEntityState player) ||
+                !player.Position.Equals(gameEvent.PlayerTo) ||
+                !runtime.BoardState.TryGetEntity(gameEvent.BoulderId, out BoardEntityState boulder) ||
+                !boulder.Position.Equals(gameEvent.BoulderTo))
+                throw new InvalidOperationException("Push event disagrees with authoritative participant positions.");
         }
 
         private Task RefreshFood(FoodRestoredEvent gameEvent)

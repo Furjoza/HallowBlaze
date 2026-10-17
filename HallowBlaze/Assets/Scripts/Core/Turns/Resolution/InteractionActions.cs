@@ -11,15 +11,21 @@ namespace HallowBlaze.Core.Turns.Resolution
     public sealed class ContextInteractionAction : IInteractionAction
     {
         private readonly string excludedContentId;
+        private readonly string additionalExcludedContentId;
 
         /// <summary>Preserves generic feedback except for content owned by an explicitly registered action.</summary>
-        public ContextInteractionAction(string excludedContentId = null) { this.excludedContentId = excludedContentId; }
+        public ContextInteractionAction(string excludedContentId = null, string additionalExcludedContentId = null)
+        {
+            this.excludedContentId = excludedContentId;
+            this.additionalExcludedContentId = additionalExcludedContentId;
+        }
 
         /// <inheritdoc />
         public string Id => "interact";
         /// <inheritdoc />
         public bool Supports(BoardEntityState target) => target.Definition.Traits.IsInteractable &&
-            target.Definition.AutomaticFoodReward == 0 && target.Definition.ContentId != excludedContentId;
+            target.Definition.AutomaticFoodReward == 0 && target.Definition.ContentId != excludedContentId &&
+            target.Definition.ContentId != additionalExcludedContentId;
         /// <inheritdoc />
         public InteractionAvailability Evaluate(BoardState board, RunState run, BoardEntityState player, BoardEntityState target)
             => InteractionAvailability.Available;

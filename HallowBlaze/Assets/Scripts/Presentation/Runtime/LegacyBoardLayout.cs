@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.State;
+using HallowBlaze.Core.Turns.Resolution;
 using UnityEngine;
 
 namespace HallowBlaze.Presentation.Runtime
@@ -54,7 +55,10 @@ namespace HallowBlaze.Presentation.Runtime
         DiggableGround,
 
         /// <summary>An explicitly authored concrete tool requiring conscious equipment transfer, never automatic food collection.</summary>
-        Tool
+        Tool,
+
+        /// <summary>An explicitly authored non-physical boulder pushed through the shared command resolver.</summary>
+        Boulder
     }
 
     /// <summary>Describes how one legacy content category participates in the authoritative runtime.</summary>
@@ -254,7 +258,9 @@ namespace HallowBlaze.Presentation.Runtime
                 Mapped(LegacyBoardContentKind.Listener, BoardLayer.Actor, EntityKind.Enemy, "enemy.listener"),
                 Mapped(LegacyBoardContentKind.DiggableGround, BoardLayer.Terrain, new EntityKind("terrain"), "shovel.diggable",
                     new BoardEntityTraits(true, false, false)),
-                Mapped(LegacyBoardContentKind.Tool, BoardLayer.Item, EntityKind.Item, "tool.ground")
+                Mapped(LegacyBoardContentKind.Tool, BoardLayer.Item, EntityKind.Item, "tool.ground"),
+                Mapped(LegacyBoardContentKind.Boulder, BoardLayer.Obstacle, EntityKind.Obstacle, BoulderPushAction.ContentId,
+                    BoulderPushAction.Definition.Traits)
             });
 
         private static readonly IReadOnlyDictionary<LegacyBoardContentKind, LegacyBoardContentDefinition> byKind =

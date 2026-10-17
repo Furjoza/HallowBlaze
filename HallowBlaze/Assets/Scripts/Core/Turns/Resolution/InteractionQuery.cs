@@ -89,12 +89,12 @@ namespace HallowBlaze.Core.Turns.Resolution
             new SortedDictionary<string, IInteractionAction>(StringComparer.Ordinal);
 
         /// <summary>Creates a fixed action catalog shared with the resolver for the board lifetime.</summary>
-        /// <param name="actions">Explicit domain hooks, or null for contextual interaction and collect.</param>
+        /// <param name="actions">Explicit domain hooks, or null for contextual interaction, collect and authored boulder pushes.</param>
         /// <exception cref="ArgumentException">An action is null, has an invalid ID, or duplicates an ID.</exception>
         public InteractionQuery(IEnumerable<IInteractionAction> actions = null)
         {
             foreach (IInteractionAction action in actions ?? new IInteractionAction[]
-                { new ContextInteractionAction(), new CollectInteractionAction() })
+                { new ContextInteractionAction(BoulderPushAction.ContentId), new CollectInteractionAction(), new BoulderPushAction() })
             {
                 if (action == null || string.IsNullOrWhiteSpace(action.Id) || action.Id != action.Id.Trim())
                     throw new ArgumentException("Actions require stable identifiers.", nameof(actions));

@@ -324,6 +324,62 @@ namespace HallowBlaze.Core.Board.State
             return true;
         }
 
+        /// <summary>Checks a single cardinal obstacle push and player advance without changing either occupancy layer.</summary>
+        /// <param name="playerId">An existing player actor.</param>
+        /// <param name="obstacleId">An adjacent non-walkable interactive obstacle; content opt-in belongs to the command's action.</param>
+        /// <returns>True only when both terrain cells are walkable non-exits, the target cell has no actor/item, and the destination has no obstacle/actor/item.</returns>
+        public bool CanPush(EntityId playerId, EntityId obstacleId) =>
+            TryGetPush(playerId, obstacleId, out _, out _, out _);
+
+        /// <summary>Atomically moves one obstacle away and the player into its former cell; rejection changes no index or entity.</summary>
+        /// <remarks>Does not push a chain, collect an item, consume resources, emit events or resolve a turn.</remarks>
+        /// <returns>True only when both positions have committed under the same preconditions as CanPush.</returns>
+        public bool TryPush(EntityId playerId, EntityId obstacleId)
+        {
+            if (!TryGetPush(playerId, obstacleId, out BoardEntityState player, out BoardEntityState obstacle, out GridPosition destination))
+                return false;
+            BoardEntityState movedPlayer = player.WithPosition(obstacle.Position);
+            BoardEntityState movedObstacle = obstacle.WithPosition(destination);
+            Dictionary<GridPosition, EntityId> actors = entityIdsByLayer[BoardLayer.Actor];
+            Dictionary<GridPosition, EntityId> obstacles = entityIdsByLayer[BoardLayer.Obstacle];
+            actors.Remove(player.Position);
+            obstacles.Remove(obstacle.Position);
+            actors.Add(obstacle.Position, player.Id);
+            obstacles.Add(destination, obstacle.Id);
+            entitiesById[player.Id] = movedPlayer;
+            entitiesById[obstacle.Id] = movedObstacle;
+            ReleasePitActor(player.Id);
+            return true;
+        }
+
+        private bool TryGetPush(EntityId playerId, EntityId obstacleId, out BoardEntityState player,
+            out BoardEntityState obstacle, out GridPosition destination)
+        {
+            player = null;
+            obstacle = null;
+            destination = default;
+            if (!TryGetEntity(playerId, out player) || player.Definition.Layer != BoardLayer.Actor ||
+                !player.Definition.Kind.Equals(EntityKind.Player) || !TryGetEntity(obstacleId, out obstacle) ||
+                obstacle.Definition.Layer != BoardLayer.Obstacle || obstacle.Definition.Traits.IsWalkable ||
+                !obstacle.Definition.Traits.IsInteractable || player.Position.ManhattanDistance(obstacle.Position) != 1)
+                return false;
+            Direction direction = obstacle.Position.X > player.Position.X ? Direction.East :
+                obstacle.Position.X < player.Position.X ? Direction.West :
+                obstacle.Position.Y > player.Position.Y ? Direction.North : Direction.South;
+            try { destination = obstacle.Position.Move(direction); }
+            catch (OverflowException) { return false; }
+            if (!Bounds.Contains(destination) ||
+                !TryGetEntity(BoardLayer.Terrain, obstacle.Position, out BoardEntityState beneath) ||
+                !beneath.Definition.Traits.IsWalkable || beneath.Definition.Traits.IsExit ||
+                !TryGetEntity(BoardLayer.Terrain, destination, out BoardEntityState terrain) ||
+                !terrain.Definition.Traits.IsWalkable || terrain.Definition.Traits.IsExit ||
+                TryGetEntity(BoardLayer.Actor, obstacle.Position, out _) || TryGetEntity(BoardLayer.Item, obstacle.Position, out _) ||
+                TryGetEntity(BoardLayer.Obstacle, destination, out _) || TryGetEntity(BoardLayer.Actor, destination, out _) ||
+                TryGetEntity(BoardLayer.Item, destination, out _))
+                return false;
+            return true;
+        }
+
         /// <summary>
         /// Finds an entity by its board-local identifier.
         /// </summary>
