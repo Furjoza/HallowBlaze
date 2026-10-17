@@ -52,7 +52,9 @@ namespace HallowBlaze.Tests.EditMode
                 LegacyBoardContentKind.Listener,
                 LegacyBoardContentKind.DiggableGround,
                 LegacyBoardContentKind.Tool,
-                LegacyBoardContentKind.Boulder
+                LegacyBoardContentKind.Boulder,
+                LegacyBoardContentKind.PressurePlate,
+                LegacyBoardContentKind.Gate
             };
 
             CollectionAssert.AreEquivalent(

@@ -58,7 +58,13 @@ namespace HallowBlaze.Presentation.Runtime
         Tool,
 
         /// <summary>An explicitly authored non-physical boulder pushed through the shared command resolver.</summary>
-        Boulder
+        Boulder,
+
+        /// <summary>Fixed walkable plate terrain with an explicit link and pressure rule.</summary>
+        PressurePlate,
+
+        /// <summary>Fixed gate terrain whose walkability derives from explicitly linked plates.</summary>
+        Gate
     }
 
     /// <summary>Describes how one legacy content category participates in the authoritative runtime.</summary>
@@ -133,9 +139,13 @@ namespace HallowBlaze.Presentation.Runtime
         /// Composition rejects enemies with missing or unsupported damage.</param>
         /// <param name="tool">Existing run-allocated instance required only for Tool content; composition never allocates or equips it.</param>
         /// <param name="sourceId">Optional stable authored tool-source ID; no atlas observation is inferred here.</param>
+        /// <param name="linkId">Required stable plate/gate link; forbidden on other content.</param>
+        /// <param name="plateOccupants">Explicit pressure rule for plate terrain.</param>
+        /// <param name="gateRule">Explicit All/Any combination for gate terrain.</param>
         /// <exception cref="ArgumentNullException"><paramref name="view"/> is null.</exception>
         public LegacyBoardView(GameObject view, LegacyBoardContentKind kind, GridPosition position,
-            int? enemyDamage = null, ToolInstanceState tool = null, string sourceId = null)
+            int? enemyDamage = null, ToolInstanceState tool = null, string sourceId = null, string linkId = null,
+            PlateOccupants plateOccupants = PlateOccupants.ActorsOrBoulders, GateRule gateRule = GateRule.All)
         {
             View = view != null ? view : throw new ArgumentNullException(nameof(view));
             Kind = kind;
@@ -143,6 +153,9 @@ namespace HallowBlaze.Presentation.Runtime
             EnemyDamage = enemyDamage;
             Tool = tool;
             SourceId = sourceId;
+            LinkId = linkId;
+            PlateOccupants = plateOccupants;
+            GateRule = gateRule;
         }
 
         /// <summary>Gets the generated or scene-owned Unity view.</summary>
@@ -160,6 +173,12 @@ namespace HallowBlaze.Presentation.Runtime
         public ToolInstanceState Tool { get; }
         /// <summary>Gets optional authored source metadata, separate from the concrete tool identity.</summary>
         public string SourceId { get; }
+        /// <summary>Gets the explicit stable plate/gate connection, never a scene-object name.</summary>
+        public string LinkId { get; }
+        /// <summary>Gets the plate pressure categories; ignored for non-plate content.</summary>
+        public PlateOccupants PlateOccupants { get; }
+        /// <summary>Gets the gate's explicit All/Any rule; ignored for non-gate content.</summary>
+        public GateRule GateRule { get; }
     }
 
     /// <summary>Defines how one legacy category maps to domain content or presentation-only state.</summary>
@@ -260,7 +279,11 @@ namespace HallowBlaze.Presentation.Runtime
                     new BoardEntityTraits(true, false, false)),
                 Mapped(LegacyBoardContentKind.Tool, BoardLayer.Item, EntityKind.Item, "tool.ground"),
                 Mapped(LegacyBoardContentKind.Boulder, BoardLayer.Obstacle, EntityKind.Obstacle, BoulderPushAction.ContentId,
-                    BoulderPushAction.Definition.Traits)
+                    BoulderPushAction.Definition.Traits),
+                Mapped(LegacyBoardContentKind.PressurePlate, BoardLayer.Terrain, PlateGateValidator.PlateContent.Kind,
+                    PlateGateValidator.PlateContent.ContentId, PlateGateValidator.PlateContent.Traits),
+                Mapped(LegacyBoardContentKind.Gate, BoardLayer.Terrain, PlateGateValidator.GateContent.Kind,
+                    PlateGateValidator.GateContent.ContentId, PlateGateValidator.GateContent.Traits)
             });
 
         private static readonly IReadOnlyDictionary<LegacyBoardContentKind, LegacyBoardContentDefinition> byKind =

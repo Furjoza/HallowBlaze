@@ -19,6 +19,7 @@ namespace HallowBlaze.Presentation.Runtime
         /// or descriptor enumeration order. Enemy descriptors require explicit 10/20 HP variants;
         /// their initial active intents are retained on the sole controller before publication.
         /// Explicit Listener descriptors require no damage and start with target-free Wait.
+        /// Explicit plate/gate descriptors require complete stable links; pressure is derived before initial planning.
         /// </summary>
         /// <param name="request">The stable request used to generate this board.</param>
         /// <param name="runState">The active run referenced by the request.</param>
@@ -64,6 +65,11 @@ namespace HallowBlaze.Presentation.Runtime
                 }
 
                 ValidateViewPosition(descriptor);
+                bool linked = descriptor.Kind == LegacyBoardContentKind.PressurePlate || descriptor.Kind == LegacyBoardContentKind.Gate;
+                if (linked && (string.IsNullOrWhiteSpace(descriptor.LinkId) || descriptor.LinkId != descriptor.LinkId.Trim()) ||
+                    !linked && descriptor.LinkId != null ||
+                    !Enum.IsDefined(typeof(PlateOccupants), descriptor.PlateOccupants) || !Enum.IsDefined(typeof(GateRule), descriptor.GateRule))
+                    throw Diagnostic(BoardRuntimeDiagnosticCode.InvalidInput, "plate-gate:invalid-link-or-rule:" + descriptor.Kind);
                 if (descriptor.Kind == LegacyBoardContentKind.Enemy)
                 {
                     if (descriptor.EnemyDamage != 10 && descriptor.EnemyDamage != 20)
@@ -132,10 +138,15 @@ namespace HallowBlaze.Presentation.Runtime
             var registry = new Dictionary<EntityId, GameObject>(mapped.Count);
             var enemies = new List<ShamblerState>();
             var listeners = new List<ListenerState>();
+            var plates = new List<PressurePlateDefinition>();
+            var gates = new List<GateDefinition>();
             EntityId playerId = default(EntityId);
             for (int index = 0; index < mapped.Count; index++)
             {
                 MappedView mappedView = mapped[index];
+                if (exitPositions.Contains(mappedView.Descriptor.Position) &&
+                    (mappedView.Descriptor.Kind == LegacyBoardContentKind.PressurePlate || mappedView.Descriptor.Kind == LegacyBoardContentKind.Gate))
+                    throw Diagnostic(BoardRuntimeDiagnosticCode.InvalidInput, "plate-gate:exit-overlap");
                 var id = new EntityId(index + 1L);
                 BoardEntityDefinition definition = mappedView.Content.CreateBoardDefinition();
                 if (mappedView.Descriptor.Tool != null)
@@ -158,6 +169,10 @@ namespace HallowBlaze.Presentation.Runtime
                 }
 
                 registry.Add(id, mappedView.Descriptor.View);
+                if (mappedView.Descriptor.Kind == LegacyBoardContentKind.PressurePlate)
+                    plates.Add(new PressurePlateDefinition(id, mappedView.Descriptor.LinkId, mappedView.Descriptor.PlateOccupants));
+                else if (mappedView.Descriptor.Kind == LegacyBoardContentKind.Gate)
+                    gates.Add(new GateDefinition(id, mappedView.Descriptor.LinkId, mappedView.Descriptor.GateRule));
                 if (mappedView.Descriptor.Tool != null)
                 {
                     var instance = mappedView.Descriptor.Tool;
@@ -173,6 +188,9 @@ namespace HallowBlaze.Presentation.Runtime
                     listeners.Add(new ListenerState(id, new ListenerDefinition()));
             }
 
+            IReadOnlyList<string> linkErrors = PlateGateValidator.Validate(boardState, plates, gates);
+            if (linkErrors.Count > 0) throw Diagnostic(BoardRuntimeDiagnosticCode.InvalidInput, string.Join("; ", linkErrors));
+            boardState.ConfigurePlateGates(plates, gates);
             return new BoardRuntime(request, runState, boardState, playerId, registry, enemies, listeners, tools);
         }
 

@@ -912,6 +912,36 @@ Zagadka systemowa wzmacnia wiedzę przydatną także poza poziomem specjalnym. O
 - gracz potrafi opisać koszt swojego rozwiązania;
 - podstawowe warianty przechodzą automatyczny test rozwiązywalności.
 
+### 14.1. Plate And Gate Rules
+
+Authored plates and gates are fixed, non-exit terrain with explicit stable textual link IDs.
+Each plate declares `Actors`, `Boulders`, or `ActorsOrBoulders` pressure. Actors include the
+player and enemies; only an explicitly authored blocking interactive `landmark.boulder`
+counts as a boulder. Items and unrelated obstacles never press a plate.
+
+Each gate declares `All` or `Any` over every plate with exactly the same link ID. At least
+one plate and one gate are required per link. Several gates may share a link and explicitly
+use different combination rules. Labels expose the connection and rule; there is no hidden
+dependency, latch, timer or extra command to activate it.
+
+`BoardState` derives pressure and gate walkability immediately after every successful
+occupancy mutation. An atomic push recomputes once after both player and boulder move,
+without an intermediate pressure flicker. Closure blocks new entry immediately, but never
+crushes, damages, removes or displaces an existing occupant. An actor may leave a closed
+gate; boulder pushes still require both traversed terrain cells to be walkable under M6.2.
+
+Changed-plate events precede changed-gate events, immediately after the causal movement or
+interaction and before its remaining cost/noise/terminal handling or the next enemy's
+opportunity. Closed-gate destinations invalidate retained enemy steps as `Wait`, without
+retargeting or replanning. Environment changes are recorded before subsequent terminal
+checks/planning. Initial composition derives state without a gameplay event, cost or RNG.
+
+Presentation replays immutable transition snapshots in order, not the later final board
+state. Setup and cancellation recovery synchronize from current domain state; animation
+never decides passability or refunds an accepted action. Link/content validation rejects
+incomplete authoring before publication; it is not a dynamic puzzle-solvability proof.
+Plate/gate state is board-local and adds no save fields or mid-board persistence.
+
 ## 15. Biomy, pogoda i narracja podróży
 
 ### Decyzja

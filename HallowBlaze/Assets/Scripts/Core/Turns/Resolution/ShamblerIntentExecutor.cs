@@ -22,6 +22,7 @@ namespace HallowBlaze.Core.Turns.Resolution
         /// handling remains with the controller; the supplied run must still be active.
         /// A move attacks without moving only when its declared condition matches the original
         /// player occupying that same legal destination; other occupants remain blockers.
+        /// Successful movement records derived plate/gate changes before any later actor executes.
         /// </summary>
         /// <param name="boardState">The authoritative board whose current layers determine legality.</param>
         /// <param name="runState">The active run whose HP is changed only by an actual hit.</param>
@@ -70,6 +71,7 @@ namespace HallowBlaze.Core.Turns.Resolution
                         boardState.TryMove(actor.Id, destination))
                     {
                         events.Add(new EntityMovedEvent(actor.Id, actor.Position, destination));
+                        PlateGateEventRecorder.Append(boardState, events);
                         if (boardState.TryTrapShambler(actor.Id, out BoardPit pit))
                             events.Add(new ShamblerTrappedEvent(pit));
                         return;

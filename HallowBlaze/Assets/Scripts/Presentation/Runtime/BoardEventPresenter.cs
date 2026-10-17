@@ -117,6 +117,16 @@ namespace HallowBlaze.Presentation.Runtime
                     ? null : runtime.BoardState);
             Dispatcher.Register<EntityMovedEvent>(MoveAsync);
             Dispatcher.Register<BoulderPushedEvent>(PushAsync);
+            Dispatcher.Register<PressurePlateChangedEvent>((gameEvent, token) =>
+            {
+                RequirePlateGateView(gameEvent.Plate.Definition.TerrainId).Present(gameEvent.Plate);
+                return ShowFeedback(gameEvent);
+            });
+            Dispatcher.Register<GateChangedEvent>((gameEvent, token) =>
+            {
+                RequirePlateGateView(gameEvent.Gate.Definition.TerrainId).Present(gameEvent.Gate);
+                return ShowFeedback(gameEvent);
+            });
             Dispatcher.Register<EntityWaitedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<InteractionPerformedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<ToolUsedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
@@ -239,6 +249,12 @@ namespace HallowBlaze.Presentation.Runtime
             try { DiggingDisplay.Refresh(); }
             catch (Exception error) { errors.Add(error); }
             try { GroundToolsDisplay.Refresh(); }
+            catch (Exception error) { errors.Add(error); }
+            try
+            {
+                foreach (PressurePlateState plate in runtime.BoardState.GetPressurePlates()) RequirePlateGateView(plate.Definition.TerrainId).Present(plate);
+                foreach (GateState gate in runtime.BoardState.GetGates()) RequirePlateGateView(gate.Definition.TerrainId).Present(gate);
+            }
             catch (Exception error) { errors.Add(error); }
             if (errors.Count != 0)
                 throw new AggregateException("Registered views or HUD could not be fully synchronized.", errors);
@@ -401,6 +417,12 @@ namespace HallowBlaze.Presentation.Runtime
             GroundToolsDisplay.Dispose();
             outcomes.TryNotify(runtime.Request, gameEvent);
             return Task.CompletedTask;
+        }
+
+        private PlateGateView RequirePlateGateView(EntityId id)
+        {
+            PlateGateView view = RequireView(id).GetComponent<PlateGateView>();
+            return view != null ? view : throw new InvalidOperationException("Missing plate/gate presentation adapter: " + id);
         }
 
         private GameObject RequireView(EntityId id)

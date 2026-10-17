@@ -1,5 +1,79 @@
 # HallowBlaze Testing
 
+## M6.3 Plates And Gates
+
+The [plate/gate contract](GameDesignContract.md#141-plate-and-gate-rules) is implemented by
+immutable `PressurePlateDefinition`/`GateDefinition` bindings and board-owned snapshots.
+Plates use exact walkable non-exit `landmark.plate` terrain; gates use `landmark.gate`
+terrain whose runtime walkability equals `GateState.IsOpen`. Published bindings are fixed
+for that board; moving or removing the bound terrain is rejected without mutation.
+
+| Rule | Pressure / Open State |
+| --- | --- |
+| `Actors` | Any actor, including player, Shambler and Listener, presses the plate |
+| `Boulders` | Only an authored blocking interactive `landmark.boulder` presses it |
+| `ActorsOrBoulders` | Either supported category presses it; items and arbitrary obstacles never count |
+| `All` | Every plate sharing the exact link ID must be pressed |
+| `Any` | At least one matching plate must be pressed |
+| Several gates on one link | Each independently applies its explicitly declared `All`/`Any` rule |
+| Actor or boulder leaves | Pressure and every affected gate recompute inside the successful mutation |
+| Closing over an existing occupant | No damage, displacement or removal; new entry is blocked |
+| Invalid link/content or duplicate binding | Reject composition/publication without changing the run or board |
+
+`PlateGateValidator` rejects null/duplicate/missing/wrong-content bindings, unbound authored
+plate/gate terrain and orphan links on either side. Diagnostics use stable IDs; link-only
+diagnostics are ordinal. Both composers validate before publishing or planning initial
+intents. Legacy descriptors expose link and pressure/combination data; blueprint composition
+accepts explicit entity-ID bindings. The ordinary static blueprint validator remains in
+force: this card neither proves dynamic puzzle solutions nor activates a production landmark.
+M6.4 owns full authored content integration and M6.5 owns dynamic solving.
+
+`TryAdd`, `TryRemove`, `TryMove` and atomic `TryPush` update pressure/gates before returning.
+Unchanged pressure/walkability emits no transition, including boulder-to-player handover.
+Changed plates precede changed gates in terrain-ID order within each mutation. The turn
+layer consumes those committed snapshots once, after the causal effect:
+
+```text
+Move: EntityMoved -> [PressurePlateChanged...] -> [GateChanged...] -> [automatic food] -> ActionCostApplied -> [Noise] -> [terminal]
+Push: InteractionPerformed -> BoulderPushed -> [PressurePlateChanged...] -> [GateChanged...] -> ActionCostApplied -> Noise -> [terminal]
+Enemy: EntityMoved -> [PressurePlateChanged...] -> [GateChanged...] -> [trap/investigation feedback] -> next locked actor
+Environment: effects and immediate state recomputation -> remaining plate/gate events -> terminal check -> next planning
+```
+
+No extra cost, tool charge, turn, noise or RNG is introduced by a gate transition. A closed
+destination turns a retained Shambler move or Listener investigation into `EntityWaited`,
+never a replan. Fresh path and noise-emission queries use new walkability immediately;
+previously emitted noise footprints stay immutable. Rejected entry preserves Food, HP,
+noise/pit lifetimes and event buffers. Starvation retains pressure/gate effects but skips
+later phases. Clone copies bindings, immutable snapshots and undelivered transitions into
+independent collections.
+
+`PlateGateView` reads the exact event snapshot, even for an intermediate open state when
+the final model is already closed. Setup/recovery reads authoritative snapshots instead.
+The two visual-only prefabs (`Assets/Prefabs/Tiles/PressurePlate.prefab` and
+`Assets/Prefabs/Tiles/Gate.prefab`) have no physics; four bitmap states differ by shape as
+well as color. Labels expose stable link, pressure category, combination and open/closed
+state with cell-constrained dimensions. The explicit Editor menu
+`HallowBlaze/Authoring/Rebuild Plate Gate Views` rebuilds only their sprites/prefabs through
+Unity APIs; normal gameplay and test setup never invoke it.
+
+Run sequentially from the active Unity project, with graphics for PlayMode:
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter 'HallowBlaze.Tests.EditMode.PlateGateTests;HallowBlaze.Tests.EditMode.PlateGatePrefabTests;HallowBlaze.Tests.EditMode.BoardRuntimeCompositionTests' --output "$env:TEMP/HB-M63-state.xml" -- -nographics -logFile "$env:TEMP/HB-M63-state.log"
+unity test $project --mode PlayMode --filter HallowBlaze.Tests.PlayMode.PlateGatePresentationTests --output "$env:TEMP/HB-M63-presentation.xml" -- -logFile "$env:TEMP/HB-M63-presentation.log"
+```
+
+Coverage includes actor/boulder entry/exit, every category, All/Any and multiple gates,
+atomic handover, clone, free rejection, gate closure between enemies, Listener, path/hearing,
+environment/terminal ordering, invalid links in both composers, initial pressure, both
+animation modes, rapid input, historical snapshots and cancellation recovery. Real-prefab
+captures with text bounds/pixel checks at 1280x720 and 320x640 are written outside the project
+as `%TEMP%/HB-M63-<closed|open>-<width>x<height>.png`. Require fresh nonzero XML, zero failures,
+full EditMode and full graphics PlayMode. Run v4/profile v2 and published generators/scenes
+are unchanged. These automated checks do not close the M4.9 human gate.
+
 ## M6.2 Boulder Pushing
 
 Only the exact `BoulderPushAction.Definition` (`landmark.boulder`, blocking interactive
@@ -64,7 +138,9 @@ rapid input, independent modal ownership and cancellation recovery. Real-sprite 
 checks write before/after captures outside the project as
 `%TEMP%/HB-M62-push-<before|after>-<width>x<height>.png` at 1280x720 and 320x640.
 Require full EditMode and graphics PlayMode plus fresh nonzero XML with zero failures.
-Run v4/profile v2 are unchanged; there is no mid-board save, M6.3 activation or M4.9 human verdict.
+Run v4/profile v2 are unchanged; there is no mid-board save or M4.9 human verdict. The M6.2
+matrix describes unbound terrain; explicitly bound M6.3 plates/gates now add the transitions
+documented above without changing the push's movement, legality or action cost.
 
 ## M6.1 Landmark Authoring
 
