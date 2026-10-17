@@ -10,6 +10,7 @@ using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
 using HallowBlaze.Core.Turns.Contracts;
+using HallowBlaze.Core.Turns.Resolution;
 using HallowBlaze.Presentation.Runtime;
 using NUnit.Framework;
 using UnityEngine;
@@ -566,6 +567,162 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
         }
 
+        [UnityTest]
+        public IEnumerator ToolPreviewCancelAndRapidConfirm_PreserveOneAtomicDecision()
+        {
+            var tools = new ToolUseQuery(new[] { new ToolAction("test.tool", new MoveToolTarget(), "Move target", 3, 2) },
+                new ActionCostPolicy(2));
+            Fixture fixture = CreateFixture(true, tools: tools);
+            ToolInstanceState tool = fixture.Runtime.RunState.CreateToolInstance(new ToolDefinition("test.tool", "Test", 3));
+            fixture.Runtime.RunState.EquipTool(1, tool);
+            var picker = fixture.Presenter.InteractionDisplay;
+            Assert.That(picker.Open(), Is.True);
+            int toolIndex = picker.Options.Count;
+            Assert.That(picker.ToolOptions.Count, Is.EqualTo(1));
+            Assert.That(picker.GetOptionLabel(toolIndex), Does.Contain("Tool 2: Move target").And.Contain("Food -2")
+                .And.Contain("Charge -1 (3 left)").And.Contain("Noise 3 / 2 turns").And.Contain("1 turn"));
+            Assert.That(picker.Select(toolIndex), Is.True);
+            picker.Cancel();
+            Assert.That(fixture.Runtime.RunState.ToolSlots[1].Instance.Charges, Is.EqualTo(3));
+            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+            yield return null;
+            Assert.That(picker.Open(), Is.True);
+            Assert.That(picker.Select(toolIndex), Is.True);
+            Task<CommandSubmission> pending = picker.ConfirmAsync();
+            Assert.That(pending.IsCompleted, Is.False);
+            Assert.That(fixture.Runtime.RunState.ToolSlots[1].Instance.Charges, Is.EqualTo(2));
+            for (int attempt = 0; attempt < 10; attempt++)
+            {
+                Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+                Assert.That(fixture.Presenter.Coordinator.SubmitAsync(new WaitCommand()).Result.Status,
+                    Is.EqualTo(CommandSubmissionStatus.Blocked));
+            }
+            while (!pending.IsCompleted) yield return null;
+            Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(fixture.Sink.Diagnostic, Is.Null);
+            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(98));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
+            Assert.That(picker.ToolOptions, Is.Empty);
+            Assert.That(fixture.Runtime.Views[fixture.AidId].transform.position, Is.EqualTo(new Vector3(1, 1, 3)));
+            CollectionAssert.AreEqual(new[] { "ToolUsed", "EntityMoved", "ToolChargeSpent", "Hud:100:98", "Noise" }, fixture.Sink.Trace);
+        }
+
+        [Test]
+        public void ToolReplacedAfterPreviewRejectsWithoutFallback()
+        {
+            var tools = new ToolUseQuery(new[] { new ToolAction("test.tool", new MoveToolTarget(), "Move target", 3, 2) });
+            Fixture fixture = CreateFixture(false, tools: tools);
+            ToolInstanceState tool = fixture.Runtime.RunState.CreateToolInstance(new ToolDefinition("test.tool", "Test", 3));
+            fixture.Runtime.RunState.EquipTool(0, tool);
+            var picker = fixture.Presenter.InteractionDisplay;
+            Assert.That(picker.Open(), Is.True);
+            Assert.That(picker.Select(picker.Options.Count), Is.True);
+            fixture.Runtime.RunState.ReplaceTool(0, fixture.Runtime.RunState.CreateToolInstance(new ToolDefinition("test.tool", "Test", 3)));
+            Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+            Assert.That(fixture.Sink.Rejection, Is.EqualTo(CommandRejectionCode.StaleTool));
+            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(fixture.Runtime.BoardState.GetActiveNoises(), Is.Empty);
+            Assert.That(fixture.Runtime.Views[fixture.AidId].transform.position, Is.EqualTo(new Vector3(0, 1, 3)));
+        }
+
+        [UnityTest]
+        public IEnumerator ToolAnimationParityAndCanceledReplay_DoNotRefundOrDuplicateAcceptedCharges()
+        {
+            Fixture animated = CreateToolFixture(true);
+            Fixture immediate = CreateToolFixture(false);
+            UseToolCommand command = animated.Runtime.Tools.GetOptions(animated.Runtime.BoardState,
+                animated.Runtime.RunState, animated.Runtime.PlayerId).Single().CreateCommand();
+            var immediatePicker = immediate.Presenter.InteractionDisplay;
+            Assert.That(immediatePicker.Open(), Is.True);
+            Assert.That(immediatePicker.Select(immediatePicker.Options.Count), Is.True);
+            Assert.That(immediatePicker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Task<CommandSubmission> pending = animated.Presenter.Coordinator.SubmitAsync(command);
+            while (!pending.IsCompleted) yield return null;
+            Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(animated.Runtime.RunState.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
+            Assert.That(immediate.Runtime.RunState.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
+            Assert.That(animated.Runtime.RunState.Food, Is.EqualTo(immediate.Runtime.RunState.Food));
+            Assert.That(animated.Runtime.Views[animated.AidId].transform.position,
+                Is.EqualTo(immediate.Runtime.Views[immediate.AidId].transform.position));
+            Assert.That(animated.Sink.Trace, Is.EqualTo(immediate.Sink.Trace));
+
+            Fixture canceled = CreateToolFixture(true);
+            UseToolCommand canceledCommand = canceled.Runtime.Tools.GetOptions(canceled.Runtime.BoardState,
+                canceled.Runtime.RunState, canceled.Runtime.PlayerId).Single().CreateCommand();
+            using (var cancellation = new CancellationTokenSource())
+            {
+                Task<CommandSubmission> replay = canceled.Presenter.Coordinator.SubmitAsync(canceledCommand, cancellation.Token);
+                cancellation.Cancel();
+                while (!replay.IsCompleted) yield return null;
+                Assert.That(replay.Result.Status, Is.EqualTo(CommandSubmissionStatus.PresentationFailed));
+                Assert.That(replay.Result.Diagnostic.Code, Is.EqualTo(PresentationDiagnosticCode.Canceled));
+                Assert.That(replay.Result.Result.Accepted, Is.True);
+                Assert.That(canceled.Runtime.RunState.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
+                Assert.That(canceled.Runtime.RunState.Food, Is.EqualTo(99));
+                Assert.That(canceled.Runtime.Views[canceled.AidId].transform.position, Is.EqualTo(new Vector3(1, 1, 3)));
+                Assert.That(canceled.Presenter.Coordinator.SubmitAsync(canceledCommand).Result.Status,
+                    Is.EqualTo(CommandSubmissionStatus.Rejected));
+                Assert.That(canceled.Sink.Rejection, Is.EqualTo(CommandRejectionCode.StaleTool));
+                Assert.That(canceled.Runtime.RunState.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
+            }
+        }
+
+        [Test]
+        public void ToolDepletedPreviewAndDisplacedTargetAreFreeAndNeverFallBackToOrdinaryInteraction()
+        {
+            Fixture depleted = CreateToolFixture(false);
+            string instanceId = depleted.Runtime.RunState.ToolSlots[0].Instance.InstanceId;
+            for (int charge = 0; charge < 3; charge++) depleted.Runtime.RunState.TrySpendToolCharge(0, instanceId);
+            var disabledPicker = depleted.Presenter.InteractionDisplay;
+            Assert.That(disabledPicker.Open(), Is.True);
+            Assert.That(disabledPicker.ToolOptions.Single().RejectionCode, Is.EqualTo(CommandRejectionCode.ToolDepleted));
+            Assert.That(disabledPicker.Select(disabledPicker.Options.Count), Is.False);
+            Assert.That(disabledPicker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+            Assert.That(depleted.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(depleted.Presenter.Coordinator.ResolutionCount, Is.Zero);
+            disabledPicker.Cancel();
+
+            Fixture displaced = CreateToolFixture(false);
+            var picker = displaced.Presenter.InteractionDisplay;
+            Assert.That(picker.Open(), Is.True);
+            Assert.That(picker.Select(picker.Options.Count), Is.True);
+            Assert.That(displaced.Runtime.BoardState.TryMove(displaced.AidId, new GridPosition(1, 1)), Is.True);
+            Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+            Assert.That(displaced.Sink.Rejection, Is.EqualTo(CommandRejectionCode.InvalidTarget));
+            Assert.That(displaced.Runtime.RunState.ToolSlots[0].Instance.Charges, Is.EqualTo(3));
+            Assert.That(displaced.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(displaced.Runtime.BoardState.GetActiveNoises(), Is.Empty);
+        }
+
+        [Test]
+        public void ToolTerminalConfirmationDisposesPickerWithoutReacquiringItsBlock()
+        {
+            Fixture fixture = CreateToolFixture(false, initialFood: 1);
+            var picker = fixture.Presenter.InteractionDisplay;
+            Assert.That(picker.Open(), Is.True);
+            Assert.That(picker.Select(picker.Options.Count), Is.True);
+            Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(fixture.Runtime.RunState.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
+            Assert.That(fixture.Runtime.RunState.Food, Is.Zero);
+            Assert.That(fixture.Runtime.Controller.IsTerminal, Is.True);
+            Assert.That(picker.IsDisposed, Is.True);
+            Assert.That(picker.ToolOptions, Is.Empty);
+            Assert.That(fixture.Presenter.Coordinator.Gate.Blocks & PresentationInputBlock.Interaction,
+                Is.EqualTo(PresentationInputBlock.None));
+            Assert.That(fixture.Sink.Trace.Last(), Is.EqualTo("PlayerStarved"));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
+        }
+
+        private Fixture CreateToolFixture(bool animations, int initialFood = 100)
+        {
+            var tools = new ToolUseQuery(new[] { new ToolAction("test.tool", new MoveToolTarget(), "Move target", 3, 2) });
+            Fixture fixture = CreateFixture(animations, initialFood, tools);
+            fixture.Runtime.RunState.EquipTool(0,
+                fixture.Runtime.RunState.CreateToolInstance(new ToolDefinition("test.tool", "Test", 3)));
+            return fixture;
+        }
+
         private static void MakeInteractiveFood(Fixture fixture)
         {
             fixture.Runtime.BoardState.TryGetEntity(fixture.FoodId, out BoardEntityState item);
@@ -602,7 +759,7 @@ namespace HallowBlaze.Tests.PlayMode
             };
         }
 
-        private Fixture CreateFixture(bool animations, int initialFood = 100)
+        private Fixture CreateFixture(bool animations, int initialFood = 100, ToolUseQuery tools = null)
         {
             var run = new RunState("presentation-" + runtimes.Count, 12345,
                 new RunStateConfiguration(100, initialFood, 0, "forest.start"));
@@ -616,7 +773,7 @@ namespace HallowBlaze.Tests.PlayMode
             layout.Add(View(LegacyBoardContentKind.Exit, 2, 1));
             layout.Add(View(LegacyBoardContentKind.Food, 1, 0));
             layout.Add(View(LegacyBoardContentKind.Aid, 0, 1));
-            BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(request, run, new GridBounds(0, 0, 2, 1), layout);
+            BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(request, run, new GridBounds(0, 0, 2, 1), layout, tools);
             runtimes.Add(runtime);
             var sink = new TestSinks { ActiveRequest = request };
             var presenter = new BoardEventPresenter(runtime, sink, sink, sink, value => sink.Diagnostic = value, 0.05f)
@@ -679,6 +836,20 @@ namespace HallowBlaze.Tests.PlayMode
                 AcceptedOutcomes++;
                 Trace.Add(outcome.EventType);
                 return true;
+            }
+        }
+
+        private sealed class MoveToolTarget : IInteractionAction
+        {
+            public string Id => "test.move";
+            public bool Supports(BoardEntityState target) => target.Definition.ContentId == "legacy.aid";
+            public InteractionAvailability Evaluate(BoardState board, RunState run, BoardEntityState player, BoardEntityState target)
+                => board.TryGetEntity(BoardLayer.Item, new GridPosition(1, 1), out _)
+                    ? InteractionAvailability.Blocked : InteractionAvailability.Available;
+            public void Apply(BoardState board, RunState run, BoardEntityState player, BoardEntityState target, ICollection<GameEvent> events)
+            {
+                Assert.That(board.TryMove(target.Id, new GridPosition(1, 1)), Is.True);
+                events.Add(new EntityMovedEvent(target.Id, target.Position, new GridPosition(1, 1)));
             }
         }
 

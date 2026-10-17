@@ -67,6 +67,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     private BoardEventPresenter activeBoardPresenter;
     private GameObject activeIntentOwner;
     private EnemyIntentPresenter activeIntents;
+    private ToolHudPresenter activeToolHud;
     private EnemyIntentLegend activeIntentLegend;
     private Vector2 intentViewport;
     private Camera intentLayoutCamera;
@@ -101,6 +102,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     /// <summary>Gets the sole presenter for the active board, including its transient gate and diagnostics.</summary>
     public BoardEventPresenter ActiveBoardPresenter => activeBoardPresenter;
+
+    /// <summary>Gets the read-only equipment display for the current board lifetime, or null before setup.</summary>
+    public ToolHudPresenter ActiveToolHud => activeToolHud;
 
     /// <summary>Gets the legal options at the reached checkpoint, never an intermediate segment.</summary>
     public IReadOnlyList<WorldMapExitOption> RouteChoices
@@ -549,6 +553,12 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         activeBoardPresenter.AnimationsEnabled = activePlayerView.animationsEnabled;
         activeBoardPresenter.SynchronizeFromState();
         intentViewport = new Vector2(Screen.width, Screen.height);
+        activeToolHud = new ToolHudPresenter(runtime.RunState, activeIntentOwner.transform, intentViewport);
+        if (Camera.main != null && Camera.main.orthographic)
+        {
+            BorrowIntentLayoutCamera();
+            ReserveIntentCameraMargin(intentViewport);
+        }
         activeIntentLegend = CreateIntentLegend();
         UpdatePresentationBlocks();
     }
@@ -580,8 +590,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (intentLayoutCamera == null)
             return;
         intentLayoutCamera.rect = size.x >= 800
-            ? new Rect(0, 0, (size.x - 224) / size.x, 1)
-            : new Rect(0, 160 / size.y, 1, (size.y - 160) / size.y);
+            ? new Rect(0, 0, (size.x - 224) / size.x, (size.y - ToolHudPresenter.ReservedHeight) / size.y)
+            : new Rect(0, 160 / size.y, 1, (size.y - 160 - ToolHudPresenter.ReservedHeight) / size.y);
         var bounds = activeBoardRuntime.BoardState.Bounds;
         float width = (float)bounds.MaxX - bounds.MinX + 1;
         float height = (float)bounds.MaxY - bounds.MinY + 1;
@@ -612,6 +622,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void LateUpdate()
     {
+        activeToolHud?.Refresh();
         if (activeIntentLegend == null || activeBoardRuntime == null || activeBoardRuntime.IsDisposed)
             return;
         Vector2 size = new Vector2(Screen.width, Screen.height);
@@ -619,6 +630,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             return;
         try
         {
+            activeToolHud?.Resize(size);
             ReserveIntentCameraMargin(size);
             try
             {
@@ -648,6 +660,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         activeIntents = null;
         activeIntentLegend?.Dispose();
         activeIntentLegend = null;
+        activeToolHud?.Dispose();
+        activeToolHud = null;
         if (intentLayoutCamera != null)
         {
             intentLayoutCamera.rect = originalIntentCameraRect;

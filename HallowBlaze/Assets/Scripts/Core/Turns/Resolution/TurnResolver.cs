@@ -13,17 +13,19 @@ namespace HallowBlaze.Core.Turns.Resolution
     /// </summary>
     public sealed class TurnResolver : IPlayerPhaseResolver
     {
-        private const int ActionFoodCost = 1;
         private readonly ActionNoiseProfile noiseProfile;
         private readonly InteractionQuery interactions;
+        private readonly ToolUseQuery tools;
 
         /// <summary>Creates a resolver with an optional immutable noise profile; null preserves silent action behavior.</summary>
         /// <param name="noiseProfile">Action emission budgets, or null for no emission. Rejections never emit noise.</param>
         /// <param name="interactions">Shared read-only action catalog; null uses the default interaction hooks.</param>
-        public TurnResolver(ActionNoiseProfile noiseProfile = null, InteractionQuery interactions = null)
+        /// <param name="tools">Shared tool dispatch, previews and central action-cost policy; null leaves tool effects unregistered.</param>
+        public TurnResolver(ActionNoiseProfile noiseProfile = null, InteractionQuery interactions = null, ToolUseQuery tools = null)
         {
             this.noiseProfile = noiseProfile;
             this.interactions = interactions ?? new InteractionQuery();
+            this.tools = tools ?? new ToolUseQuery();
         }
 
         /// <summary>Validates and resolves one player command.</summary>
@@ -65,6 +67,9 @@ namespace HallowBlaze.Core.Turns.Resolution
                     break;
                 case InteractCommand interactCommand:
                     result = ResolveInteract(boardState, runState, player, interactCommand);
+                    break;
+                case UseToolCommand toolCommand:
+                    result = ResolveUseTool(boardState, runState, player, toolCommand);
                     break;
                 default:
                     return new RejectedTurnResult(CommandRejectionCode.InvalidCommand);
@@ -185,6 +190,24 @@ namespace HallowBlaze.Core.Turns.Resolution
             return new AcceptedTurnResult(events);
         }
 
+        private TurnResult ResolveUseTool(BoardState boardState, RunState runState, BoardEntityState player, UseToolCommand command)
+        {
+            CommandRejectionCode rejection = tools.Validate(boardState, runState, player.Id, command,
+                out BoardEntityState target, out ToolAction action);
+            if (rejection != CommandRejectionCode.None) return new RejectedTurnResult(rejection);
+            var events = new List<GameEvent> { new ToolUsedEvent(player.Id, command, action.DefinitionId) };
+            action.Behavior.Apply(boardState, runState, player, target, events);
+            if (!runState.TrySpendToolCharge(command.SlotIndex, command.InstanceId))
+                throw new InvalidOperationException("Validated tool charges changed during a synchronous effect.");
+            events.Add(new ToolChargeSpentEvent(player.Id, command));
+            ApplyCost(runState, player.Id, events);
+            if (action.NoiseStrength > 0)
+                events.Add(new NoiseEvent(boardState.EmitNoise(player.Id, player.Position,
+                    action.NoiseStrength, action.NoiseLifetimeTurns)));
+            if (runState.Food == 0) events.Add(new PlayerStarvedEvent(player.Id));
+            return new AcceptedTurnResult(events);
+        }
+
         private static void CollectAutomaticFood(
             BoardState boardState,
             RunState runState,
@@ -206,8 +229,8 @@ namespace HallowBlaze.Core.Turns.Resolution
             EntityId playerId,
             ICollection<GameEvent> events)
         {
-            runState.ConsumeFood(ActionFoodCost);
-            events.Add(new ActionCostAppliedEvent(playerId, ActionFoodCost));
+            runState.ConsumeFood(tools.ActionCosts.FoodCost);
+            events.Add(new ActionCostAppliedEvent(playerId, tools.ActionCosts.FoodCost));
         }
     }
 }

@@ -37,7 +37,8 @@ namespace HallowBlaze.Presentation.Runtime
             EntityId playerId,
             Dictionary<EntityId, GameObject> views,
             IEnumerable<ShamblerState> enemies,
-            IEnumerable<ListenerState> listeners = null)
+            IEnumerable<ListenerState> listeners = null,
+            ToolUseQuery tools = null)
         {
             this.request = request ?? throw new ArgumentNullException(nameof(request));
             this.runState = runState ?? throw new ArgumentNullException(nameof(runState));
@@ -55,8 +56,9 @@ namespace HallowBlaze.Presentation.Runtime
                 boardState.RegisterListener(listener.ActorId);
             enemyPhases.PlanInitialIntents(boardState, playerId);
             Interactions = new InteractionQuery();
+            Tools = tools ?? new ToolUseQuery();
             controller = new TurnController(boardState, runState, playerId,
-                new TurnResolver(ActionNoiseProfile.Prototype, Interactions), enemyPhases.Handlers);
+                new TurnResolver(ActionNoiseProfile.Prototype, Interactions, Tools), enemyPhases.Handlers);
         }
 
         /// <summary>Gets whether this runtime has released its controller and view bindings.</summary>
@@ -100,6 +102,9 @@ namespace HallowBlaze.Presentation.Runtime
 
         /// <summary>Gets the immutable action catalog shared by target preview and the sole resolver.</summary>
         public InteractionQuery Interactions { get; }
+
+        /// <summary>Gets the exact tool behavior catalog and cost policy shared by preview and the sole resolver.</summary>
+        public ToolUseQuery Tools { get; }
 
         /// <summary>Gets the single command resolver owned for this board lifetime.</summary>
         /// <exception cref="ObjectDisposedException">The board runtime has been disposed.</exception>

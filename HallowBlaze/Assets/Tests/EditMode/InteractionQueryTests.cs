@@ -33,6 +33,20 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(board.GetActiveNoises(), Is.Empty);
         }
 
+        /// <summary>A tool command reaches the resolver but empty equipment cannot consume an action or emit noise.</summary>
+        [Test]
+        public void EmptyToolSlotIsRejectedWithoutEffects()
+        {
+            var command = new UseToolCommand(0, "tool.1", 3, new EntityId(7), new GridPosition(1, 2), "test");
+            TurnResult result = new TurnResolver(ActionNoiseProfile.Prototype).Resolve(board, run, PlayerId, command);
+            Assert.That(result.Accepted, Is.False);
+            Assert.That(((RejectedTurnResult)result).RejectionCode, Is.EqualTo(CommandRejectionCode.EmptyToolSlot));
+            Assert.That(result.Events, Is.Empty);
+            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(board.Count, Is.EqualTo(1));
+            Assert.That(board.GetActiveNoises(), Is.Empty);
+        }
+
         [Test]
         public void PreviewRetainsExactInstanceAndCapturesActionAndPosition()
         {
@@ -184,6 +198,297 @@ namespace HallowBlaze.Tests.EditMode
 
         private static InteractionQuery PushQuery() => new InteractionQuery(new IInteractionAction[]
             { new ContextInteractionAction(), new PushInteractionAction("crate") });
+
+        /// <summary>One accepted use commits effect, charge, active policy cost and noise, then rejects replay for free.</summary>
+        [Test]
+        public void ToolUseCommitsOneAtomicResultAndRejectsDuplicateDecision()
+        {
+            BoardEntityState crate = Add(7, BoardLayer.Obstacle, EntityKind.Obstacle, "crate", new GridPosition(2, 1));
+            Add(100, BoardLayer.Terrain, new EntityKind("terrain"), "floor", new GridPosition(3, 1));
+            ToolInstanceState instance = run.CreateToolInstance(new ToolDefinition("test.tool", "Test", 3));
+            run.EquipTool(1, instance);
+            var tools = new ToolUseQuery(new[] { new ToolAction("test.tool", new PushInteractionAction("crate"), "Push", 4, 2) },
+                new ActionCostPolicy(2));
+            ToolUseOption option = tools.GetOptions(board, run, PlayerId).Single();
+            Assert.That(option.FoodCost, Is.EqualTo(2));
+            Assert.That(option.ChargeCost, Is.EqualTo(1));
+            Assert.That(option.NoiseStrength, Is.EqualTo(4));
+            Assert.That(option.ExpectedCharges, Is.EqualTo(3));
+            Assert.That(run.Food, Is.EqualTo(5));
+            var resolver = new TurnResolver(ActionNoiseProfile.Prototype, tools: tools);
+            TurnResult result = resolver.Resolve(board, run, PlayerId, option.CreateCommand());
+            Assert.That(result.Accepted && result.ConsumesTurn, Is.True);
+            Assert.That(result.Events.Select(gameEvent => gameEvent.EventType), Is.EqualTo(new[]
+                { "ToolUsed", "EntityMoved", "ToolChargeSpent", "ActionCostApplied", "Noise" }));
+            Assert.That(run.Food, Is.EqualTo(3));
+            Assert.That(run.ToolSlots[1].Instance.Charges, Is.EqualTo(2));
+            Assert.That(instance.Charges, Is.EqualTo(3));
+            Assert.That(board.GetEntities().Single(entity => entity.Id.Equals(crate.Id)).Position, Is.EqualTo(new GridPosition(3, 1)));
+            Assert.That(board.GetActiveNoises().Single().Strength, Is.EqualTo(4));
+            TurnResult duplicate = resolver.Resolve(board, run, PlayerId, option.CreateCommand());
+            Assert.That(((RejectedTurnResult)duplicate).RejectionCode, Is.EqualTo(CommandRejectionCode.StaleTool));
+            Assert.That(duplicate.Events, Is.Empty);
+            Assert.That(run.Food, Is.EqualTo(3));
+            Assert.That(run.ToolSlots[1].Instance.Charges, Is.EqualTo(2));
+        }
+
+        /// <summary>Every rejected tool decision leaves equipment, resources, board, noise age and later phases unchanged.</summary>
+        [TestCase("slot-negative", CommandRejectionCode.InvalidToolSlot)]
+        [TestCase("slot-overflow", CommandRejectionCode.InvalidToolSlot)]
+        [TestCase("empty", CommandRejectionCode.EmptyToolSlot)]
+        [TestCase("depleted", CommandRejectionCode.ToolDepleted)]
+        [TestCase("replaced", CommandRejectionCode.StaleTool)]
+        [TestCase("spent", CommandRejectionCode.StaleTool)]
+        [TestCase("removed", CommandRejectionCode.InvalidTarget)]
+        [TestCase("displaced", CommandRejectionCode.InvalidTarget)]
+        [TestCase("distant", CommandRejectionCode.InvalidTarget)]
+        [TestCase("self", CommandRejectionCode.InvalidTarget)]
+        [TestCase("blocked", CommandRejectionCode.Blocked)]
+        [TestCase("unknown-tool", CommandRejectionCode.UnsupportedTool)]
+        [TestCase("unknown-action", CommandRejectionCode.UnsupportedTool)]
+        [TestCase("unsupported-target", CommandRejectionCode.UnsupportedTool)]
+        [TestCase("terminal", CommandRejectionCode.InvalidState)]
+        [TestCase("starved", CommandRejectionCode.InvalidState)]
+        [TestCase("dead", CommandRejectionCode.InvalidState)]
+        [TestCase("missing-player", CommandRejectionCode.InvalidState)]
+        public void InvalidToolDecisionsAreEffectFree(string scenario, CommandRejectionCode expected)
+        {
+            BoardEntityState crate = Add(7, BoardLayer.Obstacle, EntityKind.Obstacle, "crate", new GridPosition(2, 1));
+            Add(100, BoardLayer.Terrain, new EntityKind("terrain"), "floor", new GridPosition(3, 1));
+            ToolInstanceState tool = run.CreateToolInstance(new ToolDefinition("test.tool", "Test", 3));
+            run.EquipTool(0, tool);
+            ToolUseQuery tools = TestTools();
+            UseToolCommand command = tools.GetOptions(board, run, PlayerId).Single().CreateCommand();
+            if (scenario == "slot-negative" || scenario == "slot-overflow")
+                command = new UseToolCommand(scenario == "slot-negative" ? -1 : 2, tool.InstanceId, 3, crate.Id, crate.Position, "push");
+            if (scenario == "empty") run.RemoveTool(0);
+            if (scenario == "depleted")
+            {
+                for (int charge = 0; charge < 3; charge++) run.TrySpendToolCharge(0, tool.InstanceId);
+                command = new UseToolCommand(0, tool.InstanceId, 0, crate.Id, crate.Position, "push");
+            }
+            if (scenario == "replaced") run.ReplaceTool(0, run.CreateToolInstance(new ToolDefinition("test.tool", "Test", 3)));
+            if (scenario == "spent") run.TrySpendToolCharge(0, tool.InstanceId);
+            if (scenario == "removed")
+            {
+                board.TryRemove(crate.Id);
+                Add(8, BoardLayer.Obstacle, EntityKind.Obstacle, "crate", crate.Position);
+            }
+            if (scenario == "displaced") board.TryMove(crate.Id, new GridPosition(1, 2));
+            if (scenario == "distant")
+            {
+                board.TryMove(crate.Id, new GridPosition(4, 1));
+                command = new UseToolCommand(0, tool.InstanceId, 3, crate.Id, new GridPosition(4, 1), "push");
+            }
+            if (scenario == "self") command = new UseToolCommand(0, tool.InstanceId, 3, PlayerId, new GridPosition(1, 1), "push");
+            if (scenario == "blocked") Add(8, BoardLayer.Item, EntityKind.Item, "blocker", new GridPosition(3, 1));
+            if (scenario == "unknown-tool") tools = new ToolUseQuery();
+            if (scenario == "unknown-action") command = new UseToolCommand(0, tool.InstanceId, 3, crate.Id, crate.Position, "unknown");
+            if (scenario == "unsupported-target")
+            {
+                BoardEntityState other = Add(8, BoardLayer.Item, EntityKind.Item, "other", new GridPosition(1, 2));
+                command = new UseToolCommand(0, tool.InstanceId, 3, other.Id, other.Position, "push");
+            }
+            if (scenario == "terminal") run.MarkWon();
+            if (scenario == "starved") run.ConsumeFood(run.Food);
+            if (scenario == "dead") run.TakeDamage(run.Health);
+            if (scenario == "missing-player") board.TryRemove(PlayerId);
+            BoardNoise previous = board.EmitNoise(PlayerId, new GridPosition(1, 1), 2, 3);
+            string[] entitiesBefore = board.GetEntities().Select(entity => entity.Id + ":" + entity.Position).ToArray();
+            ToolSlotState[] slotsBefore = run.ToolSlots.ToArray();
+            int foodBefore = run.Food;
+            int healthBefore = run.Health;
+            int sequenceBefore = run.ToolInstanceSequence;
+            int laterPhases = 0;
+            var controller = new TurnController(board, run, PlayerId, new TurnResolver(tools: tools), new TurnPhaseHandlers(
+                (state, activeRun, actor, events) => laterPhases++,
+                (state, activeRun, actor, events) => laterPhases++,
+                (state, activeRun, actor, events) => laterPhases++));
+            Assert.That(tools.GetRejection(board, run, PlayerId, command), Is.EqualTo(expected));
+            TurnResult result = controller.Resolve(command);
+            Assert.That(((RejectedTurnResult)result).RejectionCode, Is.EqualTo(expected));
+            Assert.That(result.ConsumesTurn, Is.False);
+            Assert.That(result.Events, Is.Empty);
+            Assert.That(laterPhases, Is.Zero);
+            Assert.That(run.Food, Is.EqualTo(foodBefore));
+            Assert.That(run.Health, Is.EqualTo(healthBefore));
+            Assert.That(run.ToolInstanceSequence, Is.EqualTo(sequenceBefore));
+            Assert.That(run.ToolSlots, Is.EqualTo(slotsBefore));
+            Assert.That(board.GetEntities().Select(entity => entity.Id + ":" + entity.Position), Is.EqualTo(entitiesBefore));
+            Assert.That(board.GetActiveNoises().Single(), Is.SameAs(previous));
+            Assert.That(previous.RemainingTurns, Is.EqualTo(3));
+            Assert.That(controller.IsResolving, Is.False);
+        }
+
+        /// <summary>Only accepted tool actions age old noise and execute exactly one enemy/environment/planning opportunity.</summary>
+        [Test]
+        public void ToolAcceptanceExecutesOnePhaseSequenceAndKeepsFreshNoiseLifetime()
+        {
+            Add(7, BoardLayer.Obstacle, EntityKind.Obstacle, "crate", new GridPosition(2, 1));
+            Add(100, BoardLayer.Terrain, new EntityKind("terrain"), "floor", new GridPosition(3, 1));
+            run.EquipTool(0, run.CreateToolInstance(new ToolDefinition("test.tool", "Test", 1)));
+            ToolUseQuery tools = TestTools();
+            UseToolCommand command = tools.GetOptions(board, run, PlayerId).Single().CreateCommand();
+            BoardNoise old = board.EmitNoise(PlayerId, new GridPosition(1, 1), 1, 3);
+            var phases = new List<string>();
+            var controller = new TurnController(board, run, PlayerId, new TurnResolver(tools: tools), new TurnPhaseHandlers(
+                (state, activeRun, actor, events) => phases.Add("enemy"),
+                (state, activeRun, actor, events) => phases.Add("environment"),
+                (state, activeRun, actor, events) => phases.Add("plan")));
+            TurnResult accepted = controller.Resolve(command);
+            Assert.That(accepted.Accepted, Is.True);
+            Assert.That(phases, Is.EqualTo(new[] { "enemy", "environment", "plan" }));
+            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.ToolSlots[0].IsEmpty, Is.False);
+            Assert.That(run.ToolSlots[0].Instance.Charges, Is.Zero);
+            Assert.That(board.GetActiveNoises().Single(noise => noise.Id == old.Id).RemainingTurns, Is.EqualTo(2));
+            Assert.That(board.GetActiveNoises().Single(noise => noise.Id != old.Id).RemainingTurns, Is.EqualTo(2));
+            Assert.That(accepted.Events.OfType<ToolChargeSpentEvent>().Single().RemainingCharges, Is.Zero);
+            Assert.That(controller.Resolve(command).Accepted, Is.False);
+            Assert.That(phases.Count, Is.EqualTo(3));
+        }
+
+        /// <summary>Preview lists generic slots deterministically and includes explicit disabled and consequence data for free.</summary>
+        [Test]
+        public void ToolPreviewOrdersSlotsAndShowsDepletionWithoutInventingPlaceholderEffects()
+        {
+            Add(7, BoardLayer.Obstacle, EntityKind.Obstacle, "crate", new GridPosition(2, 1));
+            Add(100, BoardLayer.Terrain, new EntityKind("terrain"), "floor", new GridPosition(3, 1));
+            ToolInstanceState first = run.CreateToolInstance(new ToolDefinition("test.tool", "Test", 1));
+            run.EquipTool(0, first);
+            run.EquipTool(1, run.CreateToolInstance(new ToolDefinition("test.tool", "Test", 1)));
+            run.TrySpendToolCharge(0, first.InstanceId);
+            ToolUseQuery tools = TestTools();
+            var preview = tools.GetOptions(board, run, PlayerId);
+            Assert.That(preview.Select(option => option.SlotIndex), Is.EqualTo(new[] { 0, 1 }));
+            Assert.That(preview[0].RejectionCode, Is.EqualTo(CommandRejectionCode.ToolDepleted));
+            Assert.That(preview[1].IsAvailable, Is.True);
+            Assert.That(preview[1].EffectLabel, Is.EqualTo("Push"));
+            Assert.That(preview[1].NoiseStrength, Is.EqualTo(4));
+            Assert.That(preview[1].NoiseLifetimeTurns, Is.EqualTo(2));
+            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.ToolSlots[1].Instance.Charges, Is.EqualTo(1));
+            Assert.That(new ToolUseQuery().GetOptions(board, run, PlayerId), Is.Empty);
+        }
+
+        /// <summary>The central current policy governs ordinary commands as well as tools; no tool-only hard-coded food cost exists.</summary>
+        [TestCase("wait")]
+        [TestCase("move")]
+        [TestCase("interact")]
+        [TestCase("tool")]
+        public void AllAcceptedActionsUseTheSharedCurrentCostPolicy(string action)
+        {
+            BoardEntityState crate = Add(7, BoardLayer.Obstacle, EntityKind.Obstacle, "crate", new GridPosition(2, 1));
+            Add(100, BoardLayer.Terrain, new EntityKind("terrain"), "floor", new GridPosition(3, 1));
+            Add(101, BoardLayer.Terrain, new EntityKind("terrain"), "floor", new GridPosition(1, 2));
+            run.EquipTool(0, run.CreateToolInstance(new ToolDefinition("test.tool", "Test", 3)));
+            ToolUseQuery tools = TestTools(2);
+            PlayerCommand command = action == "wait" ? (PlayerCommand)new WaitCommand() :
+                action == "move" ? new MoveCommand(Direction.North) :
+                action == "interact" ? (PlayerCommand)new InteractCommand(crate.Id) :
+                tools.GetOptions(board, run, PlayerId).Single().CreateCommand();
+            TurnResult result = new TurnResolver(tools: tools).Resolve(board, run, PlayerId, command);
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(run.Food, Is.EqualTo(3));
+            Assert.That(result.Events.OfType<ActionCostAppliedEvent>().Count(), Is.EqualTo(1));
+        }
+
+        /// <summary>Direct effects and the charge commit precede terminal starvation; no enemy phase runs afterward.</summary>
+        [Test]
+        public void ToolStarvationKeepsAcceptedEffectChargeAndNoiseBeforeTerminalEvent()
+        {
+            Add(7, BoardLayer.Obstacle, EntityKind.Obstacle, "crate", new GridPosition(2, 1));
+            Add(100, BoardLayer.Terrain, new EntityKind("terrain"), "floor", new GridPosition(3, 1));
+            run.EquipTool(0, run.CreateToolInstance(new ToolDefinition("test.tool", "Test", 1)));
+            ToolUseQuery tools = TestTools(5);
+            int enemyPhases = 0;
+            var controller = new TurnController(board, run, PlayerId, new TurnResolver(tools: tools), new TurnPhaseHandlers(
+                (state, activeRun, actor, events) => enemyPhases++));
+            TurnResult result = controller.Resolve(tools.GetOptions(board, run, PlayerId).Single().CreateCommand());
+            Assert.That(result.Events.Select(gameEvent => gameEvent.EventType), Is.EqualTo(new[]
+                { "ToolUsed", "EntityMoved", "ToolChargeSpent", "ActionCostApplied", "Noise", "PlayerStarved" }));
+            Assert.That(run.ToolSlots[0].Instance.Charges, Is.Zero);
+            Assert.That(run.Food, Is.Zero);
+            Assert.That(enemyPhases, Is.Zero);
+            Assert.That(controller.IsTerminal, Is.True);
+        }
+
+        /// <summary>Behavior rejection reasons are shared by disabled previews and commit; rejected effects are never invoked.</summary>
+        [TestCase(InteractionAvailability.InvalidState, CommandRejectionCode.InvalidState)]
+        [TestCase(InteractionAvailability.InvalidTarget, CommandRejectionCode.InvalidTarget)]
+        [TestCase(InteractionAvailability.OutOfRange, CommandRejectionCode.InvalidTarget)]
+        [TestCase(InteractionAvailability.Unsupported, CommandRejectionCode.NoInteractionAvailable)]
+        [TestCase(InteractionAvailability.Blocked, CommandRejectionCode.Blocked)]
+        [TestCase(InteractionAvailability.DecisionRequired, CommandRejectionCode.NoInteractionAvailable)]
+        public void ToolBehaviorPreconditionsRejectWithoutCallingApply(InteractionAvailability availability, CommandRejectionCode expected)
+        {
+            Add(7, BoardLayer.Item, EntityKind.Item, "target", new GridPosition(1, 2));
+            run.EquipTool(0, run.CreateToolInstance(new ToolDefinition("test.tool", "Test", 3)));
+            var behavior = new UnavailableToolEffect(availability);
+            var tools = new ToolUseQuery(new[] { new ToolAction("test.tool", behavior, "Test", 1, 2) });
+            ToolUseOption option = tools.GetOptions(board, run, PlayerId).Single();
+            Assert.That(option.RejectionCode, Is.EqualTo(expected));
+            Assert.That(((RejectedTurnResult)new TurnResolver(tools: tools).Resolve(board, run, PlayerId,
+                option.CreateCommand())).RejectionCode, Is.EqualTo(expected));
+            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(3));
+            Assert.That(board.GetActiveNoises(), Is.Empty);
+        }
+
+        /// <summary>Direct rewards precede the current action cost and silent tool behavior never borrows ordinary interaction noise.</summary>
+        [Test]
+        public void ToolDirectRewardPrecedesCostAndSilentConfigurationEmitsNoNoise()
+        {
+            Add(7, BoardLayer.Item, EntityKind.Item, "reward", new GridPosition(1, 2), 4);
+            run.ConsumeFood(4);
+            run.EquipTool(0, run.CreateToolInstance(new ToolDefinition("test.tool", "Test", 3)));
+            var tools = new ToolUseQuery(new[] { new ToolAction("test.tool", new CollectInteractionAction(), "Collect", 0, 1) },
+                new ActionCostPolicy(2));
+            TurnResult result = new TurnController(board, run, PlayerId, new TurnResolver(ActionNoiseProfile.Prototype, tools: tools))
+                .Resolve(tools.GetOptions(board, run, PlayerId).Single().CreateCommand());
+            Assert.That(result.Events.Select(gameEvent => gameEvent.EventType), Is.EqualTo(new[]
+                { "ToolUsed", "ItemCollected", "FoodRestored", "ToolChargeSpent", "ActionCostApplied" }));
+            Assert.That(run.Food, Is.EqualTo(3));
+            Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
+            Assert.That(board.GetActiveNoises(), Is.Empty);
+        }
+
+        /// <summary>Invalid authored dispatch, cost, snapshot or event data fails before any gameplay mutation.</summary>
+        [Test]
+        public void ToolContractsRejectInvalidConfigurationAndSnapshots()
+        {
+            var behavior = new ContextInteractionAction();
+            Assert.Throws<System.ArgumentException>(() => new ToolAction(" ", behavior, "Effect", 1, 1));
+            Assert.Throws<System.ArgumentNullException>(() => new ToolAction("tool", null, "Effect", 1, 1));
+            Assert.Throws<System.ArgumentException>(() => new ToolAction("tool", behavior, "", 1, 1));
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => new ToolAction("tool", behavior, "Effect", -1, 1));
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => new ToolAction("tool", behavior, "Effect", 1, 0));
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => new ActionCostPolicy(0));
+            var binding = new ToolAction("tool", behavior, "Effect", 1, 1);
+            Assert.Throws<System.ArgumentException>(() => new ToolUseQuery(new[] { binding, binding }));
+            Assert.Throws<System.ArgumentException>(() => new ToolUseQuery(new ToolAction[] { null }));
+            Assert.Throws<System.ArgumentException>(() => new UseToolCommand(0, " ", 1, PlayerId, default, "interact"));
+            Assert.Throws<System.ArgumentException>(() => new UseToolCommand(0, "tool.1", 1, PlayerId, default, " "));
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => new UseToolCommand(0, "tool.1", -1, PlayerId, default, "interact"));
+            var depleted = new UseToolCommand(0, "tool.1", 0, PlayerId, default, "interact");
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => new ToolChargeSpentEvent(PlayerId, depleted));
+            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
+        }
+
+        private sealed class UnavailableToolEffect : IInteractionAction
+        {
+            private readonly InteractionAvailability availability;
+            public UnavailableToolEffect(InteractionAvailability availability) { this.availability = availability; }
+            public string Id => "test.unavailable";
+            public bool Supports(BoardEntityState target) => target.Definition.Layer == BoardLayer.Item;
+            public InteractionAvailability Evaluate(BoardState board, RunState run, BoardEntityState player, BoardEntityState target) => availability;
+            public void Apply(BoardState board, RunState run, BoardEntityState player, BoardEntityState target, ICollection<GameEvent> events)
+                => Assert.Fail("A rejected tool behavior must never apply.");
+        }
+
+        private static ToolUseQuery TestTools(int foodCost = 1) => new ToolUseQuery(
+            new[] { new ToolAction("test.tool", new PushInteractionAction("crate"), "Push", 4, 2) }, new ActionCostPolicy(foodCost));
 
         private BoardEntityState Add(long id, BoardLayer layer, EntityKind kind, string content, GridPosition position, int food = 0)
         {

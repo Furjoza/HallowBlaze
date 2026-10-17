@@ -447,6 +447,13 @@ namespace HallowBlaze.Tests.PlayMode
             var fixtureLifecycle = new RunLifecycleService(fixtureSession, new FileSystemSaveStore(persistenceRoot));
             Assert.That(fixtureLifecycle.StartNewRun("route-lifecycle-run", 12346,
                 new RunStateConfiguration(100, 100, 0, "forest.start")).IsSuccess, Is.True);
+            var tools = ToolContentCatalog.Load();
+            ToolInstanceState axe = fixtureSession.ActiveRun.CreateToolInstance(tools["axe.basic"]);
+            ToolInstanceState shovel = fixtureSession.ActiveRun.CreateToolInstance(tools["shovel.basic"]);
+            fixtureSession.ActiveRun.EquipTool(0, axe);
+            fixtureSession.ActiveRun.EquipTool(1, shovel);
+            Assert.That(fixtureSession.ActiveRun.TrySpendToolCharge(0, axe.InstanceId), Is.True);
+            Assert.That(fixtureLifecycle.SaveBoardBoundary().IsSuccess, Is.True);
             InvokeStatic(gameManagerType, "RequestContinue");
             AsyncOperation firstLoad = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
             while (!firstLoad.isDone)
@@ -492,6 +499,9 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(firstRun.ActiveLeg.ToNodeId, Is.EqualTo("forest.west-trail"));
             int firstSegmentCount = firstRun.ActiveLeg.Segments.Count;
             BoardAddress continuedAddress = BoardAddressFactory.CreateFromState(firstRun);
+            ToolHudPresenter firstToolHud = GetProperty<ToolHudPresenter>(firstManager, "ActiveToolHud");
+            Assert.That(firstToolHud.GetSlotText(0), Is.EqualTo("Axe  2"));
+            Assert.That(firstToolHud.GetSlotText(1), Is.EqualTo("Shovel  3"));
             Assert.That(firstSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
                 Is.EqualTo(NodeDiscoveryState.Sighted));
             Assert.That(GetProperty<bool>(firstManager, "IsRouteChoiceActive"), Is.False);
@@ -501,6 +511,7 @@ namespace HallowBlaze.Tests.PlayMode
 
             Assert.That((bool)Invoke(firstManager, "ExitToMenu"), Is.True);
             DestroyGameManagerSingleton();
+            Assert.That(firstToolHud.IsDisposed, Is.True);
             InvokeStatic(gameManagerType, "RequestContinue");
 
             AsyncOperation continuedLoad = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
@@ -518,6 +529,12 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(continuedRun.ActiveLeg.SegmentIndex, Is.Zero);
             Assert.That(GetProperty<BoardRuntime>(continuedManager, "ActiveBoardRuntime").Request.Address,
                 Is.EqualTo(continuedAddress));
+            ToolHudPresenter continuedToolHud = GetProperty<ToolHudPresenter>(continuedManager, "ActiveToolHud");
+            Assert.That(continuedToolHud, Is.Not.SameAs(firstToolHud));
+            Assert.That(continuedToolHud.GetSlotText(0), Is.EqualTo("Axe  2"));
+            Assert.That(continuedToolHud.GetSlotText(1), Is.EqualTo("Shovel  3"));
+            Assert.That(continuedRun.ToolSlots[0].Instance.InstanceId, Is.EqualTo(axe.InstanceId));
+            Assert.That(continuedRun.ToolSlots[1].Instance.InstanceId, Is.EqualTo(shovel.InstanceId));
             Assert.That(continuedSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
                 Is.EqualTo(NodeDiscoveryState.Sighted));
 
@@ -559,6 +576,8 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(checkpoint.Data.WorldNodeId, Is.EqualTo("forest.old-road"));
             Assert.That(checkpoint.Data.Route, Is.EqualTo(continuedRun.Route));
             Assert.That(checkpoint.Data.Food, Is.EqualTo(continuedRun.Food));
+            Assert.That(checkpoint.Data.ToolSlots[0].Instance.InstanceId, Is.EqualTo(axe.InstanceId));
+            Assert.That(checkpoint.Data.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
 
             Scene cleanupScene = SceneManager.CreateScene(
                 "M2.5 Route Cleanup " + Guid.NewGuid().ToString("N"));

@@ -100,6 +100,8 @@ namespace HallowBlaze.Presentation.Runtime
             Dispatcher.Register<EntityMovedEvent>(MoveAsync);
             Dispatcher.Register<EntityWaitedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<InteractionPerformedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
+            Dispatcher.Register<ToolUsedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
+            Dispatcher.Register<ToolChargeSpentEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<ItemCollectedEvent>((gameEvent, token) => HideItem(gameEvent));
             Dispatcher.Register<FoodRestoredEvent>((gameEvent, token) => RefreshFood(gameEvent));
             Dispatcher.Register<ActionCostAppliedEvent>((gameEvent, token) => RefreshHud());
