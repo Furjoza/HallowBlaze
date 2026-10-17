@@ -1,5 +1,44 @@
 # HallowBlaze Testing
 
+## M5.7 Field Notes
+
+The immutable authored registry is `Assets/GameData/Facts/Resources/SystemFacts.json`.
+`FactKnowledge` owns observation-to-profile discovery outside Unity/UI, while
+`FactDiscoveryRecorder` checkpoints only new facts before releasing feedback. Failed checkpoints
+retain pending events for a subsequent observation or explicit commit retry. Profile v2/run v4
+are unchanged; pre-existing axe/pit IDs become notes without another discovery notification.
+
+| Stable ID | Required Presented Observation | Title / Text | Icon / Source System |
+| --- | --- | --- | --- |
+| `AXE_CREATES_LOUD_NOISE` | Actual axe `NoiseEvent` after its footprint/feedback, not manual clearing or preview | **A loud shortcut**: The axe clears soft wood quickly, but its loud noise travels farther than working by hand. | `axe` / Tools / Noise |
+| `PIT_TRAPS_SHAMBLER` | Actual `ShamblerTrappedEvent` after pit/hold feedback, not pit creation | **Held by the ground**: A Shambler that steps into a pit waits there until the pit expires. The pit causes no damage. | `pit` / Shovel / Shambler |
+| `LISTENER_FOLLOWS_NOISE` | `ListenerInvestigatedEvent` after the preceding actual movement; blocked/expired/losing-initiative Wait emits none | **Following the sound**: The Listener follows a heard noise toward its source. Its announced step stays fixed; a new sound can change the next plan. | `hearing` / Listener / Noise |
+
+These are mechanical observations, not M7.5 tool-source sightings or atlas location knowledge.
+The reader displays only profile-owned entries, with a neutral placeholder for a missing
+definition and no unknown checklist/count/percentage. Reading or selecting an unknown ID never
+discovers anything. The book control (or `N`) opens notes; close/`Escape` releases only their own
+input owner after the current frame. Discovery feedback persists until acknowledged, queues later
+discoveries and remains readable with animations disabled. It hides behind the open reader and
+returns after closing. Death and a new run retain notes; explicit New Game resets them.
+
+Run sequentially from the active project, with a graphics device for the UI gate:
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter 'HallowBlaze.Tests.EditMode.FactKnowledgeTests;HallowBlaze.Tests.EditMode.PersistenceDtoTests;HallowBlaze.Tests.EditMode.PersistenceStorageTests;HallowBlaze.Tests.EditMode.ListenerTurnTests' --output "$env:TEMP/HB-M57-state.xml" -- -nographics -logFile "$env:TEMP/HB-M57-state.log"
+unity test $project --mode PlayMode --filter HallowBlaze.Tests.PlayMode.FieldNotesPresentationTests --output "$env:TEMP/HB-M57-notes-play.xml" -- -logFile "$env:TEMP/HB-M57-notes-play.log"
+```
+
+Tests cover typed triggers, idempotency, unknown/missing projections, isolated checkpoint
+failure/retry, pre-Field-Notes v2 saves and round-trip/new-run/death retention. Production
+`GameManager`/composer/presenter scenarios cover actual axe/pit/Listener replay versus preview or
+unpresented execution, independent interaction/pause ownership, free reading, queued feedback,
+animation parity and New Game replacement. Render checks include text bounds, distinct bitmap
+icons and nonblank pixels at 1280x720 and 320x480; captures are written outside the project as
+`%TEMP%/HB-M57-notes-<width>x<height>.png`. Full EditMode and graphics PlayMode remain required.
+Read fresh nonzero XML; CLI completion alone is not PASS. This does not close M4.9's human gate.
+
 ## M5.6 Conscious Tool Pickup
 
 Only concrete board-owned tools enter the equipment picker; movement never collects them.

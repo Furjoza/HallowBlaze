@@ -69,6 +69,14 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     private EnemyIntentPresenter activeIntents;
     private ToolHudPresenter activeToolHud;
     private EnemyIntentLegend activeIntentLegend;
+    private FieldNotesPresenter fieldNotes;
+    private GameObject fieldNotesOwner;
+    private ProfileState fieldNotesProfile;
+    private FactKnowledge factKnowledge;
+    private FactDiscoveryRecorder factRecorder;
+    private bool fieldNotesInputBlocked;
+    private bool fieldNotesAfterDeath;
+    private bool fieldNotesGameplayScene;
     private Vector2 intentViewport;
     private Camera intentLayoutCamera;
     private Rect originalIntentCameraRect;
@@ -105,6 +113,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     /// <summary>Gets the read-only equipment display for the current board lifetime, or null before setup.</summary>
     public ToolHudPresenter ActiveToolHud => activeToolHud;
+
+    /// <summary>Gets the profile-owned reader and committed discovery feedback, retained across death and new runs.</summary>
+    public FieldNotesPresenter FieldNotes => fieldNotes;
 
     /// <summary>Gets the legal options at the reached checkpoint, never an intermediate segment.</summary>
     public IReadOnlyList<WorldMapExitOption> RouteChoices
@@ -145,7 +156,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     public bool IsGameplayInputBlocked
     {
         get { return !enabled || doingSetup || boardStartupInProgress || gameplayInputBlocked
-                || IsRouteChoiceActive || boardOutcomeHandled || terminalActionRequested; }
+            || fieldNotesInputBlocked || IsRouteChoiceActive || boardOutcomeHandled || terminalActionRequested; }
     }
 
     /// <summary>Requests another run in the current profile.</summary>
@@ -182,7 +193,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
                 && activeBoardRuntime != null
                 && !activeBoardRuntime.IsDisposed
                 && activeBoardPresenter != null
-                && (activeBoardPresenter.Coordinator.Gate.Blocks & PresentationInputBlock.Interaction) == PresentationInputBlock.None
+                && (activeBoardPresenter.Coordinator.Gate.Blocks & (PresentationInputBlock.Interaction | PresentationInputBlock.FieldNotes)) == PresentationInputBlock.None
                 && !activeBoardRuntime.Controller.IsTerminal;
         }
     }
@@ -370,6 +381,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void OnDestroy()
     {
+        DisposeFieldNotes();
         DisposeActiveBoardRuntime();
         if (instance == this)
             instance = null;
@@ -379,10 +391,13 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     {
         if (scene.buildIndex != 1)
         {
+            fieldNotesGameplayScene = false;
+            fieldNotes?.SetAvailable(false);
             DisposeActiveBoardRuntime();
             return;
         }
 
+        fieldNotesGameplayScene = true;
         BlockBoardStartup();
         EnsurePersistence();
         if (requestedLaunchMode == RunLaunchMode.NewGame)
@@ -532,6 +547,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void PublishBoardRuntime(BoardRuntime runtime)
     {
+        fieldNotesGameplayScene = true;
+        EnsureFieldNotes();
         if (activeBoardPresenter != null)
             activeBoardPresenter.Dispose();
         DisposeIntentUi();
@@ -549,7 +566,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         activeBoardPresenter = new BoardEventPresenter(runtime, activePlayerView, activePlayerView,
             this, ReportPresentationDiagnostic, activePlayerView.moveTime, activeIntents,
             () => !IsGameplayInputBlocked && Time.frameCount > gameplayInputResumeFrame &&
-                activePlayerView != null && activePlayerView.isActiveAndEnabled, ObservePresentedFact);
+                activePlayerView != null && activePlayerView.isActiveAndEnabled,
+            observeObservation: ObservePresentedObservation);
         activeBoardPresenter.AnimationsEnabled = activePlayerView.animationsEnabled;
         activeBoardPresenter.SynchronizeFromState();
         intentViewport = new Vector2(Screen.width, Screen.height);
@@ -676,12 +694,56 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         activeIntentOwner = null;
     }
 
-    private void ObservePresentedFact(string factId)
+    private void EnsureFieldNotes()
     {
-        session.Profile.DiscoverFact(factId);
-        SaveStoreResult result = saveStore.SaveProfile(session.Profile);
-        if (result.IsFailure)
-            throw new InvalidOperationException("Observed fact checkpoint failed: " + result.ErrorMessage);
+        if (fieldNotes != null && ReferenceEquals(fieldNotesProfile, session.Profile)) return;
+        DisposeFieldNotes();
+        if (factKnowledge == null) factKnowledge = FactContentCatalog.Load();
+        fieldNotesProfile = session.Profile;
+        factRecorder = new FactDiscoveryRecorder(fieldNotesProfile, factKnowledge, current =>
+        {
+            if (saveStore == null) throw new InvalidOperationException("Fact discovery requires the profile save store.");
+            return saveStore.SaveProfile(current);
+        });
+        fieldNotesOwner = new GameObject("Profile Field Notes") { hideFlags = HideFlags.DontSave };
+        fieldNotesOwner.transform.SetParent(transform, false);
+        fieldNotes = fieldNotesOwner.AddComponent<FieldNotesPresenter>();
+        fieldNotes.Bind(fieldNotesProfile, factKnowledge, MayOpenFieldNotes, SetFieldNotesInputBlocked,
+            new Vector2(Screen.width, Screen.height));
+    }
+
+    private bool MayOpenFieldNotes()
+    {
+        if ((!enabled && !fieldNotesAfterDeath) || !fieldNotesGameplayScene || doingSetup ||
+            boardStartupInProgress || terminalActionRequested || gameplayInputBlocked && !fieldNotesAfterDeath)
+            return false;
+        if (activeBoardPresenter == null) return true;
+        PresentationGate gate = activeBoardPresenter.Coordinator.Gate;
+        return gate.State == PresentationGateState.Idle &&
+            (gate.Blocks & PresentationInputBlock.Interaction) == PresentationInputBlock.None;
+    }
+
+    private void SetFieldNotesInputBlocked(bool blocked)
+    {
+        fieldNotesInputBlocked = blocked;
+        if (!blocked) gameplayInputResumeFrame = Time.frameCount;
+        UpdatePresentationBlocks();
+    }
+
+    private void DisposeFieldNotes()
+    {
+        fieldNotes?.Dispose();
+        fieldNotes = null;
+        fieldNotesProfile = null;
+        factRecorder = null;
+        if (fieldNotesOwner != null) Destroy(fieldNotesOwner);
+        fieldNotesOwner = null;
+    }
+
+    private void ObservePresentedObservation(FactObservation observation)
+    {
+        EnsureFieldNotes();
+        foreach (FactDiscovery discovery in factRecorder.Observe(observation)) fieldNotes.ShowDiscovery(discovery);
     }
 
     private void ReportPresentationDiagnostic(PresentationDiagnostic diagnostic)
@@ -693,6 +755,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void UpdatePresentationBlocks()
     {
+        fieldNotes?.SetAvailable((enabled || fieldNotesAfterDeath) && fieldNotesGameplayScene &&
+            !doingSetup && !boardStartupInProgress && !terminalActionRequested);
         if (activeIntentOwner != null)
             activeIntentOwner.SetActive(enabled && !doingSetup && !boardStartupInProgress &&
                 !boardOutcomeHandled && !terminalActionRequested &&
@@ -702,6 +766,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         PresentationGate gate = activeBoardPresenter.Coordinator.Gate;
         gate.SetBlocked(PresentationInputBlock.Setup, doingSetup || boardStartupInProgress);
         gate.SetBlocked(PresentationInputBlock.Modal, gameplayInputBlocked || IsRouteChoiceActive);
+        gate.SetBlocked(PresentationInputBlock.FieldNotes, fieldNotesInputBlocked);
         gate.SetBlocked(PresentationInputBlock.Disabled, !enabled || boardOutcomeHandled ||
             terminalActionRequested || Time.frameCount <= gameplayInputResumeFrame);
     }
@@ -857,6 +922,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (scoreText != null)
             scoreText.text = "Your current local record is " + score + " days.";
 
+        fieldNotesAfterDeath = true;
         enabled = false;
         if (restartButton != null)
             restartButton.SetActive(true);
@@ -874,6 +940,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void OnRunStarted(RunState runState)
     {
+        fieldNotesAfterDeath = false;
+        fieldNotes?.Close();
         DisposeActiveBoardRuntime();
         worldMap = null;
         boardOutcomeHandled = false;
@@ -1054,6 +1122,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         }
 
         lifecycle = new RunLifecycleService(session, saveStore);
+        EnsureFieldNotes();
         worldDefinition = null;
         worldMap = null;
     }
@@ -1089,6 +1158,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         session.OnRunStarted += OnRunStarted;
         session.OnRunAbandoned += OnRunAbandoned;
         lifecycle = new RunLifecycleService(session, saveStore);
+        EnsureFieldNotes();
         worldDefinition = null;
         worldMap = null;
         session.ContinueRun(freshRun);

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Session;
+using HallowBlaze.Core.State;
 using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.Turns.Resolution;
 using HallowBlaze.Presentation.Runtime.Interaction;
@@ -58,6 +59,7 @@ namespace HallowBlaze.Presentation.Runtime
         private readonly EnemyAttackPresenter attacks;
         private readonly EnemyIntentPresenter intents;
         private readonly Action<string> observeFact;
+        private readonly Action<FactObservation> observeObservation;
         private readonly Dictionary<EntityId, (EnemyIntent Plan, GridPosition Source)> published =
             new Dictionary<EntityId, (EnemyIntent, GridPosition)>();
         private bool disposed;
@@ -73,9 +75,11 @@ namespace HallowBlaze.Presentation.Runtime
         /// display lifetime, publishing at setup, recovery and completion without planning. Its GameObject is borrowed.</param>
         /// <param name="interactionInputAllowed">Optional production lifecycle permission for free target selection.</param>
         /// <param name="observeFact">Optional durable knowledge sink invoked only after presenting the corresponding actual noise or Shambler trap.</param>
+        /// <param name="observeObservation">Optional typed mechanical observation sink for idempotent Field Notes discovery after actual replay.</param>
         public BoardEventPresenter(BoardRuntime runtime, IRunHud hud, ITurnFeedback feedback,
             IBoardOutcomeSink outcomes, Action<PresentationDiagnostic> diagnostic, float moveDuration = 0.1f,
-            EnemyIntentPresenter intents = null, Func<bool> interactionInputAllowed = null, Action<string> observeFact = null)
+            EnemyIntentPresenter intents = null, Func<bool> interactionInputAllowed = null, Action<string> observeFact = null,
+            Action<FactObservation> observeObservation = null)
         {
             this.runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             this.hud = hud ?? throw new ArgumentNullException(nameof(hud));
@@ -83,6 +87,7 @@ namespace HallowBlaze.Presentation.Runtime
             this.outcomes = outcomes ?? throw new ArgumentNullException(nameof(outcomes));
             this.intents = intents;
             this.observeFact = observeFact;
+            this.observeObservation = observeObservation;
             if (float.IsNaN(moveDuration) || float.IsInfinity(moveDuration) || moveDuration < 0f)
                 throw new ArgumentOutOfRangeException(nameof(moveDuration));
             MoveDuration = moveDuration;
@@ -142,6 +147,13 @@ namespace HallowBlaze.Presentation.Runtime
                 DiggingDisplay.Refresh();
                 ShowFeedback(gameEvent);
                 observeFact?.Invoke(ShamblerTrappedEvent.FactId);
+                observeObservation?.Invoke(FactObservation.ShamblerTrappedPresented);
+                return Task.CompletedTask;
+            });
+            Dispatcher.Register<ListenerInvestigatedEvent>((gameEvent, token) =>
+            {
+                ShowFeedback(gameEvent);
+                observeObservation?.Invoke(FactObservation.ListenerInvestigationPresented);
                 return Task.CompletedTask;
             });
             Dispatcher.Register<FoodRestoredEvent>((gameEvent, token) => RefreshFood(gameEvent));
@@ -151,6 +163,8 @@ namespace HallowBlaze.Presentation.Runtime
                 NoiseDisplay.Refresh();
                 ShowFeedback(gameEvent);
                 if (gameEvent.ObservedFactId != null) observeFact?.Invoke(gameEvent.ObservedFactId);
+                if (gameEvent.ObservedFactId == ObstacleClearingRules.AxeNoiseFactId)
+                    observeObservation?.Invoke(FactObservation.AxeNoisePresented);
                 return Task.CompletedTask;
             });
             Dispatcher.Register<EnemyAttackResolvedEvent>((gameEvent, token) =>
