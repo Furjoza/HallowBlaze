@@ -72,7 +72,7 @@ namespace HallowBlaze.Presentation.Runtime
         /// <param name="intents">Optional unbound board-owned display. This presenter binds and closes its
         /// display lifetime, publishing at setup, recovery and completion without planning. Its GameObject is borrowed.</param>
         /// <param name="interactionInputAllowed">Optional production lifecycle permission for free target selection.</param>
-        /// <param name="observeFact">Optional durable knowledge sink invoked only after presenting the corresponding actual noise.</param>
+        /// <param name="observeFact">Optional durable knowledge sink invoked only after presenting the corresponding actual noise or Shambler trap.</param>
         public BoardEventPresenter(BoardRuntime runtime, IRunHud hud, ITurnFeedback feedback,
             IBoardOutcomeSink outcomes, Action<PresentationDiagnostic> diagnostic, float moveDuration = 0.1f,
             EnemyIntentPresenter intents = null, Func<bool> interactionInputAllowed = null, Action<string> observeFact = null)
@@ -88,13 +88,14 @@ namespace HallowBlaze.Presentation.Runtime
             MoveDuration = moveDuration;
             attacks = new EnemyAttackPresenter(runtime, hud, feedback, moveDuration);
             ObstacleDisplay = new ObstacleWorkPresenter(runtime);
+            DiggingDisplay = new ShovelWorkPresenter(runtime);
             var noiseOwner = new GameObject("Board noise debug") { hideFlags = HideFlags.DontSave };
             NoiseDisplay = noiseOwner.AddComponent<BoardNoisePresenter>();
             NoiseDisplay.Bind(runtime.BoardState, () => disposed || runtime.IsDisposed || runtime.Controller.IsTerminal
                 ? null : runtime.BoardState);
             Dispatcher = new OrderedEventDispatcher(diagnostic, SynchronizeFromState);
             Coordinator = new CommandPresentationCoordinator(runtime, new PresentationGate(), Dispatcher,
-                feedback.ShowRejection, result => { RefreshIntents(); NoiseDisplay.Refresh(); ObstacleDisplay.Refresh(); });
+                feedback.ShowRejection, result => { RefreshIntents(); NoiseDisplay.Refresh(); ObstacleDisplay.Refresh(); DiggingDisplay.Refresh(); });
             var interactionOwner = new GameObject("Board interaction") { hideFlags = HideFlags.DontSave };
             InteractionDisplay = interactionOwner.AddComponent<InteractionPresenter>();
             InteractionDisplay.Bind(runtime, Coordinator, interactionInputAllowed);
@@ -112,6 +113,23 @@ namespace HallowBlaze.Presentation.Runtime
                 return ShowFeedback(gameEvent);
             });
             Dispatcher.Register<ItemCollectedEvent>((gameEvent, token) => HideItem(gameEvent));
+            Dispatcher.Register<CacheWorkedEvent>((gameEvent, token) =>
+            {
+                DiggingDisplay.Refresh();
+                return ShowFeedback(gameEvent);
+            });
+            Dispatcher.Register<PitCreatedEvent>((gameEvent, token) =>
+            {
+                DiggingDisplay.Refresh();
+                return ShowFeedback(gameEvent);
+            });
+            Dispatcher.Register<ShamblerTrappedEvent>((gameEvent, token) =>
+            {
+                DiggingDisplay.Refresh();
+                ShowFeedback(gameEvent);
+                observeFact?.Invoke(ShamblerTrappedEvent.FactId);
+                return Task.CompletedTask;
+            });
             Dispatcher.Register<FoodRestoredEvent>((gameEvent, token) => RefreshFood(gameEvent));
             Dispatcher.Register<ActionCostAppliedEvent>((gameEvent, token) => RefreshHud());
             Dispatcher.Register<NoiseEvent>((gameEvent, token) =>
@@ -141,6 +159,8 @@ namespace HallowBlaze.Presentation.Runtime
         public InteractionPresenter InteractionDisplay { get; }
         /// <summary>Gets the owned domain-progress display and view-only clearing feedback adapter.</summary>
         public ObstacleWorkPresenter ObstacleDisplay { get; }
+        /// <summary>Gets the owned marked-cache, diggable-ground and temporary-pit overlay with non-color lifetime/hold labels.</summary>
+        public ShovelWorkPresenter DiggingDisplay { get; }
         /// <summary>Gets or sets whether movement and attacks animate; false uses the same handlers with zero visual delay.</summary>
         public bool AnimationsEnabled { get; set; } = true;
         /// <summary>Gets movement duration in unscaled seconds; zero completes synchronously in either mode.</summary>
@@ -160,6 +180,7 @@ namespace HallowBlaze.Presentation.Runtime
                 CloseIntents();
                 NoiseDisplay.Dispose();
                 ObstacleDisplay.Dispose();
+                DiggingDisplay.Dispose();
                 return;
             }
             var errors = new List<Exception>();
@@ -182,6 +203,8 @@ namespace HallowBlaze.Presentation.Runtime
             try { NoiseDisplay.Refresh(); }
             catch (Exception error) { errors.Add(error); }
             try { ObstacleDisplay.Refresh(); }
+            catch (Exception error) { errors.Add(error); }
+            try { DiggingDisplay.Refresh(); }
             catch (Exception error) { errors.Add(error); }
             if (errors.Count != 0)
                 throw new AggregateException("Registered views or HUD could not be fully synchronized.", errors);
@@ -300,6 +323,7 @@ namespace HallowBlaze.Presentation.Runtime
             NoiseDisplay.Dispose();
             InteractionDisplay.Dispose();
             ObstacleDisplay.Dispose();
+            DiggingDisplay.Dispose();
             outcomes.TryNotify(runtime.Request, gameEvent);
             return Task.CompletedTask;
         }
@@ -325,6 +349,7 @@ namespace HallowBlaze.Presentation.Runtime
             NoiseDisplay.Dispose();
             InteractionDisplay.Dispose();
             ObstacleDisplay.Dispose();
+            DiggingDisplay.Dispose();
             if (InteractionDisplay != null)
             {
                 if (Application.isPlaying)

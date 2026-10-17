@@ -62,9 +62,10 @@ namespace HallowBlaze.Core.Turns.Resolution
         /// Exceptions propagate as implementation faults; mutated state is not rolled back.
         /// Presentation must maintain its own input gate while replaying the returned events.
         /// Run lifecycle and persistence remain the caller's responsibility.
-        /// After acceptance, only pre-command noise ages once, before locked enemy execution and
-        /// next-intent planning. A rejected command never ages noise, and a new emission retains
-        /// its full lifetime even when the accepted command ends the board.
+        /// After acceptance, only pre-command noise and pits age once, before locked enemy execution
+        /// and next-intent planning. Rejections age neither; fresh emissions/pits retain their full
+        /// lifetime even when the accepted command ends the board. Pit expiry releases its hold,
+        /// but an already published Wait still executes without being replaced by a surprise attack.
         /// </remarks>
         public TurnResult Resolve(PlayerCommand command)
         {
@@ -77,6 +78,7 @@ namespace HallowBlaze.Core.Turns.Resolution
                     return new RejectedTurnResult(CommandRejectionCode.InvalidState);
 
                 IReadOnlyList<BoardNoise> previousNoises = boardState.GetActiveNoises();
+                IReadOnlyList<BoardPit> previousPits = boardState.GetPits();
                 // Phases 1-4: validation, effects/rewards, cost, immediate terminal outcome.
                 TurnResult playerResult = playerResolver.Resolve(boardState, runState, playerId, command);
                 if (playerResult == null)
@@ -86,6 +88,8 @@ namespace HallowBlaze.Core.Turns.Resolution
 
                 if (previousNoises.Count > 0)
                     boardState.AdvanceNoiseLifetime(previousNoises[previousNoises.Count - 1].Id);
+                if (previousPits.Count > 0)
+                    boardState.AdvancePitLifetime(previousPits[previousPits.Count - 1].Id);
                 var events = new List<GameEvent>(playerResult.Events);
                 if (CheckTerminal(events))
                     return new AcceptedTurnResult(events);

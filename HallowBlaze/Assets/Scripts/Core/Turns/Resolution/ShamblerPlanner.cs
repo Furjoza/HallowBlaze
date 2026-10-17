@@ -44,7 +44,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             if (enemyState == null)
                 throw new ArgumentNullException(nameof(enemyState));
 
-            if (enemyState.Phase == ShamblerPhase.Rest)
+            if (enemyState.Phase == ShamblerPhase.Rest || boardState.IsTrappedShambler(enemyState.ActorId))
                 return new EnemyIntent(enemyState.ActorId, EnemyIntentKind.Wait);
 
             if (!boardState.TryGetEntity(enemyState.ActorId, out BoardEntityState enemy) ||

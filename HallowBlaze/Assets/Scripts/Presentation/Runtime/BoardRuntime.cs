@@ -56,8 +56,9 @@ namespace HallowBlaze.Presentation.Runtime
                 boardState.RegisterListener(listener.ActorId);
             enemyPhases.PlanInitialIntents(boardState, playerId);
             ClearingRules = AxeContent.LoadRules();
-            Interactions = AxeContent.CreateInteractions(ClearingRules);
-            Tools = tools ?? AxeContent.CreateTools(ClearingRules);
+            DiggingRules = ShovelContent.LoadRules();
+            Interactions = ShovelContent.CreateInteractions(ClearingRules, DiggingRules);
+            Tools = tools ?? ShovelContent.CreateTools(ClearingRules, DiggingRules);
             controller = new TurnController(boardState, runState, playerId,
                 new TurnResolver(ActionNoiseProfile.Prototype, Interactions, Tools), enemyPhases.Handlers);
         }
@@ -106,6 +107,9 @@ namespace HallowBlaze.Presentation.Runtime
 
         /// <summary>Gets immutable opt-in soft obstacle rules shared by manual/axe actions and progress presentation.</summary>
         public ObstacleClearingRules ClearingRules { get; }
+
+        /// <summary>Gets immutable explicit cache/pit rules shared by preview, resolver and visible remaining-work/lifetime labels.</summary>
+        public ShovelRules DiggingRules { get; }
 
         /// <summary>Gets the exact tool behavior catalog and cost policy shared by preview and the sole resolver.</summary>
         public ToolUseQuery Tools { get; }

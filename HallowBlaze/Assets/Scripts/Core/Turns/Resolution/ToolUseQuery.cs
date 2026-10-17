@@ -57,11 +57,12 @@ namespace HallowBlaze.Core.Turns.Resolution
     {
         private readonly UseToolCommand command;
 
-        internal ToolUseOption(UseToolCommand command, ToolAction action, int foodCost, CommandRejectionCode rejectionCode)
+        internal ToolUseOption(UseToolCommand command, ToolAction action, int foodCost, CommandRejectionCode rejectionCode,
+            string effectLabel = null)
         {
             this.command = command;
             DefinitionId = action.DefinitionId;
-            EffectLabel = action.EffectLabel;
+            EffectLabel = effectLabel ?? action.EffectLabel;
             FoodCost = foodCost;
             NoiseStrength = action.NoiseStrength;
             NoiseLifetimeTurns = action.NoiseLifetimeTurns;
@@ -148,7 +149,8 @@ namespace HallowBlaze.Core.Turns.Resolution
                         var command = new UseToolCommand(slot, instance.InstanceId, instance.Charges,
                             target.Id, target.Position, action.Behavior.Id);
                         options.Add(new ToolUseOption(command, action, ActionCosts.FoodCost,
-                            Validate(board, run, playerId, command, out _, out _)));
+                            Validate(board, run, playerId, command, out _, out _),
+                            (action.Behavior as IInteractionConsequences)?.DescribeEffect(board, target)));
                     }
                 }
             }
