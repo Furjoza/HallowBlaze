@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "worldDefinitionId": "world.landmark-sanity",
+  "worldVersion": 1,
+  "segmentId": "segment.sanity.day5.arrival",
+  "templateId": "landmark.sanity",
+  "templateVersion": 1,
+  "variantId": "base"
+}

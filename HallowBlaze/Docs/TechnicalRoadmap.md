@@ -5211,13 +5211,14 @@ M5 jest zaliczony, gdy oba narzędzia tworzą różne decyzje, każde ma koszt l
 
 ## `M6.1` — Format ręcznie przygotowanego szablonu landmarku
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-16)
+
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 7.1, 14 i 16.
 
 **Rationale:** Pierwsza zagadka ma być kuratorowana i automatycznie sprawdzalna, nie generowana jak pełny Sokoban. Szablon danych pozwala tworzyć warianty bez osobnej minigry i bez ręcznej logiki sceny.
 
-**Obecne zachowanie:** Brak typu node `Landmark`, formatu zagadki i mappingu do wspólnego BoardState.
+**Starting behavior:** The world already supports a textual `landmark` place kind, but lacked an authored template format, validated segment assignment and conversion to the shared blueprint/state contract.
 
 **Oczekiwany rezultat:** `LandmarkTemplate` opisuje blueprint, cele/rezultaty, dozwolone warianty i wymagania walidacji przy użyciu stable IDs. Template identity is independent from node identity and can be assigned to a stable route segment.
 
@@ -5236,6 +5237,42 @@ M5 jest zaliczony, gdy oba narzędzia tworzą różne decyzje, każde ma koszt l
 **Wpływ na save i kompatybilność:** Run data identifies the landmark by its active `BoardAddress` plus stable template/variant ID and records the outcome at the completed-board boundary. Future replay uses the same identity after M8.7 acceptance. Destination node arrival remains the route-flow consequence of completing the final segment; no node ID is used as board identity.
 
 **Wymagany handoff:** Schemat szablonu i przykład dwóch outcomes bez implementowania rozwiązania.
+
+### Implementation Outcome - 2026-10-16
+
+The owner explicitly authorized M6.1 before the planned M4.9 human sessions, without accepting
+that pending gate or authorizing later cards. Implementation started from clean baseline
+`f81799c928fc3b015989ddf603a79092024e61b9` on `M6/1/ManualBoardSchema`, Git root
+`D:/Repos/HallowBlaze`, with direct Lead implementation and no Developer delegation.
+
+`Core.Generation.Landmarks` now owns immutable template/variant/outcome declarations, a strict
+authoring schema v1 loader against the existing content catalog, and validated final-segment
+assignments. It builds the same `BoardBlueprint` and independent `BoardState` as ordinary boards,
+retaining the exact full `BoardAddress` alongside template ID/version and variant ID. Missing or
+conflicting content, goals, sources, IDs, versions and placements reject before publication.
+A mandatory tool requirement must identify a matching, observable initial spawn in every allowed
+variant, statically accessible before an exit; optional tool-dependent outcomes need no promise.
+This structural check is not a dynamic puzzle solver or proof of tactical survival.
+
+The [schema and two-outcome example](BoardGeneration.md#m61-authored-landmark-templates) use a
+separate sanity world: five edge-based days, eight boards, and the final of two inbound day-five
+segments assigned to `landmark.sanity` / `base`. `arrival.safe` and `arrival.alternate` are named
+tool-free exit declarations, not executed solutions, rewards or saved outcomes. The fixture is
+not registered in production gameplay. Run v4 round-trip reconstructs the same addressed fixture
+against its frozen assignment; profile v2 is unchanged. M6.4 activation still requires compatible
+explicit selected template/variant and completed-outcome persistence before a real puzzle can
+ship; no mid-board save or automatic migration is introduced by this format-only card.
+
+Unity 6000.3.21f1 passed final full EditMode 1108 tests with only the existing Explicit generation
+milestone skipped, full graphics PlayMode 169/169 and final landmark tests 39/39. Coverage includes
+catalog/reference failures, immutable and deterministic reconstruction, whole-graph validation,
+the ordinary validator, concrete per-variant tool guarantees, fixed-source parity and existing
+run-save/address compatibility. Independent Reviewer returned PASS for model/loader/structure and
+segment/fixture/compatibility scope. Nonblocking source/optional-guarantee test suggestions were
+covered before the final full EditMode run. Scope, metadata/GUID, editor diagnostics, documentation
+and whitespace checks passed. Existing world/generator publications, scenes, prefabs, settings,
+packages and persistence DTOs are unchanged. M4.9 remains Pending; M6.2 remains Planned and is not
+automatically authorized. No commit or push was performed.
 
 ---
 
@@ -6203,7 +6240,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer. All seven cards are Done; M5.7 passed full EditMode 1069 tests plus the existing Explicit skip and graphics PlayMode 169/169, with independent Reviewer PASS across its reviewed scopes. These card-specific exceptions do not close M4.9 or authorize execution of M6.1, which remains Planned. Preserve independent review on later cards unless separately waived;
+1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized the bounded M6.1 authoring foundation before the planned human sessions. M6.1 is Done with full EditMode 1108 tests plus the existing Explicit skip, graphics PlayMode 169/169 and independent Reviewer PASS. These card-specific exceptions do not close M4.9 or authorize execution of M6.2, which remains Planned. Preserve independent review on later cards unless separately waived;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6243,7 +6280,9 @@ M5.5 was completed on 2026-10-16 at the owner's explicit request from clean base
 
 M5.6 was completed on 2026-10-16 at the owner's explicit request from clean baseline `9e1a6f0df5726b4d0eee81dd525afad18a2d10fa` on `M5/6/ToolPickUp`, with direct Lead implementation and independent Reviewer PASS. Conscious pickup fills the first free slot; full equipment requires a modal comparison and confirmed lossless exchange, preserving the old instance on the ground. Leave/cancel/stale/refusal are free, rapid input cannot duplicate the transfer, and food remains automatic under resolved O-003. Run schema v4 / profile schema v2 and published generators are unchanged. Full EditMode passed 1061 tests with the existing Explicit milestone skipped; graphics PlayMode passed 163/163. M4.9 remains Pending without human results. At that closeout, M5.7 remained Planned and required the later explicit owner request recorded below. No commit or push was performed.
 
-M5.7 was completed on 2026-10-16 at the owner's explicit request from clean baseline `ceadef295a903f781f8fe718e7e2ae9669ab01cd` on `M5/7/FieldNotes`, with direct Lead implementation and independent Reviewer PASS. Three typed presented consequences record durable profile facts once before feedback; the reader exposes only recorded text/icons, with safe missing-content placeholders and separate input ownership. Death and a new run retain knowledge; explicit New Game resets it. Full EditMode passed 1069 tests with the existing Explicit milestone skipped; final graphics PlayMode passed 169/169. Run/profile schemas, generators and serialized scenes/settings remain unchanged. M4.9 remains Pending without human results; M6.1 remains Planned and is not automatically authorized. No commit or push was performed.
+M5.7 was completed on 2026-10-16 at the owner's explicit request from clean baseline `ceadef295a903f781f8fe718e7e2ae9669ab01cd` on `M5/7/FieldNotes`, with direct Lead implementation and independent Reviewer PASS. Three typed presented consequences record durable profile facts once before feedback; the reader exposes only recorded text/icons, with safe missing-content placeholders and separate input ownership. Death and a new run retain knowledge; explicit New Game resets it. Full EditMode passed 1069 tests with the existing Explicit milestone skipped; final graphics PlayMode passed 169/169. Run/profile schemas, generators and serialized scenes/settings remain unchanged. M4.9 remains Pending without human results. At that closeout, M6.1 remained Planned and required the later explicit owner request recorded below. No commit or push was performed.
+
+M6.1 was completed on 2026-10-16 at the owner's explicit request from clean baseline `f81799c928fc3b015989ddf603a79092024e61b9` on `M6/1/ManualBoardSchema`, with direct Lead implementation and independent Reviewer PASS. Immutable authored templates, strict schema v1 loading, structural/tool-guarantee validation and final-segment assignments share the existing blueprint/state/address contracts. A separate five-day/eight-board sanity graph declares two tool-free outcomes without activating puzzle mechanics, rewards or outcome persistence. Final full EditMode passed 1108 tests with the existing Explicit milestone skipped; graphics PlayMode passed 169/169; final focused landmark cases passed 39/39. Published world/generators, run/profile schemas and scene/settings/package state are unchanged. M4.9 remains Pending without human results; M6.2 remains Planned and is not automatically authorized. No commit or push was performed.
 
 # Zasada aktualizacji roadmapy
 
