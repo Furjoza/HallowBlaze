@@ -1,5 +1,39 @@
 # HallowBlaze Testing
 
+## M6.4 Radio Tower
+
+The production [radio tower layout, paths and costs](BoardGeneration.md#radio-tower-landmark)
+are validated against actual authored JSON, shared rules and real prefab references.
+`RadioTowerLandmarkTests` executes both outcomes, manual/axe supply alternatives, free rejected
+movement, two bad-push fallbacks, zombie death and starvation. It rejects malformed pressure
+links, ambiguous exit bindings and missing special prefab references; named old-arrival
+publication upgrades retain their original addresses/generators. `LandmarkProgressTests`
+checks v5 round-trip, v4 migration, corrupt records, reset, atomic selection/arrival rollback
+and exactly-once retry without resource replay. Existing persistence suites still cover v1-v4,
+isolated corrupt-file backup recovery and unsupported future schemas.
+
+Production PlayMode cases named `BoardRuntimeStartupTests.LandmarkProduction_*` run actual
+`GameManager`/`BoardManager` startup, Continue, both resolver exits, selection/run/profile save
+failures, duplicate rejection and terminal starvation against isolated temporary storage.
+Real prefab/animation captures at 1280x720 and 320x640 check sprite references, missing scripts,
+label bounds and nonblank/changed pixels for closed/open gates. Images remain outside the
+project at `%TEMP%/HB-M64-<closed|open>-<width>x<height>.png`.
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter 'HallowBlaze.Tests.EditMode.RadioTowerLandmarkTests;HallowBlaze.Tests.EditMode.LandmarkProgressTests' --output "$env:TEMP/HB-M64-domain.xml" -- -nographics -logFile "$env:TEMP/HB-M64-domain.log"
+unity test $project --mode PlayMode --filter HallowBlaze.Tests.PlayMode.BoardRuntimeStartupTests.LandmarkProduction --output "$env:TEMP/HB-M64-production.xml" -- -logFile "$env:TEMP/HB-M64-production.log"
+```
+
+Run sequentially and inspect fresh XML identities/counts/results, then full EditMode and
+graphics PlayMode for persistence/lifecycle integration changes. The ordinary 1000-seed gate
+now covers 44 ordinary segment IDs; the four-board inbound ordinary prefix is explicitly
+reported separately from complete ordinary roads. It does not substitute an ordinary layout
+for the authored arrival. The existing 10000-seed milestone remains Explicit, not an M6.4 gate.
+Run v5/profile v2 are the current persistence versions. There is still no mid-board snapshot.
+M6.4 acceptance used owner-authorized self-review, not independent review or human playtest
+evidence; it neither closes M4.9 nor implements M6.5's bounded state-search solver.
+
 ## M6.3 Plates And Gates
 
 The [plate/gate contract](GameDesignContract.md#141-plate-and-gate-rules) is implemented by

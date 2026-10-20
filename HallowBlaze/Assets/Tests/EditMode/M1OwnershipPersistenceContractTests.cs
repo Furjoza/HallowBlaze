@@ -246,7 +246,7 @@ namespace HallowBlaze.Tests.EditMode
                 File.ReadAllText(Path.Combine(testRoot, "run.json")));
 
             Assert.That(profileEnvelope.schemaVersion, Is.EqualTo(2));
-            Assert.That(runEnvelope.schemaVersion, Is.EqualTo(4));
+            Assert.That(runEnvelope.schemaVersion, Is.EqualTo(5));
             RunState restored = store.LoadRun().Data;
             Assert.That(restored.RandomAlgorithmId, Is.EqualTo(HallowBlaze.Core.Random.RandomStreamProvider.AlgorithmId));
             Assert.That(restored.RandomAlgorithmVersion, Is.EqualTo(HallowBlaze.Core.Random.RandomStreamProvider.AlgorithmVersion));

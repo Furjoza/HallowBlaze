@@ -486,6 +486,17 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
                 }
             }
             BoardRequest request = BoardRequest.CreateFromRun(run, worldDefinition);
+            if (request.Address?.GenerationConfigurationId == RadioTowerLandmark.ConfigurationId)
+            {
+                var placement = RadioTowerLandmark.Load().CreatePlacement(worldDefinition);
+                var selected = new LandmarkRecord(request.Address, placement.TemplateId, placement.TemplateVersion, placement.VariantId);
+                SaveStoreResult chosen = worldMap.Travel.SelectLandmark(request, selected);
+                if (chosen.IsFailure)
+                {
+                    Debug.LogError("Landmark selection checkpoint failed: " + chosen.Type);
+                    return;
+                }
+            }
             GameObject playerView = GameObject.FindGameObjectWithTag("Player");
             if (request.Address != null && playerView != null)
                 playerView.transform.position = new Vector3(0, 0, playerView.transform.position.z);
@@ -497,7 +508,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             if (showIntro)
             {
                 if (levelText != null)
-                    levelText.text = "Day: " + Math.Max(1, run.CurrentDay);
+                    levelText.text = "Day: " + Math.Max(1, run.CurrentDay) +
+                        (run.ActiveLandmark == null ? string.Empty : "\nRadio tower");
                 if (levelImage != null)
                     levelImage.SetActive(true);
                 activePlayerView.SetHudVisible(false);
@@ -781,8 +793,12 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             activeBoardRuntime == null || activeBoardRuntime.IsDisposed)
             return false;
         BoardOutcome boardOutcome;
-        if (outcome is ExitReachedEvent)
-            boardOutcome = BoardOutcome.ExitReached(request);
+        if (outcome is ExitReachedEvent reached)
+        {
+            LandmarkRecord landmark = ResolveLandmarkExit(reached);
+            if (session.ActiveRun.ActiveLandmark != null && landmark == null) return false;
+            boardOutcome = BoardOutcome.ExitReached(request, landmark);
+        }
         else if (outcome is PlayerStarvedEvent)
             boardOutcome = BoardOutcome.PlayerDied(request, DeathReason.Starvation);
         else if (outcome is PlayerDiedEvent)
@@ -794,6 +810,20 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (activePlayerView != null)
             activePlayerView.ShowEvent(outcome);
         return true;
+    }
+
+    private LandmarkRecord ResolveLandmarkExit(ExitReachedEvent reached)
+    {
+        var authored = boardScript?.ActiveLandmark;
+        if (authored == null || activeBoardRuntime == null || !activeBoardRuntime.Controller.IsTerminal ||
+            !reached.PlayerId.Equals(activeBoardRuntime.PlayerId) ||
+            !activeBoardRuntime.BoardState.TryGetEntity(reached.ExitId, out var exitEntity) ||
+            !activeBoardRuntime.BoardState.TryGetEntity(reached.PlayerId, out var playerEntity) ||
+            !exitEntity.Definition.Traits.IsExit || !exitEntity.Position.Equals(playerEntity.Position)) return null;
+        foreach (var goal in authored.Outcomes)
+            if (goal.ExitEntityId.Equals(reached.ExitId)) return new LandmarkRecord(activeBoardRequest.Address,
+                authored.TemplateId, authored.TemplateVersion, authored.VariantId, goal.Id);
+        return null;
     }
 
     /// <summary>
@@ -816,6 +846,13 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             return false;
         }
 
+        if (outcome.Type == BoardOutcomeType.ExitReached && session.ActiveRun.ActiveLandmark != null &&
+            (outcome.Landmark == null || activeBoardRuntime == null || !activeBoardRuntime.Controller.IsTerminal ||
+            !activeBoardRuntime.BoardState.TryGetEntity(activeBoardRuntime.PlayerId, out var currentPlayer) ||
+            !activeBoardRuntime.BoardState.TryGetEntity(HallowBlaze.Core.Board.State.BoardLayer.Terrain,
+                currentPlayer.Position, out var currentExit) ||
+            ResolveLandmarkExit(new ExitReachedEvent(activeBoardRuntime.PlayerId, currentExit.Id))?.OutcomeId != outcome.Landmark.OutcomeId)) return false;
+
         if (outcome.Type == BoardOutcomeType.ExitReached || outcome.Type == BoardOutcomeType.PlayerDied)
             DisposeIntentUi();
         switch (outcome.Type)
@@ -827,7 +864,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
                 SetGameplayInputBlocked(true);
                 if (outcome.Request.Address != null && !arrivalCheckpointCommitted)
                 {
-                    if (!worldMap.Travel.TryCompleteSegment(outcome.Request, out SaveStoreResult checkpoint, out bool arrived))
+                    if (!worldMap.Travel.TryCompleteSegment(outcome.Request, out SaveStoreResult checkpoint, out bool arrived, outcome.Landmark))
                         return false;
                     if (checkpoint.IsFailure)
                     {

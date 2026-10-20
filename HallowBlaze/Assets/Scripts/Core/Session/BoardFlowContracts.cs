@@ -175,11 +175,12 @@ namespace HallowBlaze.Core.Session
         /// Creates a board outcome for when the player reaches the exit.
         /// </summary>
         /// <param name="request">The original board request that produced this outcome.</param>
-        public static BoardOutcome ExitReached(BoardRequest request)
+        /// <param name="landmark">Exact authored exit result, or null for ordinary boards; Session validates it against the saved selection.</param>
+        public static BoardOutcome ExitReached(BoardRequest request, LandmarkRecord landmark = null)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
-            return new BoardOutcome(request, BoardOutcomeType.ExitReached, null);
+            return new BoardOutcome(request, BoardOutcomeType.ExitReached, null, landmark);
         }
 
         /// <summary>
@@ -197,11 +198,12 @@ namespace HallowBlaze.Core.Session
             return new BoardOutcome(request, BoardOutcomeType.PlayerDied, deathReason);
         }
 
-        private BoardOutcome(BoardRequest request, BoardOutcomeType type, DeathReason? deathReason)
+        private BoardOutcome(BoardRequest request, BoardOutcomeType type, DeathReason? deathReason, LandmarkRecord landmark = null)
         {
             Request = request ?? throw new ArgumentNullException(nameof(request));
             Type = type;
             DeathReason = deathReason;
+            Landmark = landmark;
         }
 
         /// <summary>
@@ -221,6 +223,9 @@ namespace HallowBlaze.Core.Session
         /// Gets the reason for death, or null if the outcome is exit reached.
         /// </summary>
         public DeathReason? DeathReason { get; }
+
+        /// <summary>Gets the immutable selected-template result associated with the actual resolved exit, or null for ordinary/death outcomes.</summary>
+        public LandmarkRecord Landmark { get; }
     }
 
     /// <summary>

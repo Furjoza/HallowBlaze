@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 995f93abcdfd956409e769861b6c3245, type: 3}
+  m_Name: RadioTowerLandmark
+  m_EditorClassIdentifier: HallowBlaze.Presentation.Runtime::HallowBlaze.Presentation.Runtime.RadioTowerLandmark
+  template: {fileID: 4900000, guid: 46b7ece5893f61949a9da8e09c2b5674, type: 3}
+  placement: {fileID: 4900000, guid: b4a588d200ef07e42bf4c432d2fee5ca, type: 3}
+  boulder: {fileID: 1475026818879650767, guid: aa7722352005a9e4e9448280407efb29, type: 3}
+  plate: {fileID: 510152843432461982, guid: 948e34c1cf54eab4c8e29db737efbb74, type: 3}
+  gate: {fileID: 9199526337967690649, guid: c8b11b5e9eb78a142b5c08ba09082e3e, type: 3}
+  axe: {fileID: 7503777184404832600, guid: 3cc57a55aa2d07c48aa23b2a162b29fc, type: 3}

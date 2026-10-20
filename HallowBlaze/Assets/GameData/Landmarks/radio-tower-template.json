@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "templateId": "landmark.radio-tower",
+  "templateVersion": 1,
+  "configuration": {
+    "id": "landmark.radio-tower.board", "version": 1,
+    "pathLength": { "minimum": 1, "maximum": 63 },
+    "branchPoints": { "minimum": 0, "maximum": 64 },
+    "obstacleCount": { "minimum": 2, "maximum": 2 },
+    "enemyCount": { "minimum": 1, "maximum": 1 },
+    "maximumConcurrentThreats": 1, "minimumSafeStartMoves": 2,
+    "allowedContentIds": ["legacy.player", "legacy.floor", "legacy.wall", "landmark.boulder", "landmark.plate", "landmark.gate", "ordinary.exit-terrain", "ordinary.shambler.10", "axe.basic", "landmark.radio-tower.rations"],
+    "resourceBudgets": [
+      { "resourceFamilyId": "food", "itemCount": { "minimum": 1, "maximum": 1 } },
+      { "resourceFamilyId": "tools", "itemCount": { "minimum": 1, "maximum": 1 } }
+    ]
+  },
+  "outcomes": [
+    { "id": "tower.arrival", "name": "Radio tower", "exitEntityId": 151, "optional": false },
+    { "id": "tower.supplies", "name": "Radio tower supplies", "exitEntityId": 146, "optional": true }
+  ],
+  "variants": [{
+    "id": "base",
+    "entities": [
+      { "id": 1, "layer": "Actor", "contentId": "legacy.player", "x": 1, "y": 1 },
+      { "id": 2, "layer": "Actor", "contentId": "ordinary.shambler.10", "x": 6, "y": 3 },
+      { "id": 10, "layer": "Obstacle", "contentId": "landmark.boulder", "x": 2, "y": 3 },
+      { "id": 11, "layer": "Obstacle", "contentId": "legacy.wall", "x": 5, "y": 4 },
+      { "id": 20, "layer": "Item", "contentId": "axe.basic", "x": 2, "y": 1 },
+      { "id": 21, "layer": "Item", "contentId": "landmark.radio-tower.rations", "x": 5, "y": 5 },
+      { "id": 109, "layer": "Terrain", "contentId": "legacy.floor", "x": 1, "y": 1 },
+      { "id": 110, "layer": "Terrain", "contentId": "legacy.floor", "x": 2, "y": 1 },
+      { "id": 117, "layer": "Terrain", "contentId": "legacy.floor", "x": 1, "y": 2 },
+      { "id": 118, "layer": "Terrain", "contentId": "legacy.floor", "x": 2, "y": 2 },
+      { "id": 119, "layer": "Terrain", "contentId": "legacy.floor", "x": 3, "y": 2 },
+      { "id": 125, "layer": "Terrain", "contentId": "legacy.floor", "x": 1, "y": 3 },
+      { "id": 126, "layer": "Terrain", "contentId": "legacy.floor", "x": 2, "y": 3 },
+      { "id": 127, "layer": "Terrain", "contentId": "landmark.plate", "x": 3, "y": 3 },
+      { "id": 133, "layer": "Terrain", "contentId": "legacy.floor", "x": 1, "y": 4 },
+      { "id": 134, "layer": "Terrain", "contentId": "legacy.floor", "x": 2, "y": 4 },
+      { "id": 135, "layer": "Terrain", "contentId": "legacy.floor", "x": 3, "y": 4 },
+      { "id": 136, "layer": "Terrain", "contentId": "landmark.gate", "x": 4, "y": 4 },
+      { "id": 137, "layer": "Terrain", "contentId": "legacy.floor", "x": 5, "y": 4 },
+      { "id": 138, "layer": "Terrain", "contentId": "legacy.floor", "x": 6, "y": 4 },
+      { "id": 139, "layer": "Terrain", "contentId": "legacy.floor", "x": 6, "y": 3 },
+      { "id": 141, "layer": "Terrain", "contentId": "legacy.floor", "x": 1, "y": 5 },
+      { "id": 142, "layer": "Terrain", "contentId": "legacy.floor", "x": 2, "y": 5 },
+      { "id": 143, "layer": "Terrain", "contentId": "legacy.floor", "x": 3, "y": 5 },
+      { "id": 145, "layer": "Terrain", "contentId": "legacy.floor", "x": 5, "y": 5 },
+      { "id": 146, "layer": "Terrain", "contentId": "ordinary.exit-terrain", "x": 6, "y": 5 },
+      { "id": 149, "layer": "Terrain", "contentId": "legacy.floor", "x": 1, "y": 6 },
+      { "id": 150, "layer": "Terrain", "contentId": "legacy.floor", "x": 2, "y": 6 },
+      { "id": 151, "layer": "Terrain", "contentId": "ordinary.exit-terrain", "x": 3, "y": 6 }
+    ],
+    "items": [
+      { "instanceId": "radio-tower.axe", "entityId": 20, "itemDefinitionId": "axe.basic", "resourceFamilyId": "tools", "sourceId": "source.radio-tower.axe", "initiallyObservable": true },
+      { "instanceId": "radio-tower.rations", "entityId": 21, "itemDefinitionId": "landmark.radio-tower.rations", "resourceFamilyId": "food", "sourceId": "source.radio-tower.rations", "initiallyObservable": true }
+    ],
+    "plates": [{ "terrainId": 127, "linkId": "A", "occupants": "Boulders" }],
+    "gates": [{ "terrainId": 136, "linkId": "A", "rule": "All" }]
+  }]
+}

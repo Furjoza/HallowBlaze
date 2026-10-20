@@ -86,14 +86,37 @@ namespace HallowBlaze.Core.Session
         }
 
         /// <summary>
+        /// Checkpoints an exact authored selection before its first render; repeated identical selections perform no write.
+        /// Failure restores the previous selection and never authorizes board input.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The selection is foreign, conflicts or is not the current final consumed segment.</exception>
+        public SaveStoreResult SelectLandmark(BoardRequest request, LandmarkRecord selection)
+        {
+            RunState run = session.GetCurrentRun();
+            if (request?.Address == null || selection == null || !selection.Address.Equals(request.Address) ||
+                !BoardOutcomeIdentityGuard.ValidateRequest(request, run, out _) ||
+                run.ActiveLeg.IntroState != DayIntroState.Consumed)
+                throw new InvalidOperationException("Landmark selection does not match current travel.");
+            BoardAddressFactory.Create(run, world);
+            LandmarkRecord previous = run.ActiveLandmark;
+            if (!run.TrySelectLandmark(selection)) throw new InvalidOperationException("Conflicting landmark selection.");
+            if (previous != null) return SaveStoreResult.Success();
+            SaveStoreResult saved = saveStore.SaveRun(run);
+            if (saved.IsFailure) run.RestoreLandmarkState(previous, run.CompletedLandmarks);
+            return saved;
+        }
+
+        /// <summary>
         /// Advances one matching consumed segment and checkpoints its boundary once.
-        /// Final completion records arrival in the run; profile reconciliation must follow before atlas/input.
+        /// Final completion atomically records the selected landmark result and arrival in the run;
+        /// profile reconciliation must follow before atlas/input. Failure rolls both records back, not resolved board resources.
         /// </summary>
         /// <param name="request">The complete current segment identity; foreign or repeated requests are free.</param>
         /// <param name="checkpoint">The save result when admitted, or null when rejected.</param>
         /// <param name="arrived">True only when final arrival has been durably committed.</param>
+        /// <param name="landmark">Trusted result resolved from the actual exit; required exactly when an authored selection is active.</param>
         /// <returns>Whether the current segment admitted this completion, independently of save success.</returns>
-        public bool TryCompleteSegment(BoardRequest request, out SaveStoreResult checkpoint, out bool arrived)
+        public bool TryCompleteSegment(BoardRequest request, out SaveStoreResult checkpoint, out bool arrived, LandmarkRecord landmark = null)
         {
             checkpoint = null;
             arrived = false;
@@ -109,6 +132,9 @@ namespace HallowBlaze.Core.Session
             string reached = run.ReachedCheckpointNodeId;
             int sequence = run.TraversalSequence;
             TravelHistoryEntry[] history = run.TravelHistory.ToArray();
+            LandmarkRecord selected = run.ActiveLandmark;
+            LandmarkRecord[] completed = run.CompletedLandmarks.ToArray();
+            if (selected != null ? !run.TryCompleteLandmark(landmark) : landmark != null) return false;
             bool final = previous.IsFinalSegment;
             if (final)
                 run.TryCompleteLeg(previous.LegId, previous.CurrentSegment.SegmentId);
@@ -117,7 +143,10 @@ namespace HallowBlaze.Core.Session
 
             checkpoint = saveStore.SaveRun(run);
             if (checkpoint.IsFailure)
+            {
                 run.RestoreTravelState(completedDays, reached, sequence, history, previous);
+                run.RestoreLandmarkState(selected, completed);
+            }
             else
                 arrived = final;
             return true;

@@ -2,11 +2,12 @@ using System;
 using System.Collections.Generic;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
+using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.State;
 
 namespace HallowBlaze.Core.Generation.Landmarks
 {
-    /// <summary>Names a future completed-board result, not an executable puzzle rule or an already earned reward.</summary>
+    /// <summary>Names a completed exit result; resources still come from ordinary resolver effects on concrete items.</summary>
     public sealed class LandmarkOutcomeDefinition
     {
         /// <summary>Declares an exit goal and optional tool requirement; a mandatory tool must have an explicit initial instance guarantee.</summary>
@@ -46,7 +47,8 @@ namespace HallowBlaze.Core.Generation.Landmarks
     public sealed class LandmarkVariant
     {
         /// <summary>Copies all initial entities/items, preserving board-local IDs across reconstruction.</summary>
-        public LandmarkVariant(string id, IEnumerable<BoardEntityState> entities, IEnumerable<BoardItemSpawn> items)
+        public LandmarkVariant(string id, IEnumerable<BoardEntityState> entities, IEnumerable<BoardItemSpawn> items,
+            IEnumerable<PressurePlateDefinition> plates = null, IEnumerable<GateDefinition> gates = null)
         {
             GenerationContract.RequireId(id, nameof(id));
             if (entities == null) throw new ArgumentNullException(nameof(entities));
@@ -54,6 +56,8 @@ namespace HallowBlaze.Core.Generation.Landmarks
             Id = id;
             Entities = new List<BoardEntityState>(entities).AsReadOnly();
             Items = new List<BoardItemSpawn>(items).AsReadOnly();
+            Plates = new List<PressurePlateDefinition>(plates ?? Array.Empty<PressurePlateDefinition>()).AsReadOnly();
+            Gates = new List<GateDefinition>(gates ?? Array.Empty<GateDefinition>()).AsReadOnly();
         }
 
         /// <summary>Gets the stable variant key, independent of its position in a JSON array.</summary>
@@ -62,20 +66,27 @@ namespace HallowBlaze.Core.Generation.Landmarks
         public IReadOnlyList<BoardEntityState> Entities { get; }
         /// <summary>Gets concrete generic item/source bindings, including any promised tool.</summary>
         public IReadOnlyList<BoardItemSpawn> Items { get; }
+        /// <summary>Gets explicit immutable terrain-pressure bindings, validated before template publication.</summary>
+        public IReadOnlyList<PressurePlateDefinition> Plates { get; }
+        /// <summary>Gets explicit immutable gate links and All/Any rules, never inferred from sprite names.</summary>
+        public IReadOnlyList<GateDefinition> Gates { get; }
     }
 
     /// <summary>Pairs an ordinary blueprint with explicit authored identity without replacing its full segment address.</summary>
     public sealed class LandmarkBoard
     {
-        internal LandmarkBoard(LandmarkTemplate template, string variantId, BoardBlueprint blueprint)
+        internal LandmarkBoard(LandmarkTemplate template, LandmarkVariant variant, BoardBlueprint blueprint)
         {
             TemplateId = template.Id;
             TemplateVersion = template.Version;
-            VariantId = variantId;
+            VariantId = variant.Id;
             Blueprint = blueprint;
+            Plates = variant.Plates;
+            Gates = variant.Gates;
+            Outcomes = template.Outcomes;
         }
 
-        /// <summary>Gets the stable template key for future completed-board persistence.</summary>
+        /// <summary>Gets the stable template key retained at selection and completed-board persistence boundaries.</summary>
         public string TemplateId { get; }
         /// <summary>Gets the positive authored schema/content version, not the world-node version.</summary>
         public int TemplateVersion { get; }
@@ -83,6 +94,39 @@ namespace HallowBlaze.Core.Generation.Landmarks
         public string VariantId { get; }
         /// <summary>Gets the same blueprint/state construction contract used by ordinary boards.</summary>
         public BoardBlueprint Blueprint { get; }
+        /// <summary>Gets explicit fixed plate bindings required when composing this blueprint.</summary>
+        public IReadOnlyList<PressurePlateDefinition> Plates { get; }
+        /// <summary>Gets explicit gate bindings required before initial enemy planning.</summary>
+        public IReadOnlyList<GateDefinition> Gates { get; }
+        /// <summary>Gets the named exit outcomes belonging to this exact selected template.</summary>
+        public IReadOnlyList<LandmarkOutcomeDefinition> Outcomes { get; }
+
+        /// <summary>Reconstructs independent board state with derived plate/gate walkability and no gameplay events.</summary>
+        public BoardState CreateState()
+        {
+            BoardState state = Blueprint.CreateState();
+            state.ConfigurePlateGates(Plates, Gates);
+            return state;
+        }
+
+        /// <summary>
+        /// Applies ordinary catalog, budget, opening and topology checks while allowing an explicitly optional exit
+        /// behind interactive obstacles/gates. Mandatory exits still need a static tool-free fallback.
+        /// This is not a dynamic solvability proof; intended sequences and the M6.5 solver validate optional routes.
+        /// </summary>
+        public BoardValidationReport Validate(BoardValidationCatalog catalog)
+        {
+            BoardValidationReport ordinary = BoardValidator.Validate(Blueprint, catalog);
+            var optional = new HashSet<GridPosition>();
+            foreach (LandmarkOutcomeDefinition outcome in Outcomes)
+                if (outcome.IsOptional)
+                    foreach (BoardEntityState entity in Blueprint.Entities)
+                        if (entity.Id.Equals(outcome.ExitEntityId)) optional.Add(entity.Position);
+            var errors = new List<BoardValidationError>();
+            foreach (BoardValidationError error in ordinary.Errors)
+                if (error.Code != "UnreachableExit" || !error.Position.HasValue || !optional.Contains(error.Position.Value)) errors.Add(error);
+            return new BoardValidationReport(Blueprint.Address, Blueprint.Config, errors, ordinary.Metrics);
+        }
     }
 
     /// <summary>Defines a validated authored 8x8 landmark using existing board layers; it neither solves nor executes outcomes.</summary>
@@ -103,10 +147,11 @@ namespace HallowBlaze.Core.Generation.Landmarks
             if (variants == null) throw new ArgumentNullException(nameof(variants));
             if (outcomes == null) throw new ArgumentNullException(nameof(outcomes));
             var orderedOutcomes = new SortedDictionary<string, LandmarkOutcomeDefinition>(StringComparer.Ordinal);
+            var exitIds = new HashSet<EntityId>();
             bool mandatory = false;
             foreach (LandmarkOutcomeDefinition outcome in outcomes)
             {
-                if (outcome == null || orderedOutcomes.ContainsKey(outcome.Id))
+                if (outcome == null || orderedOutcomes.ContainsKey(outcome.Id) || !exitIds.Add(outcome.ExitEntityId))
                     throw new ArgumentException("Landmark " + id + " requires distinct non-null outcomes.", nameof(outcomes));
                 orderedOutcomes.Add(outcome.Id, outcome);
                 mandatory |= !outcome.IsOptional;
@@ -146,7 +191,7 @@ namespace HallowBlaze.Core.Generation.Landmarks
             GenerationContract.RequireId(variantId, nameof(variantId));
             if (!variants.TryGetValue(variantId, out LandmarkVariant variant))
                 throw new ArgumentException("Unknown variant " + variantId + " in landmark " + Id + ".", nameof(variantId));
-            return new LandmarkBoard(this, variantId, new BoardBlueprint(address, Config, variant.Entities, variant.Items));
+            return new LandmarkBoard(this, variant, new BoardBlueprint(address, Config, variant.Entities, variant.Items));
         }
 
         private void ValidateVariant(LandmarkVariant variant)
@@ -157,6 +202,7 @@ namespace HallowBlaze.Core.Generation.Landmarks
             {
                 var address = new BoardAddress("validation", "validation", "validation", "validation", 1, Config.Id, Config.Version, 0);
                 state = new BoardBlueprint(address, Config, variant.Entities, variant.Items).CreateState();
+                state.ConfigurePlateGates(variant.Plates, variant.Gates);
             }
             catch (ArgumentException exception) { throw new ArgumentException(context + exception.Message, nameof(variant), exception); }
             foreach (BoardEntityState entity in variant.Entities)

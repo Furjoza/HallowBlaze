@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Generation;
+using HallowBlaze.Core.Generation.Landmarks;
 using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
@@ -28,17 +29,20 @@ namespace HallowBlaze.Presentation.Runtime
         /// <param name="groundTools">Optional existing run-allocated tool instances matching authored item entities; no generation or equipment mutation.</param>
         /// <param name="plates">Explicit fixed plate bindings; every plate terrain requires one.</param>
         /// <param name="gates">Explicit gate links/rules, validated before initial enemy planning.</param>
+        /// <param name="landmark">Exact authored board, if any; permits declared optional gated exits without weakening ordinary validation.</param>
         /// <returns>A complete runtime whose initial state reproduces the blueprint.</returns>
         /// <exception cref="BoardRuntimeCompositionException">Identity, blueprint validation or view parity fails.</exception>
         public static BoardRuntime Compose(BoardRequest request, RunState run, BoardBlueprint blueprint,
             BoardValidationCatalog catalog, IReadOnlyDictionary<EntityId, GameObject> views, ToolUseQuery tools = null,
             IEnumerable<GroundToolState> groundTools = null, IEnumerable<PressurePlateDefinition> plates = null,
-            IEnumerable<GateDefinition> gates = null)
+            IEnumerable<GateDefinition> gates = null, LandmarkBoard landmark = null)
         {
             if (request == null || run == null || blueprint == null || catalog == null || views == null ||
                 !BoardOutcomeIdentityGuard.ValidateRequest(request, run, out _) || !blueprint.Address.Equals(request.Address))
                 throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, "blueprint:identity-or-input");
-            BoardValidationReport report = BoardValidator.Validate(blueprint, catalog);
+            if (landmark != null && !ReferenceEquals(landmark.Blueprint, blueprint))
+                throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, "blueprint:foreign-landmark");
+            BoardValidationReport report = landmark == null ? BoardValidator.Validate(blueprint, catalog) : landmark.Validate(catalog);
             if (!report.IsValid) throw new BoardGenerationException(report);
             if (views.Count != blueprint.Entities.Count)
                 throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, "blueprint:view-count");
@@ -75,8 +79,8 @@ namespace HallowBlaze.Presentation.Runtime
                     spawn == null || spawn.SourceId != ground.SourceId || !board.TryBindGroundTool(ground))
                     throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, "blueprint:invalid-ground-tool");
             }
-            var plateBindings = new List<PressurePlateDefinition>(plates ?? Array.Empty<PressurePlateDefinition>());
-            var gateBindings = new List<GateDefinition>(gates ?? Array.Empty<GateDefinition>());
+            var plateBindings = new List<PressurePlateDefinition>(landmark?.Plates ?? plates ?? Array.Empty<PressurePlateDefinition>());
+            var gateBindings = new List<GateDefinition>(landmark?.Gates ?? gates ?? Array.Empty<GateDefinition>());
             IReadOnlyList<string> linkErrors = PlateGateValidator.Validate(board, plateBindings, gateBindings);
             if (linkErrors.Count > 0) throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, string.Join("; ", linkErrors));
             board.ConfigurePlateGates(plateBindings, gateBindings);

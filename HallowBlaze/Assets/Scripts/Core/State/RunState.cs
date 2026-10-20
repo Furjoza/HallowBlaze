@@ -15,7 +15,7 @@ namespace HallowBlaze.Core.State
     }
 
     /// <summary>Owns one run's resources, travel and persisted RNG identity, independently of profile knowledge.</summary>
-    public sealed class RunState
+    public sealed partial class RunState
     {
         /// <summary>Exactly two generic equipment slots, independent of backpack or pocket capacity.</summary>
         public const int ToolSlotCount = 2;
@@ -105,6 +105,8 @@ namespace HallowBlaze.Core.State
             Food = configuration.InitialFood;
             Status = RunStatus.Active;
             travelHistory.Clear();
+            ActiveLandmark = null;
+            completedLandmarks.Clear();
             Array.Clear(toolSlots, 0, toolSlots.Length);
         }
 
@@ -229,11 +231,11 @@ namespace HallowBlaze.Core.State
             return true;
         }
 
-        /// <summary>Records final arrival once; Session still owns discovery and persistence.</summary>
-        /// <returns>False unless the matching consumed final segment belongs to an active run.</returns>
+        /// <summary>Records final arrival once after any selected landmark outcome; Session still owns discovery and persistence.</summary>
+        /// <returns>False unless the matching consumed final segment belongs to an active run and no selected outcome remains unresolved.</returns>
         public bool TryCompleteLeg(string legId, string segmentId)
         {
-            if (!MatchesSegment(legId, segmentId) || !ActiveLeg.IsFinalSegment)
+            if (!MatchesSegment(legId, segmentId) || !ActiveLeg.IsFinalSegment || ActiveLandmark != null)
                 return false;
             TravelHistoryEntry entry = TravelHistoryEntry.Completed(ActiveLeg.LegId, ActiveLeg.EdgeId,
                 ActiveLeg.FromNodeId, ActiveLeg.ToNodeId, ActiveLeg.DayNumber, ActiveLeg.Segments.Count);
