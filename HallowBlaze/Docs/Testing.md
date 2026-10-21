@@ -1,5 +1,35 @@
 # HallowBlaze Testing
 
+## M6.5 Bounded Landmark Solver
+
+[LandmarkSolverTests](../Assets/Tests/EditMode/LandmarkSolverTests.cs) checks real-controller
+paths, not a second movement or enemy engine. The [model, budgets and measured paths](BoardGeneration.md#m65-bounded-landmark-solver)
+define the exact supported scope. Both published outcomes are solved dynamically within
+50,000 states / 32 accepted commands / 10 seconds and executed on fresh owners. The supply
+outcome is also solved without an axe. Repeated searches compare paths and state counts,
+not elapsed time. A minimal authored blocked variant must return exhaustive `NoSolution`;
+state, depth and time caps have separate incomplete results.
+
+The fixture covers structural equality across independent snapshots, constant-hash collisions,
+causal-field mutation and key immutability, caller isolation before/after construction, retained
+Wait/Rest copying without initial replanning, terminal exits, starvation on an exit, invalid
+budgets, unsupported equipment and missing enemy catalog. Pickup path execution rebinds to
+the exact ground snapshot on the fresh board rather than weakening stale-command validation.
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter HallowBlaze.Tests.EditMode.LandmarkSolverTests --output "$env:TEMP/HB-M65-focused.xml" -- -nographics -logFile "$env:TEMP/HB-M65-focused.log"
+unity test $project --mode EditMode --output "$env:TEMP/HB-M65-editmode.xml" -- -nographics -logFile "$env:TEMP/HB-M65-editmode.log"
+```
+
+Run sequentially and inspect fresh XML for fixture identities and nonzero passing counts.
+Acceptance on 2026-10-21: focused **26/26 Passed**, full EditMode **1225 passed, zero failed,
+one pre-existing Explicit 10000-seed milestone skip**. Source compiled without new editor
+diagnostics. PlayMode was not rerun: only the offline tool/tests/docs changed, not runtime
+composition, scenes, UI or saves. The owner authorized direct replacement of the failed local
+attempt followed by validation and self-review; no independent review verdict is claimed.
+Run v5/profile v2 and M8.7 Deferred remain unchanged; M4.9 is Pending and M6.6 is Planned.
+
 ## M6.4 Radio Tower
 
 The production [radio tower layout, paths and costs](BoardGeneration.md#radio-tower-landmark)

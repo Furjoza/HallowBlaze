@@ -5438,13 +5438,14 @@ explicit command paths, fallback and migration details. Full EditMode passed 119
 the existing Explicit milestone skipped; graphics PlayMode passed 185/185, including actual
 production Continue/outcomes/save failures/death and desktop/portrait art checks. The owner's
 explicit solo instruction authorized implementation, validation and self-review; no independent
-review or human playtest verdict is claimed. M4.9 remains Pending; M6.5/M6.6 remain Planned.
+review or human playtest verdict is claimed. At that closeout, M4.9 remained Pending and
+M6.5/M6.6 remained Planned; M6.5's subsequent authorization and acceptance are recorded below.
 
 ---
 
 ## `M6.5` — Solver rozwiązywalności landmarku
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-21)
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 14, 16 i 22.
 
@@ -5469,6 +5470,23 @@ review or human playtest verdict is claimed. M4.9 remains Pending; M6.5/M6.6 rem
 **Wpływ na save i kompatybilność:** Brak; solver używa snapshotów testowych.
 
 **Wymagany handoff:** Liczba odwiedzonych stanów, czas i przykładowa sekwencja dla każdego outcome.
+
+**Completion (2026-10-21):** Offline bounded BFS uses independent board/run/Shambler owners
+and the real resolver/controller, preserving retained plans and cadence without initial replan.
+Solver-local structural keys deduplicate equivalent states and distinguish forced hash collisions;
+unsupported mechanics fail explicitly. Exhaustive failure is separate from state/depth/time limits.
+Both published outcomes solve within 50,000 states / 32 commands / 10 seconds and their found
+paths execute on fresh owners, including exact pickup rebinding. Arrival visited 219 states in
+218 ms; axe supplies 1838 in 606 ms; manual supplies without an axe 1324 in 357 ms in the final
+focused run. [Model, limits and paths](BoardGeneration.md#m65-bounded-landmark-solver) and
+[test commands](Testing.md#m65-bounded-landmark-solver) document the evidence. Focused EditMode
+passed 26/26; full EditMode passed 1225 tests with the existing Explicit milestone skipped.
+The initial local attempt failed compilation; the owner then explicitly authorized direct
+replacement, validation and self-review. No independent review verdict is claimed. PlayMode
+was not rerun for this offline-only change. Run v5/profile v2, runtime composition, authored
+content, generators, scenes/prefabs and settings/packages are unchanged. No M8.7 capture/hash/
+codec dependency was added. M4.9 remains Pending; M6.6 remains Planned and is not authorized
+by this card. No commit or push was performed.
 
 ---
 
@@ -6316,7 +6334,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state and M6.4's production landmark before the planned human sessions. All four cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185. These card-specific exceptions do not close M4.9 or authorize M6.5/M6.6, which remain Planned. Preserve independent review on later cards unless separately waived;
+1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. These card-specific exceptions do not close M4.9 or authorize M6.6, which remains Planned. Preserve independent review on later cards unless separately waived;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6371,8 +6389,18 @@ tool-free fallback approaches. Run v5 durably pins template/variant and atomic o
 profile v2 records discovery through existing reconciliation. Full EditMode passed 1199 tests
 with one existing Explicit skip; graphics PlayMode passed 185/185. Validation and review were
 performed by the same agent under the owner's instruction, not an independent verdict.
-M4.9 remains Pending without human results; M6.5/M6.6 remain Planned and need separate
-authorization. No commit or push was performed.
+At that closeout, M4.9 remained Pending without human results and M6.5/M6.6 remained Planned.
+No commit or push was performed.
+
+M6.5 was completed on 2026-10-21 from clean baseline `b97a337240d027d29ebd8a656fea827d9a6c20b8`
+on `M6/5/BoardSolver`, Git root `D:/Repos/HallowBlaze`. After the local attempt failed compilation,
+the owner authorized direct replacement, validation and self-review. The bounded offline solver
+finds both real outcomes and the manual no-axe alternative, executes found decisions on fresh
+owners and separates exhaustive failure from incomplete budget stops. Focused EditMode passed
+26/26 and full EditMode passed 1225 tests with the pre-existing Explicit skip. No runtime, save,
+content or M8.7 change was introduced; PlayMode was not rerun. No independent verdict is claimed.
+M4.9 remains Pending without human results; M6.6 remains Planned and needs separate authorization.
+No commit or push was performed.
 
 # Zasada aktualizacji roadmapy
 
