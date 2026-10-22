@@ -65,7 +65,7 @@ namespace HallowBlaze.Core.Generation.Landmarks
             foreach (JToken token in Array(root["variants"]))
             {
                 JObject row = Object(token);
-                Fields(row, "id", "entities", "items");
+                Fields(row, "id", "entities", "items", "plates", "gates");
                 var entities = new List<BoardEntityState>();
                 foreach (JToken entityToken in Array(row["entities"]))
                 {
@@ -95,7 +95,25 @@ namespace HallowBlaze.Core.Generation.Landmarks
                     items.Add(new BoardItemSpawn(Text(item, "instanceId"), new EntityId(Integer(item["entityId"])),
                         definitionId, family, sourceId, Boolean(item["initiallyObservable"])));
                 }
-                variants.Add(new LandmarkVariant(Text(row, "id"), entities, items));
+                var plates = new List<PressurePlateDefinition>();
+                if (row["plates"] != null)
+                    foreach (JToken plateToken in Array(row["plates"]))
+                    {
+                        JObject plate = Object(plateToken);
+                        Fields(plate, "terrainId", "linkId", "occupants");
+                        plates.Add(new PressurePlateDefinition(new EntityId(Integer(plate["terrainId"])), Text(plate, "linkId"),
+                            EnumValue<PlateOccupants>(plate["occupants"])));
+                    }
+                var gates = new List<GateDefinition>();
+                if (row["gates"] != null)
+                    foreach (JToken gateToken in Array(row["gates"]))
+                    {
+                        JObject gate = Object(gateToken);
+                        Fields(gate, "terrainId", "linkId", "rule");
+                        gates.Add(new GateDefinition(new EntityId(Integer(gate["terrainId"])), Text(gate, "linkId"),
+                            EnumValue<GateRule>(gate["rule"])));
+                    }
+                variants.Add(new LandmarkVariant(Text(row, "id"), entities, items, plates, gates));
             }
             return new LandmarkTemplate(id, Integer(root["templateVersion"]), targets, variants, outcomes);
         }
@@ -159,6 +177,14 @@ namespace HallowBlaze.Core.Generation.Landmarks
             { throw Error(token, "Integer exceeds Int32 capacity."); }
             if (value < int.MinValue || value > int.MaxValue) throw Error(token, "Integer exceeds Int32 capacity.");
             return (int)value;
+        }
+
+        private static TEnum EnumValue<TEnum>(JToken token) where TEnum : struct
+        {
+            string value = String(token);
+            if (!Enum.TryParse(value, false, out TEnum parsed) || parsed.ToString() != value || !Enum.IsDefined(typeof(TEnum), parsed))
+                throw Error(token, "Unknown rule " + value + ".");
+            return parsed;
         }
 
         private static bool Boolean(JToken token)

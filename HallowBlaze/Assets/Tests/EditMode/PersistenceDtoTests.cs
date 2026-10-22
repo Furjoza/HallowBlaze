@@ -94,7 +94,7 @@ namespace HallowBlaze.Tests.EditMode
         public void TravelRunWriter_EmitsCompleteV4StableState()
         {
             string json = PersistenceJsonSerializer.SerializeTravelRun(TravelBoundary("pending"));
-            Assert.That(json, Does.Contain("\"schemaVersion\": 4").And.Contain("\"introState\": \"pending\""));
+            Assert.That(json, Does.Contain("\"schemaVersion\": 5").And.Contain("\"introState\": \"pending\""));
             Assert.That(json, Does.Not.Contain("\"route\":").And.Not.Contain("\"boardSeed\":").And.Not.Contain("\"currentDay\":"));
             AssertTravelEquals(TravelBoundary("pending"), PersistenceJsonSerializer.DeserializeTravelRun(json));
             Assert.That(RunStateDto.CurrentSchemaVersion, Is.EqualTo(1));
@@ -144,7 +144,7 @@ namespace HallowBlaze.Tests.EditMode
             string profileJson = PersistenceJsonSerializer.SerializeProfile(profile);
             RunState run = TravelBoundary("intermediate");
             string runJson = PersistenceJsonSerializer.SerializeRun(run);
-            Assert.That(runJson, Does.Contain("\"schemaVersion\": 4"));
+            Assert.That(runJson, Does.Contain("\"schemaVersion\": 5"));
             AssertTravelEquals(run, PersistenceJsonSerializer.DeserializeRun(runJson));
             Assert.That(PersistenceJsonSerializer.SerializeProfile(profile), Is.EqualTo(profileJson));
             Assert.That(ProfileStateDto.CurrentSchemaVersion, Is.EqualTo(2));
@@ -607,7 +607,7 @@ namespace HallowBlaze.Tests.EditMode
         {
             string futureDocument = profile
                 ? "{\"schemaVersion\":3}"
-                : "{\"schemaVersion\":5}";
+                : "{\"schemaVersion\":6}";
 
             PersistenceDataException exception = Assert.Throws<PersistenceDataException>(() =>
             {

@@ -8,7 +8,7 @@ namespace HallowBlaze.Core.Board.State
     /// Owns the authoritative entity positions and occupancy indexes for one board.
     /// Terrain, obstacles, items, and actors occupy independent layers.
     /// </summary>
-    public sealed class BoardState
+    public sealed partial class BoardState
     {
         private static readonly BoardLayer[] Layers =
         {
@@ -82,17 +82,19 @@ namespace HallowBlaze.Core.Board.State
 
             entitiesById.Add(entity.Id, entity);
             layer.Add(entity.Position, entity.Id);
+            RecomputePlateGates();
             return true;
         }
 
         /// <summary>
         /// Removes an entity, its layer occupancy entry and any Listener hearing registration as one operation.
+        /// Fixed plate/gate terrain cannot be removed after layout publication; pressure updates before return.
         /// </summary>
         /// <param name="id">The board-local entity identifier.</param>
         /// <returns><see langword="true"/> when an entity was removed; otherwise, <see langword="false"/>.</returns>
         public bool TryRemove(EntityId id)
         {
-            if (!entitiesById.TryGetValue(id, out BoardEntityState entity))
+            if (IsBoundPlateGate(id) || !entitiesById.TryGetValue(id, out BoardEntityState entity))
                 return false;
 
             Dictionary<GridPosition, EntityId> layer = entityIdsByLayer[entity.Definition.Layer];
@@ -104,6 +106,7 @@ namespace HallowBlaze.Core.Board.State
             pits.Remove(id);
             ReleasePitActor(id);
             listenerNoises.Remove(id);
+            RecomputePlateGates();
             return true;
         }
 
@@ -295,7 +298,8 @@ namespace HallowBlaze.Core.Board.State
 
         /// <summary>
         /// Moves an entity within its current layer when the destination is legal and unoccupied.
-        /// A rejected move leaves both indexes and the entity state unchanged.
+        /// A rejected move leaves both indexes and the entity state unchanged. Published plate/gate terrain is fixed;
+        /// other successful moves recompute pressure and gate walkability before returning.
         /// </summary>
         /// <param name="id">The board-local entity identifier.</param>
         /// <param name="destination">The requested destination.</param>
@@ -311,6 +315,7 @@ namespace HallowBlaze.Core.Board.State
             if (entity.Position.Equals(destination))
                 return true;
 
+            if (IsBoundPlateGate(id)) return false;
             Dictionary<GridPosition, EntityId> layer = entityIdsByLayer[entity.Definition.Layer];
             if (layer.ContainsKey(destination))
                 return false;
@@ -321,6 +326,65 @@ namespace HallowBlaze.Core.Board.State
             layer.Remove(entity.Position);
             layer.Add(destination, id);
             entitiesById[id] = movedEntity;
+            RecomputePlateGates();
+            return true;
+        }
+
+        /// <summary>Checks a single cardinal obstacle push and player advance without changing either occupancy layer.</summary>
+        /// <param name="playerId">An existing player actor.</param>
+        /// <param name="obstacleId">An adjacent non-walkable interactive obstacle; content opt-in belongs to the command's action.</param>
+        /// <returns>True only when both terrain cells are walkable non-exits, the target cell has no actor/item, and the destination has no obstacle/actor/item.</returns>
+        public bool CanPush(EntityId playerId, EntityId obstacleId) =>
+            TryGetPush(playerId, obstacleId, out _, out _, out _);
+
+        /// <summary>Atomically moves one obstacle away and the player into its former cell; rejection changes no index or entity.</summary>
+        /// <remarks>Does not push a chain, collect an item, consume resources or resolve a turn.
+        /// Pressure/gates recompute once after both positions commit; transitions are retained for the turn layer.</remarks>
+        /// <returns>True only when both positions have committed under the same preconditions as CanPush.</returns>
+        public bool TryPush(EntityId playerId, EntityId obstacleId)
+        {
+            if (!TryGetPush(playerId, obstacleId, out BoardEntityState player, out BoardEntityState obstacle, out GridPosition destination))
+                return false;
+            BoardEntityState movedPlayer = player.WithPosition(obstacle.Position);
+            BoardEntityState movedObstacle = obstacle.WithPosition(destination);
+            Dictionary<GridPosition, EntityId> actors = entityIdsByLayer[BoardLayer.Actor];
+            Dictionary<GridPosition, EntityId> obstacles = entityIdsByLayer[BoardLayer.Obstacle];
+            actors.Remove(player.Position);
+            obstacles.Remove(obstacle.Position);
+            actors.Add(obstacle.Position, player.Id);
+            obstacles.Add(destination, obstacle.Id);
+            entitiesById[player.Id] = movedPlayer;
+            entitiesById[obstacle.Id] = movedObstacle;
+            ReleasePitActor(player.Id);
+            RecomputePlateGates();
+            return true;
+        }
+
+        private bool TryGetPush(EntityId playerId, EntityId obstacleId, out BoardEntityState player,
+            out BoardEntityState obstacle, out GridPosition destination)
+        {
+            player = null;
+            obstacle = null;
+            destination = default;
+            if (!TryGetEntity(playerId, out player) || player.Definition.Layer != BoardLayer.Actor ||
+                !player.Definition.Kind.Equals(EntityKind.Player) || !TryGetEntity(obstacleId, out obstacle) ||
+                obstacle.Definition.Layer != BoardLayer.Obstacle || obstacle.Definition.Traits.IsWalkable ||
+                !obstacle.Definition.Traits.IsInteractable || player.Position.ManhattanDistance(obstacle.Position) != 1)
+                return false;
+            Direction direction = obstacle.Position.X > player.Position.X ? Direction.East :
+                obstacle.Position.X < player.Position.X ? Direction.West :
+                obstacle.Position.Y > player.Position.Y ? Direction.North : Direction.South;
+            try { destination = obstacle.Position.Move(direction); }
+            catch (OverflowException) { return false; }
+            if (!Bounds.Contains(destination) ||
+                !TryGetEntity(BoardLayer.Terrain, obstacle.Position, out BoardEntityState beneath) ||
+                !beneath.Definition.Traits.IsWalkable || beneath.Definition.Traits.IsExit ||
+                !TryGetEntity(BoardLayer.Terrain, destination, out BoardEntityState terrain) ||
+                !terrain.Definition.Traits.IsWalkable || terrain.Definition.Traits.IsExit ||
+                TryGetEntity(BoardLayer.Actor, obstacle.Position, out _) || TryGetEntity(BoardLayer.Item, obstacle.Position, out _) ||
+                TryGetEntity(BoardLayer.Obstacle, destination, out _) || TryGetEntity(BoardLayer.Actor, destination, out _) ||
+                TryGetEntity(BoardLayer.Item, destination, out _))
+                return false;
             return true;
         }
 
@@ -411,6 +475,12 @@ namespace HallowBlaze.Core.Board.State
             clone.nextNoiseId = nextNoiseId;
             foreach (var listener in listenerNoises)
                 clone.listenerNoises.Add(listener.Key, listener.Value);
+            clone.plateDefinitions.AddRange(plateDefinitions);
+            clone.gateDefinitions.AddRange(gateDefinitions);
+            foreach (var plate in pressurePlates) clone.pressurePlates.Add(plate.Key, plate.Value);
+            foreach (var gate in plateGates) clone.plateGates.Add(gate.Key, gate.Value);
+            clone.plateGateChanges.AddRange(plateGateChanges);
+            clone.plateGatesConfigured = plateGatesConfigured;
 
             return clone;
         }

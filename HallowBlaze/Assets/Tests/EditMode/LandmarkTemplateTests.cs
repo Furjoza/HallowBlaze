@@ -21,6 +21,30 @@ namespace HallowBlaze.Tests.EditMode
     /// <summary>Verifies authored templates use ordinary blueprints without scene state, runtime outcomes or tool-dependent mandatory exits.</summary>
     public sealed class LandmarkTemplateTests
     {
+        /// <summary>Authored pressure links survive independent reconstruction and never leak mutations between boards.</summary>
+        [Test]
+        public void ExplicitPlateGateBindingsSurviveTemplateReconstruction()
+        {
+            var entities = Entities();
+            entities.Add(new BoardEntityState(new EntityId(50), PlateGateValidator.PlateContent, new GridPosition(2, 1)));
+            entities.Add(new BoardEntityState(new EntityId(51), PlateGateValidator.GateContent, new GridPosition(3, 1)));
+            var config = new BoardGenerationConfig("landmark.links", 1, new GenerationRange(1, 63), new GenerationRange(0, 64),
+                new GenerationRange(0, 0), new GenerationRange(0, 0), 0, 0,
+                entities.Select(entity => entity.Definition.ContentId).Distinct(), Array.Empty<ResourceGenerationBudget>());
+            var variant = new LandmarkVariant("base", entities, Array.Empty<BoardItemSpawn>(),
+                new[] { new PressurePlateDefinition(new EntityId(50), "A") }, new[] { new GateDefinition(new EntityId(51), "A") });
+            var template = new LandmarkTemplate("landmark.links", 1, config, new[] { variant }, Outcomes());
+            var address = new BoardAddress("run", "leg", "edge", "segment", 5, config.Id, 1, 64);
+            LandmarkBoard authored = template.CreateBoard(address, "base");
+            BoardState first = authored.CreateState();
+            BoardState second = authored.CreateState();
+            Assert.That(first.GetGates().Single().IsOpen, Is.False);
+            Assert.That(first.TryMove(new EntityId(1), new GridPosition(2, 1)), Is.True);
+            Assert.That(first.GetGates().Single().IsOpen, Is.True);
+            Assert.That(second.GetGates().Single().IsOpen, Is.False);
+            Assert.That(authored.Plates.Single().LinkId, Is.EqualTo("A"));
+        }
+
         /// <summary>Template construction and runtime state round-trip retain the exact address/layers and isolate every reconstruction.</summary>
         [Test]
         public void ExplicitVariantBuildsTheSameBlueprintAndIndependentState()

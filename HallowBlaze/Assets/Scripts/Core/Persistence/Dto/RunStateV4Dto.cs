@@ -5,7 +5,7 @@ namespace HallowBlaze.Core.Persistence.Dto
 {
     /// <summary>Extends the frozen travel fields with identity-bearing equipment and its durable allocator.</summary>
     [JsonObject(MemberSerialization.OptIn)]
-    public sealed class RunStateV4Dto : RunStateV2Dto
+    public class RunStateV4Dto : RunStateV2Dto
     {
         /// <summary>Gets the equipment-aware run schema; profile and historical schemas remain unchanged.</summary>
         public new const int CurrentSchemaVersion = 4;

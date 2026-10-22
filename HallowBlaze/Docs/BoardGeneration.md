@@ -62,10 +62,10 @@ resource-budget lists. Property names, layer names and textual identities are ca
 | Root | `schemaVersion`, `templateId`, `templateVersion`, `configuration`, `variants`, `outcomes` | Authoring schema 1; template identity is independent of any world node or segment. |
 | Configuration | `id`, `version`, `pathLength`, `branchPoints`, `obstacleCount`, `enemyCount`, `maximumConcurrentThreats`, `minimumSafeStartMoves`, `allowedContentIds`, `resourceBudgets` | Existing `BoardGenerationConfig` contract; each range has integer `minimum`/`maximum`. Configuration ID/version must match the eventual `BoardAddress`. |
 | Resource budget | `resourceFamilyId`, `itemCount` | Known family and the existing inclusive item-count range, not resource restoration amounts. |
-| Variant | `id`, `entities`, `items` | Distinct stable ID; explicit detached layout. No rotation, random selection or procedural puzzle creation is inferred. |
+| Variant | `id`, `entities`, `items`; optional `plates`, `gates` | Distinct stable ID; explicit detached layout and terrain-ID link bindings. No rotation, random selection or procedural puzzle creation is inferred. |
 | Entity | `id`, `layer`, `contentId`, `x`, `y` | Board-local entity ID and exact existing catalog definition for `Terrain`, `Obstacle`, `Item` or `Actor`; no serialized traits, prefab or Unity ID. |
 | Item | `instanceId`, `entityId`, `itemDefinitionId`, `resourceFamilyId`, `initiallyObservable`; optional nullable `sourceId` | Same generic spawn/binding rules as ordinary blueprints. A fixed source must resolve to this definition. |
-| Outcome | `id`, `name`, `exitEntityId`, `optional`; optional nullable `requiredToolDefinitionId`, `guaranteedToolInstanceId` | Names a future result and a walkable terrain-exit marker present in every variant. It is not an executed outcome or a solution script. |
+| Outcome | `id`, `name`, `exitEntityId`, `optional`; optional nullable `requiredToolDefinitionId`, `guaranteedToolInstanceId` | Names a result and a distinct walkable terrain-exit marker present in every variant. It is not a solution script or an automatic reward grant. |
 
 All public collections are read-only snapshots. Variant/outcome keys, rather than array indices,
 identify content; the blueprint normalizes entity/item order. Repeated construction with the
@@ -111,16 +111,213 @@ landmark. The assignment does not add an extra day or mark arrival before the fi
 
 `placement.CreateBoard(actualAddress)` rejects a different edge/segment/configuration and returns
 `LandmarkBoard`: template ID/version, variant ID and the ordinary blueprint with the exact full
-address. `Blueprint.CreateState()` builds independent runtime state. Named outcomes remain
-declarations; reaching an exit through the current resolver does not yet persist a named result.
+address. `LandmarkBoard.CreateState()` builds independent runtime state with explicit pressure
+links; `Blueprint.CreateState()` alone does not install those bindings. M6.4 connects the actual
+resolved exit to a named persistent result for the production template described below.
 
 M6.1 adds no run/profile DTO fields, migration, reset or mid-board save. Existing run v4 travel
 data round-trips the fixture's active segment/configuration/seed and reconstructs the same board
-against the same frozen placement. M6.4 activation must persist explicit selected template/variant
-and completed outcome identity at the completed-board boundary; M6.6 must pin random selection,
-not reroll it on load. Those runtime save changes require compatible versioning before activation.
+against the same frozen placement. M6.4 adds compatible run v5 selection/outcome fields as
+described below; M6.6 must also pin any future random selection, not reroll it on load.
 Do not change a published mapping/layout under the same generation contract. The authoring
 fixture is not registered with `GameManager`, the scene bootstrap or ordinary fallback selection.
+
+## Radio Tower Landmark
+
+M6.4 publishes one authored `landmark.radio-tower` template, content version `1`, variant `base`:
+[layout](../Assets/GameData/Landmarks/radio-tower-template.json) and
+[assignment](../Assets/GameData/Landmarks/radio-tower-placement.json).
+It replaces only `segment.ridge-radio-tower.arrival`, the fifth and final board of
+`road.ridge-radio-tower` in `world-1/1`. The four inbound approach boards remain ordinary v2;
+all intended atlas routes reach this edge on day five. No day/modulo test or extra travel day
+selects the landmark. The earlier sanity fixture remains separate.
+
+### Layout
+
+Coordinates use the same lower-left grid origin as commands. `#` is absent/nonwalkable terrain,
+not a destructible obstacle. Entity IDs and content are explicit in the template, not inferred
+from this diagram.
+
+```text
+     x 0 1 2 3 4 5 6 7
+  y
+  7    # # # # # # # #
+  6    # . . X # # # #
+  5    # . . . # R Y #
+  4    # . . . G W . #
+  3    # . B A # # Z #
+  2    # . . . # # # #
+  1    # P T # # # # #
+  0    # # # # # # # #
+```
+
+| Marker | Content / Meaning |
+| --- | --- |
+| `P` | Player `(1,1)`, entity `1` |
+| `B` | Shared pushable `landmark.boulder`, entity `10` |
+| `A` | Plate entity `127`, link `A`, `Boulders` pressure only |
+| `G` | Gate entity `136`, link `A`, `All`; initially closed |
+| `W` | Shared clearable `legacy.wall`, entity `11`; three manual actions or one axe use |
+| `Z` | Shared `ordinary.shambler.10`, entity `2`, retained intent and alternating rest |
+| `T` | Optional `axe.basic`, spawn `radio-tower.axe`, source `source.radio-tower.axe` |
+| `R` | Ration entity `21`, spawn `radio-tower.rations`, definition `landmark.radio-tower.rations`, source `source.radio-tower.rations` |
+| `X` | Mandatory `tower.arrival`, terrain exit `151` at `(3,6)` |
+| `Y` | Optional `tower.supplies`, terrain exit `146` at `(6,5)` |
+
+### Routes And Costs
+
+The exact test notation is `N/E/W/S` for cardinal moves, `P` for the adjacent boulder interaction,
+`C` for one manual clearing action, `T` for conscious axe pickup, and `A` for axe use on the wall.
+These are ordinary commands submitted to the same `TurnController`, including live zombie phases.
+They are developer documentation, not a separate in-game input language.
+
+| Result / Route | Command Sequence | Accepted Actions / Food Cost | Charges | Concrete Reward | Food From 100 |
+| --- | --- | --- | --- | --- | --- |
+| `tower.arrival`, tool-free western bypass | `NNNNNEE` | 7 / 7 | 0 | None | 93 |
+| `tower.supplies`, tool-free manual route | `NNPNEECCCENE` | 12 / 12 | 0 | One ration, +20 Food | 108 |
+| `tower.supplies`, optional axe route | `TNNPNEEAENE` | 11 / 11, including pickup | 1 axe use | Same single ration, +20 Food | 109 |
+
+The ration is collected by the existing item effect before the action cost, never by the
+arrival callback. Picking up the axe is optional and uses the ordinary two-slot comparison/
+replacement flow. Manual clearing emits shared strength-1 noise per action; the axe emits
+strength-6 noise, and pushing uses the existing strength-4 profile. Costs and retained intent
+are exposed through the existing picker/intent UI; plate/gate labels show their link, pressure,
+combination and current state. Exit labels name the radio tower and supplies. There is no
+landmark-only movement, reward command, zombie behavior, latch or minigame.
+
+The western bypass never needs a tool, gate, clearing action or loot. The mandatory exit has
+two approaches, `(2,6)` and `(3,5)`, so one abandoned boulder cannot seal both. Tests include
+`NEP` followed by `WNNNEE`, and the upper-boundary mistake `NEPPP` followed by `EN`.
+The optional supply route can be forfeited by bad pushes; the mandatory objective remains
+available. Death/starvation cannot emit success, record an outcome or visit the destination.
+The tested costs are working authored balance, not a human playtest verdict or an exhaustive
+proof against every bad command sequence. The bounded M6.5 solver below proves paths from
+specified inputs; M6.6 still owns the variant/playtest gate.
+
+### Validation And Persistence
+
+Strict authoring schema 1 now accepts optional `plates` (`terrainId`, `linkId`, `occupants`)
+and `gates` (`terrainId`, `linkId`, `rule`) arrays. Absence means empty for old templates;
+explicit null, unknown/case-variant/numeric rules, wrong terrain and orphan/duplicate links
+are rejected. Every outcome has a distinct terrain-exit ID. `LandmarkBoard.Validate` retains
+ordinary catalog, resource, opening and topology checks; only static `UnreachableExit` errors
+for explicitly optional outcomes are exempt. Mandatory exits retain static tool-free reachability.
+Executable command sequences, not that exemption, demonstrate the optional route.
+
+Run schema v5 adds required `activeLandmark` (nullable) and `completedLandmarks`. Records contain
+the full `BoardAddress`, template ID/version, variant ID and completed outcome ID (null only for
+an active selection). Profile schema remains v2. Readers retain v1-v4 migrations, resources,
+equipment, RNG and travel identity and initialize empty landmark state; there is no reset.
+
+The selection is saved before board presentation. The optional ground tool is allocated from
+that boundary's existing run allocator; Continue recreates the same instance without equipping
+or refilling it. No mutable board, gate state, animation or ground-tool snapshot is persisted.
+An unsupported/missing content identity fails startup rather than rerolling or substituting art.
+Failure while composing a board restores its tool allocator and previous player view position.
+
+The actual resolver exit maps to exactly one outcome. `RouteTravelService` saves the result and
+final travel arrival atomically. A failed run write restores both records, leaving resolved board
+effects intact for retry. Profile `Visited`/`Traversed` discovery follows the committed run history;
+failed profile writes use existing arrival reconciliation without replaying the run save, turn
+or reward. Duplicate/stale/unresolved/foreign results are rejected. Starting a new run clears
+landmark state, not profile knowledge.
+
+The exact named publication upgrade preserves already-saved legacy v1 and ordinary v1/v2
+generation at this arrival segment. Those active legs keep their old layouts, seeds and RNG;
+they are not silently converted to the new puzzle. Newly started inbound legs use the authored
+identity. Published world/node/edge/segment IDs and world version remain unchanged.
+
+`RadioTowerLandmark` is a build-included Resources asset referencing the two JSON files and
+the existing boulder/plate/gate prefabs plus one visual-only axe prefab. The explicit Unity menu
+`HallowBlaze/Authoring/Rebuild Radio Tower References` rebuilds only these references and axe art
+through AssetDatabase/PrefabUtility. Normal tests/gameplay never run the authoring operation.
+
+## M6.5 Bounded Landmark Solver
+
+[LandmarkSolver](../Assets/Scripts/Core/Generation/Landmarks/LandmarkSolver.cs) is an offline
+BFS over concrete domain owners, not production hint AI. Supply the selected `LandmarkBoard`,
+its nonterminal `BoardState`, matching active run, player ID, and exact Shambler states with
+already retained plans. Concrete ground axes must already have run-allocated identities.
+Supply the authoritative enemy catalog and the same `ObstacleClearingRules` used by production.
+The solver does not allocate equipment, select variants, modify the template, or replan initial
+intents. Construction captures the caller's state; later caller mutations and repeated solves
+do not modify the captured root.
+
+Each attempted edge owns a `BoardState.Clone`, independently restored run resources/equipment
+and independent Shambler states. Rest is reconstructed through existing cadence operations
+on the new enemy only; the original immutable retained intent is then locked unchanged.
+Each branch uses a fresh real `TurnController`, `TurnResolver`, shared option queries and
+`EnemyBatchTurnPhases`. Candidate order is North, East, West, South, Wait, available interactions,
+available axe actions, then all conscious pickup/replacement choices in query order. Rejected
+candidates never enter the search graph or the returned path. Other exits, death and starvation
+are terminal leaves, not intermediate states on a path to the selected exit.
+
+### Model And Equality Boundary
+
+The closed model covers current movement/Wait and Food costs, automatic and explicit food,
+single boulder pushes, linked plates/gates, manual wood clearing, axe use, two equipment slots,
+conscious axe pickup/exchange, and catalog-resolved current Shambler rules. It accepts no arbitrary
+effect callbacks or environment phase. Listeners/unmapped enemy rules, shovel equipment, caches,
+pits, unsupported interactive content and unbound non-food items fail explicitly instead of
+being silently simulated as simpler mechanics. Missing/inconsistent rosters, retained plans,
+tool ownership, run identity and authored gate bindings are invalid input. The player cannot
+already occupy an exit at the supplied nonterminal boundary.
+
+[LandmarkSolverStateKey](../Assets/Scripts/Core/Generation/Landmarks/LandmarkSolverStateKey.cs)
+captures detached structural values: bounds/player identity, Health/Food/status, ordered slots
+and charges/allocator, entity IDs/definitions/positions, obstacle work, ground tool identity/source,
+plate/gate definitions and current states, and sorted enemy identity/damage/cadence with every
+retained-intent field. Equal independently constructed keys share a hash; equality compares the
+whole structure, so collisions cannot merge distinct states. Keys are local to one fixed template,
+rule set and frozen travel context, not portable cross-rules state identities.
+
+Noise still emits, ages and clones through real domain rules, but is intentionally absent from
+the reachability key: supported Shambler rules never read noise. Listener inputs and arbitrary
+noise-dependent effects are rejected. Frozen travel/landmark records are copied, not mutated or
+rehashed per turn. Presentation-only pending transition events do not affect reachability.
+Adding a new causal mechanic requires explicit model/key/tests work; this is not M8.7 capture,
+hashing or replay, and it does not introduce a persistence dependency or save-schema change.
+
+### Budgets And Results
+
+Default limits per requested outcome are **50,000 admitted nonterminal states**, **32 accepted
+commands** and **10,000 ms**. The state count includes the root, excludes terminal leaves and
+never exceeds the supplied state cap. `ExpandedStates` counts dequeued states. Time is checked
+before expansion and before/after each bounded synchronous controller attempt; it is cooperative,
+not an OS watchdog or a latency SLA. Zero milliseconds deliberately tests an immediate stop.
+
+`Solved` carries a shortest accepted-command path. `NoSolution` means all reachable modeled
+nonterminal states were exhausted. `StateLimit`, `DepthLimit` and `TimeLimit` are incomplete
+searches, never evidence of impossibility. Failures retain template/version/variant, outcome and
+the full `BoardAddress` including seed, visited/expanded counts and elapsed time. The minimal
+negative fixture is the authored `landmark.solver-test/1/blocked`, seed 64, in the owning tests;
+it exhausts rather than timing out. This does not automatically minimize arbitrary future puzzles.
+
+`SolutionPath` is an ordered read-only list of local decisions. Call each step's `CreateCommand`
+against the equivalent fresh board/run/player, then resolve once with the real controller.
+Pickup decisions are rebound to the current exact ground snapshot and slot preconditions;
+using stale object references from a different board would violate ordinary pickup validation.
+There is no command codec, exported trace, save snapshot, runtime recorder or player-facing UI.
+
+### Measured Radio Tower Paths
+
+Final focused Unity 6000.3.21f1 validation on 2026-10-21 used template `landmark.radio-tower/1/base`,
+run `solver-tower`, root/board seed 64, day 5, initial Health/Food 100, damage-10 Shambler 2 and
+the published clearing rules. Timings are observed single-run wall times, not deterministic outputs.
+`T`, `P`, `A`, `C` and cardinal letters retain the meanings in the layout table above.
+
+| Requested Outcome / Input | Accepted Path | Visited / Expanded | Elapsed | Final Food |
+| --- | --- | --- | --- | --- |
+| `tower.arrival`, optional ground axe present | `NNNNNEE` | 219 / 114 | 218 ms | 93 |
+| `tower.supplies`, optional ground axe present | `TNNPNEEAENE` | 1838 / 1364 | 606 ms | 109 |
+| `tower.supplies`, axe absent and slots empty | `NNPNEECCCENE` | 1324 / 1035 | 357 ms | 108 |
+
+Tests discover these paths rather than feeding the intended routes to BFS, then execute each
+decision on independent owners through the production rule catalog/controller. Repeated searches
+match status, path and visited/expanded counts; elapsed time is not compared. Required arrival
+uses no tool; the optional supply path also has a checked manual alternative. This proves these
+starting fixtures have solutions within budget, not that every possible player mistake is recoverable
+or that humans understand the costs. M4.9 and M6.6 retain their human gates.
 
 ## Generic items and initial supply
 
@@ -583,13 +780,19 @@ exhaustion and every unexecuted case rather than accepting a shortened sweep. Th
 synchronous generator is bounded by M4.5; this timer is not an OS-level interruption
 mechanism for arbitrary hung code.
 
-The daily/milestone fixtures load the current prototype registry, cover all nine edges,
-all 45 segment IDs and all days 1-10. Each sample is a complete five-board synthetic leg,
-with the exact generation identity read from the published segment. Edges cycle through
-the catalog and days cycle 1-10 across traversals. Root seeds alternate `0,-1,1,-2,...`;
-run IDs include the traversal number. The production `BoardAddressFactory` derives the
-board seeds and addresses. The daily gate covers 200 complete traversals; milestone
-covers 2,000. Both assert exactly 1,000/10,000 distinct board seeds, not only request count.
+The daily/milestone fixtures load the current prototype registry and cover ordinary boards
+on all nine edges, all 44 ordinary segment IDs and all days 1-10. M6.4's authored arrival is
+not passed to the ordinary generator. The eight wholly ordinary roads retain complete
+five-board synthetic legs. Five complete four-board inbound ordinary-prefix sweeps are
+explicitly named `published-inbound-ordinary-prefix`; remaining samples use full ordinary
+roads. Thus the current daily sample set has 196 full ordinary roads and five inbound
+prefixes (1000 boards); the milestone set has 1996 full roads and five prefixes (10000).
+These prefix totals do not claim to measure supply on the authored arrival. Each sample
+retains the exact published generation identity. Edges cycle through the catalog and days
+cycle 1-10 across traversals. Root seeds alternate `0,-1,1,-2,...`; run IDs include the
+traversal number. The production `BoardAddressFactory` derives board seeds and addresses.
+Both gates assert exactly 1000/10000 distinct board seeds, not only request count. Historical
+measurements below used the earlier 45-board ordinary registry and are not relabeled.
 
 Every sweep is run twice. Canonical, ordinally ordered JSON includes the input sequence,
 blueprint/selection history hash, complete histograms, per-day measurements, per-segment

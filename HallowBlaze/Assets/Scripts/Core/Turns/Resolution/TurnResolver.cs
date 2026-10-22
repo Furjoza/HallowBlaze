@@ -140,6 +140,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             {
                 new EntityMovedEvent(player.Id, player.Position, destination)
             };
+            PlateGateEventRecorder.Append(boardState, events);
             if (automaticFood != null)
             {
                 CollectAutomaticFood(boardState, runState, player.Id, automaticFood, events);
@@ -190,12 +191,16 @@ namespace HallowBlaze.Core.Turns.Resolution
                 new InteractionPerformedEvent(player.Id, target.Id)
             };
             action.Apply(boardState, runState, player, target, events);
+            PlateGateEventRecorder.Append(boardState, events);
             ApplyCost(runState, player.Id, events);
             var consequences = action as IInteractionConsequences;
             int strength = consequences?.NoiseStrength ?? noiseProfile?.InteractionStrength ?? 0;
             if (strength > 0)
-                events.Add(new NoiseEvent(boardState.EmitNoise(player.Id, player.Position, strength,
+            {
+                boardState.TryGetEntity(player.Id, out BoardEntityState currentPlayer);
+                events.Add(new NoiseEvent(boardState.EmitNoise(player.Id, currentPlayer.Position, strength,
                     consequences?.NoiseLifetimeTurns ?? noiseProfile.LifetimeTurns)));
+            }
             if (runState.Food == 0)
                 events.Add(new PlayerStarvedEvent(player.Id));
             return new AcceptedTurnResult(events);
@@ -208,6 +213,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             if (rejection != CommandRejectionCode.None) return new RejectedTurnResult(rejection);
             var events = new List<GameEvent> { new ToolUsedEvent(player.Id, command, action.DefinitionId) };
             action.Behavior.Apply(boardState, runState, player, target, events);
+            PlateGateEventRecorder.Append(boardState, events);
             if (!runState.TrySpendToolCharge(command.SlotIndex, command.InstanceId))
                 throw new InvalidOperationException("Validated tool charges changed during a synchronous effect.");
             events.Add(new ToolChargeSpentEvent(player.Id, command));

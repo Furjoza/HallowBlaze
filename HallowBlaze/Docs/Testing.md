@@ -1,5 +1,211 @@
 # HallowBlaze Testing
 
+## M6.5 Bounded Landmark Solver
+
+[LandmarkSolverTests](../Assets/Tests/EditMode/LandmarkSolverTests.cs) checks real-controller
+paths, not a second movement or enemy engine. The [model, budgets and measured paths](BoardGeneration.md#m65-bounded-landmark-solver)
+define the exact supported scope. Both published outcomes are solved dynamically within
+50,000 states / 32 accepted commands / 10 seconds and executed on fresh owners. The supply
+outcome is also solved without an axe. Repeated searches compare paths and state counts,
+not elapsed time. A minimal authored blocked variant must return exhaustive `NoSolution`;
+state, depth and time caps have separate incomplete results.
+
+The fixture covers structural equality across independent snapshots, constant-hash collisions,
+causal-field mutation and key immutability, caller isolation before/after construction, retained
+Wait/Rest copying without initial replanning, terminal exits, starvation on an exit, invalid
+budgets, unsupported equipment and missing enemy catalog. Pickup path execution rebinds to
+the exact ground snapshot on the fresh board rather than weakening stale-command validation.
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter HallowBlaze.Tests.EditMode.LandmarkSolverTests --output "$env:TEMP/HB-M65-focused.xml" -- -nographics -logFile "$env:TEMP/HB-M65-focused.log"
+unity test $project --mode EditMode --output "$env:TEMP/HB-M65-editmode.xml" -- -nographics -logFile "$env:TEMP/HB-M65-editmode.log"
+```
+
+Run sequentially and inspect fresh XML for fixture identities and nonzero passing counts.
+Acceptance on 2026-10-21: focused **26/26 Passed**, full EditMode **1225 passed, zero failed,
+one pre-existing Explicit 10000-seed milestone skip**. Source compiled without new editor
+diagnostics. PlayMode was not rerun: only the offline tool/tests/docs changed, not runtime
+composition, scenes, UI or saves. The owner authorized direct replacement of the failed local
+attempt followed by validation and self-review; no independent review verdict is claimed.
+Run v5/profile v2 and M8.7 Deferred remain unchanged; M4.9 is Pending and M6.6 is Planned.
+
+## M6.4 Radio Tower
+
+The production [radio tower layout, paths and costs](BoardGeneration.md#radio-tower-landmark)
+are validated against actual authored JSON, shared rules and real prefab references.
+`RadioTowerLandmarkTests` executes both outcomes, manual/axe supply alternatives, free rejected
+movement, two bad-push fallbacks, zombie death and starvation. It rejects malformed pressure
+links, ambiguous exit bindings and missing special prefab references; named old-arrival
+publication upgrades retain their original addresses/generators. `LandmarkProgressTests`
+checks v5 round-trip, v4 migration, corrupt records, reset, atomic selection/arrival rollback
+and exactly-once retry without resource replay. Existing persistence suites still cover v1-v4,
+isolated corrupt-file backup recovery and unsupported future schemas.
+
+Production PlayMode cases named `BoardRuntimeStartupTests.LandmarkProduction_*` run actual
+`GameManager`/`BoardManager` startup, Continue, both resolver exits, selection/run/profile save
+failures, duplicate rejection and terminal starvation against isolated temporary storage.
+Real prefab/animation captures at 1280x720 and 320x640 check sprite references, missing scripts,
+label bounds and nonblank/changed pixels for closed/open gates. Images remain outside the
+project at `%TEMP%/HB-M64-<closed|open>-<width>x<height>.png`.
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter 'HallowBlaze.Tests.EditMode.RadioTowerLandmarkTests;HallowBlaze.Tests.EditMode.LandmarkProgressTests' --output "$env:TEMP/HB-M64-domain.xml" -- -nographics -logFile "$env:TEMP/HB-M64-domain.log"
+unity test $project --mode PlayMode --filter HallowBlaze.Tests.PlayMode.BoardRuntimeStartupTests.LandmarkProduction --output "$env:TEMP/HB-M64-production.xml" -- -logFile "$env:TEMP/HB-M64-production.log"
+```
+
+Run sequentially and inspect fresh XML identities/counts/results, then full EditMode and
+graphics PlayMode for persistence/lifecycle integration changes. The ordinary 1000-seed gate
+now covers 44 ordinary segment IDs; the four-board inbound ordinary prefix is explicitly
+reported separately from complete ordinary roads. It does not substitute an ordinary layout
+for the authored arrival. The existing 10000-seed milestone remains Explicit, not an M6.4 gate.
+Run v5/profile v2 are the current persistence versions. There is still no mid-board snapshot.
+M6.4 acceptance used owner-authorized self-review, not independent review or human playtest
+evidence; it neither closes M4.9 nor implements M6.5's bounded state-search solver.
+
+## M6.3 Plates And Gates
+
+The [plate/gate contract](GameDesignContract.md#141-plate-and-gate-rules) is implemented by
+immutable `PressurePlateDefinition`/`GateDefinition` bindings and board-owned snapshots.
+Plates use exact walkable non-exit `landmark.plate` terrain; gates use `landmark.gate`
+terrain whose runtime walkability equals `GateState.IsOpen`. Published bindings are fixed
+for that board; moving or removing the bound terrain is rejected without mutation.
+
+| Rule | Pressure / Open State |
+| --- | --- |
+| `Actors` | Any actor, including player, Shambler and Listener, presses the plate |
+| `Boulders` | Only an authored blocking interactive `landmark.boulder` presses it |
+| `ActorsOrBoulders` | Either supported category presses it; items and arbitrary obstacles never count |
+| `All` | Every plate sharing the exact link ID must be pressed |
+| `Any` | At least one matching plate must be pressed |
+| Several gates on one link | Each independently applies its explicitly declared `All`/`Any` rule |
+| Actor or boulder leaves | Pressure and every affected gate recompute inside the successful mutation |
+| Closing over an existing occupant | No damage, displacement or removal; new entry is blocked |
+| Invalid link/content or duplicate binding | Reject composition/publication without changing the run or board |
+
+`PlateGateValidator` rejects null/duplicate/missing/wrong-content bindings, unbound authored
+plate/gate terrain and orphan links on either side. Diagnostics use stable IDs; link-only
+diagnostics are ordinal. Both composers validate before publishing or planning initial
+intents. Legacy descriptors expose link and pressure/combination data; blueprint composition
+accepts explicit entity-ID bindings. The ordinary static blueprint validator remains in
+force: this card neither proves dynamic puzzle solutions nor activates a production landmark.
+M6.4 owns full authored content integration and M6.5 owns dynamic solving.
+
+`TryAdd`, `TryRemove`, `TryMove` and atomic `TryPush` update pressure/gates before returning.
+Unchanged pressure/walkability emits no transition, including boulder-to-player handover.
+Changed plates precede changed gates in terrain-ID order within each mutation. The turn
+layer consumes those committed snapshots once, after the causal effect:
+
+```text
+Move: EntityMoved -> [PressurePlateChanged...] -> [GateChanged...] -> [automatic food] -> ActionCostApplied -> [Noise] -> [terminal]
+Push: InteractionPerformed -> BoulderPushed -> [PressurePlateChanged...] -> [GateChanged...] -> ActionCostApplied -> Noise -> [terminal]
+Enemy: EntityMoved -> [PressurePlateChanged...] -> [GateChanged...] -> [trap/investigation feedback] -> next locked actor
+Environment: effects and immediate state recomputation -> remaining plate/gate events -> terminal check -> next planning
+```
+
+No extra cost, tool charge, turn, noise or RNG is introduced by a gate transition. A closed
+destination turns a retained Shambler move or Listener investigation into `EntityWaited`,
+never a replan. Fresh path and noise-emission queries use new walkability immediately;
+previously emitted noise footprints stay immutable. Rejected entry preserves Food, HP,
+noise/pit lifetimes and event buffers. Starvation retains pressure/gate effects but skips
+later phases. Clone copies bindings, immutable snapshots and undelivered transitions into
+independent collections.
+
+`PlateGateView` reads the exact event snapshot, even for an intermediate open state when
+the final model is already closed. Setup/recovery reads authoritative snapshots instead.
+The two visual-only prefabs (`Assets/Prefabs/Tiles/PressurePlate.prefab` and
+`Assets/Prefabs/Tiles/Gate.prefab`) have no physics; four bitmap states differ by shape as
+well as color. Labels expose stable link, pressure category, combination and open/closed
+state with cell-constrained dimensions. The explicit Editor menu
+`HallowBlaze/Authoring/Rebuild Plate Gate Views` rebuilds only their sprites/prefabs through
+Unity APIs; normal gameplay and test setup never invoke it.
+
+Run sequentially from the active Unity project, with graphics for PlayMode:
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter 'HallowBlaze.Tests.EditMode.PlateGateTests;HallowBlaze.Tests.EditMode.PlateGatePrefabTests;HallowBlaze.Tests.EditMode.BoardRuntimeCompositionTests' --output "$env:TEMP/HB-M63-state.xml" -- -nographics -logFile "$env:TEMP/HB-M63-state.log"
+unity test $project --mode PlayMode --filter HallowBlaze.Tests.PlayMode.PlateGatePresentationTests --output "$env:TEMP/HB-M63-presentation.xml" -- -logFile "$env:TEMP/HB-M63-presentation.log"
+```
+
+Coverage includes actor/boulder entry/exit, every category, All/Any and multiple gates,
+atomic handover, clone, free rejection, gate closure between enemies, Listener, path/hearing,
+environment/terminal ordering, invalid links in both composers, initial pressure, both
+animation modes, rapid input, historical snapshots and cancellation recovery. Real-prefab
+captures with text bounds/pixel checks at 1280x720 and 320x640 are written outside the project
+as `%TEMP%/HB-M63-<closed|open>-<width>x<height>.png`. Require fresh nonzero XML, zero failures,
+full EditMode and full graphics PlayMode. Run v4/profile v2 and published generators/scenes
+are unchanged. These automated checks do not close the M4.9 human gate.
+
+## M6.2 Boulder Pushing
+
+Only the exact `BoulderPushAction.Definition` (`landmark.boulder`, blocking interactive
+obstacle) opts into `push-boulder`. Both runtime composers use the same interaction catalog
+and resolver. The old opt-in `push` hook remains target-only for compatibility; it is not
+the boulder action. Neither contextual feedback nor axe/shovel strength is a push alternative.
+Published generators and scenes do not acquire new placements through this card.
+
+`BoardState.CanPush` is a pure preflight. `TryPush` checks the complete operation before
+replacing both immutable snapshots and actor/obstacle indices. The player advances into the
+boulder's former cell and the boulder moves exactly one cardinal cell away. No view, physics,
+RNG, resource charge or later phase participates in that commit.
+
+| Condition | Result |
+| --- | --- |
+| Existing player and explicitly supported adjacent cardinal boulder | Eligible for remaining checks |
+| Missing participant, wrong layer, diagonal or same-cell target | Reject, unchanged state |
+| Destination outside bounds or coordinate overflow | Reject, unchanged state |
+| Terrain missing, non-walkable or an exit under the boulder or its destination | Reject, unchanged state |
+| Actor or item on the boulder's current cell | Reject; no collision or collection on player advance |
+| Any obstacle, actor or item at the destination | Reject; no chain, crushing or automatic collection |
+| Both terrain cells walkable non-exits and required layers empty | Commit both positions atomically |
+| Walkable authored plate-like terrain | Same occupancy rule; no plate activation or gate behavior before M6.3 |
+| Captured target moved/disappeared, or destination became blocked after preview | Reject without cost, noise aging or later phases |
+| Picker cancel or repeated confirm without a new selection | No additional command or cost |
+
+The resolver applies the shared ordinary action-cost policy once (currently one Food),
+spends no tool charge, and emits the existing interaction noise (strength 4, lifetime 2)
+from the advanced player's cell against the new occupancy. Player-phase event order is:
+
+```text
+InteractionPerformed -> BoulderPushed -> ActionCostApplied -> Noise -> [PlayerStarved]
+```
+
+`BoulderPushedEvent` carries both origins and destinations as one grouped effect, not two
+independent moves. Existing pre-command noise/pit aging and terminal handling remain
+controller-owned. If nonterminal, locked enemies, environment and next planning run once
+in their existing order. A retained enemy step into the moved boulder emits `EntityWaited`
+without replanning; a fresh path query immediately reads the new occupancy/player cell.
+Starvation retains the committed push but skips later phases. Rejection preserves resources,
+entity snapshots, noise lifetimes and enemy opportunities.
+
+The presenter interpolates both registered views with one shared progress value, or snaps
+both with animations disabled. Replay cancellation recovers both from committed state;
+it does not refund or resolve again. The one-cell `Assets/Prefabs/Tiles/Boulder.prefab`
+contains only Transform and SpriteRenderer. Its PNG and metadata are Unity-authored;
+`HallowBlaze/Authoring/Rebuild Boulder View` is an explicit opt-in Editor operation, never
+normal gameplay or test setup. The domain never infers rules from this sprite or prefab.
+
+Run focused checks sequentially from the active Unity project, with graphics for PlayMode:
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter 'HallowBlaze.Tests.EditMode.BoulderPushTests;HallowBlaze.Tests.EditMode.BoulderPrefabTests;HallowBlaze.Tests.EditMode.BoardRuntimeCompositionTests' --output "$env:TEMP/HB-M62-state.xml" -- -nographics -logFile "$env:TEMP/HB-M62-state.log"
+unity test $project --mode PlayMode --filter HallowBlaze.Tests.PlayMode.BoulderPushPresentationTests --output "$env:TEMP/HB-M62-presentation.xml" -- -logFile "$env:TEMP/HB-M62-presentation.log"
+```
+
+Coverage includes all four directions, bounds/overflow, missing/blocked terrain, actors/items,
+single-chain rejection, clone ownership, stale/replayed commands, cost/noise/terminal ordering,
+immediate path queries, retained enemy blocking, both composers, synchronized animation,
+rapid input, independent modal ownership and cancellation recovery. Real-sprite pixel/framing
+checks write before/after captures outside the project as
+`%TEMP%/HB-M62-push-<before|after>-<width>x<height>.png` at 1280x720 and 320x640.
+Require full EditMode and graphics PlayMode plus fresh nonzero XML with zero failures.
+Run v4/profile v2 are unchanged; there is no mid-board save or M4.9 human verdict. The M6.2
+matrix describes unbound terrain; explicitly bound M6.3 plates/gates now add the transitions
+documented above without changing the push's movement, legality or action cost.
+
 ## M6.1 Landmark Authoring
 
 The engine-free template loader uses externally supplied `BoardValidationCatalog` definitions;

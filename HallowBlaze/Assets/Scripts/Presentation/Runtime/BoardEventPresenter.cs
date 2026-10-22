@@ -116,6 +116,17 @@ namespace HallowBlaze.Presentation.Runtime
                 intents.Bind(runtime.BoardState, () => disposed || runtime.IsDisposed || runtime.Controller.IsTerminal
                     ? null : runtime.BoardState);
             Dispatcher.Register<EntityMovedEvent>(MoveAsync);
+            Dispatcher.Register<BoulderPushedEvent>(PushAsync);
+            Dispatcher.Register<PressurePlateChangedEvent>((gameEvent, token) =>
+            {
+                RequirePlateGateView(gameEvent.Plate.Definition.TerrainId).Present(gameEvent.Plate);
+                return ShowFeedback(gameEvent);
+            });
+            Dispatcher.Register<GateChangedEvent>((gameEvent, token) =>
+            {
+                RequirePlateGateView(gameEvent.Gate.Definition.TerrainId).Present(gameEvent.Gate);
+                return ShowFeedback(gameEvent);
+            });
             Dispatcher.Register<EntityWaitedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<InteractionPerformedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<ToolUsedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
@@ -239,6 +250,12 @@ namespace HallowBlaze.Presentation.Runtime
             catch (Exception error) { errors.Add(error); }
             try { GroundToolsDisplay.Refresh(); }
             catch (Exception error) { errors.Add(error); }
+            try
+            {
+                foreach (PressurePlateState plate in runtime.BoardState.GetPressurePlates()) RequirePlateGateView(plate.Definition.TerrainId).Present(plate);
+                foreach (GateState gate in runtime.BoardState.GetGates()) RequirePlateGateView(gate.Definition.TerrainId).Present(gate);
+            }
+            catch (Exception error) { errors.Add(error); }
             if (errors.Count != 0)
                 throw new AggregateException("Registered views or HUD could not be fully synchronized.", errors);
         }
@@ -323,6 +340,46 @@ namespace HallowBlaze.Presentation.Runtime
             feedback.ShowEvent(gameEvent);
         }
 
+        private async Task PushAsync(BoulderPushedEvent gameEvent, CancellationToken token)
+        {
+            GameObject playerView = RequireView(gameEvent.PlayerId);
+            GameObject boulderView = RequireView(gameEvent.BoulderId);
+            ValidatePushPositions(gameEvent);
+            Vector3 playerOrigin = playerView.transform.position;
+            Vector3 boulderOrigin = boulderView.transform.position;
+            Vector3 playerTarget = Position(gameEvent.PlayerTo, playerOrigin.z);
+            Vector3 boulderTarget = Position(gameEvent.BoulderTo, boulderOrigin.z);
+            if (AnimationsEnabled && MoveDuration > 0f)
+            {
+                float elapsed = 0f;
+                while (elapsed < MoveDuration)
+                {
+                    await Task.Yield();
+                    token.ThrowIfCancellationRequested();
+                    if (runtime.IsDisposed || playerView == null || boulderView == null)
+                        throw new InvalidOperationException("A push participant was disposed during presentation.");
+                    elapsed += Time.unscaledDeltaTime;
+                    float progress = Mathf.Clamp01(elapsed / MoveDuration);
+                    playerView.transform.position = Vector3.Lerp(playerOrigin, playerTarget, progress);
+                    boulderView.transform.position = Vector3.Lerp(boulderOrigin, boulderTarget, progress);
+                }
+            }
+            token.ThrowIfCancellationRequested();
+            playerView.transform.position = playerTarget;
+            boulderView.transform.position = boulderTarget;
+            ValidatePushPositions(gameEvent);
+            feedback.ShowEvent(gameEvent);
+        }
+
+        private void ValidatePushPositions(BoulderPushedEvent gameEvent)
+        {
+            if (!runtime.BoardState.TryGetEntity(gameEvent.PlayerId, out BoardEntityState player) ||
+                !player.Position.Equals(gameEvent.PlayerTo) ||
+                !runtime.BoardState.TryGetEntity(gameEvent.BoulderId, out BoardEntityState boulder) ||
+                !boulder.Position.Equals(gameEvent.BoulderTo))
+                throw new InvalidOperationException("Push event disagrees with authoritative participant positions.");
+        }
+
         private Task RefreshFood(FoodRestoredEvent gameEvent)
         {
             RefreshHud();
@@ -360,6 +417,12 @@ namespace HallowBlaze.Presentation.Runtime
             GroundToolsDisplay.Dispose();
             outcomes.TryNotify(runtime.Request, gameEvent);
             return Task.CompletedTask;
+        }
+
+        private PlateGateView RequirePlateGateView(EntityId id)
+        {
+            PlateGateView view = RequireView(id).GetComponent<PlateGateView>();
+            return view != null ? view : throw new InvalidOperationException("Missing plate/gate presentation adapter: " + id);
         }
 
         private GameObject RequireView(EntityId id)

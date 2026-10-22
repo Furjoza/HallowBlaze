@@ -97,7 +97,7 @@ public class PlayerScript : MovingObject, IRunHud, ITurnFeedback
     /// <inheritdoc />
     public void ShowEvent(GameEvent gameEvent)
     {
-        if (gameEvent is EntityMovedEvent)
+        if (gameEvent is EntityMovedEvent || gameEvent is BoulderPushedEvent)
             PlaySound(moveSound1, moveSound2);
         else if (gameEvent is FoodRestoredEvent restored)
         {

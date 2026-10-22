@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "worldDefinitionId": "world-1",
+  "worldVersion": 1,
+  "segmentId": "segment.ridge-radio-tower.arrival",
+  "templateId": "landmark.radio-tower",
+  "templateVersion": 1,
+  "variantId": "base"
+}
