@@ -5271,14 +5271,14 @@ run-save/address compatibility. Independent Reviewer returned PASS for model/loa
 segment/fixture/compatibility scope. Nonblocking source/optional-guarantee test suggestions were
 covered before the final full EditMode run. Scope, metadata/GUID, editor diagnostics, documentation
 and whitespace checks passed. Existing world/generator publications, scenes, prefabs, settings,
-packages and persistence DTOs are unchanged. M4.9 remains Pending; M6.2 remains Planned and is not
-automatically authorized. No commit or push was performed.
+packages and persistence DTOs are unchanged. M4.9 remains Pending. At that closeout, M6.2 remained
+Planned and required the separate owner authorization recorded below. No commit or push was performed.
 
 ---
 
 ## `M6.2` — Pchanie głazów w wspólnym resolverze
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-17)
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 9, 10 i 14.
 
@@ -5304,11 +5304,42 @@ automatically authorized. No commit or push was performed.
 
 **Wymagany handoff:** Macierz legalności pchania i event order.
 
+**Implementation and acceptance (2026-10-17):**
+
+The owner explicitly requested M6.2 and combined Lead/Developer/Reviewer work from clean
+baseline `8a2bf0339ab5cdb14948927f0e52d4a341bd27a9` on `M6/2/BoulderPushing`, Git root
+`D:/Repos/HallowBlaze`. This was direct implementation and self-review, not independent review.
+The request authorizes this card before M4.9's planned human sessions; it does not close that
+gate or authorize M6.3.
+
+Explicit `Interact` action `push-boulder` accepts only authored `landmark.boulder` content.
+BoardState prevalidates both cells and atomically advances the player and single boulder;
+blocked, stale, diagonal, occupied, exit and out-of-bounds cases are free. The shared resolver
+charges one ordinary action without tool charges, then emits interaction noise at the advanced
+player cell. One `BoulderPushedEvent` carries both movements for a shared animation clock.
+Cancellation recovers both views without resolving/refunding. Existing locked intents see
+new occupancy and wait when blocked; fresh path queries use the freed cell immediately.
+The [legality matrix and event order](Testing.md#m62-boulder-pushing) document the contract.
+
+Both legacy and blueprint composition use the same action. Unity-authored one-cell PNG/prefab
+is visual-only, without physics, missing scripts or inferred rules. Walkable plate-like terrain
+is an occupancy test only; plate/gate activation remains M6.3. Published generators, template
+activation, scenes, packages/settings, run v4 and profile v2 are unchanged; no mid-board save.
+
+Unity 6000.3.21f1 passed full EditMode 1140 tests with only the existing Explicit generation
+milestone skipped, and full graphics PlayMode 174/174. Focused domain 31/31, prefab 1/1,
+composition 29/29 and presentation 5/5 passed. Tests cover cardinal/edge/overflow/occupancy,
+clone/stale/replay rejection, one cost and terminal/phases, immediate path/retained intent,
+both composers, concurrent animation, rapid input, cancellation and real-sprite captures
+at 1280x720 and 320x640. Self-review found no remaining M6.2 blocker; no independent verdict
+or human-playtest result is claimed. M4.9 remains Pending. At that closeout, M6.3 remained
+Planned and required the later explicit owner request recorded below. No commit or push was performed.
+
 ---
 
 ## `M6.3` — Płyty i bramy jako stan domenowy
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-18)
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 10 i 14.
 
@@ -5333,6 +5364,37 @@ automatically authorized. No commit or push was performed.
 **Wpływ na save i kompatybilność:** Tylko BoardState.
 
 **Wymagany handoff:** Jawna logika wielu płyt i chronologia events względem faz tury.
+
+**Implementation and acceptance (2026-10-18):**
+
+The owner explicitly requested solo M6.3 implementation, validation and self-review from
+clean baseline `06a7072a45a48f5287fe5947a8ea7b8274c8febb` on the existing
+`M6/2/BoulderPushing` branch, Git root `D:/Repos/HallowBlaze`. No subagent or independent
+verdict is claimed. This card-specific continuation does not close M4.9's Pending human
+gate or authorize M6.4.
+
+Fixed plate/gate terrain has stable explicit link IDs, immutable definitions and BoardState
+snapshots. Each plate declares Actors/Boulders/ActorsOrBoulders; each gate declares All/Any
+over matching plates, with several gates permitted per link. Successful occupancy mutations
+recompute pressure and walkability before returning; atomic push recomputes once. Closure
+blocks entry without crushing/displacing occupants. Events follow the causal effect, with
+changed plates before changed gates and before the next enemy opportunity. Shambler and
+Listener retained steps into closed gates Wait without replan. Both composers reject invalid
+links before publication and derive initial state before planning. See the
+[rule and event-order matrix](Testing.md#m63-plates-and-gates) and
+[accepted contract](GameDesignContract.md#141-plate-and-gate-rules).
+
+Two Unity-authored visual-only prefabs use distinct bitmap states and visible link/rule
+labels. Replay uses historical event snapshots; setup/cancellation recovery synchronizes
+from the domain, without another resolution or cost. Full EditMode passed 1169 tests with
+only the existing Explicit generation milestone skipped; full graphics PlayMode passed
+181/181. Domain 27/27, prefab 2/2 and presentation 7/7 cover pressure categories, All/Any,
+multiple gates, enter/leave, clone, free rejection/lifetimes, terminal/environment order,
+sequential enemies/Listener, immediate path/hearing, both composers, animation parity,
+rapid input, snapshot order and cancellation. Real-prefab text/pixel checks passed at
+1280x720 and 320x640. Self-review found no remaining M6.3 blocker. Run v4/profile v2,
+published generators, template JSON/activation, scenes, settings and packages are unchanged.
+No dynamic solvability or human-playtest verdict is claimed. No commit or push was performed.
 
 ---
 
@@ -6240,7 +6302,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized the bounded M6.1 authoring foundation before the planned human sessions. M6.1 is Done with full EditMode 1108 tests plus the existing Explicit skip, graphics PlayMode 169/169 and independent Reviewer PASS. These card-specific exceptions do not close M4.9 or authorize execution of M6.2, which remains Planned. Preserve independent review on later cards unless separately waived;
+1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push and M6.3's plate/gate state before the planned human sessions. All three cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3 used explicitly authorized combined-role self-review. M6.3 passed full EditMode 1169 tests plus the existing Explicit skip and graphics PlayMode 181/181. These card-specific exceptions do not close M4.9 or authorize M6.4, which remains Planned. Preserve independent review on later cards unless separately waived;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6282,7 +6344,11 @@ M5.6 was completed on 2026-10-16 at the owner's explicit request from clean base
 
 M5.7 was completed on 2026-10-16 at the owner's explicit request from clean baseline `ceadef295a903f781f8fe718e7e2ae9669ab01cd` on `M5/7/FieldNotes`, with direct Lead implementation and independent Reviewer PASS. Three typed presented consequences record durable profile facts once before feedback; the reader exposes only recorded text/icons, with safe missing-content placeholders and separate input ownership. Death and a new run retain knowledge; explicit New Game resets it. Full EditMode passed 1069 tests with the existing Explicit milestone skipped; final graphics PlayMode passed 169/169. Run/profile schemas, generators and serialized scenes/settings remain unchanged. M4.9 remains Pending without human results. At that closeout, M6.1 remained Planned and required the later explicit owner request recorded below. No commit or push was performed.
 
-M6.1 was completed on 2026-10-16 at the owner's explicit request from clean baseline `f81799c928fc3b015989ddf603a79092024e61b9` on `M6/1/ManualBoardSchema`, with direct Lead implementation and independent Reviewer PASS. Immutable authored templates, strict schema v1 loading, structural/tool-guarantee validation and final-segment assignments share the existing blueprint/state/address contracts. A separate five-day/eight-board sanity graph declares two tool-free outcomes without activating puzzle mechanics, rewards or outcome persistence. Final full EditMode passed 1108 tests with the existing Explicit milestone skipped; graphics PlayMode passed 169/169; final focused landmark cases passed 39/39. Published world/generators, run/profile schemas and scene/settings/package state are unchanged. M4.9 remains Pending without human results; M6.2 remains Planned and is not automatically authorized. No commit or push was performed.
+M6.1 was completed on 2026-10-16 at the owner's explicit request from clean baseline `f81799c928fc3b015989ddf603a79092024e61b9` on `M6/1/ManualBoardSchema`, with direct Lead implementation and independent Reviewer PASS. Immutable authored templates, strict schema v1 loading, structural/tool-guarantee validation and final-segment assignments share the existing blueprint/state/address contracts. A separate five-day/eight-board sanity graph declares two tool-free outcomes without activating puzzle mechanics, rewards or outcome persistence. Final full EditMode passed 1108 tests with the existing Explicit milestone skipped; graphics PlayMode passed 169/169; final focused landmark cases passed 39/39. Published world/generators, run/profile schemas and scene/settings/package state are unchanged. M4.9 remains Pending without human results. At that closeout, M6.2 remained Planned and required the later explicit owner request recorded below. No commit or push was performed.
+
+M6.2 was completed on 2026-10-17 at the owner's explicit request from clean baseline `8a2bf0339ab5cdb14948927f0e52d4a341bd27a9` on `M6/2/BoulderPushing`, with explicitly authorized direct implementation, validation and self-review only. The shared `push-boulder` interaction atomically advances player and one authored boulder, rejects blocked/stale commands for free, applies one ordinary action cost/noise and exposes new occupancy immediately to locked enemies/path queries. One grouped event synchronizes both views, including cancellation recovery; the Unity-authored prefab has no physics. Full EditMode passed 1140 tests with the existing Explicit milestone skipped; graphics PlayMode passed 174/174. Saves, published generators and scenes/settings/packages are unchanged. M4.9 remains Pending without human results. At that closeout, M6.3 remained Planned and required the later explicit owner request recorded below. No independent verdict, commit or push is claimed.
+
+M6.3 was completed on 2026-10-18 at the owner's explicit request from clean baseline `06a7072a45a48f5287fe5947a8ea7b8274c8febb` on the existing `M6/2/BoulderPushing` branch, with direct implementation and self-review only. Explicit linked plate/gate terrain recomputes pressure and walkability inside occupancy mutations, records transitions before subsequent enemy opportunities and blocks retained steps without replanning. Per-plate pressure categories and per-gate All/Any rules are validated in both composers; two visual-only prefabs replay immutable snapshots and recover from cancellation. Full EditMode passed 1169 tests with the existing Explicit milestone skipped; graphics PlayMode passed 181/181. Run/profile schemas, published generators and scenes/settings/packages are unchanged. M4.9 remains Pending without human results; M6.4 remains Planned and requires separate authorization. No independent verdict, commit or push is claimed.
 
 # Zasada aktualizacji roadmapy
 

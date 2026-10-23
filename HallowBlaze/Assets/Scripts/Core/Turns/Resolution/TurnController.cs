@@ -66,6 +66,8 @@ namespace HallowBlaze.Core.Turns.Resolution
         /// and next-intent planning. Rejections age neither; fresh emissions/pits retain their full
         /// lifetime even when the accepted command ends the board. Pit expiry releases its hold,
         /// but an already published Wait still executes without being replaced by a surprise attack.
+        /// Plate/gate changes are already committed inside each mutation; events are recorded after
+        /// their causal effect and before subsequent opportunities, including environment completion.
         /// </remarks>
         public TurnResult Resolve(PlayerCommand command)
         {
@@ -91,12 +93,15 @@ namespace HallowBlaze.Core.Turns.Resolution
                 if (previousPits.Count > 0)
                     boardState.AdvancePitLifetime(previousPits[previousPits.Count - 1].Id);
                 var events = new List<GameEvent>(playerResult.Events);
+                PlateGateEventRecorder.Append(boardState, events);
                 if (CheckTerminal(events))
                     return new AcceptedTurnResult(events);
 
                 // Phases 5-6: execute already locked intents, then apply the environment.
                 phases.ExecuteLockedIntents(boardState, runState, playerId, events);
+                PlateGateEventRecorder.Append(boardState, events);
                 phases.ApplyEnvironment(boardState, runState, playerId, events);
+                PlateGateEventRecorder.Append(boardState, events);
 
                 // Phase 7: terminal outcomes stop next-turn planning.
                 if (CheckTerminal(events))

@@ -26,11 +26,14 @@ namespace HallowBlaze.Presentation.Runtime
         /// <param name="views">Exactly one unique, positioned view per entity ID; decorative objects are not bindings.</param>
         /// <param name="tools">Optional explicit tool dispatch and current action-cost policy; null leaves placeholders without effects.</param>
         /// <param name="groundTools">Optional existing run-allocated tool instances matching authored item entities; no generation or equipment mutation.</param>
+        /// <param name="plates">Explicit fixed plate bindings; every plate terrain requires one.</param>
+        /// <param name="gates">Explicit gate links/rules, validated before initial enemy planning.</param>
         /// <returns>A complete runtime whose initial state reproduces the blueprint.</returns>
         /// <exception cref="BoardRuntimeCompositionException">Identity, blueprint validation or view parity fails.</exception>
         public static BoardRuntime Compose(BoardRequest request, RunState run, BoardBlueprint blueprint,
             BoardValidationCatalog catalog, IReadOnlyDictionary<EntityId, GameObject> views, ToolUseQuery tools = null,
-            IEnumerable<GroundToolState> groundTools = null)
+            IEnumerable<GroundToolState> groundTools = null, IEnumerable<PressurePlateDefinition> plates = null,
+            IEnumerable<GateDefinition> gates = null)
         {
             if (request == null || run == null || blueprint == null || catalog == null || views == null ||
                 !BoardOutcomeIdentityGuard.ValidateRequest(request, run, out _) || !blueprint.Address.Equals(request.Address))
@@ -72,6 +75,11 @@ namespace HallowBlaze.Presentation.Runtime
                     spawn == null || spawn.SourceId != ground.SourceId || !board.TryBindGroundTool(ground))
                     throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, "blueprint:invalid-ground-tool");
             }
+            var plateBindings = new List<PressurePlateDefinition>(plates ?? Array.Empty<PressurePlateDefinition>());
+            var gateBindings = new List<GateDefinition>(gates ?? Array.Empty<GateDefinition>());
+            IReadOnlyList<string> linkErrors = PlateGateValidator.Validate(board, plateBindings, gateBindings);
+            if (linkErrors.Count > 0) throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, string.Join("; ", linkErrors));
+            board.ConfigurePlateGates(plateBindings, gateBindings);
             return new BoardRuntime(request, run, board, playerId, bindings, enemies, tools: tools);
         }
     }

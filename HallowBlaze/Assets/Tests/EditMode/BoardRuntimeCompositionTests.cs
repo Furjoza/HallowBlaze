@@ -32,6 +32,7 @@ namespace HallowBlaze.Tests.EditMode
             createdObjects.Clear();
         }
 
+        /// <summary>Every accepted descriptor is classified explicitly; authored boulders use the same definition as the shared push action.</summary>
         [Test]
         public void Catalog_ClassifiesEveryCurrentLegacyContentKind()
         {
@@ -50,7 +51,10 @@ namespace HallowBlaze.Tests.EditMode
                 LegacyBoardContentKind.Enemy,
                 LegacyBoardContentKind.Listener,
                 LegacyBoardContentKind.DiggableGround,
-                LegacyBoardContentKind.Tool
+                LegacyBoardContentKind.Tool,
+                LegacyBoardContentKind.Boulder,
+                LegacyBoardContentKind.PressurePlate,
+                LegacyBoardContentKind.Gate
             };
 
             CollectionAssert.AreEquivalent(
@@ -73,6 +77,12 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(listener.ContentId, Is.EqualTo("enemy.listener"));
             Assert.That(listener.Layer, Is.EqualTo(BoardLayer.Actor));
             Assert.That(listener.EntityKind, Is.EqualTo(EntityKind.Enemy));
+            LegacyBoardContentDefinition boulder = LegacyBoardContentCatalog.Definitions.Single(
+                definition => definition.Kind == LegacyBoardContentKind.Boulder);
+            Assert.That(boulder.ContentId, Is.EqualTo(BoulderPushAction.ContentId));
+            Assert.That(boulder.Layer, Is.EqualTo(BoulderPushAction.Definition.Layer));
+            Assert.That(boulder.EntityKind, Is.EqualTo(BoulderPushAction.Definition.Kind));
+            Assert.That(boulder.Traits, Is.EqualTo(BoulderPushAction.Definition.Traits));
             Assert.That(LegacyBoardContentCatalog.DeferredLegacyMutationPaths, Is.Empty);
         }
 

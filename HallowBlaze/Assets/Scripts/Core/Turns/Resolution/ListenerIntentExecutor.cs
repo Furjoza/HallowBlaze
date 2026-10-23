@@ -14,6 +14,7 @@ namespace HallowBlaze.Core.Turns.Resolution
         /// the original noise remains active. Expiration, blocking or displacement yields Wait, never
         /// attack, retargeting or replanning. A newer heard noise affects only subsequent planning.
         /// Missing/invalid actors emit nothing. No run resource or player action cost is changed.
+        /// Actual movement records pressure/gate transitions before the next actor; closed gate terrain yields Wait.
         /// </summary>
         /// <param name="board">The current authoritative board.</param>
         /// <param name="listener">The owner with one locked investigation or wait.</param>
@@ -45,6 +46,7 @@ namespace HallowBlaze.Core.Turns.Resolution
                     !board.TryGetEntity(BoardLayer.Actor, destination, out _) && board.TryMove(actor.Id, destination))
                 {
                     events.Add(new EntityMovedEvent(actor.Id, actor.Position, destination));
+                    PlateGateEventRecorder.Append(board, events);
                     events.Add(new ListenerInvestigatedEvent(actor.Id, actor.Position, destination,
                         intent.NoiseId.Value, intent.InvestigationTarget.Value));
                     return;
