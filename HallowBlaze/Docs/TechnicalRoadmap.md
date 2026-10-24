@@ -5400,7 +5400,7 @@ No dynamic solvability or human-playtest verdict is claimed. No commit or push w
 
 ## `M6.4` — Pierwszy landmark dnia około 5
 
-**Status:** `Planned`  
+**Status:** `Done` (2026-10-20)
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 14 i 20.
 
@@ -5425,6 +5425,20 @@ No dynamic solvability or human-playtest verdict is claimed. No commit or push w
 **Wpływ na save i kompatybilność:** Stable template/outcome IDs w run/profile; zmiana ID wymaga migracji/aliasu.
 
 **Wymagany handoff:** Diagram układu, lista zamierzonych rozwiązań, kosztów i awaryjnej ścieżki.
+
+**Completion (2026-10-20):** Published `landmark.radio-tower/1/base` only at the final inbound
+segment, with shared boulder/plate/gate/zombie/clearing/pickup rules, two outcomes and optional
+axe use. The tool-free arrival costs 7 Food; the supply routes cost 12 Food manually or
+11 Food plus one axe charge, with one stable concrete +20 Food ration. Two approaches keep
+the mandatory exit accessible after bad pushes. Compatible run schema v5 pins selection
+before presentation and atomically saves outcome/final arrival; profile v2 discovery follows
+existing retryable reconciliation. Old saved arrival layouts retain their generator/seed.
+The [layout and cost contract](BoardGeneration.md#radio-tower-landmark) contains the diagram,
+explicit command paths, fallback and migration details. Full EditMode passed 1199 tests with
+the existing Explicit milestone skipped; graphics PlayMode passed 185/185, including actual
+production Continue/outcomes/save failures/death and desktop/portrait art checks. The owner's
+explicit solo instruction authorized implementation, validation and self-review; no independent
+review or human playtest verdict is claimed. M4.9 remains Pending; M6.5/M6.6 remain Planned.
 
 ---
 
@@ -6302,7 +6316,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push and M6.3's plate/gate state before the planned human sessions. All three cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3 used explicitly authorized combined-role self-review. M6.3 passed full EditMode 1169 tests plus the existing Explicit skip and graphics PlayMode 181/181. These card-specific exceptions do not close M4.9 or authorize M6.4, which remains Planned. Preserve independent review on later cards unless separately waived;
+1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state and M6.4's production landmark before the planned human sessions. All four cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185. These card-specific exceptions do not close M4.9 or authorize M6.5/M6.6, which remain Planned. Preserve independent review on later cards unless separately waived;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6349,6 +6363,16 @@ M6.1 was completed on 2026-10-16 at the owner's explicit request from clean base
 M6.2 was completed on 2026-10-17 at the owner's explicit request from clean baseline `8a2bf0339ab5cdb14948927f0e52d4a341bd27a9` on `M6/2/BoulderPushing`, with explicitly authorized direct implementation, validation and self-review only. The shared `push-boulder` interaction atomically advances player and one authored boulder, rejects blocked/stale commands for free, applies one ordinary action cost/noise and exposes new occupancy immediately to locked enemies/path queries. One grouped event synchronizes both views, including cancellation recovery; the Unity-authored prefab has no physics. Full EditMode passed 1140 tests with the existing Explicit milestone skipped; graphics PlayMode passed 174/174. Saves, published generators and scenes/settings/packages are unchanged. M4.9 remains Pending without human results. At that closeout, M6.3 remained Planned and required the later explicit owner request recorded below. No independent verdict, commit or push is claimed.
 
 M6.3 was completed on 2026-10-18 at the owner's explicit request from clean baseline `06a7072a45a48f5287fe5947a8ea7b8274c8febb` on the existing `M6/2/BoulderPushing` branch, with direct implementation and self-review only. Explicit linked plate/gate terrain recomputes pressure and walkability inside occupancy mutations, records transitions before subsequent enemy opportunities and blocks retained steps without replanning. Per-plate pressure categories and per-gate All/Any rules are validated in both composers; two visual-only prefabs replay immutable snapshots and recover from cancellation. Full EditMode passed 1169 tests with the existing Explicit milestone skipped; graphics PlayMode passed 181/181. Run/profile schemas, published generators and scenes/settings/packages are unchanged. M4.9 remains Pending without human results; M6.4 remains Planned and requires separate authorization. No independent verdict, commit or push is claimed.
+
+M6.4 was completed on 2026-10-20 at the owner's explicit solo request from clean baseline
+`85d51e98c3e58e639832908853fe05e8618d0aac` on `M6/4/Landmark`. The production final-segment
+radio tower combines existing rules with two cost-distinct outcomes, optional axe use and
+tool-free fallback approaches. Run v5 durably pins template/variant and atomic outcome/arrival;
+profile v2 records discovery through existing reconciliation. Full EditMode passed 1199 tests
+with one existing Explicit skip; graphics PlayMode passed 185/185. Validation and review were
+performed by the same agent under the owner's instruction, not an independent verdict.
+M4.9 remains Pending without human results; M6.5/M6.6 remain Planned and need separate
+authorization. No commit or push was performed.
 
 # Zasada aktualizacji roadmapy
 

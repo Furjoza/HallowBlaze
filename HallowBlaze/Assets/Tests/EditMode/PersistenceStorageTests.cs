@@ -110,7 +110,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(restored.ToolSlots[0].Instance.InstanceId, Is.EqualTo(tool.InstanceId));
             Assert.That(restored.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
             Assert.That(restored.Food, Is.EqualTo(run.Food));
-            Assert.That(File.ReadAllText(Path.Combine(testRootPath, "run.json")), Does.Contain("\"schemaVersion\": 4"));
+            Assert.That(File.ReadAllText(Path.Combine(testRootPath, "run.json")), Does.Contain("\"schemaVersion\": 5"));
             Assert.That(controller.Resolve(command).Accepted, Is.False);
             Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
         }
@@ -161,7 +161,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(migrated.TravelHistory.All(entry => entry.EdgeId == null && entry.LegId == null), Is.True);
             Assert.That(File.ReadAllText(runPath), Is.EqualTo(legacy), "Reading must not rewrite an old file.");
             Assert.That(store.SaveRun(migrated).IsSuccess, Is.True);
-            Assert.That(File.ReadAllText(runPath), Does.Contain("\"schemaVersion\": 4")
+            Assert.That(File.ReadAllText(runPath), Does.Contain("\"schemaVersion\": 5")
                 .And.Contain(RunState.LegacyRandomAlgorithmId));
             Assert.That(File.ReadAllText(Path.Combine(testRootPath, "run.backup.json")), Is.EqualTo(legacy));
             Assert.That(File.ReadAllBytes(profilePath), Is.EqualTo(profileBytes));
@@ -402,7 +402,7 @@ namespace HallowBlaze.Tests.EditMode
             string backupPath = Path.Combine(testRootPath, "run.backup.json");
             string backup = File.ReadAllText(backupPath);
             var document = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(currentPath));
-            document["schemaVersion"] = 5;
+            document["schemaVersion"] = 6;
             string future = document.ToString();
             File.WriteAllText(currentPath, future);
             Assert.That(store.LoadRun().Type, Is.EqualTo(SaveStoreResultType.UnsupportedFutureSchema));

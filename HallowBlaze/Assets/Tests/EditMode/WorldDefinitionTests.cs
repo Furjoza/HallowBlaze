@@ -326,8 +326,17 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(world.TryGetEdge("road." + road, out WorldEdgeDefinition edge), Is.True);
                 Assert.That(edge.Segments.Select(segment => segment.SegmentId),
                     Is.EqualTo(names.Select(name => "segment." + road + "." + name)));
-                Assert.That(edge.Segments.All(segment => segment.GenerationVersion == 2 &&
-                    segment.GenerationConfigurationId == "ordinary.board.v1"), Is.True);
+                foreach (RouteSegmentDefinition segment in edge.Segments)
+                    if (segment.SegmentId == "segment.ridge-radio-tower.arrival")
+                    {
+                        Assert.That(segment.GenerationConfigurationId, Is.EqualTo("landmark.radio-tower.board"));
+                        Assert.That(segment.GenerationVersion, Is.EqualTo(1));
+                    }
+                    else
+                    {
+                        Assert.That(segment.GenerationConfigurationId, Is.EqualTo("ordinary.board.v1"));
+                        Assert.That(segment.GenerationVersion, Is.EqualTo(2));
+                    }
             }
             Assert.That(world.Edges.SelectMany(edge => edge.Segments).Select(segment => segment.SegmentId), Is.Unique);
             Assert.That(world.WorldDefinitionId, Is.EqualTo("world-1"));

@@ -8,6 +8,7 @@
         "HallowBlaze.Core.Session",
         "HallowBlaze.Core.State",
         "HallowBlaze.Core.Turns.Contracts",
-        "HallowBlaze.Core.Turns.Resolution"
+        "HallowBlaze.Core.Turns.Resolution",
+        "HallowBlaze.Core.World"
     ]
 }

@@ -22,6 +22,9 @@ using HallowBlaze.Presentation.Runtime;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 using EntityId = HallowBlaze.Core.Board.Primitives.EntityId;
 
 namespace HallowBlaze.Tests.PlayMode
@@ -1106,6 +1109,239 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
             Assert.That(presenter.Coordinator.ResolutionCount, Is.Zero);
         }
+
+#if UNITY_EDITOR
+        /// <summary>The real final-segment runtime preserves template/tool identity on Continue and commits exact exit results plus profile discovery.</summary>
+        [UnityTest]
+        public IEnumerator LandmarkProduction_BothOutcomesPersistWithoutRerollOrDuplicateRewards()
+        {
+            foreach (bool supplies in new[] { false, true })
+            {
+                Component manager = CreateLandmarkManager(out GameSession session, out TravelFaultStore store);
+                InvokeManager(manager, "InitGame");
+                BoardRuntime first = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+                Assert.That(first, Is.Not.Null);
+                LandmarkRecord selected = store.LoadRun().Data.ActiveLandmark;
+                Assert.That(selected.TemplateId, Is.EqualTo("landmark.radio-tower"));
+                Assert.That(selected.VariantId, Is.EqualTo("base"));
+                string hash = GetProperty<BoardBlueprint>(GetManagerField<Component>(manager, "boardScript"), "ActiveBlueprint").ContentHash;
+                first.BoardState.TryGetGroundTool(new EntityId(20), out GroundToolState firstAxe);
+                RunLifecycleService lifecycle = GetManagerField<RunLifecycleService>(manager, "lifecycle");
+                Assert.That(lifecycle.ExitToMenu().IsSuccess, Is.True);
+                Assert.That(lifecycle.ContinueRun().IsSuccess, Is.True);
+                InvokeManager(manager, "InitGame");
+                BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+                Assert.That(runtime.Request.Address, Is.EqualTo(selected.Address));
+                Assert.That(GetProperty<BoardBlueprint>(GetManagerField<Component>(manager, "boardScript"), "ActiveBlueprint").ContentHash, Is.EqualTo(hash));
+                runtime.BoardState.TryGetGroundTool(new EntityId(20), out GroundToolState restoredAxe);
+                Assert.That(restoredAxe.InstanceId, Is.EqualTo(firstAxe.InstanceId));
+                Assert.That((bool)InvokeManager(manager, "HandleBoardOutcome", BoardOutcome.ExitReached(runtime.Request)), Is.False);
+                InvokeManager(manager, "HideLevelImage");
+                yield return null;
+                yield return ExecuteLandmark(manager, supplies ? "NNPNEECCCENE" : "NNNNNEE");
+                RunState durable = store.LoadRun().Data;
+                Assert.That(durable.CompletedLandmarks.Single().OutcomeId, Is.EqualTo(supplies ? "tower.supplies" : "tower.arrival"));
+                Assert.That(durable.CompletedDayCount, Is.EqualTo(5));
+                Assert.That(durable.Food, Is.EqualTo(supplies ? 108 : 93));
+                Assert.That(durable.ActiveLandmark, Is.Null);
+                Assert.That(store.LoadProfile().Data.GetNodeDiscoveryState("landmark.radio-tower"), Is.EqualTo(NodeDiscoveryState.Visited));
+                int saves = store.RunSaves;
+                Assert.That((bool)InvokeManager(manager, "HandleBoardOutcome", BoardOutcome.ExitReached(runtime.Request)), Is.False);
+                Assert.That(store.RunSaves, Is.EqualTo(saves));
+                UnityEngine.Object.DestroyImmediate(manager.gameObject);
+                GameObject player = GameObject.FindGameObjectWithTag("Player");
+                if (player != null) UnityEngine.Object.DestroyImmediate(player);
+                yield return null;
+            }
+        }
+
+        /// <summary>Selection failure blocks first publication; completion and discovery retries never resolve again or replay resource rewards.</summary>
+        [UnityTest]
+        public IEnumerator LandmarkProduction_SaveAndDiscoveryFailuresRemainRetryableAndExactlyOnce()
+        {
+            Component manager = CreateLandmarkManager(out GameSession session, out TravelFaultStore store);
+            store.FailRun = true;
+            LogAssert.Expect(LogType.Error, "Landmark selection checkpoint failed: IoError");
+            InvokeManager(manager, "InitGame");
+            Assert.That(session.ActiveRun.ActiveLandmark, Is.Null);
+            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Null);
+            Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+            store.FailRun = false;
+            InvokeManager(manager, "InitGame");
+            InvokeManager(manager, "HideLevelImage");
+            yield return null;
+            yield return ExecuteLandmark(manager, "NNPNEECCCEN");
+            store.FailRun = true;
+            LogAssert.Expect(LogType.Error, "Segment checkpoint failed: IoError");
+            yield return ExecuteLandmark(manager, "E");
+            Assert.That(session.ActiveRun.CompletedLandmarks, Is.Empty);
+            Assert.That(session.ActiveRun.ActiveLandmark, Is.Not.Null);
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(108));
+            Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+            int resolutions = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount;
+            store.FailRun = false;
+            store.FailProfile = true;
+            LogAssert.Expect(LogType.Error, "Arrival discovery checkpoint failed: Injected discovery checkpoint failure.");
+            Assert.That((bool)InvokeManager(manager, "RetryTravelCheckpoint"), Is.False);
+            Assert.That(store.LoadRun().Data.CompletedLandmarks.Single().OutcomeId, Is.EqualTo("tower.supplies"));
+            Assert.That(store.LoadProfile().Data.GetNodeDiscoveryState("landmark.radio-tower"), Is.Not.EqualTo(NodeDiscoveryState.Visited));
+            int saves = store.RunSaves;
+            store.FailProfile = false;
+            Assert.That((bool)InvokeManager(manager, "RetryTravelCheckpoint"), Is.True);
+            Assert.That(store.RunSaves, Is.EqualTo(saves));
+            Assert.That(session.ActiveRun.CompletedLandmarks.Count, Is.EqualTo(1));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(108));
+            Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.EqualTo(resolutions));
+            Assert.That(store.LoadProfile().Data.GetNodeDiscoveryState("landmark.radio-tower"), Is.EqualTo(NodeDiscoveryState.Visited));
+        }
+
+        /// <summary>Real starvation terminalization preserves completed-day accounting but cannot record landmark success or arrival discovery.</summary>
+        [UnityTest]
+        public IEnumerator LandmarkProduction_DeathNeverRecordsOutcomeOrVisitedDestination()
+        {
+            Component manager = CreateLandmarkManager(out GameSession session, out TravelFaultStore store);
+            InvokeManager(manager, "InitGame");
+            InvokeManager(manager, "HideLevelImage");
+            yield return null;
+            RunState run = session.ActiveRun;
+            run.ConsumeFood(99);
+            GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").AnimationsEnabled = false;
+            Assert.That(TrySubmit(manager, new WaitCommand(), out Task<CommandSubmission> pending), Is.True);
+            while (!pending.IsCompleted) yield return null;
+            Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(run.Status, Is.EqualTo(RunStatus.Dead));
+            Assert.That(run.CompletedLandmarks, Is.Empty);
+            Assert.That(session.ActiveRun, Is.Null);
+            Assert.That(store.LoadRun().Type, Is.EqualTo(SaveStoreResultType.Missing));
+            Assert.That(store.LoadProfile().Data.RunSummaries.Single().DaysSurvived, Is.EqualTo(4));
+            Assert.That(store.LoadProfile().Data.GetNodeDiscoveryState("landmark.radio-tower"), Is.Not.EqualTo(NodeDiscoveryState.Visited));
+        }
+
+        /// <summary>Actual production prefab art and labels are framed on desktop/portrait renders; opening the gate changes visible pixels.</summary>
+        [UnityTest]
+        public IEnumerator LandmarkProduction_DesktopAndPortraitShowAuthoredArtAndReadableLinks()
+        {
+            Component manager = CreateLandmarkManager(out _, out _);
+            InvokeManager(manager, "InitGame");
+            InvokeManager(manager, "HideLevelImage");
+            yield return null;
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            var sizes = new[] { new Vector2Int(1280, 720), new Vector2Int(320, 640) };
+            var closed = sizes.Select(size => CaptureLandmark(runtime, size, "closed")).ToArray();
+            yield return ExecuteLandmark(manager, "NNP");
+            for (int index = 0; index < sizes.Length; index++)
+            {
+                Color32[] opened = CaptureLandmark(runtime, sizes[index], "open");
+                Assert.That(opened.Zip(closed[index], (left, right) => !left.Equals(right)).Count(changed => changed), Is.GreaterThan(100));
+            }
+        }
+
+        private static Color32[] CaptureLandmark(BoardRuntime runtime, Vector2Int size, string state)
+        {
+            Assert.That(SystemInfo.graphicsDeviceType, Is.Not.EqualTo(UnityEngine.Rendering.GraphicsDeviceType.Null));
+            var owner = new GameObject("Landmark capture camera");
+            var target = new RenderTexture(size.x, size.y, 24);
+            var texture = new Texture2D(size.x, size.y, TextureFormat.RGB24, false);
+            RenderTexture previous = RenderTexture.active;
+            try
+            {
+                Camera camera = owner.AddComponent<Camera>();
+                camera.enabled = false;
+                camera.orthographic = true;
+                camera.orthographicSize = Mathf.Max(5, 5f * size.y / size.x);
+                camera.transform.position = new Vector3(3.5f, 3.5f, -10);
+                camera.clearFlags = CameraClearFlags.SolidColor;
+                camera.backgroundColor = new Color32(12, 28, 20, 255);
+                camera.targetTexture = target;
+                foreach (var entity in runtime.BoardState.GetEntities())
+                {
+                    GameObject view = runtime.Views[entity.Id];
+                    Assert.That(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(view), Is.Zero);
+                    Assert.That(view.GetComponent<SpriteRenderer>().sprite, Is.Not.Null, entity.Id + ":" + entity.Definition.ContentId);
+                    foreach (TextMesh label in view.GetComponentsInChildren<TextMesh>())
+                    {
+                        Bounds bounds = label.GetComponent<MeshRenderer>().bounds;
+                        Assert.That(bounds.size.x, Is.LessThanOrEqualTo(0.93f));
+                        Assert.That(bounds.size.y, Is.LessThanOrEqualTo(0.35f));
+                        foreach (Vector3 corner in new[] { bounds.min, bounds.max })
+                        {
+                            Vector3 point = camera.WorldToViewportPoint(corner);
+                            Assert.That(point.x, Is.InRange(0.01f, 0.99f));
+                            Assert.That(point.y, Is.InRange(0.01f, 0.99f));
+                        }
+                    }
+                }
+                camera.Render();
+                RenderTexture.active = target;
+                texture.ReadPixels(new Rect(0, 0, size.x, size.y), 0, 0);
+                texture.Apply();
+                Color32[] pixels = texture.GetPixels32();
+                Assert.That(pixels.Count(color => color.r > 120 && color.g > 100), Is.GreaterThan(1000));
+                File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M64-" + state + "-" + size.x + "x" + size.y + ".png"), texture.EncodeToPNG());
+                return pixels;
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                UnityEngine.Object.DestroyImmediate(owner);
+                UnityEngine.Object.DestroyImmediate(target);
+                UnityEngine.Object.DestroyImmediate(texture);
+            }
+        }
+
+        private Component CreateLandmarkManager(out GameSession session, out TravelFaultStore store)
+        {
+            Component manager = CreateTravelManager(5, out session, out store, out _, out _);
+            WorldDefinition world = WorldDefinitionJson.Deserialize(File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json")));
+            SetField(manager, "worldDefinition", world);
+            SetField(manager, "worldMap", new WorldMapService(world, session, store));
+            var run = new RunState("radio-tower-production", 64, new RunStateConfiguration(100, 100, 4, "forest.ridge"));
+            world.TryGetEdge("road.ridge-radio-tower", out WorldEdgeDefinition edge);
+            run.StartLeg(edge.EdgeId, edge.FromNodeId, edge.ToNodeId, edge.Segments.Select(segment =>
+                new RouteSegmentState(segment.SegmentId, segment.GenerationConfigurationId, segment.GenerationVersion)));
+            run.TryConsumeIntro(run.ActiveLeg.LegId);
+            for (int index = 0; index < 4; index++) run.TryAdvanceSegment(run.ActiveLeg.LegId, run.ActiveLeg.CurrentSegment.SegmentId);
+            session.ContinueRun(run);
+            Assert.That(store.SaveRun(run).IsSuccess, Is.True);
+            Assert.That(store.SaveProfile(session.Profile).IsSuccess, Is.True);
+            Component board = GetManagerField<Component>(manager, "boardScript");
+            SetField(board, "columns", 8);
+            SetField(board, "rows", 8);
+            SetField(board, "floorTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Floor1.prefab") });
+            SetField(board, "outerWallTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/OuterWall1.prefab") });
+            SetField(board, "wallTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Wall1.prefab") });
+            SetField(board, "groundFoodTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Food.prefab") });
+            SetField(board, "enemyTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Enemy1.prefab") });
+            SetField(board, "exit", AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Exit.prefab"));
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            SpriteRenderer playerRenderer = player.GetComponent<SpriteRenderer>();
+            if (playerRenderer == null) playerRenderer = player.AddComponent<SpriteRenderer>();
+            playerRenderer.sortingLayerName = "Units";
+            Animator animator = player.GetComponent<Animator>();
+            if (animator == null) animator = player.AddComponent<Animator>();
+            animator.runtimeAnimatorController = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Player.prefab").GetComponent<Animator>().runtimeAnimatorController;
+            animator.Rebind();
+            animator.Update(0);
+            return manager;
+        }
+
+        private static IEnumerator ExecuteLandmark(Component manager, string sequence)
+        {
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").AnimationsEnabled = false;
+            foreach (char step in sequence)
+            {
+                PlayerCommand command = step == 'P' || step == 'C' ? (PlayerCommand)runtime.Interactions
+                    .GetOptions(runtime.BoardState, runtime.RunState, runtime.PlayerId)
+                    .Single(option => option.TargetId.Equals(new EntityId(step == 'P' ? 10 : 11))).CreateCommand() :
+                    new MoveCommand(step == 'N' ? Direction.North : Direction.East);
+                Assert.That(TrySubmit(manager, command, out Task<CommandSubmission> pending), Is.True, "sequence=" + sequence + " step=" + step);
+                while (!pending.IsCompleted) yield return null;
+                Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                yield return null;
+            }
+        }
+#endif
 
         private IEnumerator ExerciseProductionTravel(int count)
         {

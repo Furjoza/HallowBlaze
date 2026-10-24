@@ -193,7 +193,7 @@
         { "segmentId": "segment.ridge-radio-tower.stretch", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 2 },
         { "segmentId": "segment.ridge-radio-tower.clearing", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 2 },
         { "segmentId": "segment.ridge-radio-tower.approach", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 2 },
-        { "segmentId": "segment.ridge-radio-tower.arrival", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 2 }
+        { "segmentId": "segment.ridge-radio-tower.arrival", "generationConfigurationId": "landmark.radio-tower.board", "generationVersion": 1 }
       ]
     }
   ]

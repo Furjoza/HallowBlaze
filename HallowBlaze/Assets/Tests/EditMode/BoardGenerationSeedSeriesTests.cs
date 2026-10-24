@@ -296,28 +296,36 @@ namespace HallowBlaze.Tests.EditMode
             WorldDefinition world = WorldDefinitionJson.Deserialize(File.ReadAllText(Path.Combine(project, "Assets", "GameData", "World", "prototype-world.json")));
             var catalog = OrdinaryBoardContent.CreateCatalog();
             var cases = new List<SeedSeriesCase>();
+            int inboundPrefixSweeps = 0;
             for (int traversal = 0; cases.Count < count; traversal++)
             {
                 WorldEdgeDefinition edge = world.Edges[traversal % world.Edges.Count];
+                int ordinaryCount = edge.Segments.Count(segment => segment.GenerationConfigurationId == OrdinaryBoardGenerator.ConfigurationId);
+                bool inboundPrefix = ordinaryCount != edge.SegmentCount;
+                if (inboundPrefix && inboundPrefixSweeps >= 5) continue;
+                if (cases.Count + ordinaryCount > count) throw new InvalidOperationException("A sweep must contain complete ordinary traversals or inbound prefixes.");
+                if (inboundPrefix) inboundPrefixSweeps++;
                 int day = 1 + traversal % 10;
                 int rootSeed = traversal % 2 == 0 ? traversal / 2 : -(traversal / 2) - 1;
                 var run = new RunState("series-run-" + traversal.ToString(CultureInfo.InvariantCulture), rootSeed,
                     new RunStateConfiguration(100, 100, day - 1, edge.FromNodeId));
-                if (cases.Count + edge.SegmentCount > count) throw new InvalidOperationException("A sweep must contain complete published traversals.");
                 run.StartLeg(edge.EdgeId, edge.FromNodeId, edge.ToNodeId, edge.Segments.Select(segment =>
                     new RouteSegmentState(segment.SegmentId, segment.GenerationConfigurationId, segment.GenerationVersion)));
                 run.TryConsumeIntro(run.ActiveLeg.LegId);
-                for (int index = 0; index < edge.SegmentCount; index++)
+                for (int index = 0; index < edge.SegmentCount && cases.Count < count; index++)
                 {
                     BoardAddress address = BoardAddressFactory.Create(run, world);
-                    Assert.That(address.GenerationVersion, Is.EqualTo(BoardGenerationPipeline.OrdinaryConfigurationVersion));
-                    cases.Add(new SeedSeriesCase(new BoardGenerationRequest(address, OrdinaryBoardContent.CreateConfiguration(address), catalog, rootSeed),
-                        "published", index, edge.SegmentCount));
+                    if (address.GenerationConfigurationId == OrdinaryBoardGenerator.ConfigurationId)
+                    {
+                        Assert.That(address.GenerationVersion, Is.EqualTo(BoardGenerationPipeline.OrdinaryConfigurationVersion));
+                        cases.Add(new SeedSeriesCase(new BoardGenerationRequest(address, OrdinaryBoardContent.CreateConfiguration(address), catalog, rootSeed),
+                            inboundPrefix ? "published-inbound-ordinary-prefix" : "published", index, ordinaryCount));
+                    }
                     if (index + 1 < edge.SegmentCount)
                         Assert.That(run.TryAdvanceSegment(run.ActiveLeg.LegId, address.SegmentId), Is.True);
                 }
             }
-            Assert.That(cases.Select(sample => sample.Request.Address.SegmentId).Distinct().Count(), Is.EqualTo(45));
+            Assert.That(cases.Select(sample => sample.Request.Address.SegmentId).Distinct().Count(), Is.EqualTo(44));
             Assert.That(cases.Select(sample => sample.Request.Address.DayNumber).Distinct().Count(), Is.EqualTo(10));
             return cases;
         }

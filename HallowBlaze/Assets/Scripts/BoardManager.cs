@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Generation;
+using HallowBlaze.Core.Generation.Landmarks;
 using HallowBlaze.Core.Generation.Pipeline;
 using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.Random;
@@ -52,6 +53,7 @@ public class BoardManager : MonoBehaviour
     private BoardRuntime activeRuntime;
     private BoardBlueprint activeBlueprint;
     private BoardGenerationResult activeGenerationResult;
+    private LandmarkBoard activeLandmark;
 
     private void InitialiseList()
     {
@@ -178,6 +180,7 @@ public class BoardManager : MonoBehaviour
     /// <summary>
     /// Creates and validates the addressed layout before publishing one authoritative runtime.
     /// Ordinary version 2 uses bounded retry/fallback; version 1, checkpoint and legacy boards retain their original generation.
+    /// Authored landmarks require the exact durably selected template/version/variant and use the same runtime/resolver.
     /// A failed setup destroys its staged views and leaves no active request or runtime.
     /// Ordinary enemy rules come from the catalog; legacy variants retain prefab 10/20 HP data.
     /// Initial domain plans exist before activation.
@@ -202,6 +205,16 @@ public class BoardManager : MonoBehaviour
         if (runState == null)
             throw new ArgumentNullException(nameof(runState));
         ReleaseCurrentBoard();
+        if (request.Address?.GenerationConfigurationId == RadioTowerLandmark.ConfigurationId)
+        {
+            LandmarkRecord selection = runState.ActiveLandmark;
+            RadioTowerLandmark content = RadioTowerLandmark.Load();
+            LandmarkTemplate template = content.ReadTemplate();
+            if (selection == null || !selection.Address.Equals(request.Address) || selection.TemplateId != template.Id ||
+                selection.TemplateVersion != template.Version)
+                throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, "landmark:selection-not-checkpointed");
+            return SetupOrdinaryScene(request, runState, playerView, template.CreateBoard(request.Address, selection.VariantId), content);
+        }
         if (request.Address != null && request.Address.GenerationConfigurationId == OrdinaryBoardGenerator.ConfigurationId)
             return SetupOrdinaryScene(request, runState, playerView);
         if (request.Address != null && (request.Address.GenerationConfigurationId != "legacy.board.v1" ||
@@ -325,23 +338,27 @@ public class BoardManager : MonoBehaviour
     /// <summary>Gets the complete active runtime, or null when startup failed or the board was released.</summary>
     public BoardRuntime ActiveRuntime => activeRuntime;
 
+    /// <summary>Gets the exact authored board used by the active runtime, or null for ordinary/released boards.</summary>
+    public LandmarkBoard ActiveLandmark => activeRuntime == null ? null : activeLandmark;
+
     internal void ClearActiveRequest()
     {
         ReleaseCurrentBoard();
     }
 
-    private BoardRuntime SetupOrdinaryScene(BoardRequest request, RunState runState, GameObject playerView)
+    private BoardRuntime SetupOrdinaryScene(BoardRequest request, RunState runState, GameObject playerView,
+        LandmarkBoard landmark = null, RadioTowerLandmark landmarkContent = null)
     {
         if (columns != 8 || rows != 8 || playerView == null ||
             !BoardOutcomeIdentityGuard.ValidateRequest(request, runState, out _))
             throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, "ordinary:bounds-player-or-identity");
-        BoardValidationCatalog catalog = OrdinaryBoardContent.CreateCatalog();
-        BoardGenerationConfig config = OrdinaryBoardContent.CreateConfiguration(request.Address);
-        BoardGenerationResult generation = config.Version == BoardGenerationPipeline.OrdinaryConfigurationVersion
+        BoardValidationCatalog catalog = landmark == null ? OrdinaryBoardContent.CreateCatalog() : RadioTowerLandmark.CreateCatalog();
+        BoardGenerationConfig config = landmark?.Blueprint.Config ?? OrdinaryBoardContent.CreateConfiguration(request.Address);
+        BoardGenerationResult generation = landmark == null && config.Version == BoardGenerationPipeline.OrdinaryConfigurationVersion
             ? BoardGenerationPipeline.GenerateOrdinary(new BoardGenerationRequest(request.Address, config, catalog, request.RunSeed)) : null;
         if (generation != null && !generation.IsSuccess)
             throw new InvalidOperationException("Ordinary generation exhausted its attempts and fallbacks: " + generation);
-        BoardBlueprint blueprint = generation?.Blueprint ?? OrdinaryBoardGenerator.Generate(request.Address, config, catalog, request.RunSeed);
+        BoardBlueprint blueprint = landmark?.Blueprint ?? generation?.Blueprint ?? OrdinaryBoardGenerator.Generate(request.Address, config, catalog, request.RunSeed);
         if (generation != null && generation.Attempts.Count > 1)
             Debug.LogWarning("Board generation recovery: " + generation);
         RequirePrefabs(floorTiles, nameof(floorTiles));
@@ -353,8 +370,21 @@ public class BoardManager : MonoBehaviour
         stagingHolder.gameObject.SetActive(false);
         var views = new Dictionary<EntityId, GameObject>();
         Vector3 previousPlayerPosition = playerView.transform.position;
+        int previousToolSequence = runState.ToolInstanceSequence;
+        var previousTools = new List<ToolInstanceState>();
+        foreach (ToolSlotState slot in runState.ToolSlots) previousTools.Add(slot.Instance);
         try
         {
+            if (landmark != null)
+                for (int horizontal = 0; horizontal < 8; horizontal++)
+                    for (int vertical = 0; vertical < 8; vertical++)
+                    {
+                        bool hasTerrain = false;
+                        foreach (BoardEntityState entity in blueprint.Entities)
+                            if (entity.Definition.Layer == BoardLayer.Terrain && entity.Position.Equals(new GridPosition(horizontal, vertical))) hasTerrain = true;
+                        if (!hasTerrain) Instantiate(outerWallTiles[cosmeticRandom.NextInt(0, outerWallTiles.Length)],
+                            new Vector3(horizontal, vertical, 0), Quaternion.identity, stagingHolder);
+                    }
             for (int coordinateX = -1; coordinateX <= 8; coordinateX++)
                 for (int coordinateY = -1; coordinateY <= 8; coordinateY++)
                     if (coordinateX == -1 || coordinateX == 8 || coordinateY == -1 || coordinateY == 8)
@@ -371,28 +401,66 @@ public class BoardManager : MonoBehaviour
                 }
                 else
                 {
-                    GameObject prefab = ResolveOrdinaryPrefab(entity.Definition);
+                    GameObject prefab = landmarkContent?.FindPrefab(entity.Definition.ContentId) ?? ResolveOrdinaryPrefab(entity.Definition);
                     view = Instantiate(prefab, position, Quaternion.identity, stagingHolder);
                 }
                 views.Add(entity.Id, view);
                 if (entity.Definition.Traits.IsExit)
                     Instantiate(exit, position, Quaternion.identity, stagingHolder);
             }
-            BoardRuntime runtime = BlueprintBoardRuntimeComposer.Compose(request, runState, blueprint, catalog, views);
+            var groundTools = new List<GroundToolState>();
+            if (landmark != null)
+            {
+                foreach (BoardItemSpawn spawn in blueprint.Items)
+                    if (spawn.ResourceFamilyId == "tools")
+                    {
+                        ToolInstanceState instance = runState.CreateToolInstance(ToolContentCatalog.Load()[spawn.ItemDefinitionId]);
+                        groundTools.Add(new GroundToolState(spawn.EntityId, instance.InstanceId, instance.DefinitionId, instance.Charges, spawn.SourceId));
+                    }
+                foreach (LandmarkOutcomeDefinition outcome in landmark.Outcomes)
+                    foreach (BoardEntityState entity in blueprint.Entities)
+                        if (entity.Id.Equals(outcome.ExitEntityId)) CreateLandmarkLabel(outcome.Name,
+                            new Vector3(entity.Position.X, entity.Position.Y + 0.55f, -0.1f), stagingHolder);
+            }
+            BoardRuntime runtime = BlueprintBoardRuntimeComposer.Compose(request, runState, blueprint, catalog, views,
+                groundTools: groundTools, landmark: landmark);
             boardHolder = stagingHolder;
             activeRequest = request;
             activeBlueprint = blueprint;
             activeGenerationResult = generation;
+            activeLandmark = landmark;
             activeRuntime = runtime;
             stagingHolder.gameObject.SetActive(true);
             return runtime;
         }
         catch
         {
+            if (landmark != null) runState.RestoreToolState(previousToolSequence, previousTools);
             SetPlayerPosition(playerView, previousPlayerPosition);
             DestroyBoardHolder(stagingHolder);
             throw;
         }
+    }
+
+    private static void CreateLandmarkLabel(string text, Vector3 position, Transform parent)
+    {
+        var owner = new GameObject("Landmark goal");
+        owner.transform.SetParent(parent, false);
+        owner.transform.position = position;
+        TextMesh label = owner.AddComponent<TextMesh>();
+        label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        label.fontSize = 32;
+        label.characterSize = 0.08f;
+        label.anchor = TextAnchor.MiddleCenter;
+        label.alignment = TextAlignment.Center;
+        label.color = Color.white;
+        label.text = text;
+        MeshRenderer renderer = owner.GetComponent<MeshRenderer>();
+        renderer.sharedMaterial = label.font.material;
+        renderer.sortingLayerName = "Units";
+        renderer.sortingOrder = 31;
+        Vector3 size = renderer.bounds.size;
+        owner.transform.localScale = Vector3.one * Mathf.Min(1, 1.9f / Mathf.Max(0.001f, size.x), 0.25f / Mathf.Max(0.001f, size.y));
     }
 
     private GameObject ResolveOrdinaryPrefab(BoardEntityDefinition definition)
@@ -481,6 +549,7 @@ public class BoardManager : MonoBehaviour
         activeRequest = null;
         activeBlueprint = null;
         activeGenerationResult = null;
+        activeLandmark = null;
         if (boardHolder != null)
         {
             DestroyBoardHolder(boardHolder);
