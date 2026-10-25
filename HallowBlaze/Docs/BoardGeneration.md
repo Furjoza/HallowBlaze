@@ -191,7 +191,8 @@ two approaches, `(2,6)` and `(3,5)`, so one abandoned boulder cannot seal both. 
 The optional supply route can be forfeited by bad pushes; the mandatory objective remains
 available. Death/starvation cannot emit success, record an outcome or visit the destination.
 The tested costs are working authored balance, not a human playtest verdict or an exhaustive
-dynamic solvability proof. M6.5 owns the bounded solver; M6.6 owns the variant/playtest gate.
+proof against every bad command sequence. The bounded M6.5 solver below proves paths from
+specified inputs; M6.6 still owns the variant/playtest gate.
 
 ### Validation And Persistence
 
@@ -230,6 +231,93 @@ identity. Published world/node/edge/segment IDs and world version remain unchang
 the existing boulder/plate/gate prefabs plus one visual-only axe prefab. The explicit Unity menu
 `HallowBlaze/Authoring/Rebuild Radio Tower References` rebuilds only these references and axe art
 through AssetDatabase/PrefabUtility. Normal tests/gameplay never run the authoring operation.
+
+## M6.5 Bounded Landmark Solver
+
+[LandmarkSolver](../Assets/Scripts/Core/Generation/Landmarks/LandmarkSolver.cs) is an offline
+BFS over concrete domain owners, not production hint AI. Supply the selected `LandmarkBoard`,
+its nonterminal `BoardState`, matching active run, player ID, and exact Shambler states with
+already retained plans. Concrete ground axes must already have run-allocated identities.
+Supply the authoritative enemy catalog and the same `ObstacleClearingRules` used by production.
+The solver does not allocate equipment, select variants, modify the template, or replan initial
+intents. Construction captures the caller's state; later caller mutations and repeated solves
+do not modify the captured root.
+
+Each attempted edge owns a `BoardState.Clone`, independently restored run resources/equipment
+and independent Shambler states. Rest is reconstructed through existing cadence operations
+on the new enemy only; the original immutable retained intent is then locked unchanged.
+Each branch uses a fresh real `TurnController`, `TurnResolver`, shared option queries and
+`EnemyBatchTurnPhases`. Candidate order is North, East, West, South, Wait, available interactions,
+available axe actions, then all conscious pickup/replacement choices in query order. Rejected
+candidates never enter the search graph or the returned path. Other exits, death and starvation
+are terminal leaves, not intermediate states on a path to the selected exit.
+
+### Model And Equality Boundary
+
+The closed model covers current movement/Wait and Food costs, automatic and explicit food,
+single boulder pushes, linked plates/gates, manual wood clearing, axe use, two equipment slots,
+conscious axe pickup/exchange, and catalog-resolved current Shambler rules. It accepts no arbitrary
+effect callbacks or environment phase. Listeners/unmapped enemy rules, shovel equipment, caches,
+pits, unsupported interactive content and unbound non-food items fail explicitly instead of
+being silently simulated as simpler mechanics. Missing/inconsistent rosters, retained plans,
+tool ownership, run identity and authored gate bindings are invalid input. The player cannot
+already occupy an exit at the supplied nonterminal boundary.
+
+[LandmarkSolverStateKey](../Assets/Scripts/Core/Generation/Landmarks/LandmarkSolverStateKey.cs)
+captures detached structural values: bounds/player identity, Health/Food/status, ordered slots
+and charges/allocator, entity IDs/definitions/positions, obstacle work, ground tool identity/source,
+plate/gate definitions and current states, and sorted enemy identity/damage/cadence with every
+retained-intent field. Equal independently constructed keys share a hash; equality compares the
+whole structure, so collisions cannot merge distinct states. Keys are local to one fixed template,
+rule set and frozen travel context, not portable cross-rules state identities.
+
+Noise still emits, ages and clones through real domain rules, but is intentionally absent from
+the reachability key: supported Shambler rules never read noise. Listener inputs and arbitrary
+noise-dependent effects are rejected. Frozen travel/landmark records are copied, not mutated or
+rehashed per turn. Presentation-only pending transition events do not affect reachability.
+Adding a new causal mechanic requires explicit model/key/tests work; this is not M8.7 capture,
+hashing or replay, and it does not introduce a persistence dependency or save-schema change.
+
+### Budgets And Results
+
+Default limits per requested outcome are **50,000 admitted nonterminal states**, **32 accepted
+commands** and **10,000 ms**. The state count includes the root, excludes terminal leaves and
+never exceeds the supplied state cap. `ExpandedStates` counts dequeued states. Time is checked
+before expansion and before/after each bounded synchronous controller attempt; it is cooperative,
+not an OS watchdog or a latency SLA. Zero milliseconds deliberately tests an immediate stop.
+
+`Solved` carries a shortest accepted-command path. `NoSolution` means all reachable modeled
+nonterminal states were exhausted. `StateLimit`, `DepthLimit` and `TimeLimit` are incomplete
+searches, never evidence of impossibility. Failures retain template/version/variant, outcome and
+the full `BoardAddress` including seed, visited/expanded counts and elapsed time. The minimal
+negative fixture is the authored `landmark.solver-test/1/blocked`, seed 64, in the owning tests;
+it exhausts rather than timing out. This does not automatically minimize arbitrary future puzzles.
+
+`SolutionPath` is an ordered read-only list of local decisions. Call each step's `CreateCommand`
+against the equivalent fresh board/run/player, then resolve once with the real controller.
+Pickup decisions are rebound to the current exact ground snapshot and slot preconditions;
+using stale object references from a different board would violate ordinary pickup validation.
+There is no command codec, exported trace, save snapshot, runtime recorder or player-facing UI.
+
+### Measured Radio Tower Paths
+
+Final focused Unity 6000.3.21f1 validation on 2026-10-21 used template `landmark.radio-tower/1/base`,
+run `solver-tower`, root/board seed 64, day 5, initial Health/Food 100, damage-10 Shambler 2 and
+the published clearing rules. Timings are observed single-run wall times, not deterministic outputs.
+`T`, `P`, `A`, `C` and cardinal letters retain the meanings in the layout table above.
+
+| Requested Outcome / Input | Accepted Path | Visited / Expanded | Elapsed | Final Food |
+| --- | --- | --- | --- | --- |
+| `tower.arrival`, optional ground axe present | `NNNNNEE` | 219 / 114 | 218 ms | 93 |
+| `tower.supplies`, optional ground axe present | `TNNPNEEAENE` | 1838 / 1364 | 606 ms | 109 |
+| `tower.supplies`, axe absent and slots empty | `NNPNEECCCENE` | 1324 / 1035 | 357 ms | 108 |
+
+Tests discover these paths rather than feeding the intended routes to BFS, then execute each
+decision on independent owners through the production rule catalog/controller. Repeated searches
+match status, path and visited/expanded counts; elapsed time is not compared. Required arrival
+uses no tool; the optional supply path also has a checked manual alternative. This proves these
+starting fixtures have solutions within budget, not that every possible player mistake is recoverable
+or that humans understand the costs. M4.9 and M6.6 retain their human gates.
 
 ## Generic items and initial supply
 
