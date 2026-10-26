@@ -118,19 +118,23 @@ resolved exit to a named persistent result for the production template described
 M6.1 adds no run/profile DTO fields, migration, reset or mid-board save. Existing run v4 travel
 data round-trips the fixture's active segment/configuration/seed and reconstructs the same board
 against the same frozen placement. M6.4 adds compatible run v5 selection/outcome fields as
-described below; M6.6 must also pin any future random selection, not reroll it on load.
+described below; M6.6 pins new random selections and reuses them on load.
 Do not change a published mapping/layout under the same generation contract. The authoring
 fixture is not registered with `GameManager`, the scene bootstrap or ordinary fallback selection.
 
 ## Radio Tower Landmark
 
-M6.4 publishes one authored `landmark.radio-tower` template, content version `1`, variant `base`:
+M6.4 initially published one authored `landmark.radio-tower` template, content version `1`, variant `base`:
 [layout](../Assets/GameData/Landmarks/radio-tower-template.json) and
 [assignment](../Assets/GameData/Landmarks/radio-tower-placement.json).
 It replaces only `segment.ridge-radio-tower.arrival`, the fifth and final board of
 `road.ridge-radio-tower` in `world-1/1`. The four inbound approach boards remain ordinary v2;
 all intended atlas routes reach this edge on day five. No day/modulo test or extra travel day
 selects the landmark. The earlier sanity fixture remains separate.
+
+M6.6 adds `east-guard` and `north-push` without changing the old `base` object or saved
+selection contract. The diagram and original route table below describe `base`; the
+[current variant matrix and pending human gate](Validation/M6.6.md) cover all three layouts.
 
 ### Layout
 
@@ -318,6 +322,34 @@ match status, path and visited/expanded counts; elapsed time is not compared. Re
 uses no tool; the optional supply path also has a checked manual alternative. This proves these
 starting fixtures have solutions within budget, not that every possible player mistake is recoverable
 or that humans understand the costs. M4.9 and M6.6 retain their human gates.
+
+## M6.6 Curated Landmark Variants
+
+The published ordinal variant set is `base`, `east-guard`, `north-push`. Each explicitly authors
+all placements; floor topology, exit identities, rewards and shared rules are unchanged.
+`east-guard` moves the Shambler to `(6,4)` and axe to `(2,2)`; `north-push` moves the boulder
+to `(3,4)`. There is no random per-entity shuffle or variant-only mechanic.
+
+`LandmarkPlacement.SelectVariant(address, runSeed)` uses an independent `landmark-variant-v1`
+PCG32 stream addressed by world/template identity and the complete board address. One draw
+indexes ordinal-sorted variant IDs, independent of JSON enumeration and cosmetic randomness.
+The API returns a decision; it does not mutate/persist Session state. Production uses an
+existing `RunState.ActiveLandmark` first, otherwise selects and checkpoints through the current
+travel service before publication/input. Continue never rerolls an existing selection. Run v5,
+profile v2, old `base/1`, world/node/edge/segment IDs and ordinary generation remain compatible.
+The expanded set intentionally applies only to new unpinned decisions, not saved selections.
+
+All three variants solve both actual outcomes within the M6.5 budgets with and without the axe,
+then execute those found commands on fresh owners. Arrival remains seven tool-free moves.
+Supply paths cost 11/12 commands for base/east-guard with/without the axe and 13/14 for north-push;
+each receives +20 Food, and axe paths spend one charge. The shortest east-guard axe path takes
+10 HP damage: shortest command count does not mean least damage. A separate reduced geometric
+enumeration confirms mandatory-exit reachability from all reached nonterminal boulder/wood
+states (428, 428 and 248 respectively), not survival under arbitrary mistakes/resource depletion.
+
+The [M6.6 protocol and evidence](Validation/M6.6.md) contain the exact seed vector, paths,
+costs, model limits and isolated session preparation. Technical tests passed; participants and
+sessions are zero. M6.6 remains Active and the human landmark gate Pending, not accepted.
 
 ## Generic items and initial supply
 

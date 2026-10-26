@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using HallowBlaze.Core.Random;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Generation;
@@ -21,6 +22,47 @@ namespace HallowBlaze.Tests.EditMode
     /// <summary>Verifies authored templates use ordinary blueprints without scene state, runtime outcomes or tool-dependent mandatory exits.</summary>
     public sealed class LandmarkTemplateTests
     {
+        /// <summary>Authored enumeration order and unrelated RNG cursors cannot reroll the full-address landmark decision.</summary>
+        [Test]
+        public void LandmarkVariantSelectionIsAddressedAndOrderIndependent()
+        {
+            WorldDefinition world = WorldDefinitionJson.Deserialize(FixtureText("sanity-world.json"));
+            JObject json = JObject.Parse(FixtureText("sanity-template.json"));
+            JObject original = (JObject)json["variants"][0];
+            var variants = new JArray();
+            foreach (string id in new[] { "base", "upper-guard", "south-rations" })
+            {
+                var variant = (JObject)original.DeepClone();
+                variant["id"] = id;
+                variants.Add(variant);
+            }
+            json["variants"] = variants;
+            LandmarkTemplate first = LandmarkTemplateJson.Deserialize(json.ToString(), Catalog());
+            json["variants"] = new JArray(variants.Reverse().Select(variant => variant.DeepClone()));
+            LandmarkTemplate reversed = LandmarkTemplateJson.Deserialize(json.ToString(), Catalog());
+            LandmarkPlacement placement = LandmarkTemplateJson.DeserializePlacement(FixtureText("sanity-placement.json"), world, first);
+            LandmarkPlacement reordered = LandmarkTemplateJson.DeserializePlacement(FixtureText("sanity-placement.json"), world, reversed);
+            var address = new BoardAddress("selection-test", "leg.1", placement.EdgeId, placement.SegmentId, 5, first.Config.Id, first.Config.Version, 64);
+            var seen = new HashSet<string>();
+            for (int seed = 0; seed < 64; seed++)
+            {
+                LandmarkRecord selected = placement.SelectVariant(address, seed);
+                LandmarkRecord reorderedSelection = reordered.SelectVariant(address, seed);
+                Assert.That(reorderedSelection.Address, Is.EqualTo(selected.Address));
+                Assert.That(reorderedSelection.TemplateId, Is.EqualTo(selected.TemplateId));
+                Assert.That(reorderedSelection.TemplateVersion, Is.EqualTo(selected.TemplateVersion));
+                Assert.That(reorderedSelection.VariantId, Is.EqualTo(selected.VariantId));
+                var unrelated = new RandomStreamProvider(seed).Create(RandomStreamProvider.StreamId("cosmetic-board", "selection-test"));
+                for (int draw = 0; draw < 20; draw++) unrelated.NextInt(0, 100);
+                Assert.That(placement.SelectVariant(address, seed).VariantId, Is.EqualTo(selected.VariantId));
+                Assert.That(selected.Address, Is.SameAs(address));
+                seen.Add(selected.VariantId);
+            }
+            Assert.That(seen, Is.EquivalentTo(first.VariantIds));
+            Assert.Throws<ArgumentException>(() => placement.SelectVariant(new BoardAddress("selection-test", "leg.1", "foreign",
+                placement.SegmentId, 5, first.Config.Id, first.Config.Version, 64), 64));
+        }
+
         /// <summary>Authored pressure links survive independent reconstruction and never leak mutations between boards.</summary>
         [Test]
         public void ExplicitPlateGateBindingsSurviveTemplateReconstruction()

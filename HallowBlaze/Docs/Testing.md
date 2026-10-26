@@ -1,5 +1,36 @@
 # HallowBlaze Testing
 
+## M6.6 Curated Landmark Variants
+
+[Protocol, variant/cost matrix and actual evidence](Validation/M6.6.md) separate technical
+validation from the Pending human gate. Three authored variants solve and execute both outcomes
+with and without the axe. Focused coverage includes addressed selection/order independence,
+stable golden vectors, old saved selections, checkpoint-before-presentation, failure rollback,
+Continue without reroll/extra writes, all outcome branches and the bounded geometric softlock audit.
+
+```powershell
+$project = (Get-Location).Path
+unity test $project --mode EditMode --filter 'HallowBlaze.Tests.EditMode.LandmarkTemplateTests;HallowBlaze.Tests.EditMode.LandmarkSolverTests;HallowBlaze.Tests.EditMode.RadioTowerLandmarkTests;HallowBlaze.Tests.EditMode.LandmarkProgressTests' --output "$env:TEMP/HB-M66-domain-current.xml" -- -nographics -logFile "$env:TEMP/HB-M66-domain-current.log"
+unity test $project --mode PlayMode --filter HallowBlaze.Tests.PlayMode.BoardRuntimeStartupTests.LandmarkProduction --output "$env:TEMP/HB-M66-production-current.xml" -- -logFile "$env:TEMP/HB-M66-production-current.log"
+unity test $project --mode EditMode --output "$env:TEMP/HB-M66-editmode-current.xml" -- -nographics -logFile "$env:TEMP/HB-M66-editmode-current.log"
+unity test $project --mode PlayMode --output "$env:TEMP/HB-M66-playmode-current.xml" -- -logFile "$env:TEMP/HB-M66-playmode-current.log"
+```
+
+Run sequentially against this exact project with no other Editor. Inspect fresh XML for expected
+identities, nonzero counts and results. Do not add `-nographics` to the PlayMode capture gate.
+On 2026-10-21 the final production group passed **7/7**, full EditMode passed **1237 with zero
+failures and the one existing Explicit 10000-seed skip**, and full graphics PlayMode passed
+**188/188**. No compile errors were reported. The code suites preceded the authorized removal
+of Unity's generated analytics define; only that token and Markdown changed afterward.
+
+All three variants have neutral before and moderator-only gate-after captures at desktop/portrait
+sizes, plus a tested explicit exporter for isolated pinned profile/run boundaries. The exporter
+does not launch gameplay or redirect the player's storage: follow the protocol's isolation
+preflight, use a fresh temporary session per attempt, and never overwrite the real profile.
+Captures and automated execution do not count as sessions. The owner authorized direct work and
+self-review, not an independent verdict. M6.6 is Active with zero human participants; M4.9 is
+still Pending and M7 is not authorized by these checks.
+
 ## M6.5 Bounded Landmark Solver
 
 [LandmarkSolverTests](../Assets/Tests/EditMode/LandmarkSolverTests.cs) checks real-controller
@@ -28,7 +59,8 @@ one pre-existing Explicit 10000-seed milestone skip**. Source compiled without n
 diagnostics. PlayMode was not rerun: only the offline tool/tests/docs changed, not runtime
 composition, scenes, UI or saves. The owner authorized direct replacement of the failed local
 attempt followed by validation and self-review; no independent review verdict is claimed.
-Run v5/profile v2 and M8.7 Deferred remain unchanged; M4.9 is Pending and M6.6 is Planned.
+Run v5/profile v2 and M8.7 Deferred remain unchanged. At the M6.5 closeout M4.9 was Pending
+and M6.6 was Planned; the later owner-authorized M6.6 work is recorded above.
 
 ## M6.4 Radio Tower
 
