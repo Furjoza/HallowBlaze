@@ -1,4 +1,6 @@
 using System;
+using System.Globalization;
+using HallowBlaze.Core.Random;
 using HallowBlaze.Core.State;
 using HallowBlaze.Core.World;
 
@@ -46,16 +48,39 @@ namespace HallowBlaze.Core.Generation.Landmarks
         public string TemplateId => template.Id;
         /// <summary>Gets the selected published template version.</summary>
         public int TemplateVersion => template.Version;
-        /// <summary>Gets the explicitly selected variant key; random selection is not implemented here.</summary>
+        /// <summary>Gets the explicit authoring/default variant used by direct construction, not a saved random selection.</summary>
         public string VariantId { get; }
+
+        /// <summary>Creates a fresh addressed selection from the ordinal authored variant set using an independent landmark PCG32 stream.</summary>
+        /// <param name="address">The complete assigned board identity; no node/day-only or seed-only substitution is allowed.</param>
+        /// <param name="runSeed">The persisted run root seed, independent of cosmetic/layout stream cursors.</param>
+        /// <returns>An immutable decision that Session must durably checkpoint before rendering. Existing saved selections must be reused instead.</returns>
+        /// <exception cref="ArgumentException">The address does not belong to this assignment or generation configuration.</exception>
+        public LandmarkRecord SelectVariant(BoardAddress address, int runSeed)
+        {
+            ValidateAddress(address);
+            string streamId = RandomStreamProvider.StreamId("landmark-variant-v1", WorldDefinitionId,
+                WorldVersion.ToString(CultureInfo.InvariantCulture), TemplateId, TemplateVersion.ToString(CultureInfo.InvariantCulture),
+                address.RunId, address.LegId, address.EdgeId, address.SegmentId,
+                address.DayNumber.ToString(CultureInfo.InvariantCulture), address.GenerationConfigurationId,
+                address.GenerationVersion.ToString(CultureInfo.InvariantCulture), address.BoardSeed.ToString(CultureInfo.InvariantCulture));
+            int index = new RandomStreamProvider(runSeed).Create(streamId).NextInt(0, template.VariantIds.Count);
+            return new LandmarkRecord(address, TemplateId, TemplateVersion, template.VariantIds[index]);
+        }
 
         /// <summary>Builds only for the assigned active edge/segment; preserves all address fields including run, leg, day and seed.</summary>
         public LandmarkBoard CreateBoard(BoardAddress address)
         {
-            if (address == null) throw new ArgumentNullException(nameof(address));
-            if (address.EdgeId != EdgeId || address.SegmentId != SegmentId)
-                throw new ArgumentException("BoardAddress does not identify the assigned landmark segment.", nameof(address));
+            ValidateAddress(address);
             return template.CreateBoard(address, VariantId);
+        }
+
+        private void ValidateAddress(BoardAddress address)
+        {
+            if (address == null) throw new ArgumentNullException(nameof(address));
+            if (address.EdgeId != EdgeId || address.SegmentId != SegmentId ||
+                address.GenerationConfigurationId != template.Config.Id || address.GenerationVersion != template.Config.Version)
+                throw new ArgumentException("BoardAddress does not identify the assigned landmark segment.", nameof(address));
         }
     }
 }

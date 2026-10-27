@@ -141,6 +141,123 @@ namespace HallowBlaze.Tests.EditMode
             TestContext.WriteLine(result + " path=" + string.Join("; ", result.SolutionPath));
         }
 
+        /// <summary>Every curated variant and both tool-availability states solve each outcome, then execute on fresh production-rule owners.</summary>
+        [TestCase("base", false)]
+        [TestCase("base", true)]
+        [TestCase("east-guard", false)]
+        [TestCase("east-guard", true)]
+        [TestCase("north-push", false)]
+        [TestCase("north-push", true)]
+        public void CuratedVariantsSolveAndExecuteBothOutcomes(string variantId, bool withoutAxe)
+        {
+            foreach (string outcomeId in new[] { "tower.arrival", "tower.supplies" })
+            {
+                var source = new Tower(variantId);
+                Assert.That(source.Landmark.Validate(RadioTowerLandmark.CreateCatalog()).IsValid, Is.True, variantId);
+                if (withoutAxe) Assert.That(source.Board.TryRemove(new EntityId(20)), Is.True);
+                LandmarkSolverResult result = source.Solver().Solve(outcomeId);
+                Assert.That(result.Status, Is.EqualTo(LandmarkSolverStatus.Solved), result.ToString());
+                Assert.That(result.VisitedStates, Is.InRange(1, 50000));
+                Assert.That(result.ElapsedMilliseconds, Is.LessThan(10000));
+                Assert.That(result.SolutionPath.Count, Is.InRange(1, 32));
+                var fresh = new Tower(variantId);
+                if (withoutAxe) Assert.That(fresh.Board.TryRemove(new EntityId(20)), Is.True);
+                List<GameEvent> events = fresh.Execute(result);
+                Assert.That(events.OfType<ExitReachedEvent>().Single().ExitId,
+                    Is.EqualTo(source.Landmark.Outcomes.Single(outcome => outcome.Id == outcomeId).ExitEntityId));
+                Assert.That(fresh.Run.Health, Is.GreaterThan(0), result.ToString());
+                Assert.That(fresh.Controller.IsTerminal, Is.True);
+                int reward = outcomeId == "tower.supplies" ? 20 : 0;
+                Assert.That(fresh.Run.Food, Is.EqualTo(100 + reward - result.SolutionPath.Count));
+                if (outcomeId == "tower.arrival")
+                {
+                    Assert.That(events.OfType<BoulderPushedEvent>(), Is.Empty);
+                    Assert.That(events.OfType<ToolUsedEvent>(), Is.Empty);
+                    Assert.That(fresh.Run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
+                    Assert.That(fresh.Board.TryGetEntity(new EntityId(21), out _), Is.True);
+                }
+                else
+                {
+                    Assert.That(events.OfType<BoulderPushedEvent>(), Is.Not.Empty);
+                    Assert.That(events.OfType<GateChangedEvent>().Any(change => change.Gate.IsOpen), Is.True);
+                    Assert.That(fresh.Board.TryGetEntity(new EntityId(21), out _), Is.False);
+                    Assert.That(fresh.Board.TryGetEntity(new EntityId(11), out _), Is.False);
+                    if (withoutAxe) Assert.That(events.OfType<ToolUsedEvent>(), Is.Empty);
+                    else Assert.That(events.OfType<ToolChargeSpentEvent>().Count(), Is.EqualTo(1));
+                }
+                TestContext.WriteLine(result + " noAxe=" + withoutAxe + " health=" + fresh.Run.Health +
+                    " food=" + fresh.Run.Food + " path=" + string.Join("; ", result.SolutionPath));
+            }
+        }
+
+        /// <summary>All reachable geometric player/boulder/work states retain a tool-free mandatory exit, independently of survival resources.</summary>
+        [TestCase("base")]
+        [TestCase("east-guard")]
+        [TestCase("north-push")]
+        public void CuratedBoulderOccupancyCannotSealMandatoryExit(string variantId)
+        {
+            var scenario = new Tower(variantId);
+            BoardState initial = scenario.Board.Clone();
+            foreach (BoardEntityState entity in initial.GetEntities())
+                if (entity.Definition.Kind.Equals(EntityKind.Enemy) || entity.Definition.Layer == BoardLayer.Item)
+                    Assert.That(initial.TryRemove(entity.Id), Is.True);
+            var interactions = new InteractionQuery(new IInteractionAction[]
+                { new BoulderPushAction(), new ClearObstacleAction(AxeContent.LoadRules(), false) });
+            var states = new Dictionary<(GridPosition Player, GridPosition Boulder, int Work), BoardState>();
+            var predecessors = new Dictionary<(GridPosition Player, GridPosition Boulder, int Work),
+                HashSet<(GridPosition Player, GridPosition Boulder, int Work)>>();
+            var winning = new HashSet<(GridPosition Player, GridPosition Boulder, int Work)>();
+            var frontier = new Queue<(GridPosition Player, GridPosition Boulder, int Work)>();
+            (GridPosition Player, GridPosition Boulder, int Work) Key(BoardState board)
+            {
+                board.TryGetEntity(new EntityId(1), out BoardEntityState player);
+                board.TryGetEntity(new EntityId(10), out BoardEntityState boulder);
+                return (player.Position, boulder.Position, board.TryGetEntity(new EntityId(11), out _) ? board.GetObstacleWork(new EntityId(11)) : -1);
+            }
+            var root = Key(initial);
+            states.Add(root, initial);
+            predecessors.Add(root, new HashSet<(GridPosition, GridPosition, int)>());
+            frontier.Enqueue(root);
+            while (frontier.Count > 0)
+            {
+                var current = frontier.Dequeue();
+                BoardState board = states[current];
+                var run = new RunState("geometry-only", 64, new RunStateConfiguration(100, 100, 0, "start"));
+                var commands = new List<PlayerCommand>(new[] { Direction.North, Direction.East, Direction.West, Direction.South }
+                    .Select(direction => new MoveCommand(direction)));
+                commands.AddRange(interactions.GetOptions(board, run, new EntityId(1)).Where(option => option.IsAvailable).Select(option => option.CreateCommand()));
+                foreach (PlayerCommand command in commands)
+                {
+                    BoardState next = board.Clone();
+                    var edgeRun = new RunState("geometry-only", 64, new RunStateConfiguration(100, 100, 0, "start"));
+                    var controller = new TurnController(next, edgeRun, new EntityId(1), new TurnResolver(interactions: interactions));
+                    TurnResult result = controller.Resolve(command);
+                    if (!result.Accepted) continue;
+                    if (controller.IsTerminal)
+                    {
+                        if (result.Events.OfType<ExitReachedEvent>().Any(exit => exit.ExitId.Equals(new EntityId(151)))) winning.Add(current);
+                        continue;
+                    }
+                    var nextKey = Key(next);
+                    if (!states.ContainsKey(nextKey))
+                    {
+                        Assert.That(states.Count, Is.LessThan(16384), variantId + " geometry budget");
+                        states.Add(nextKey, next);
+                        predecessors.Add(nextKey, new HashSet<(GridPosition, GridPosition, int)>());
+                        frontier.Enqueue(nextKey);
+                    }
+                    predecessors[nextKey].Add(current);
+                }
+            }
+            foreach (var state in winning) frontier.Enqueue(state);
+            while (frontier.Count > 0)
+                foreach (var previous in predecessors[frontier.Dequeue()])
+                    if (winning.Add(previous)) frontier.Enqueue(previous);
+            var blocked = states.Keys.Where(state => !winning.Contains(state)).ToArray();
+            Assert.That(blocked, Is.Empty, variantId + " tool-free geometry softlock: " + string.Join("; ", blocked.Take(5)));
+            TestContext.WriteLine(variantId + " geometricStates=" + states.Count + " mandatoryReachable=" + winning.Count);
+        }
+
         /// <summary>The copy keeps an explicitly retained Wait and its cadence; initial replanning would make the two-step escape lethal.</summary>
         [TestCase(false)]
         [TestCase(true)]
@@ -288,12 +405,12 @@ namespace HallowBlaze.Tests.EditMode
             internal readonly TurnController Controller;
             private readonly ObstacleClearingRules clearing = AxeContent.LoadRules();
 
-            internal Tower()
+            internal Tower(string variantId = "base")
             {
                 LandmarkTemplate template = LandmarkTemplateJson.Deserialize(File.ReadAllText(Path.Combine(Application.dataPath,
                     "GameData/Landmarks/radio-tower-template.json")), RadioTowerLandmark.CreateCatalog());
                 Landmark = template.CreateBoard(new BoardAddress(Run.RunId, "leg.1", "road.ridge-radio-tower",
-                    "segment.ridge-radio-tower.arrival", 5, template.Config.Id, 1, 64), "base");
+                    "segment.ridge-radio-tower.arrival", 5, template.Config.Id, 1, 64), variantId);
                 Board = Landmark.CreateState();
                 ToolInstanceState axe = Run.CreateToolInstance(ToolContentCatalog.Load()["axe.basic"]);
                 Assert.That(Board.TryBindGroundTool(new GroundToolState(new EntityId(20), axe.InstanceId, axe.DefinitionId,

@@ -189,6 +189,19 @@ Do not change:
 
 unless the active task requires it.
 
+### Known Unity-generated symbol exception
+
+Unity may automatically add or remove the exact semicolon-delimited token
+`SENTIS_ANALYTICS_ENABLED` in `Standalone` under `scriptingDefineSymbols` in
+`ProjectSettings/ProjectSettings.asset`. Ignore only that token when checking baseline
+cleanliness, scope integrity, and acceptance. Its recurrence alone does not require a stop
+or another user approval.
+
+If the token was absent from the recorded baseline, removing only its task-added occurrence
+to keep the candidate scoped is permitted without further approval. Preserve every other
+symbol and setting. This exception does not allow ignoring the entire file, other define
+symbols, package changes, or analytics/telemetry behavior in project code.
+
 Do not mix mass reserialization with unrelated gameplay changes.
 
 Text/YAML serialization does not make blind merge conflict resolution safe.

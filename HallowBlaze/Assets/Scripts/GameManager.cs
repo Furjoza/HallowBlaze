@@ -489,7 +489,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             if (request.Address?.GenerationConfigurationId == RadioTowerLandmark.ConfigurationId)
             {
                 var placement = RadioTowerLandmark.Load().CreatePlacement(worldDefinition);
-                var selected = new LandmarkRecord(request.Address, placement.TemplateId, placement.TemplateVersion, placement.VariantId);
+                var selected = run.ActiveLandmark ?? placement.SelectVariant(request.Address, run.RunSeed);
                 SaveStoreResult chosen = worldMap.Travel.SelectLandmark(request, selected);
                 if (chosen.IsFailure)
                 {

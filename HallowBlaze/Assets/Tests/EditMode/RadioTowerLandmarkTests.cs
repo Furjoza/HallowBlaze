@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -5,6 +6,7 @@ using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Generation.Landmarks;
 using HallowBlaze.Core.Generation.Validation;
+using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.State;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.Turns.Contracts;
@@ -22,6 +24,76 @@ namespace HallowBlaze.Tests.EditMode
     /// <summary>Verifies the actual published landmark data and intended shared-resolver command paths, not a substitute test layout.</summary>
     public sealed class RadioTowerLandmarkTests
     {
+        /// <summary>Exactly three structurally distinct curated layouts retain one shared content contract and both outcome identities.</summary>
+        [Test]
+        public void CuratedCatalogAndSelectionVectorsAreStable()
+        {
+            LandmarkTemplate template = Template();
+            Assert.That(template.VariantIds, Is.EqualTo(new[] { "base", "east-guard", "north-push" }));
+            Assert.That(template.VariantIds.Select(id => template.CreateBoard(Address(), id).Blueprint.ContentHash).Distinct().Count(), Is.EqualTo(3));
+            WorldDefinition world = WorldDefinitionJson.Deserialize(File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json")));
+            LandmarkPlacement placement = RadioTowerLandmark.Load().CreatePlacement(world);
+            var selected = new List<string>();
+            for (int seed = 0; seed < 8; seed++) selected.Add(placement.SelectVariant(Address(), seed).VariantId);
+            Assert.That(selected, Is.EqualTo(new[] { "north-push", "base", "east-guard", "north-push", "north-push", "east-guard", "north-push", "base" }));
+            TestContext.WriteLine("radio-tower-test address seed=64, root seeds 0..7: " + string.Join(",", selected));
+            Assert.That(selected.Distinct(), Is.EquivalentTo(template.VariantIds));
+        }
+
+        /// <summary>Moderator fixtures use independent external profiles and exact persisted variants without touching real player storage.</summary>
+        [Test]
+        public void CuratedPlaytestSavesAreIsolatedAndPinned()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "HB-M66-export-check-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                WritePlaytestBoundaries(root);
+                foreach (string variantId in Template().VariantIds)
+                {
+                    var store = new FileSystemSaveStore(Path.Combine(root, variantId));
+                    Assert.That(store.LoadProfile().IsSuccess, Is.True);
+                    RunState run = store.LoadRun().Data;
+                    Assert.That(run.ActiveLandmark.VariantId, Is.EqualTo(variantId));
+                    Assert.That(run.ActiveLandmark.Address, Is.EqualTo(BoardAddressFactory.CreateFromState(run)));
+                    Assert.That(run.Health, Is.EqualTo(100));
+                    Assert.That(run.Food, Is.EqualTo(100));
+                    Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
+                    Assert.That(run.ToolInstanceSequence, Is.Zero);
+                    Assert.That(run.CompletedLandmarks, Is.Empty);
+                    Assert.That(store.LoadProfile().Data.GetNodeDiscoveryState("landmark.radio-tower"), Is.EqualTo(NodeDiscoveryState.Unknown));
+                }
+            }
+            finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
+        /// <summary>Exports fresh moderator-only boundaries outside the project; does not launch gameplay or change persistence overrides.</summary>
+        [MenuItem("HallowBlaze/Playtests/M6.6/Export isolated sessions")]
+        public static void ExportCuratedPlaytestSessions()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "HB-M66-sessions-" + Guid.NewGuid().ToString("N"));
+            WritePlaytestBoundaries(root);
+            Debug.Log("M6.6 isolated session boundaries: " + root);
+        }
+
+        private static void WritePlaytestBoundaries(string root)
+        {
+            WorldDefinition world = WorldDefinitionJson.Deserialize(File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json")));
+            world.TryGetEdge("road.ridge-radio-tower", out WorldEdgeDefinition edge);
+            foreach (string variantId in Template().VariantIds)
+            {
+                var run = new RunState("m66-session", 64, new RunStateConfiguration(100, 100, 4, "forest.ridge"));
+                run.StartLeg(edge.EdgeId, edge.FromNodeId, edge.ToNodeId, edge.Segments.Select(segment =>
+                    new RouteSegmentState(segment.SegmentId, segment.GenerationConfigurationId, segment.GenerationVersion)));
+                run.TryConsumeIntro(run.ActiveLeg.LegId);
+                while (!run.ActiveLeg.IsFinalSegment) run.TryAdvanceSegment(run.ActiveLeg.LegId, run.ActiveLeg.CurrentSegment.SegmentId);
+                if (!run.TrySelectLandmark(new LandmarkRecord(BoardAddressFactory.Create(run, world), "landmark.radio-tower", 1, variantId)))
+                    throw new InvalidOperationException("The playtest boundary could not pin its authored variant.");
+                var store = new FileSystemSaveStore(Path.Combine(root, variantId));
+                if (!store.SaveProfile(new ProfileState("m66-test-profile", world.WorldDefinitionId, world.Version)).IsSuccess || !store.SaveRun(run).IsSuccess)
+                    throw new IOException("The isolated playtest boundary could not be saved.");
+            }
+        }
+
         /// <summary>Only an optional gated exit is exempt from ordinary static reachability; all other catalog/budget/opening rules remain enforced.</summary>
         [Test]
         public void AuthoredContentPassesSharedValidationWithToolFreeFallback()
@@ -173,7 +245,7 @@ namespace HallowBlaze.Tests.EditMode
         {
             RadioTowerLandmark empty = ScriptableObject.CreateInstance<RadioTowerLandmark>();
             try { Assert.Throws<System.InvalidOperationException>(() => empty.FindPrefab(contentId)); }
-            finally { Object.DestroyImmediate(empty); }
+            finally { UnityEngine.Object.DestroyImmediate(empty); }
             Assert.That(RadioTowerLandmark.Load().FindPrefab(contentId), Is.Not.Null);
         }
 
@@ -242,7 +314,7 @@ namespace HallowBlaze.Tests.EditMode
                 texture.Apply();
                 File.WriteAllBytes("Assets/Sprites/LandmarkAxe.png", texture.EncodeToPNG());
             }
-            finally { Object.DestroyImmediate(texture); }
+            finally { UnityEngine.Object.DestroyImmediate(texture); }
             AssetDatabase.ImportAsset("Assets/Sprites/LandmarkAxe.png", ImportAssetOptions.ForceSynchronousImport);
             var importer = (TextureImporter)AssetImporter.GetAtPath("Assets/Sprites/LandmarkAxe.png");
             importer.textureType = TextureImporterType.Sprite;
@@ -260,7 +332,7 @@ namespace HallowBlaze.Tests.EditMode
                 renderer.sortingLayerName = "Units";
                 PrefabUtility.SaveAsPrefabAsset(axe, "Assets/Prefabs/Tiles/LandmarkAxe.prefab");
             }
-            finally { Object.DestroyImmediate(axe); }
+            finally { UnityEngine.Object.DestroyImmediate(axe); }
             const string path = folder + "/RadioTowerLandmark.asset";
             RadioTowerLandmark asset = AssetDatabase.LoadAssetAtPath<RadioTowerLandmark>(path);
             if (asset == null) { asset = ScriptableObject.CreateInstance<RadioTowerLandmark>(); AssetDatabase.CreateAsset(asset, path); }

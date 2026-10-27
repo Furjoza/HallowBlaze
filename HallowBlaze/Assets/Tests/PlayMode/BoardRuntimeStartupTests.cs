@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Generation;
+using HallowBlaze.Core.Generation.Landmarks;
 using HallowBlaze.Core.Generation.Pipeline;
 using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.Persistence;
@@ -1111,6 +1112,94 @@ namespace HallowBlaze.Tests.PlayMode
         }
 
 #if UNITY_EDITOR
+        /// <summary>New decisions are addressed and saved before publication; failed selection and Continue cannot reroll or duplicate the checkpoint.</summary>
+        [UnityTest]
+        public IEnumerator LandmarkProduction_NewVariantSelectionIsCheckpointedAndRepeatable()
+        {
+            var observed = new HashSet<string>();
+            for (int seed = 0; seed < 8; seed++)
+            {
+                Component manager = CreateLandmarkManager(out GameSession session, out TravelFaultStore store, null, seed);
+                WorldDefinition world = GetManagerField<WorldDefinition>(manager, "worldDefinition");
+                BoardRequest request = BoardRequest.CreateFromRun(session.ActiveRun, world);
+                LandmarkRecord expected = RadioTowerLandmark.Load().CreatePlacement(world).SelectVariant(request.Address, seed);
+                store.FailRun = true;
+                LogAssert.Expect(LogType.Error, "Landmark selection checkpoint failed: IoError");
+                InvokeManager(manager, "InitGame");
+                Assert.That(session.ActiveRun.ActiveLandmark, Is.Null);
+                Assert.That(store.LoadRun().Data.ActiveLandmark, Is.Null);
+                Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Null);
+                Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
+                store.FailRun = false;
+                int before = store.RunSaves;
+                InvokeManager(manager, "InitGame");
+                BoardRuntime first = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+                Assert.That(first, Is.Not.Null);
+                Assert.That(store.RunSaves, Is.EqualTo(before + 1));
+                LandmarkRecord selected = store.LoadRun().Data.ActiveLandmark;
+                Assert.That(selected.VariantId, Is.EqualTo(expected.VariantId));
+                Assert.That(selected.Address, Is.EqualTo(expected.Address));
+                observed.Add(selected.VariantId);
+                string hash = GetProperty<BoardBlueprint>(GetManagerField<Component>(manager, "boardScript"), "ActiveBlueprint").ContentHash;
+                first.BoardState.TryGetGroundTool(new EntityId(20), out GroundToolState firstAxe);
+                RunLifecycleService lifecycle = GetManagerField<RunLifecycleService>(manager, "lifecycle");
+                Assert.That(lifecycle.ExitToMenu().IsSuccess, Is.True);
+                Assert.That(lifecycle.ContinueRun().IsSuccess, Is.True);
+                before = store.RunSaves;
+                InvokeManager(manager, "InitGame");
+                BoardRuntime restored = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+                Assert.That(restored, Is.Not.Null);
+                Assert.That(store.RunSaves, Is.EqualTo(before), "Continue must not save another selection.");
+                Assert.That(session.ActiveRun.ActiveLandmark.VariantId, Is.EqualTo(selected.VariantId));
+                Assert.That(GetProperty<BoardBlueprint>(GetManagerField<Component>(manager, "boardScript"), "ActiveBlueprint").ContentHash, Is.EqualTo(hash));
+                restored.BoardState.TryGetGroundTool(new EntityId(20), out GroundToolState restoredAxe);
+                Assert.That(restoredAxe.InstanceId, Is.EqualTo(firstAxe.InstanceId));
+                Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+                Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
+                UnityEngine.Object.DestroyImmediate(manager.gameObject);
+                GameObject player = GameObject.FindGameObjectWithTag("Player");
+                if (player != null) UnityEngine.Object.DestroyImmediate(player);
+                yield return null;
+            }
+            Assert.That(observed, Is.EquivalentTo(RadioTowerLandmark.Load().ReadTemplate().VariantIds));
+        }
+
+        /// <summary>Saved explicit variants, including old base decisions, survive Continue and commit only their actually resolved outcome.</summary>
+        [UnityTest]
+        public IEnumerator LandmarkProduction_CuratedVariantsExecuteSolverPathsAndPreserveSavedSelection()
+        {
+            foreach (string variantId in RadioTowerLandmark.Load().ReadTemplate().VariantIds)
+                foreach (string outcomeId in new[] { "tower.arrival", "tower.supplies" })
+                {
+                    Component manager = CreateLandmarkManager(out GameSession session, out TravelFaultStore store, variantId);
+                    InvokeManager(manager, "InitGame");
+                    Assert.That(session.ActiveRun.ActiveLandmark.VariantId, Is.EqualTo(variantId));
+                    RunLifecycleService lifecycle = GetManagerField<RunLifecycleService>(manager, "lifecycle");
+                    Assert.That(lifecycle.ExitToMenu().IsSuccess, Is.True);
+                    Assert.That(lifecycle.ContinueRun().IsSuccess, Is.True);
+                    InvokeManager(manager, "InitGame");
+                    InvokeManager(manager, "HideLevelImage");
+                    yield return null;
+                    BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+                    Assert.That(session.ActiveRun.ActiveLandmark.VariantId, Is.EqualTo(variantId));
+                    LandmarkSolverResult solution = SolveLandmark(runtime, outcomeId);
+                    yield return ExecuteLandmarkSteps(manager, solution.SolutionPath);
+                    RunState durable = store.LoadRun().Data;
+                    LandmarkRecord completed = durable.CompletedLandmarks.Single();
+                    Assert.That(completed.VariantId, Is.EqualTo(variantId));
+                    Assert.That(completed.OutcomeId, Is.EqualTo(outcomeId));
+                    Assert.That(durable.Food, Is.EqualTo(100 + (outcomeId == "tower.supplies" ? 20 : 0) - solution.SolutionPath.Count));
+                    Assert.That(durable.CompletedDayCount, Is.EqualTo(5));
+                    Assert.That(store.LoadProfile().Data.GetNodeDiscoveryState("landmark.radio-tower"), Is.EqualTo(NodeDiscoveryState.Visited));
+                    Assert.That(durable.ActiveLandmark, Is.Null);
+                    Assert.That(durable.Health, Is.GreaterThan(0));
+                    UnityEngine.Object.DestroyImmediate(manager.gameObject);
+                    GameObject player = GameObject.FindGameObjectWithTag("Player");
+                    if (player != null) UnityEngine.Object.DestroyImmediate(player);
+                    yield return null;
+                }
+        }
+
         /// <summary>The real final-segment runtime preserves template/tool identity on Continue and commits exact exit results plus profile discovery.</summary>
         [UnityTest]
         public IEnumerator LandmarkProduction_BothOutcomesPersistWithoutRerollOrDuplicateRewards()
@@ -1159,7 +1248,7 @@ namespace HallowBlaze.Tests.PlayMode
         [UnityTest]
         public IEnumerator LandmarkProduction_SaveAndDiscoveryFailuresRemainRetryableAndExactlyOnce()
         {
-            Component manager = CreateLandmarkManager(out GameSession session, out TravelFaultStore store);
+            Component manager = CreateLandmarkManager(out GameSession session, out TravelFaultStore store, null);
             store.FailRun = true;
             LogAssert.Expect(LogType.Error, "Landmark selection checkpoint failed: IoError");
             InvokeManager(manager, "InitGame");
@@ -1170,13 +1259,15 @@ namespace HallowBlaze.Tests.PlayMode
             InvokeManager(manager, "InitGame");
             InvokeManager(manager, "HideLevelImage");
             yield return null;
-            yield return ExecuteLandmark(manager, "NNPNEECCCEN");
+            LandmarkSolverResult solution = SolveLandmark(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), "tower.supplies");
+            int expectedFood = 120 - solution.SolutionPath.Count;
+            yield return ExecuteLandmarkSteps(manager, solution.SolutionPath.Take(solution.SolutionPath.Count - 1));
             store.FailRun = true;
             LogAssert.Expect(LogType.Error, "Segment checkpoint failed: IoError");
-            yield return ExecuteLandmark(manager, "E");
+            yield return ExecuteLandmarkSteps(manager, solution.SolutionPath.Skip(solution.SolutionPath.Count - 1));
             Assert.That(session.ActiveRun.CompletedLandmarks, Is.Empty);
             Assert.That(session.ActiveRun.ActiveLandmark, Is.Not.Null);
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(108));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(expectedFood));
             Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
             int resolutions = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount;
             store.FailRun = false;
@@ -1190,7 +1281,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That((bool)InvokeManager(manager, "RetryTravelCheckpoint"), Is.True);
             Assert.That(store.RunSaves, Is.EqualTo(saves));
             Assert.That(session.ActiveRun.CompletedLandmarks.Count, Is.EqualTo(1));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(108));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(expectedFood));
             Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.EqualTo(resolutions));
             Assert.That(store.LoadProfile().Data.GetNodeDiscoveryState("landmark.radio-tower"), Is.EqualTo(NodeDiscoveryState.Visited));
         }
@@ -1236,7 +1327,35 @@ namespace HallowBlaze.Tests.PlayMode
             }
         }
 
-        private static Color32[] CaptureLandmark(BoardRuntime runtime, Vector2Int size, string state)
+        /// <summary>Every curated layout renders real prefabs at both viewport shapes and exports neutral before images without solution instructions.</summary>
+        [UnityTest]
+        public IEnumerator LandmarkProduction_CuratedVariantsRenderAndExportNeutralPreviews()
+        {
+            int caseNumber = 0;
+            foreach (string variantId in RadioTowerLandmark.Load().ReadTemplate().VariantIds)
+            {
+                caseNumber++;
+                Component manager = CreateLandmarkManager(out _, out _, variantId);
+                InvokeManager(manager, "InitGame");
+                InvokeManager(manager, "HideLevelImage");
+                yield return null;
+                BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+                var sizes = new[] { new Vector2Int(1280, 720), new Vector2Int(320, 640) };
+                var closed = sizes.Select(size => CaptureLandmark(runtime, size, "case" + caseNumber + "-before", "HB-M66")).ToArray();
+                yield return ExecuteLandmark(manager, variantId == "north-push" ? "NNNNEEP" : "NNP");
+                for (int index = 0; index < sizes.Length; index++)
+                {
+                    Color32[] opened = CaptureLandmark(runtime, sizes[index], "case" + caseNumber + "-after", "HB-M66-moderator");
+                    Assert.That(opened.Zip(closed[index], (left, right) => !left.Equals(right)).Count(changed => changed), Is.GreaterThan(100));
+                }
+                UnityEngine.Object.DestroyImmediate(manager.gameObject);
+                GameObject player = GameObject.FindGameObjectWithTag("Player");
+                if (player != null) UnityEngine.Object.DestroyImmediate(player);
+                yield return null;
+            }
+        }
+
+        private static Color32[] CaptureLandmark(BoardRuntime runtime, Vector2Int size, string state, string prefix = "HB-M64")
         {
             Assert.That(SystemInfo.graphicsDeviceType, Is.Not.EqualTo(UnityEngine.Rendering.GraphicsDeviceType.Null));
             var owner = new GameObject("Landmark capture camera");
@@ -1277,7 +1396,7 @@ namespace HallowBlaze.Tests.PlayMode
                 texture.Apply();
                 Color32[] pixels = texture.GetPixels32();
                 Assert.That(pixels.Count(color => color.r > 120 && color.g > 100), Is.GreaterThan(1000));
-                File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M64-" + state + "-" + size.x + "x" + size.y + ".png"), texture.EncodeToPNG());
+                File.WriteAllBytes(Path.Combine(Path.GetTempPath(), prefix + "-" + state + "-" + size.x + "x" + size.y + ".png"), texture.EncodeToPNG());
                 return pixels;
             }
             finally
@@ -1289,18 +1408,20 @@ namespace HallowBlaze.Tests.PlayMode
             }
         }
 
-        private Component CreateLandmarkManager(out GameSession session, out TravelFaultStore store)
+        private Component CreateLandmarkManager(out GameSession session, out TravelFaultStore store, string pinnedVariant = "base", int rootSeed = 64)
         {
             Component manager = CreateTravelManager(5, out session, out store, out _, out _);
             WorldDefinition world = WorldDefinitionJson.Deserialize(File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json")));
             SetField(manager, "worldDefinition", world);
             SetField(manager, "worldMap", new WorldMapService(world, session, store));
-            var run = new RunState("radio-tower-production", 64, new RunStateConfiguration(100, 100, 4, "forest.ridge"));
+            var run = new RunState("radio-tower-production", rootSeed, new RunStateConfiguration(100, 100, 4, "forest.ridge"));
             world.TryGetEdge("road.ridge-radio-tower", out WorldEdgeDefinition edge);
             run.StartLeg(edge.EdgeId, edge.FromNodeId, edge.ToNodeId, edge.Segments.Select(segment =>
                 new RouteSegmentState(segment.SegmentId, segment.GenerationConfigurationId, segment.GenerationVersion)));
             run.TryConsumeIntro(run.ActiveLeg.LegId);
             for (int index = 0; index < 4; index++) run.TryAdvanceSegment(run.ActiveLeg.LegId, run.ActiveLeg.CurrentSegment.SegmentId);
+            if (pinnedVariant != null)
+                Assert.That(run.TrySelectLandmark(new LandmarkRecord(BoardAddressFactory.Create(run, world), "landmark.radio-tower", 1, pinnedVariant)), Is.True);
             session.ContinueRun(run);
             Assert.That(store.SaveRun(run).IsSuccess, Is.True);
             Assert.That(store.SaveProfile(session.Profile).IsSuccess, Is.True);
@@ -1323,6 +1444,30 @@ namespace HallowBlaze.Tests.PlayMode
             animator.Rebind();
             animator.Update(0);
             return manager;
+        }
+
+        private static LandmarkSolverResult SolveLandmark(BoardRuntime runtime, string outcomeId)
+        {
+            LandmarkTemplate template = RadioTowerLandmark.Load().ReadTemplate();
+            LandmarkBoard landmark = template.CreateBoard(runtime.Request.Address, runtime.RunState.ActiveLandmark.VariantId);
+            LandmarkSolverResult solution = new LandmarkSolver(landmark, runtime.BoardState, runtime.RunState,
+                runtime.PlayerId, runtime.Enemies, RadioTowerLandmark.CreateCatalog(), runtime.ClearingRules).Solve(outcomeId);
+            Assert.That(solution.Status, Is.EqualTo(LandmarkSolverStatus.Solved), solution.ToString());
+            return solution;
+        }
+
+        private static IEnumerator ExecuteLandmarkSteps(Component manager, IEnumerable<LandmarkSolverStep> steps)
+        {
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").AnimationsEnabled = false;
+            foreach (LandmarkSolverStep step in steps)
+            {
+                PlayerCommand command = step.CreateCommand(runtime.BoardState, runtime.RunState, runtime.PlayerId);
+                Assert.That(TrySubmit(manager, command, out Task<CommandSubmission> pending), Is.True, step.ToString());
+                while (!pending.IsCompleted) yield return null;
+                Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                yield return null;
+            }
         }
 
         private static IEnumerator ExecuteLandmark(Component manager, string sequence)

@@ -5485,14 +5485,15 @@ The initial local attempt failed compilation; the owner then explicitly authoriz
 replacement, validation and self-review. No independent review verdict is claimed. PlayMode
 was not rerun for this offline-only change. Run v5/profile v2, runtime composition, authored
 content, generators, scenes/prefabs and settings/packages are unchanged. No M8.7 capture/hash/
-codec dependency was added. M4.9 remains Pending; M6.6 remains Planned and is not authorized
-by this card. No commit or push was performed.
+codec dependency was added. At this closeout M4.9 remained Pending; M6.6 remained Planned
+and was not authorized by this card. The later owner request is recorded in M6.6 below.
+No commit or push was performed.
 
 ---
 
 ## `M6.6` — Kuratorowane warianty i bramka landmarku
 
-**Status:** `Planned`  
+**Status:** `Active` - technical preparation validated on 2026-10-21; human gate Pending
 **Priorytet:** P1  
 **Powiązany kontrakt:** bramka landmarku z sekcji 22.
 
@@ -5517,6 +5518,25 @@ by this card. No commit or push was performed.
 **Wpływ na save i kompatybilność:** Run data stores variant ID/seed; future M8.7 must include them once accepted. The profile does not automatically mark all variants as visited.
 
 **Wymagany handoff:** Macierz wariant → rozwiązania → koszt → wynik solvera/playtestu.
+
+**Progress (2026-10-21):** The owner explicitly authorized direct M6.6 implementation,
+validation and self-review from clean baseline `b53ac61ea4b7dd5e89bd12b4e6e9af8c01d2605f`
+on `M6/6/CuratedVariants`, Git root `D:/Repos/HallowBlaze`. The three fixed variants `base`,
+`east-guard` and `north-push` share both outcomes and existing rules. The old base object is
+unchanged; new addressed RNG selections are checkpointed before publication, and saved
+selections/Continue never reroll. Solver/fresh execution cover both outcomes for every variant
+with/without the axe; a reduced geometric audit finds no mandatory boulder softlock. Production
+tests cover all variants/outcomes, failed selection/arrival/discovery retries and graphics at
+1280x720/320x640. Full EditMode passed 1237 tests with the existing Explicit skip; graphics
+PlayMode passed 188/188; focused production passed 7/7. See the
+[variant/cost matrix, evidence and frozen session protocol](Validation/M6.6.md).
+Isolated pinned saves and neutral previews are prepared, but the exporter is not a game launcher:
+interactive storage isolation must be checked before human sessions. Participants/sessions are
+0; no comprehension result or Proceed/Revise/Stop verdict is claimed. M6.6 and the M6 gate are
+not Done; 5-8 real moderated sessions remain required. M4.9 remains Pending, M7 is not started,
+and M8.7 stays Deferred. Run v5/profile v2, world identities and ordinary generation are unchanged.
+The owner separately authorized removing only Unity's generated analytics token and recording
+its narrow exception in AGENTS.md. No independent review, commit or push is claimed.
 
 ### Bramka M6
 
@@ -6334,7 +6354,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. These card-specific exceptions do not close M4.9 or authorize M6.6, which remains Planned. Preserve independent review on later cards unless separately waived;
+1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. The owner then separately authorized solo M6.6: its technical preparation passed full EditMode 1237 tests plus the existing Explicit skip and graphics PlayMode 188/188, with self-review only. M6.6 remains Active until 5-8 real sessions and the landmark decision in `Docs/Validation/M6.6.md`; neither exception closes M4.9 or authorizes M7. Preserve independent review on later cards unless separately waived;
 2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
 3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
 
@@ -6399,8 +6419,20 @@ finds both real outcomes and the manual no-axe alternative, executes found decis
 owners and separates exhaustive failure from incomplete budget stops. Focused EditMode passed
 26/26 and full EditMode passed 1225 tests with the pre-existing Explicit skip. No runtime, save,
 content or M8.7 change was introduced; PlayMode was not rerun. No independent verdict is claimed.
-M4.9 remains Pending without human results; M6.6 remains Planned and needs separate authorization.
+At that closeout M4.9 remained Pending without human results; M6.6 remained Planned and needed
+the later separate owner authorization recorded below.
 No commit or push was performed.
+
+M6.6 technical preparation was validated on 2026-10-21 from clean baseline
+`b53ac61ea4b7dd5e89bd12b4e6e9af8c01d2605f` on `M6/6/CuratedVariants`, Git root
+`D:/Repos/HallowBlaze`, under the owner's explicit solo instruction. Three curated variants,
+addressed durable selection, all outcome/tool-free solver paths, production retry/Continue
+coverage, desktop/portrait previews and isolated session boundaries are ready. Full EditMode
+passed 1237 tests with the existing Explicit skip; graphics PlayMode passed 188/188; production
+landmark cases passed 7/7. Review was self-review, not independent. The
+[protocol and actual matrix](Validation/M6.6.md) record zero participants and Pending human
+results. M6.6 remains Active; M4.9 is still Pending; no M6 acceptance or M7 authorization is
+claimed. No commit or push was performed.
 
 # Zasada aktualizacji roadmapy
 
