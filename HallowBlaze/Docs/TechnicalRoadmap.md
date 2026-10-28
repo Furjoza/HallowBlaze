@@ -1,8 +1,8 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.6 - M3.6-M3.10 accepted; M3.9 readability owner-approved for PoC; route-leg amendments accepted; M8.7 and M9 deferred**
-> Data ostatniej weryfikacji: 2026-10-13
-> Właściciel statusów i kolejności: **Coordinator**  
+> Status dokumentu: **Accepted / execution roadmap v0.7 - M7 playtest repairs planned; existing M7-M9 shifted to M8-M10; M9.7 and M10 remain deferred**
+> Data ostatniej weryfikacji: 2026-10-28
+> Status and execution owner: **Lead (also implementation developer)**
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
 > Zasady pracy agentów: [`../AGENTS.md`](../AGENTS.md)
 
@@ -16,12 +16,12 @@ Ten dokument zamienia kontrakt projektowy na kolejność małych, weryfikowalnyc
 
 ## 2. Jak korzystać z roadmapy
 
-1. Coordinator wybiera pierwszą niezakończoną kartę, której zależności są spełnione.
-2. Przed przydzieleniem zmienia jej status z `Ready` na `Active` i wskazuje jednego writera.
-3. Developer realizuje wyłącznie tę kartę zgodnie z `AGENTS.md`.
-4. Po handoffie Reviewer/Tester pracuje read-only i wydaje werdykt `Accept`, `Changes requested` albo `Blocked`.
-5. Tylko Coordinator zmienia status na `Done` albo zwraca kartę do `Active`.
-6. Karta `Planned` musi zostać ponownie sprawdzona i, jeśli potrzeba, doprecyzowana przed zmianą na `Ready`.
+1. The Lead selects the first unfinished card whose dependencies are satisfied.
+2. Before implementation, the Lead changes `Ready` to `Active` and defines a closed write scope.
+3. The Lead implements and validates that card directly under `AGENTS.md`; there is no separate Developer handoff.
+4. After required checks pass, the read-only Reviewer returns `PASS`, `CHANGES_REQUIRED`, or `BLOCKED`. If independent review is unavailable, the Lead performs and discloses self-review under `AGENTS.md` without waiving tests, material findings, or human gates.
+5. The Lead resolves in-scope failures and findings, reruns affected checks, and owns the `Done` or `Active` decision.
+6. A `Planned` card must be rechecked and, where needed, clarified before becoming `Ready`. Configuration changes do not authorize its implementation.
 
 Dozwolone statusy:
 
@@ -41,6 +41,25 @@ W danej chwili może istnieć najwyżej jedna karta `Active`. Równolegle można
 - An umbrella is `Done` only after every child is accepted. A dependency on the umbrella ID means that all of its children are accepted; callers do not depend on a partially completed umbrella unless they name a specific child explicitly.
 - Each card or child starts after a horizontal rule with its numbered heading. The one-writer rule still permits at most one `Active` executable card or child at a time; an umbrella tracking an active child is not a second writer lease.
 - Current identifiers, including child identifiers where used, remain authoritative in dependencies, historical handoffs, execution queues, and planned validation-report names.
+
+#### Owner-approved milestone insertion - 2026-10-28
+
+The owner requested a dedicated repair milestone after the reported play session. New M7
+contains only that repair/onboarding backlog; every previously numbered milestone from M7
+onward moves forward by one, including child IDs, dependencies and gates in this roadmap:
+
+| Previous milestone | Current milestone | Scope |
+| --- | --- | --- |
+| M7 | M8 | Ten-day Vertical Slice |
+| M8 | M9 | Optional Post-slice Work |
+| M9 | M10 | Spatial Inventory and Resource Pressure |
+
+M0-M6 retain their identifiers and acceptance history. Existing commits, branches, stable
+gameplay/content IDs and evidence filenames are not renamed. Other documents may retain
+pre-insertion milestone labels; use this mapping and the task title when following those
+references. Reconcile affected contract references in the owning implementation task.
+This documentation-only request does not start implementation, close M4.9 or M6.6, approve
+a human-playtest verdict, or activate deferred replay/inventory work.
 
 ### Rationale — dlaczego tylko jeden aktywny writer
 
@@ -95,9 +114,10 @@ Nowy atlas, resolver tur i save system dotkną wielu plików. Bez poprawnego ign
 | M4 — Generation, Noise and Enemies | model-first generator jest walidowany, a hałas tworzy decyzje | 10 000 seedów bez softlocka; Listener jest przewidywalny |
 | M5 — Tools | dwa narzędzia tworzą odmienne decyzje i alternatywne trasy | brak losowego softlocka; koszty narzędzi są czytelne |
 | M6 — Landmark | systemowa zagadka łączy pchanie, płyty i bramy | każdy wariant jest rozwiązywalny; co najmniej dwa sensowne rezultaty |
-| M7 — Ten-day Vertical Slice | the two-biome journey has a finale, historical route-supply memory, fixed tool-source knowledge, and a summary | the player understands atlas evidence/intents/tools and wants another run |
-| M8 — Optional Post-slice Work | explicitly deferred capabilities remain isolated from the validated core | each item requires its own product decision and evidence |
-| M9 — Spatial Inventory and Resource Pressure | a 3×3 bag, two quick pockets, and satiety turn route knowledge into resource decisions | no duplication/loss; players choose routes from current need and learned supply |
+| M7 - Playtest Repairs and Opening Warm-up | a warm-up first day precedes route choice; transitions, HUD, footsteps and board-entry safety are reliable | reported regressions have focused evidence and the complete opening flow passes visual/audio smoke |
+| M8 — Ten-day Vertical Slice | the two-biome journey has a finale, historical route-supply memory, fixed tool-source knowledge, and a summary | the player understands atlas evidence/intents/tools and wants another run |
+| M9 — Optional Post-slice Work | explicitly deferred capabilities remain isolated from the validated core | each item requires its own product decision and evidence |
+| M10 — Spatial Inventory and Resource Pressure | a 3×3 bag, two quick pockets, and satiety turn route knowledge into resource decisions | no duplication/loss; players choose routes from current need and learned supply |
 
 Etapy są sekwencyjne jako bramki jakości, ale nie oznaczają masowego refaktoru. Każda karta ma pozostawić projekt w uruchamialnym stanie.
 
@@ -126,7 +146,7 @@ Do czasu powstania `M1.5` nie ma gwarancji kompatybilności prototypowych `Playe
 
 ### 5.4. Domyślny handoff
 
-Każda karta wymaga handoffu z `AGENTS.md`: ID, rationale rozwiązania, zmienione pliki, potwierdzone non-goals, dokładne testy, ręczne kroki, ryzyka, otwarte decyzje i stan working tree. Karty poniżej dopisują tylko wymagania specyficzne.
+The Lead keeps the task, diff, scope, acceptance criteria, and actual validation evidence sufficient for review or disclosed self-review under `AGENTS.md`. Card-specific handoff fields below describe required evidence, not a separate Developer packet. Successful closeout is a brief dated status and summary; separate reports are required only for failures/blockers or an explicit request. Required manual checks and human verdicts remain explicit and cannot be replaced by agent self-review.
 
 ### Rationale — dlaczego wspólne reguły nie są kopiowane do każdej karty
 
@@ -139,26 +159,26 @@ This audit reviewed every existing milestone against the accepted multi-board ro
 | Existing scope | Required preparation or conclusion | Owning follow-up |
 | --- | --- | --- |
 | M0 | No gameplay structure is affected. Repository and Unity safety rules remain unchanged. | none |
-| M1.1–M1.11 (`Done`) | Do not rewrite history. Current run schema, `Food`, node-ID route, node/day seed, and profile discovery lists are migrated explicitly rather than extended opportunistically. Pause/menu behavior remains compatible; new route/inventory state is migrated explicitly rather than added opportunistically. | M3.11, M7.4, M7.5, M9.2–M9.3 |
+| M1.1–M1.11 (`Done`) | Do not rewrite history. Current run schema, `Food`, node-ID route, node/day seed, and profile discovery lists are migrated explicitly rather than extended opportunistically. Pause/menu behavior remains compatible; new route/inventory state is migrated explicitly rather than added opportunistically. | M3.11, M8.4, M8.5, M10.2–M10.3 |
 | M2.1–M2.8 (`Done`) | Preserve the accepted atlas prototype. Edge selection must later begin travel instead of immediately reaching its destination; node-based `BoardRequest` is replaced by a stable segment address. | M3.11–M3.12 |
-| M3.1–M3.4 (`Done`) | Grid/item layers and the one-turn result remain valid. Automatic food and cost `1` are transitional behavior, explicitly replaced only by M9. | M9.2 and M9.5 |
-| M3.5, M3.6, M3.10 | Keep orchestration command-agnostic, modal input draft-only, and explicit scenario coverage extensible. Portable replay/version/hash is deferred. M3.7–M3.9 need no inventory-specific redesign. | amendments in those cards, M8.7 |
-| M4.1–M4.6 | Generate by stable board address; represent generic items/source IDs and a read-only resource manifest; measure segment and aggregate route supply. M4.7–M4.9 remain structurally unchanged. | amendments in those cards, M7.4–M7.5 |
-| M5.1–M5.7 | Preserve ground instances until atomic commit; keep generic tool equipment separate from the bag; distinguish tool source, definition, and instance IDs. O-003 is resolved and transitional. | amendments in M5.1–M5.7, M9.5 |
+| M3.1–M3.4 (`Done`) | Grid/item layers and the one-turn result remain valid. Automatic food and cost `1` are transitional behavior, explicitly replaced only by M10. | M10.2 and M10.5 |
+| M3.5, M3.6, M3.10 | Keep orchestration command-agnostic, modal input draft-only, and explicit scenario coverage extensible. Portable replay/version/hash is deferred. M3.7–M3.9 need no inventory-specific redesign. | amendments in those cards, M9.7 |
+| M4.1–M4.6 | Generate by stable board address; represent generic items/source IDs and a read-only resource manifest; measure segment and aggregate route supply. M4.7–M4.9 remain structurally unchanged. | amendments in those cards, M8.4–M8.5 |
+| M5.1–M5.7 | Preserve ground instances until atomic commit; keep generic tool equipment separate from the bag; distinguish tool source, definition, and instance IDs. O-003 is resolved and transitional. | amendments in M5.1–M5.7, M10.5 |
 | M6.1–M6.6 | Landmark/template addressing must not assume node equals one board; rewards use stable item IDs. Puzzle, solver, and gate semantics otherwise remain unchanged. | M6.1/M6.4 readiness notes, M3.11 |
-| M7.1–M7.3 | Author variable segment sequences, route-aware biome/config data, truthful resource bands, and route length. | amended cards |
-| M7 finale/summary/gate | Add resource observations and fixed tool-source knowledge before the finale; summaries use structured leg history; the final gate makes a separate M9 decision. | M7.4–M7.8 |
-| M8.1 | A future snapshot includes active leg state, observation accumulator, and—if M9 has shipped—satiety, item instances, bag, and pockets. | amended card |
-| M8.2 and M8.5 | Campaign budgets count boards/turns as well as days; accepted inventory is not part of the deferred crafting/combat/rarity proposal. M8.3, M8.4, and M8.6 require no inventory redesign. | amended cards |
-| New inventory work | Do not pull backpack UI or economy into M5. Implement it only after a no-backpack playtest and an explicit owner checkpoint. | M9.1–M9.8 |
+| M8.1–M8.3 | Author variable segment sequences, route-aware biome/config data, truthful resource bands, and route length. | amended cards |
+| M8 finale/summary/gate | Add resource observations and fixed tool-source knowledge before the finale; summaries use structured leg history; the final gate makes a separate M10 decision. | M8.4–M8.8 |
+| M9.1 | A future snapshot includes active leg state, observation accumulator, and—if M10 has shipped—satiety, item instances, bag, and pockets. | amended card |
+| M9.2 and M9.5 | Campaign budgets count boards/turns as well as days; accepted inventory is not part of the deferred crafting/combat/rarity proposal. M9.3, M9.4, and M9.6 require no inventory redesign. | amended cards |
+| New inventory work | Do not pull backpack UI or economy into M5. Implement it only after a no-backpack playtest and an explicit owner checkpoint. | M10.1–M10.8 |
 
 #### Rationale
 
-The route-leg model changes identity and persistence before the bag changes UI. Establishing stable edge/segment addresses before generator work avoids later rewrites of seeds, future replay, tool locations, and atlas samples. Keeping M9 last still lets the owner play the complete no-backpack game before committing to its new economy.
+The route-leg model changes identity and persistence before the bag changes UI. Establishing stable edge/segment addresses before generator work avoids later rewrites of seeds, future replay, tool locations, and atlas samples. Keeping M10 last still lets the owner play the complete no-backpack game before committing to its new economy.
 
 ### 5.6. Owner-approved diagnostic scope reduction - 2026-10-13
 
-M3.10 is an explicit scenario-test gate, not a portable replay implementation. Every new mechanic owns concrete initial-state/command/expected-result tests and its normal save compatibility checks. Planned diagnostic snapshot, replay codec/version, canonical hash, and omission/first-divergence requirements are conditional on acceptance of deferred M8.7; they do not block M3.11/M3.12, generation, tools, atlas, mid-board saves, or M9. M8.7 must first inventory all mechanics already shipped; later mechanic tickets then extend its coverage together. Existing deterministic seed/equality hashes and accepted historical evidence are unaffected.
+M3.10 is an explicit scenario-test gate, not a portable replay implementation. Every new mechanic owns concrete initial-state/command/expected-result tests and its normal save compatibility checks. Planned diagnostic snapshot, replay codec/version, canonical hash, and omission/first-divergence requirements are conditional on acceptance of deferred M9.7; they do not block M3.11/M3.12, generation, tools, atlas, mid-board saves, or M10. M9.7 must first inventory all mechanics already shipped; later mechanic tickets then extend its coverage together. Existing deterministic seed/equality hashes and accepted historical evidence are unaffected.
 
 ---
 
@@ -721,7 +741,7 @@ Próbę `3d10d54` oceniono jako legacy `MonoBehaviour` zależny od `UnityEngine`
 
 **Macierz własności:** profil posiada tożsamość świata, trwałą wiedzę, terminalne summaries i agregaty; run posiada seed, dzień, bieżący węzeł, zasoby, trasę, wynik i narzędzia; przyszły BoardState posiada siatkę, aktorów, przedmioty i efekty pola.
 
-**Świadomie pominięto:** stopnie discovery M2.3, pełne summary M7.7, persistence, UI, session i BoardState. Profil nie zawiera health, food, weather ani tools.
+**Świadomie pominięto:** stopnie discovery M2.3, pełne summary M8.7, persistence, UI, session i BoardState. Profil nie zawiera health, food, weather ani tools.
 
 **Walidacja:** Unity 6000.3.21f1: `15/15`, `32/32`, `15/15`, wszystkie kody `0`; build, diagnostyka, `git diff --check`, `.meta` i integrity gate przeszły. Właściciel zaakceptował usunięcie nieużywanego `SENTIS_ANALYTICS_ENABLED`. Niezależny `qwen-reviewer`: `Pass`.
 
@@ -1405,7 +1425,7 @@ M2 jest zaliczony, gdy pięciodniowy graf przechodzi walidację, discovery pozos
 
 **Plan testów:** EditMode dla równości, hashowania, kierunków, sąsiedztwa, granic i stabilnego sortowania.
 
-**Wpływ na save i kompatybilność:** `EntityId` runtime nie musi przetrwać kolejnej planszy; ID contentu nadal są tekstowe. Ewentualny zapis pozycji pojawi się dopiero w Deferred `M8.1`.
+**Wpływ na save i kompatybilność:** `EntityId` runtime nie musi przetrwać kolejnej planszy; ID contentu nadal są tekstowe. Ewentualny zapis pozycji pojawi się dopiero w Deferred `M9.1`.
 
 **Wymagany handoff:** Krótki kontrakt wartości i lista adapterów, które później zastąpią odczyt `Transform`.
 
@@ -1635,7 +1655,7 @@ The migration is deliberately split because command submission cannot safely pre
 
 **Umbrella scope:** Establish the board runtime boundary, implement reusable command submission/event replay, then replace the legacy production path and prove the complete PC loop.
 
-**Umbrella non-goals:** No enemy AI, target-selection rules, tool or inventory flow, model-first generator, final HUD, multi-platform input, new gameplay rules, or save schema. Those remain with `M3.7+`, `M4`, `M5`, and deferred `M9`.
+**Umbrella non-goals:** No enemy AI, target-selection rules, tool or inventory flow, model-first generator, final HUD, multi-platform input, new gameplay rules, or save schema. Those remain with `M3.7+`, `M4`, `M5`, and deferred `M10`.
 
 **Dependencies:** `M3.5`, the accepted M2 board-request/outcome boundary, and resolved O-004 selecting PC as the reference platform.
 
@@ -1899,7 +1919,7 @@ Validation: baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e
 
 **Scope:** Bind PC movement/Wait to the command source; connect registered production views, HUD, sounds, and guarded `BoardOutcome`; remove or disable legacy player movement, pickup, cost, death/exit, and turn-scheduling paths; update the relevant M0.8 reflection tests to the new public behavior; document the intentionally deferred legacy content behavior.
 
-**Non-goals:** No domain enemy AI or enemy damage, target-selection UI, bare-hand wall rule, tool behavior, aid/unsupported-pickup rule, generator rewrite, final HUD/art, mobile input, save migration, or future M5/M9 interaction. Legacy enemy views remain logically inert until `M3.7`/`M3.8`; they must not continue through a hidden coroutine path.
+**Non-goals:** No domain enemy AI or enemy damage, target-selection UI, bare-hand wall rule, tool behavior, aid/unsupported-pickup rule, generator rewrite, final HUD/art, mobile input, save migration, or future M5/M10 interaction. Legacy enemy views remain logically inert until `M3.7`/`M3.8`; they must not continue through a hidden coroutine path.
 
 **Dependencies:** `M3.6.2` and the accepted guarded `BoardOutcome` lifecycle from M2.
 
@@ -2877,7 +2897,7 @@ Run the children in order as separate delegations. Foundation children are valid
 **Priority:** P0
 **Related contract:** sections 10.2, 11, 18, 21.2, and the intent gate in section 22; [accepted Shambler rule](GameDesignContract.md#1131-accepted-shambler-rule).
 
-**Owner acceptance exception:** The owner accepts the current presentation for PoC and closes the manual gate without supplying a formal blind-prediction sample, grayscale capture set, or complete recorded lifecycle smoke. Those missing measurements are waived as blockers for this milestone only; no majority-of-testers or measured manual PASS is claimed. Final graphical polish remains deferred, and later M4.9/M7.8 playtest obligations are unchanged.
+**Owner acceptance exception:** The owner accepts the current presentation for PoC and closes the manual gate without supplying a formal blind-prediction sample, grayscale capture set, or complete recorded lifecycle smoke. Those missing measurements are waived as blockers for this milestone only; no majority-of-testers or measured manual PASS is claimed. Final graphical polish remains deferred, and later M4.9/M8.8 playtest obligations are unchanged.
 
 **Rationale:** Intent projection, drawing, replay timing, board lifetime, production binding, and human readability are different acceptance problems. A symbol assignment must not also require inventing AI, changing turn ownership, migrating legacy enemies, and running a playtest.
 
@@ -3397,7 +3417,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Allowed file area:** Existing Lead-owned `Docs/Validation/M3.9IntentReadability.md` and status/dependency corrections in this roadmap only. Future screenshots/test captures stay in an explicit local directory outside the Unity project; no project asset or production change is part of this closeout.
 
-**Acceptance criteria:** The owner explicitly approves the current PoC presentation; the Lead records the approval/date and previously accepted implementation evidence. Missing formal smoke/capture/prediction measurements are waived for this milestone only. Keep actual participant/response counts at zero and percentages not evaluable; do not claim that the contract's majority-of-testers criterion was measured or passed. Later M4.9/M7.8 playtest gates retain their requirements.
+**Acceptance criteria:** The owner explicitly approves the current PoC presentation; the Lead records the approval/date and previously accepted implementation evidence. Missing formal smoke/capture/prediction measurements are waived for this milestone only. Keep actual participant/response counts at zero and percentages not evaluable; do not claim that the contract's majority-of-testers criterion was measured or passed. Later M4.9/M8.8 playtest gates retain their requirements.
 
 **Test plan:** Cross-check owner approval, card/umbrella/queue status, and the existing report's evidence limits. No Unity tests are rerun for documentation-only acceptance; automated results retain their original dates. No test filter is treated as human prediction evidence.
 
@@ -3421,7 +3441,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Scope:** Add the sequence in M3.10.1 and run the bounded domain/presentation gate in M3.10.2. Reuse existing fixtures and helpers; no new runtime service, assembly, package, or general-purpose replay fixture.
 
-**Extension rule:** Each new mechanic adds or updates focused scenarios in its owning test fixture with explicit initial input, ordered commands, expected intermediate results, and free-rejection/terminal assertions where relevant. Do not introduce diagnostic snapshots, command-format versions, or canonical state hashes solely to satisfy this gate. Full portable replay and its eventual coverage/version contract belong to deferred `M8.7`.
+**Extension rule:** Each new mechanic adds or updates focused scenarios in its owning test fixture with explicit initial input, ordered commands, expected intermediate results, and free-rejection/terminal assertions where relevant. Do not introduce diagnostic snapshots, command-format versions, or canonical state hashes solely to satisfy this gate. Full portable replay and its eventual coverage/version contract belong to deferred `M9.7`.
 
 **Non-goals:** No recorder, JSON command format, canonical state-hash framework, second AI/resolver, concurrency audit, automatic gameplay capture, generator, player-save change, mid-board resume, or production integration.
 
@@ -3435,7 +3455,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Save and compatibility impact:** None. Tests use synthetic state and existing isolated presentation fixtures; no profile/player data is exported. Deferred replay is not a prerequisite for save migration or generation.
 
-**Completion:** Both children below are accepted. The previous fifteen replay implementation children are superseded by this reduced scope, not outstanding M3 work; future capability planning is consolidated in M8.7.
+**Completion:** Both children below are accepted. The previous fifteen replay implementation children are superseded by this reduced scope, not outstanding M3 work; future capability planning is consolidated in M9.7.
 
 ---
 
@@ -3495,7 +3515,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Rationale:** Segment authoring, travel-state transitions, identity/seed derivation, stale-outcome guards, save migration, and scenario regression are separate acceptance surfaces. A single domain model assignment must not also change scenes, rewrite persistence, and convert route selection.
 
-**Current behavior:** World edges expose authored stable segments; `RunState` owns checkpoint/day/history and optional immutable active-leg state. Session derives full segment addresses and validates runtime/outcome identity before effects. Normal run saves write v2 and read supported v1/v2; profile schema is unchanged. Production `WorldMapService.ChooseRoute()` deliberately retains the legacy checkpoint flow until M3.12. Multi-board orchestration and pre-render intro checkpointing are not active. Portable replay remains deferred to M8.7.
+**Current behavior:** World edges expose authored stable segments; `RunState` owns checkpoint/day/history and optional immutable active-leg state. Session derives full segment addresses and validates runtime/outcome identity before effects. Normal run saves write v2 and read supported v1/v2; profile schema is unchanged. Production `WorldMapService.ChooseRoute()` deliberately retains the legacy checkpoint flow until M3.12. Multi-board orchestration and pre-render intro checkpointing are not active. Portable replay remains deferred to M9.7.
 
 **Expected outcome:** Edges expose ordered non-empty stable segment definitions. The run owns a reached checkpoint, completed-day count, structured history, and an optional persisted active leg with a unique run-local traversal ID. The leg has one 1-based displayed day, stable segment cursor/progress, and `Pending`/`Consumed` intro state. A `BoardAddress` identifies run, traversal, edge, segment, day, generation version/configuration, and deterministic seed. Separate child acceptance precedes production travel flow in M3.12.
 
@@ -3791,7 +3811,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.StartLeg_CreatesPendingIdentityWithoutArrival`.
 
-**Save and compatibility impact:** Sequence/leg fields must later be stored in v2 and covered by explicit scenarios; diagnostic hash coverage is deferred to M8.7. No default file writes here.
+**Save and compatibility impact:** Sequence/leg fields must later be stored in v2 and covered by explicit scenarios; diagnostic hash coverage is deferred to M9.7. No default file writes here.
 
 **Required handoff:** Start transition before/after fields, deterministic ID examples, and rejected/overflow cases.
 
@@ -3869,7 +3889,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Expected outcome:** A matching consumed final segment atomically reaches the destination, advances completed-day count once, appends one structured entry, and clears the active leg.
 
-**Scope:** Add only final completion to `RunState`, reusing the accepted entry/leg APIs and traversal sequence. Validate final cursor/identity/status before mutation. Test repeated edge traversals through the already accepted start operation and distinguish their leg IDs. Keep profile discovery/observation/save orchestration for M3.12/M7.
+**Scope:** Add only final completion to `RunState`, reusing the accepted entry/leg APIs and traversal sequence. Validate final cursor/identity/status before mutation. Test repeated edge traversals through the already accepted start operation and distinguish their leg IDs. Keep profile discovery/observation/save orchestration for M3.12/M8.
 
 **Non-goals:** No WorldMapService flow, profile edge/node discovery, sample aggregation, save I/O, terminal/death policy change, or UI.
 
@@ -3911,9 +3931,9 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Test plan:** EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.BoardAddress_UsesEveryStableIdentityField`.
 
-**Save and compatibility impact:** Address fields are versioned in later DTO steps; portable replay integration is deferred to M8.7. No default persistence yet.
+**Save and compatibility impact:** Address fields are versioned in later DTO steps; portable replay integration is deferred to M9.7. No default persistence yet.
 
-**Required handoff:** Identity/equality matrix and complete field table for persistence and future M8.7 diagnostic encoding.
+**Required handoff:** Identity/equality matrix and complete field table for persistence and future M9.7 diagnostic encoding.
 
 ---
 
@@ -4353,7 +4373,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Test plan:** Planned EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.AddressedContexts_PreserveExplicitIdentityAndSeed`.
 
-**Save and compatibility impact:** None; portable context encoding remains deferred to M8.7.
+**Save and compatibility impact:** None; portable context encoding remains deferred to M9.7.
 
 ---
 
@@ -4429,7 +4449,7 @@ Run the children in order as separate delegations. Foundation children are valid
 
 **Test plan:** Planned EditMode filter `HallowBlaze.Tests.EditMode.RouteLegTests.AddressedTravel_PreservesExplicitTurnOutcomesAfterLoad`.
 
-**Save and compatibility impact:** Evidence for v2 compatibility, with no real player/profile access. Portable replay coverage remains deferred to M8.7.
+**Save and compatibility impact:** Evidence for v2 compatibility, with no real player/profile access. Portable replay coverage remains deferred to M9.7.
 
 **Required handoff:** Matrix/case counts, explicit intermediate outcomes, and accepted save-version boundaries.
 
@@ -4555,7 +4575,7 @@ Both native invocations of the configured `reviewer`, without a model override o
 
 ### Bramka M3
 
-M3 is complete when each input creates at most one command, rejected actions are free, accepted actions resolve one full turn, intents are locked and readable, authored command scenarios match explicit expected state/events on fresh runs, and a variable-length route leg advances through stable board addresses without changing day or discovery until final arrival. Portable replay and canonical diagnostic hashes are deferred to M8.7 and do not block this gate.
+M3 is complete when each input creates at most one command, rejected actions are free, accepted actions resolve one full turn, intents are locked and readable, authored command scenarios match explicit expected state/events on fresh runs, and a variable-length route leg advances through stable board addresses without changing day or discovery until final arrival. Portable replay and canonical diagnostic hashes are deferred to M9.7 and do not block this gate.
 
 ---
 
@@ -4585,7 +4605,7 @@ M3 is complete when each input creates at most one command, rejected actions are
 
 **Kryteria akceptacji:** Ten sam root/stream daje tę samą sekwencję; pobranie z kosmetyki nie zmienia board stream; zakresy są udokumentowane; brak globalnego RNG w zmigrowanym gameplayu; two route segments never alias a gameplay stream merely because they share node/day context.
 
-**Plan testów:** Fixed vectors, stream independence, range boundaries, and explicit M3 command-scenario regression. Portable replay integration is conditional on M8.7 acceptance.
+**Plan testów:** Fixed vectors, stream independence, range boundaries, and explicit M3 command-scenario regression. Portable replay integration is conditional on M9.7 acceptance.
 
 **Wpływ na save i kompatybilność:** Run DTO przechowuje root seed oraz identyfikatory/wersję algorytmu niezbędne do odtworzenia granicy planszy.
 
@@ -4641,7 +4661,7 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 **Priorytet:** P0  
 **Powiązany kontrakt:** sekcje 7.2, 8, 16 i 17.
 
-**Rationale:** The generator must produce inspectable data before Instantiate. The blueprint feeds validation, state construction, tests, and presentation; future M8.7 may consume its accepted export APIs without making replay a generator prerequisite.
+**Rationale:** The generator must produce inspectable data before Instantiate. The blueprint feeds validation, state construction, tests, and presentation; future M9.7 may consume its accepted export APIs without making replay a generator prerequisite.
 
 **Obecne zachowanie:** `BoardManager` losuje oraz natychmiast tworzy GameObjecty, a trudność wynika głównie z dnia/liczby zombie.
 
@@ -4659,7 +4679,7 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 **Plan testów:** EditMode construction, round-trip blueprint→state, hash i invalid examples.
 
-**Wpływ na save i kompatybilność:** A future M8.7 diagnostic capture may use the blueprint, but normal between-board saves do not store it. No portable replay format is required here.
+**Wpływ na save i kompatybilność:** A future M9.7 diagnostic capture may use the blueprint, but normal between-board saves do not store it. No portable replay format is required here.
 
 **Wymagany handoff:** Przykład jednego blueprintu i mapping pól budżetu na zamierzoną presję.
 
@@ -4755,7 +4775,7 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 **Plan testów:** Wymuszony generator zawsze-fail, sukces na N-tej próbie, uszkodzony fallback oraz timeout/performance bound.
 
-**Wpływ na save i kompatybilność:** The selected board seed/config stays in run-boundary data. Algorithm changes can change generated boards and require explicit generation/version identity; diagnostic format updates apply only after M8.7 acceptance.
+**Wpływ na save i kompatybilność:** The selected board seed/config stays in run-boundary data. Algorithm changes can change generated boards and require explicit generation/version identity; diagnostic format updates apply only after M9.7 acceptance.
 
 **Wymagany handoff:** Maksymalna liczba prób, zasada sub-seedów i raport z wymuszonego fallbacku.
 
@@ -4817,7 +4837,7 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 **Kryteria akceptacji:** Ten sam event daje ten sam obszar; UI i AI czytają ten sam model; wygasanie jest jawne; brak ukrytego rzutu; sygnał jest czytelny bez audio.
 
-**Plan testów:** EditMode range/obstacle/lifetime and explicit noise-command scenarios; PlayMode visual consistency. Portable replay coverage is conditional on M8.7 acceptance.
+**Plan testów:** EditMode range/obstacle/lifetime and explicit noise-command scenarios; PlayMode visual consistency. Portable replay coverage is conditional on M9.7 acceptance.
 
 **Wpływ na save i kompatybilność:** Bieżący hałas jest BoardState i nie jest zapisowany między planszami.
 
@@ -4881,7 +4901,7 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 **Kryteria akceptacji:** Większość uczestników przewiduje znanego zombie; błędy są sklasyfikowane UI/reguła/tutorial; porażkę można wyjaśnić bez ukrytego RNG; istnieje decyzja bramki.
 
-**Plan testów:** Scripted playtest, separate first-contact and learned results, and comparison with explicit automated enemy/noise scenarios. Portable replay comparison applies only after M8.7 acceptance.
+**Plan testów:** Scripted playtest, separate first-contact and learned results, and comparison with explicit automated enemy/noise scenarios. Portable replay comparison applies only after M9.7 acceptance.
 
 **Wpływ na save i kompatybilność:** Brak; profile testowe są izolowane.
 
@@ -4891,7 +4911,7 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 ### Bramka M4
 
-M4 is accepted when 10,000 active-configuration seeds produce no invalid boards, explicit generator/enemy/noise scenarios are repeatable, global RNG does not control gameplay, and testers can predict Shambler/Listener behavior and intentionally use noise. Portable replay is not required unless M8.7 has separately been accepted.
+M4 is accepted when 10,000 active-configuration seeds produce no invalid boards, explicit generator/enemy/noise scenarios are repeatable, global RNG does not control gameplay, and testers can predict Shambler/Listener behavior and intentionally use noise. Portable replay is not required unless M9.7 has separately been accepted.
 
 ---
 
@@ -4911,7 +4931,7 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 **Expected outcome:** `InteractionQuery` returns actions on explicit targets, and `InteractCommand` identifies the selected possibility. No legal target means no turn cost. Query and modal preview retain the exact ground-entity identity and never remove or mutate it before an accepted command commits.
 
-**Scope:** Query model, target IDs/positions, availability codes, basic collect/push hooks and a highlight presenter. The option model may represent a future decision-required pickup without implementing the M9 `Use now / Store / Leave` flow.
+**Scope:** Query model, target IDs/positions, availability codes, basic collect/push hooks and a highlight presenter. The option model may represent a future decision-required pickup without implementing the M10 `Use now / Store / Leave` flow.
 
 **Non-goals:** Tools, expanded inventory, radial menus, crafting, automatic selection of a preferred interaction, and changes to ordinary automatic-food collection.
 
@@ -5004,7 +5024,7 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 **Save and compatibility impact:** Accepted charges are stored in `RunState` and serialized at the existing run-save boundaries. Run schema v4 and profile schema v2 are unchanged; no migration or reset is added. The isolated file-save regression confirms the exact instance ID and remaining charges after command execution and reload. Preview selections and commands are not persisted.
 
-**Selection and dispatch:** `UseToolCommand` captures the generic slot, run-local instance ID, expected charges, exact target ID/position, and selected action ID. `ToolUseQuery` validates that snapshot and dispatches by definition/action ID through trusted deterministic domain effects. Empty/depleted/invalid slots, replaced instances, changed charges, missing/displaced/distant targets, unsupported behavior, and blocked or decision-required effects reject without fallback. Captured charges invalidate replay of an accepted decision. The same catalog and immutable `ActionCostPolicy` are shared by the runtime, picker and resolver through both composers. The default policy remains one Food for ordinary board commands; tests exercise a different policy without introducing future M9 cost tiers.
+**Selection and dispatch:** `UseToolCommand` captures the generic slot, run-local instance ID, expected charges, exact target ID/position, and selected action ID. `ToolUseQuery` validates that snapshot and dispatches by definition/action ID through trusted deterministic domain effects. Empty/depleted/invalid slots, replaced instances, changed charges, missing/displaced/distant targets, unsupported behavior, and blocked or decision-required effects reject without fallback. Captured charges invalidate replay of an accepted decision. The same catalog and immutable `ActionCostPolicy` are shared by the runtime, picker and resolver through both composers. The default policy remains one Food for ordinary board commands; tests exercise a different policy without introducing future M10 cost tiers.
 
 **Preview and presentation:** The existing numbered interaction picker also lists explicit tool options with generic slot, direct-effect label, target position, one turn, one charge, current Food cost and noise strength/lifetime. Opening, selection and cancellation remain free. Independent input owners, same-frame hold, rapid-confirm protection, animation parity, terminal disposal and recovery are preserved. New tool events have read-only presentation handlers. Canceling replay after resolution does not refund charges or rerun the command.
 
@@ -5028,7 +5048,7 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 **Oczekiwany rezultat:** Krzew/miękka drewniana przeszkoda ma wolną alternatywę bez narzędzia; axe usuwa ją szybciej, zużywa charge i emituje czytelny głośny noise.
 
-**Zakres:** Domenowy stan przeszkody/progress, akcja ręczna, efekt axe, konfiguracja liczb, events, audio/visual feedback i fakt `AXE_CREATES_LOUD_NOISE`. Axe board instances use stable tool definitions and may expose a distinct authored source ID for M7.5.
+**Zakres:** Domenowy stan przeszkody/progress, akcja ręczna, efekt axe, konfiguracja liczb, events, audio/visual feedback i fakt `AXE_CREATES_LOUD_NOISE`. Axe board instances use stable tool definitions and may expose a distinct authored source ID for M8.5.
 
 **Non-goals:** Bez walki siekierą, ścinania każdego drzewa, craftingu, trwałych ulepszeń i drugiego zastosowania „barykada”, dopóki pierwsze nie przejdzie bramki.
 
@@ -5038,7 +5058,7 @@ M4 is accepted when 10,000 active-configuration seeds produce no invalid boards,
 
 **Kryteria akceptacji:** Obie trasy są legalne; axe zawsze jest szybsza według config; noise i charge są pokazane przed/po akcji; brak axe nie softlockuje; Listener reaguje na dokładnie ten noise event.
 
-**Plan testów:** EditMode explicit cost/charge/noise command sequences; PlayMode obstacle interaction with/without an axe and Listener response. Portable replay is additional coverage only after M8.7 acceptance.
+**Plan testów:** EditMode explicit cost/charge/noise command sequences; PlayMode obstacle interaction with/without an axe and Listener response. Portable replay is additional coverage only after M9.7 acceptance.
 
 **Save and compatibility impact:** Run schema v4 already stores the changed axe charges at existing run-save boundaries. Profile schema v2 already accepts stable fact IDs and now retains `AXE_CREATES_LOUD_NOISE` without a schema bump or reset. The fact is checkpointed only after presenting its actual axe-noise event; preview, rejection, equipment ownership and manual work do not discover it. Knowledge never enables the action. Clearing progress belongs to `BoardState`, is independently cloned, and is removed with its obstacle; a reconstructed board starts fresh under the existing no-mid-board-save contract. New runs clear equipment, not profile knowledge. Published layout/RNG identities and generation budgets remain unchanged.
 
@@ -5067,11 +5087,11 @@ Manual work persists between actions and the axe completes whatever work remains
 
 **Rationale:** Łopata ma łączyć eksplorację z manipulowaniem planszą, a nie wyłącznie skracać animację zbierania. Schowek daje korzyść ekonomiczną, dół daje taktyczną kontrolę pola.
 
-**Implemented behavior:** Explicit `legacy.buried-food` caches share board-owned progress: three manual actions or one shovel action reveal one `shovel.cache-ration` item. The item retains its source entity ID and stable board-local `cache.reward.<entity-id>` instance ID; the pre-M9 adapter collects that exact item before charge/action cost. An uncollected reward remains board state. Only explicitly authored `shovel.diggable` terrain supports pits; ordinary floors are not inferred as diggable.
+**Implemented behavior:** Explicit `legacy.buried-food` caches share board-owned progress: three manual actions or one shovel action reveal one `shovel.cache-ration` item. The item retains its source entity ID and stable board-local `cache.reward.<entity-id>` instance ID; the pre-M10 adapter collects that exact item before charge/action cost. An uncollected reward remains board state. Only explicitly authored `shovel.diggable` terrain supports pits; ordinary floors are not inferred as diggable.
 
-**Oczekiwany rezultat:** A marked cache has a slow alternative or explicitly optional reward; the shovel reveals it quickly. The reward is represented by one concrete stable item definition/instance rather than a raw `RestoreFood` call. Before M9, a compatibility adapter may resolve that item immediately under O-003; M9.5 replaces the adapter with the shared item decision. The second shovel use creates a temporary pit for a supported archetype.
+**Oczekiwany rezultat:** A marked cache has a slow alternative or explicitly optional reward; the shovel reveals it quickly. The reward is represented by one concrete stable item definition/instance rather than a raw `RestoreFood` call. Before M10, a compatibility adapter may resolve that item immediately under O-003; M10.5 replaces the adapter with the shared item decision. The second shovel use creates a temporary pit for a supported archetype.
 
-**Zakres:** Dig targets/progress, cache reward through a concrete item instance and stable definition ID, transitional pre-M9 reward adapter, pit state/lifetime, interakcja Shamblera, charges, events i fact `PIT_TRAPS_SHAMBLER`. Shovel board instances may expose a distinct authored source ID for M7.5.
+**Zakres:** Dig targets/progress, cache reward through a concrete item instance and stable definition ID, transitional pre-M10 reward adapter, pit state/lifetime, interakcja Shamblera, charges, events i fact `PIT_TRAPS_SHAMBLER`. Shovel board instances may expose a distinct authored source ID for M8.5.
 
 **Non-goals:** Bez dowolnego kopania każdego pola, terraformingu, losowej ukrytej pułapki, obrażeń jako walki i obowiązkowego celu wymagającego losowego łopaty.
 
@@ -5083,7 +5103,7 @@ Manual work persists between actions and the axe completes whatever work remains
 
 **Plan testów:** EditMode cache/pit/lifetime/enemy/softlock validation; PlayMode oba zastosowania i UI pozostałych tur/charges.
 
-**Wpływ na save i kompatybilność:** Charges/facts as in M5.4; pit and an uncollected revealed cache item are `BoardState`. M9.5 later owns the item transfer choice without changing the cache/source identity.
+**Wpływ na save i kompatybilność:** Charges/facts as in M5.4; pit and an uncollected revealed cache item are `BoardState`. M10.5 later owns the item transfer choice without changing the cache/source identity.
 
 **Wymagany handoff:** Macierz zastosowanie → korzyść → koszt/ryzyko → alternatywa bez narzędzia.
 
@@ -5108,15 +5128,15 @@ Manual work persists between actions and the axe completes whatever work remains
 **Priorytet:** P1  
 **Powiązany kontrakt:** sekcje 13.1, 18 i O-003.
 
-**Rationale:** Przy dwóch pełnych slotach znalezione narzędzie tworzy ważny wybór, ale przypadkowa zamiana byłaby karą za wejście na pole. O-003 now fixes the pre-M9 split: food remains automatic and transitional, while a tool requires conscious pickup and routing to the separate equipment bar.
+**Rationale:** Przy dwóch pełnych slotach znalezione narzędzie tworzy ważny wybór, ale przypadkowa zamiana byłaby karą za wejście na pole. O-003 now fixes the pre-M10 split: food remains automatic and transitional, while a tool requires conscious pickup and routing to the separate equipment bar.
 
 **Implemented behavior:** A board-owned `GroundToolState` separates the entity, run-allocated instance, content definition, remaining charges and optional authored source. The existing target picker offers conscious equipment pickup. The first free generic slot is selected automatically only after confirmation. Full equipment opens a comparison of both slots with `Replace` and `Leave`; a complete `PickupToolCommand` retains the exact ground snapshot, position and selected slot identity/definition/charges. Revalidation rejects invalid, stale or replayed choices before mutation.
 
-**Oczekiwany rezultat:** A consciously accepted tool pickup automatically fills a free generic tool slot. With both slots occupied it presents `Replace` or `Leave`; cancel/leave is free, the ground instance remains, and no equipped tool is silently destroyed. Transitional automatic food remains unchanged until M9.
+**Oczekiwany rezultat:** A consciously accepted tool pickup automatically fills a free generic tool slot. With both slots occupied it presents `Replace` or `Leave`; cancel/leave is free, the ground instance remains, and no equipped tool is silently destroyed. Transitional automatic food remains unchanged until M10.
 
 **Zakres:** Tool pickup command, stable board entity/tool instance and optional source IDs, modal slot choice, UI comparison of definition/charges, equipment presentation, and turn integration.
 
-**Non-goals:** No generic consumable prompt, bag, side pockets, spatial placement, carried-item discard, stacks, trade, crafting, or automatic destruction of an equipped tool. Those consumable semantics belong to M9.
+**Non-goals:** No generic consumable prompt, bag, side pockets, spatial placement, carried-item discard, stacks, trade, crafting, or automatic destruction of an equipped tool. Those consumable semantics belong to M10.
 
 **Zależności:** `M5.2`, `M5.3`, `M5.1`, and accepted O-003 in the contract.
 
@@ -5124,11 +5144,11 @@ Manual work persists between actions and the axe completes whatever work remains
 
 **Kryteria akceptacji:** Conscious pickup into an empty slot and confirmed replacement each mutate exactly one slot and resolve the accepted turn once; `Leave`, cancel, invalid/stale replacement, and full-slot refusal cost nothing and keep the same ground instance; rapid input cannot duplicate a tool; UI shows both definitions and charges.
 
-**Plan testów:** EditMode empty/full/replace/leave/cancel/stale/source-instance identity; PlayMode modal/input/reload; regression proving accepted O-003 automatic food is unchanged before M9.
+**Plan testów:** EditMode empty/full/replace/leave/cancel/stale/source-instance identity; PlayMode modal/input/reload; regression proving accepted O-003 automatic food is unchanged before M10.
 
 **Wpływ na save i kompatybilność:** Run DTO zachowuje wynik zamiany; brak nowych danych profilu.
 
-**Wymagany handoff:** Reference resolved O-003, provide the full tool modal flow, and list the seams intentionally reserved for M9 without implementing them.
+**Wymagany handoff:** Reference resolved O-003, provide the full tool modal flow, and list the seams intentionally reserved for M10 without implementing them.
 
 **Accepted replacement outcome:** The owner requested autonomous decisions when asked about the displaced tool. M5.6 uses a lossless exchange, recorded in contract section 13.1: the incoming instance occupies exactly one chosen slot and the old tool remains at the original ground entity/cell with its existing ID and charges. It does not inherit the incoming source ID. This is an equipment exchange, not an implementation of carried-item discard or a generic drop command.
 
@@ -5142,7 +5162,7 @@ Manual work persists between actions and the axe completes whatever work remains
 
 **Integration and compatibility:** Both runtime composers accept explicit existing tool-instance bindings without allocating or equipping them. Blueprint bindings additionally validate entity/definition and authored source parity; invalid, unallocated, already-equipped or duplicate bindings cannot publish a partial runtime. Existing versioned generators, placements, prefabs and scenes are unchanged. Ground labels and the equipment HUD read current definitions/charges, including the old tool after exchange. Run schema v4 preserves resulting equipment identities, charges and allocator; profile schema v2 is unchanged. Ground tools remain transient board state at existing reconstruction/save boundaries. O-003 automatic food still resolves before movement cost. No tool-source knowledge or mechanical fact is inferred from pickup.
 
-**Reserved seams:** M9 owns the shared consumable `Use now` / `Store` / `Leave` decision, bag/pockets, placement and carried-item discard, including migration of the shovel-cache reward adapter. This card adds none of those behaviors and does not change transitional automatic food. M7.5 remains responsible for fixed-source discovery and atlas knowledge.
+**Reserved seams:** M10 owns the shared consumable `Use now` / `Store` / `Leave` decision, bag/pockets, placement and carried-item discard, including migration of the shovel-cache reward adapter. This card adds none of those behaviors and does not change transitional automatic food. M8.5 remains responsible for fixed-source discovery and atlas knowledge.
 
 **Acceptance:** Completed from clean `9e1a6f0df5726b4d0eee81dd525afad18a2d10fa` on `M5/6/ToolPickUp`, Git root `D:/Repos/HallowBlaze`, by direct Lead implementation without Developer delegation. After the review correction preserving authored entity traits, Unity 6000.3.21f1 passed full EditMode 1061 tests with only the existing Explicit milestone skipped and full graphics PlayMode 163/163. Focused transfer/composition passed 54/54; the correction/state gate passed 33/33; pickup PlayMode passed 6/6, including actual scene unload, isolated save/reload, modal/input scenarios and desktop/portrait pixel checks. Independent Reviewer returned PASS for domain, picker/modal, composers and replay/lifetime after bounded sequential retries for provider failures. Scope, metadata, diagnostics and whitespace checks passed. M4.9 remains Pending without human results; this card-specific owner authorization does not authorize M5.7. No commit or push was performed.
 
@@ -5159,7 +5179,7 @@ Manual work persists between actions and the axe completes whatever work remains
 
 **Obecne zachowanie:** `ProfileState` potrafi przechować IDs faktów, lecz gracz nie ma uporządkowanego widoku ani momentu odkrycia.
 
-**Oczekiwany rezultat:** Po pierwszej obserwacji fakt trafia do profilu, pojawia się jednoznaczny feedback i jest dostępny w Field Notes z tekstem/ikoną; nieodkryte fakty nie zdradzają treści. Mechanical `FactDiscovery` is a separate event/model from M7.5 `ToolSourceSighted` location knowledge.
+**Oczekiwany rezultat:** Po pierwszej obserwacji fakt trafia do profilu, pojawia się jednoznaczny feedback i jest dostępny w Field Notes z tekstem/ikoną; nieodkryte fakty nie zdradzają treści. Mechanical `FactDiscovery` is a separate event/model from M8.5 `ToolSourceSighted` location knowledge.
 
 **Zakres:** `FactDefinition`, event discovery, lokalizacja robocza, ekran/lista notesów i pierwsze fakty axe/shovel/Listener.
 
@@ -5234,7 +5254,7 @@ M5 jest zaliczony, gdy oba narzędzia tworzą różne decyzje, każde ma koszt l
 
 **Plan testów:** EditMode load/validation/stable ID/round-trip template→blueprint.
 
-**Wpływ na save i kompatybilność:** Run data identifies the landmark by its active `BoardAddress` plus stable template/variant ID and records the outcome at the completed-board boundary. Future replay uses the same identity after M8.7 acceptance. Destination node arrival remains the route-flow consequence of completing the final segment; no node ID is used as board identity.
+**Wpływ na save i kompatybilność:** Run data identifies the landmark by its active `BoardAddress` plus stable template/variant ID and records the outcome at the completed-board boundary. Future replay uses the same identity after M9.7 acceptance. Destination node arrival remains the route-flow consequence of completing the final segment; no node ID is used as board identity.
 
 **Wymagany handoff:** Schemat szablonu i przykład dwóch outcomes bez implementowania rozwiązania.
 
@@ -5420,7 +5440,7 @@ No dynamic solvability or human-playtest verdict is claimed. No commit or push w
 
 **Kryteria akceptacji:** Co najmniej dwa outcomes mają różny koszt; brak narzędzia nie blokuje celu obowiązkowego; zasady są komunikowane przez istniejące UI; ukończenie zapisuje outcome w runie i discovery w profilu, jeśli dotyczy.
 
-**Plan testów:** Manual traversal of each intended route, automated validator, explicit command sequences for every solution, and death/exit tests. Portable replay is conditional on M8.7 acceptance.
+**Plan testów:** Manual traversal of each intended route, automated validator, explicit command sequences for every solution, and death/exit tests. Portable replay is conditional on M9.7 acceptance.
 
 **Wpływ na save i kompatybilność:** Stable template/outcome IDs w run/profile; zmiana ID wymaga migracji/aliasu.
 
@@ -5455,7 +5475,7 @@ M6.5/M6.6 remained Planned; M6.5's subsequent authorization and acceptance are r
 
 **Oczekiwany rezultat:** Ograniczony BFS/A* enumeruje domenowe stany dla landmarku, znajduje co najmniej jedno rozwiązanie każdego wymaganej rezultatu albo raportuje minimalny failing fixture.
 
-**Zakres:** A solver-local state key with structural equality for deduplication, legal command enumeration, time/state limits, solution-path reconstruction, and template-test integration. This key covers the modeled puzzle inputs; it is not the portable replay hash deferred to M8.7 and requires no replay codec or capture framework.
+**Zakres:** A solver-local state key with structural equality for deduplication, legal command enumeration, time/state limits, solution-path reconstruction, and template-test integration. This key covers the modeled puzzle inputs; it is not the portable replay hash deferred to M9.7 and requires no replay codec or capture framework.
 
 **Non-goals:** Bez AI podpowiadającego graczowi, optymalnego solvera dowolnego poziomu, generowania puzzli i uwzględniania animacji.
 
@@ -5463,7 +5483,7 @@ M6.5/M6.6 remained Planned; M6.5's subsequent authorization and acceptance are r
 
 **Dozwolony obszar plików:** Core Solver, tests, and external validation output. Portable replay sources are not required.
 
-**Kryteria akceptacji:** Every required outcome has a path within budget; an intentionally blocked variant fails. Equal solver-local state keys deduplicate equivalent states, while hash collisions cannot merge structurally different states. Failure context includes template ID/variant/seed. No M8.7 dependency is introduced.
+**Kryteria akceptacji:** Every required outcome has a path within budget; an intentionally blocked variant fails. Equal solver-local state keys deduplicate equivalent states, while hash collisions cannot merge structurally different states. Failure context includes template ID/variant/seed. No M9.7 dependency is introduced.
 
 **Plan testów:** Znane małe puzzle, no-solution fixture, determinism i performance budget.
 
@@ -5484,7 +5504,7 @@ passed 26/26; full EditMode passed 1225 tests with the existing Explicit milesto
 The initial local attempt failed compilation; the owner then explicitly authorized direct
 replacement, validation and self-review. No independent review verdict is claimed. PlayMode
 was not rerun for this offline-only change. Run v5/profile v2, runtime composition, authored
-content, generators, scenes/prefabs and settings/packages are unchanged. No M8.7 capture/hash/
+content, generators, scenes/prefabs and settings/packages are unchanged. No M9.7 capture/hash/
 codec dependency was added. At this closeout M4.9 remained Pending; M6.6 remained Planned
 and was not authorized by this card. The later owner request is recorded in M6.6 below.
 No commit or push was performed.
@@ -5513,9 +5533,9 @@ No commit or push was performed.
 
 **Kryteria akceptacji:** Wszystkie warianty mają rozwiązanie i dwa sensowne rezultaty tam, gdzie wymagane; gracz potrafi wyjaśnić konsekwencję; selection jest deterministyczny; brak znanego softlocka.
 
-**Plan testów:** Solve every variant, execute the found command sequence through the real rules with explicit outcome assertions, and conduct manual playtests without solution instructions. Portable replay is additional coverage only after M8.7 acceptance.
+**Plan testów:** Solve every variant, execute the found command sequence through the real rules with explicit outcome assertions, and conduct manual playtests without solution instructions. Portable replay is additional coverage only after M9.7 acceptance.
 
-**Wpływ na save i kompatybilność:** Run data stores variant ID/seed; future M8.7 must include them once accepted. The profile does not automatically mark all variants as visited.
+**Wpływ na save i kompatybilność:** Run data stores variant ID/seed; future M9.7 must include them once accepted. The profile does not automatically mark all variants as visited.
 
 **Wymagany handoff:** Macierz wariant → rozwiązania → koszt → wynik solvera/playtestu.
 
@@ -5533,8 +5553,8 @@ PlayMode passed 188/188; focused production passed 7/7. See the
 Isolated pinned saves and neutral previews are prepared, but the exporter is not a game launcher:
 interactive storage isolation must be checked before human sessions. Participants/sessions are
 0; no comprehension result or Proceed/Revise/Stop verdict is claimed. M6.6 and the M6 gate are
-not Done; 5-8 real moderated sessions remain required. M4.9 remains Pending, M7 is not started,
-and M8.7 stays Deferred. Run v5/profile v2, world identities and ordinary generation are unchanged.
+not Done; 5-8 real moderated sessions remain required. M4.9 remains Pending, M8 is not started,
+and M9.7 stays Deferred. Run v5/profile v2, world identities and ordinary generation are unchanged.
 The owner separately authorized removing only Unity's generated analytics token and recording
 its narrow exception in AGENTS.md. No independent review, commit or push is claimed.
 
@@ -5544,11 +5564,429 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 ---
 
-# M7 — Dziesięciodniowy vertical slice
+# M7 - Playtest Repairs and Opening Warm-up
+
+**Planning date:** 2026-10-28. All cards below are `Planned`; no implementation or fix is
+claimed. This milestone precedes the expanded vertical slice, not the existing human gates.
+M4.9 and M6.6 keep their recorded status and evidence requirements. Any implementation before
+those gates close still needs a separate, explicit owner authorization.
+
+**Reported evidence:** The owner's three session screenshots are observations, not a recovered
+seed or a confirmed technical diagnosis. Screenshot #1 shows white regions around Field Notes
+and the tool/legend controls. Screenshot #2 shows a residual legend, a Day-like backing layer
+and overlapping Field Notes text. Screenshot #3 shows a corner with two nearby zombies after
+the player had already moved; it does not establish the original spawn or prove that every
+initial command sequence was fatal. The brief player flash, previous-board wall fragment,
+blinking icon, long footstep, missing resource gains and alignment issues were also reported.
+
+| Reported issue or requested change | Owning card |
+| --- | --- |
+| First route choice only after a tutorial-like warm-up first day | M7.1 |
+| Player visible before Day intro ends; white backgrounds; previous-board wall fragment; residual legend/Day layer | M7.2 |
+| Duplicate/offset Field Notes label and icon blinking on each step | M7.3 |
+| Footstep stretches beyond a single short step | M7.4 |
+| Missing `+X` beside Food/Health for the rest of the turn | M7.5 |
+| Suspected unavoidable corner spawn with two zombies around day four | M7.6 |
+| Board and Food/Health group not centered; resource text clipped | M7.7 |
+| Complete multi-board/day regression and owner smoke acceptance | M7.8 |
 
 ---
 
-## `M7.1` — Rozszerzenie stałego grafu do około 10 dni
+## `M7.1` - Warm-up first day before the first route choice
+
+**Status:** `Planned`
+**Priority:** P1
+**Related contract:** sections 7, 9, 18 and 20; accepted route-leg/intro rules in M3.11-M3.12.
+
+**Rationale:** Choosing a route before experiencing movement, turns and an exit asks for a
+strategic decision before the player has practical context.
+
+**Reported/current behavior:** The owner encountered route choice before the first Day screen.
+Verify the production New Game/new-run flow rather than assuming an isolated test matches it.
+
+**Expected outcome:** A new run starts with a short, controlled first day that serves as a
+warm-up. The first meaningful route choice is offered only after that day is completed.
+
+**Scope:** Amend the opening-flow contract, author bounded opening content using existing
+movement/intent/exit rules, and integrate its start, completion, Day presentation and first
+route-choice checkpoint. Before Ready, specify the opening's board count, stable address,
+initial threat/supply and how it counts toward the campaign and landmark days. Reconcile the
+former immediate-choice assumption without treating a node ID as a board address.
+
+**Non-goals:** No new tutorial engine, forced tool grant, new mechanic, atlas knowledge reset,
+automatic route recommendation, or silent change to later landmark/finale pacing.
+
+**Dependencies:** M3.12 and the explicit opening-flow contract amendment before implementation;
+the milestone's earlier-gate scheduling rule still applies.
+
+**Allowed file area:** Core Session/Travel/World and persistence only where required; opening
+GameData; Presentation Day/RouteChoice; focused EditMode/PlayMode tests; the owning contract and
+flow documentation. Enumerate exact assets before Ready; no blanket scene/settings changes.
+
+**Acceptance criteria:** New Game and a fresh run after death begin in the warm-up without a
+route modal. Only successful first-day completion unlocks the first route choice, exactly once;
+death or interrupted setup does not. The first choice begins the intended next day without
+skipping or double-counting days/segments. Ordinary accepted/rejected command rules and profile
+knowledge remain unchanged. The flow is usable without lengthy instructional text.
+
+**Test plan:** EditMode opening/completion/death/checkpoint sequences; PlayMode real New Game,
+new run, first exit, first route choice, rapid input and Continue at each supported boundary;
+manual first-time-player warm-up smoke. Include scene reload and failed checkpoint retry.
+
+**Save and compatibility impact:** Preserve existing active route/address/template selections.
+Define an explicit old-run policy before changing flow; version/migrate any new persisted phase.
+Do not prepend a warm-up to an already-started run, replay its reward, or erase profile data.
+
+**Required handoff:** Before/after flow and day/address table, authored opening limits, contract
+amendment, checkpoint/migration matrix and observed opening smoke outcome.
+
+---
+
+## `M7.2` - Clean Day, board and overlay presentation boundaries
+
+**Status:** `Planned`
+**Priority:** P1
+**Related contract:** sections 18 and 20; M3.12 Day/board publication contract.
+
+**Rationale:** A previous frame or hidden panel leaking into the next view obscures the board
+and makes unrelated UI appear to own the Day backdrop.
+
+**Reported/current behavior:** The player briefly appears while the first Day screen is loading.
+Opening Field Notes exposes white areas behind the legend control and tool slots (screenshot
+#1). Later boards show a fragment resembling the preceding board's top wall; screenshot #2
+retains legend content and a Day-like backing layer during gameplay. Root causes are unverified.
+
+**Expected outcome:** Each presentation state draws only its own intended layers, with no stale
+camera regions, previous-board imagery, white fill or orphaned overlay/background.
+
+**Scope:** Inspect the production camera/viewport clearing, canvas sorting, visibility and
+board-publication lifecycle; fix the owning boundary rather than covering artifacts with a
+new panel. Define visibility for setup, Day, gameplay, legend, Field Notes, route choice and
+terminal states. Close/dispose or explicitly restore overlays at board boundaries.
+
+**Non-goals:** No art redesign, gameplay change, new rendering package, unexplained camera
+clear-color workaround, or widening of the inspectable board behind modal content.
+
+**Dependencies:** M3.12, M5.7 and coordination with M7.1's opening flow.
+
+**Allowed file area:** Presentation Day/Board/Camera/HUD/Legend/FieldNotes and their lifecycle
+integration; graphics PlayMode tests. List any necessary scene/prefab assets before Ready.
+
+**Acceptance criteria:** From the first rendered setup frame until Day ends, the player, board
+and gameplay HUD are hidden. Gameplay has no Day backing layer. Opening/closing either overlay
+does not recolor unrelated regions; closing or leaving a board leaves no legend/Notes residue.
+The tool band never contains previous-board pixels. Cancellation, rapid toggles, resize,
+Continue and subsequent day/segment transitions restore one coherent view and input ownership.
+
+**Test plan:** Graphics PlayMode frame/pixel assertions before/during/after Day and overlay
+changes, with visibly distinct consecutive board fixtures; repeated legend -> Notes -> close ->
+next board/day sequences; desktop/portrait resize and animation-disabled parity. Inspect the
+actual production scene through Unity CLI/Pipeline, followed by owner visual smoke.
+
+**Save and compatibility impact:** Presentation state only; no persisted camera image, modal
+draft or new run/profile schema. Resume must project the existing committed boundary.
+
+**Required handoff:** Reproduction and diagnosed owner for each reported artifact, visibility
+matrix, before/after frames and explicit evidence that no old-board pixels survive.
+
+---
+
+## `M7.3` - Stable Field Notes control, label and input lifetime
+
+**Status:** `Planned`
+**Priority:** P1
+**Related contract:** sections 4, 5.4 and 18; M5.7 observation/read-only ownership.
+
+**Rationale:** A persistent journal control should remain legible and stable while the board
+resolves turns, rather than appearing to be recreated with each movement.
+
+**Reported/current behavior:** The Field Notes label looks doubled or slightly offset, and the
+icon blinks with player steps. The owner permits moving the label one cell to the right if
+needed; that is a layout option, not evidence that offset alone fixes duplicate ownership.
+
+**Expected outcome:** One visible control and one label occupy a stable reserved HUD area,
+without overlapping the legend or being hidden/recreated on ordinary accepted steps.
+
+**Scope:** Resolve duplicate creation/subscription or visibility refresh only if reproduced;
+separate per-turn data refresh from control lifetime; align the label with the shared layout
+from M7.7. Preserve independent modal/pause input owners and free journal access.
+
+**Non-goals:** No fact-trigger changes, undiscovered-rule hints, new journal content, or arbitrary
+label offset used to hide a second rendered instance.
+
+**Dependencies:** M5.7; shared layer rules from M7.2 and layout agreement with M7.7.
+
+**Allowed file area:** Presentation FieldNotes/HUD/Legend layout and lifecycle; focused PlayMode
+tests. No domain/persistence changes or asset edits outside an explicit Ready allowlist.
+
+**Acceptance criteria:** Exactly one active Notes control/label is rendered. Movement, Wait,
+resource refresh and rejected commands do not blink, duplicate or shift it. Open/close, pause,
+death, new run, scene reload and Continue retain correct ownership without leaked listeners.
+Text fits and does not overlap at desktop and portrait sizes, including post-death resize.
+
+**Test plan:** Production PlayMode hierarchy/lifetime and frame-visible glyph checks across
+several turns, repeated toggles, scene reload/death/new run, resize and rapid input; verify
+opening/canceling remains free and cannot release another modal's movement block.
+
+**Save and compatibility impact:** None. Profile facts remain owned by the existing durable model.
+
+**Required handoff:** Proven duplicate/blink cause, control ownership and refresh rules, lifecycle
+assertions and before/after label captures.
+
+---
+
+## `M7.4` - One short footstep per accepted player step
+
+**Status:** `Planned`
+**Priority:** P2
+**Related contract:** sections 9, 10 and 18; presentation must not own turn resolution.
+
+**Rationale:** A step is a short discrete cue, not a sustained sound trailing across later turns.
+
+**Reported/current behavior:** The movement sound lasts too long for a single step/turn.
+
+**Expected outcome:** Each accepted player-cell advance produces one brief non-looping step
+cue contained within that movement's presentation, without a tail into the next turn.
+
+**Scope:** Inspect the actual clip, playback settings, trigger count and cancellation/transition
+lifetime. Trim/select the appropriate authored cue or bound playback as required. Cover ordinary
+movement and any existing action that advances the player; preserve sound settings and mute.
+
+**Non-goals:** No new audio system, change to the domain Noise/Listener footprint, turn timing
+stretched to fit a long clip, or changes to unrelated axe/enemy/audio assets.
+
+**Dependencies:** Existing accepted movement/replay path; coordinate cancellation with M7.2.
+
+**Allowed file area:** Player-movement audio presentation and focused PlayMode tests; only the
+exact step clip/import settings or prefab explicitly listed before Ready.
+
+**Acceptance criteria:** One accepted step triggers one short cue, with no loop, stacking or
+next-turn tail during rapid steps. Rejected movement, Wait and non-moving actions trigger no
+player footstep. Recovery/Continue does not replay a step; board change, death and cancellation
+leave no orphaned playback. Animation-disabled behavior is explicit and preserves mute settings.
+
+**Test plan:** PlayMode trigger-count/duration/cancel/rapid-step cases and muted/disabled-animation
+cases; listen to isolated and consecutive production steps in owner audio smoke. A mocked audio
+call alone is not evidence that the actual clip sounds short.
+
+**Save and compatibility impact:** None. Gameplay noise strength/lifetime and RNG are unchanged.
+
+**Required handoff:** Clip identity, measured duration/playback limit, trigger matrix and actual
+listening result, with any unavailable audio verification stated explicitly.
+
+---
+
+## `M7.5` - Turn-scoped Food and Health gain feedback
+
+**Status:** `Planned`
+**Priority:** P1
+**Related contract:** sections 9, 10 and 18; existing effect-before-cost resource ordering.
+
+**Rationale:** A changed total alone hides how much a pickup restored, especially when action
+cost or enemy damage follows in the same turn.
+
+**Reported/current behavior:** Food collection lacks an adjacent gain suffix. The same feedback
+is requested for health restoration.
+
+**Expected outcome:** The HUD shows the current total plus a separate positive applied gain,
+for example `Food: 173 +10`, and the equivalent `Health: N +X`, throughout the rest of the turn.
+
+**Scope:** Project actual accepted restoration events into a turn-scoped presentation value;
+keep it through hostile/environment replay and ordinary HUD refreshes. Sum multiple applied
+gains for the same resource within one turn. Clear at the next accepted turn's presentation
+start or board/terminal disposal, so fast/disabled animations cannot erase it in the same frame.
+Use the current resource owner; do not calculate the pickup amount from final-minus-initial totals.
+
+**Non-goals:** No Food-to-satiety migration, new caps/balance, floating combat text, resource
+mutation from UI, persisted suffix, or deferred inventory work from M10.
+
+**Dependencies:** Existing accepted restoration events and cost policy; M7.7 reserves suffix space.
+
+**Allowed file area:** Presentation resource HUD/event handlers and focused tests; a narrowly
+scoped result/event field only if the real applied amount is unavailable, with its contract tested.
+
+**Acceptance criteria:** A +10 reward followed by Food -1 still reports `+10`, not net `+9`.
+Health gains remain separate from later damage. Displayed totals always match the presented
+state; suffixes use actual applied amounts, not unconditionally configured rewards. Rejection,
+preview, cancel and no-gain turns create no suffix. Rejected attempts do not clear the last
+accepted turn's feedback. No duplicate gain appears after recovery, reload or board replacement.
+
+**Test plan:** EditMode event/value projection where applicable; PlayMode food/healing/multiple
+gains/cost/damage, rejected attempts, animation parity, lifecycle and next-turn clearing. Pixel
+checks prove both total and suffix stay visible and unclipped through the turn.
+
+**Save and compatibility impact:** None. Gains are transient presentation of existing results,
+not extra restored resources or new persisted run/profile fields.
+
+**Required handoff:** Event-to-total/gain table, lifetime/reset rules and captures across the
+pickup, later hostile phase, completed turn and following accepted turn.
+
+---
+
+## `M7.6` - Reproduce and prevent unavoidable board-entry corner traps
+
+**Status:** `Planned`
+**Priority:** P0 investigation; confirm the defect and affected generation version before a fix.
+**Related contract:** sections 9, 12, 16 and 22; M4.3 validator and M4.5-M4.6 fallback/seed gates.
+
+**Rationale:** Static exit reachability does not establish that a player can leave a spawn pocket
+when two enemies and retained intents constrain the first accepted commands.
+
+**Reported/current behavior:** Around day four the owner reports a closed corner with two
+zombies and no escape sequence. Screenshot #3 was taken after a move; the seed, exact starting
+state/resources, enemy cadence and prior commands are not yet recovered.
+
+**Expected outcome:** A reproducible investigation distinguishes an unsafe initial layout from
+a later tactical dead end. New ordinary boards reject known unavoidable entry traps through a
+bounded deterministic safety rule and existing retry/fallback machinery, if the defect is confirmed.
+
+**Scope:** Recover seed/address/generation version and initial plans where possible; otherwise
+label the nearest authored fixture as synthetic rather than claiming exact reproduction. Before
+Ready, declare a bounded spawn-safety criterion/horizon covering terrain, starting resources,
+enemy occupancy/cadence and retained intents. Exercise legal command sequences through real
+rules; diagnose whether generation, validation, composition or presentation caused the report.
+Place the correction at that owner and preserve deterministic attempts and bounded fallback.
+
+**Non-goals:** No guarantee of survival after arbitrary mistakes, full-campaign tactical solver,
+global zombie nerf, free random tool, silent intent replan, or automatic activation of M9.7 replay.
+
+**Dependencies:** M4.3, M4.5, M4.6 and the existing real turn/enemy controller. An unrecovered
+original seed is an evidence limitation, not permission to claim a confirmed original cause.
+
+**Allowed file area:** Core Generation/Validation and tests; turn/enemy or composition code only
+if the investigation identifies that owner and a closed Ready scope is updated first. Relevant
+generator configs/fallbacks only when explicitly listed; no unrelated landmark redesign.
+
+**Acceptance criteria:** An initial corner/two-enemy fixture that forces death before any legal
+escape within the declared criterion is rejected or corrected; a valid narrow but survivable
+fixture remains accepted. Tests use actual initial intents and accepted/rejected command costs,
+not only a flood fill. The chosen rule's horizon/limitations are explicit; a bounded search
+timeout is not reported as proof of safety. Fixed input repeats the same decision and fallback.
+There is no known unavoidable entry trap in the accepted regression/seed set, without promising
+that every later player choice or whole run is safe.
+
+**Test plan:** EditMode closed/open corners, one/two enemies, alternating cadence, blocked exits,
+initial resources and a real escape sequence; actual command execution of accepted fixtures.
+Run representative day/biome seeds and the 10,000-board milestone gate with a predeclared safety
+metric/fallback budget. PlayMode fresh board entry plus visual intent/model parity; owner smoke
+on the recovered or clearly identified synthetic case.
+
+**Save and compatibility impact:** Any published layout change requires an explicit generator
+version/legacy policy. Continue must not reroll a pinned old board or change its enemy plans
+silently; a known unsafe saved board needs an explicit owner-approved compatibility decision.
+No profile reset or diagnostic export containing private saves.
+
+**Required handoff:** Confirmed facts versus missing evidence, reproducible seed/address/fixture,
+initial state and failing/legal command sequences, safety bound, generator-version decision,
+fallback/seed results and remaining tactical guarantees that are not proved.
+
+---
+
+## `M7.7` - Center the board and resource HUD in one responsive layout
+
+**Status:** `Planned`
+**Priority:** P1
+**Related contract:** section 18; existing inspectable-board and reserved-HUD rules.
+
+**Rationale:** The board and resource readout need a consistent visual center, and neither total
+nor feedback may be lost beyond the screen edge.
+
+**Reported/current behavior:** The owner requests centering both the map and the Food/Health
+readout. Screenshot #3 also shows the Health readout cut at the right edge.
+
+**Expected outcome:** The board is horizontally centered in a defined gameplay viewport and the
+Food/Health group shares that center. Reserved tool/overlay areas do not shift or crop it.
+
+**Scope:** One responsive camera/viewport and HUD layout contract, symmetric letterboxing where
+needed, board framing, resource-group alignment and stable room for M7.5 suffixes. Account for
+legend/Notes/tool controls and actual text bounds at desktop, portrait and resize transitions.
+Use layout/viewport math rather than moving authoritative grid/entity coordinates.
+
+**Non-goals:** No board scaling/content changes, camera gameplay motion, art replacement,
+resource renaming, new UI framework, or unrelated HUD redesign.
+
+**Dependencies:** M7.2 layer boundaries; coordinate M7.3 controls and M7.5 feedback dimensions.
+
+**Allowed file area:** Presentation camera/viewport/HUD layout and graphics PlayMode tests;
+exact UI scene/prefab assets only if explicitly listed before Ready.
+
+**Acceptance criteria:** Board and resource group have the same horizontal center in the
+declared gameplay area; the area remains centered in the window with documented symmetric
+reservations. Food/Health totals and `+X` fit without clipping, overlap or layout jumps as
+digits change. The whole playable board remains inspectable. Repeated board/day transitions,
+legend/Notes toggles and resize preserve framing without leaking old-board pixels.
+
+**Test plan:** Graphics PlayMode bounds/pixel checks at 1280x720, a wide desktop size, 320x480
+and 320x640; actual long resource values and suffixes; live resize, repeated boards and
+overlay/Day cycles. Compare captures against the shared center and reserved-area contract.
+
+**Save and compatibility impact:** None. Layout does not change board identity, grid state or saves.
+
+**Required handoff:** Viewport/HUD dimensions and center definition, text-fit assertions and
+uncropped before/after captures for every tested aspect ratio.
+
+---
+
+## `M7.8` - Integrated repair regression and owner smoke gate
+
+**Status:** `Planned`
+**Priority:** P0 milestone gate
+**Related contract:** sections 18, 20 and 22.
+
+**Rationale:** The reported defects cross frame, turn, overlay and board boundaries; isolated
+tests alone can miss their combined production sequence.
+
+**Current behavior:** This is a newly planned repair backlog. Prior milestone test counts do
+not establish that any issue reported on 2026-10-28 is fixed.
+
+**Expected outcome:** All M7 repairs have focused evidence and one production smoke sequence
+covers the new opening and repeated board/day/overlay transitions, with an explicit owner verdict.
+
+**Scope:** Regression coverage and triage, graphics/audio smoke, old-run/new-run/Continue
+compatibility, representative generation safety and the complete issue-to-evidence matrix.
+No implementation expansion outside the owning cards' closed scopes.
+
+**Non-goals:** No new mechanic, substitute human results for M4.9/M6.6, approval of M8 content
+or M10 inventory, fabricated reconstruction of screenshot #3, or portable replay dependency.
+
+**Dependencies:** M7.1-M7.7 and the earlier human gates, unless a separate explicit owner
+exception authorizes the repair work without declaring those gates complete.
+
+**Allowed file area:** Relevant tests, Docs/Testing.md and this roadmap; a separate bounded defect
+card owns any additional production correction. Do not create a success-report file by default.
+
+**Acceptance criteria:** No known P0/P1 regression remains in scope. Start -> warm-up Day ->
+first completion -> first route choice -> later boards/days, with repeated legend/Notes use,
+passes without flash, residue, white fill, blinking, duplicate labels or clipping. A step sounds
+once and short; Food/Health gains survive the turn; board/HUD alignment is stable. The entry-trap
+investigation has an honest outcome and passing declared safety regressions. Compatibility and
+required scoped/full test gates pass; owner visual/audio smoke has an explicit Accept/Revise
+outcome. Unperformed checks and unresolved original-seed evidence remain visible.
+
+**Test plan:** Focused tests after each repair; final relevant EditMode and graphics PlayMode
+regressions, required generation milestone, desktop/portrait/resize and animation parity smoke;
+manual real-audio check and production opening through multiple boards/day boundaries. Record
+actual results, not intended coverage, and use isolated storage for save/restart tests.
+
+**Save and compatibility impact:** Verify the last supported saves and any M7.1/M7.6 migration
+or legacy generation policy; profile knowledge and existing pinned addresses remain intact.
+
+**Required handoff:** Issue -> reproduction -> owning fix -> test/smoke result matrix, honest
+remaining limitations, actual owner verdict and brief dated milestone status.
+
+### M7 gate
+
+M7 is complete only after M7.1-M7.7 and M7.8 are accepted. Planning these cards does not repair
+the game or accept either outstanding human gate. M8 starts only after the repair gate and the
+earlier required gates, unless the owner separately changes that order.
+
+---
+
+# M8 — Dziesięciodniowy vertical slice
+
+---
+
+## `M8.1` — Rozszerzenie stałego grafu do około 10 dni
 
 **Status:** `Planned`  
 **Priorytet:** P1  
@@ -5578,7 +6016,7 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 ---
 
-## `M7.2` — Dwa biomy różniące się regułą
+## `M8.2` — Dwa biomy różniące się regułą
 
 **Status:** `Planned` — dokładne reguły pozostają `Hypothesis`, zanim playtest je zatwierdzi  
 **Priorytet:** P1  
@@ -5594,7 +6032,7 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 **Non-goals:** Bez pełnych pór roku, temperatury survival-sim, wielu skinów bez reguły i jednoczesnego wprowadzania wszystkich mechanik.
 
-**Zależności:** `M7.1` i `M4.6`; Coordinator wybiera eksperymentalne reguły na podstawie prototypu.
+**Zależności:** `M8.1` i `M4.6`; Coordinator wybiera eksperymentalne reguły na podstawie prototypu.
 
 **Dozwolony obszar plików:** Core/GameData Biomes/Generation, presentation art/audio, tests.
 
@@ -5608,7 +6046,7 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 ---
 
-## `M7.3` — Archetypy miejsc i prawdziwe wskazówki tras
+## `M8.3` — Archetypy miejsc i prawdziwe wskazówki tras
 
 **Status:** `Planned`  
 **Priorytet:** P1  
@@ -5620,11 +6058,11 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 **Oczekiwany rezultat:** Location and route archetypes have explicit tags/features. A `Rumored` edge may expose truthful resource-family `low`/`medium`/`high` bands and route length; `Sighted` may reveal family/icon without pretending an exact future total.
 
-**Zakres:** Definitions/tags, per-resource-family qualitative thresholds, generator constraints proving the authored band, route-length presentation, truthful hint generation, localization, and examples per biome. Historical numeric samples belong to M7.4.
+**Zakres:** Definitions/tags, per-resource-family qualitative thresholds, generator constraints proving the authored band, route-length presentation, truthful hint generation, localization, and examples per biome. Historical numeric samples belong to M8.4.
 
 **Non-goals:** Bez proceduralnej narracji LLM, ukrytego procentu prawdy, perfekcyjnej informacji i dziesiątek archetypów.
 
-**Zależności:** `M7.2` i `M2.4`.
+**Zależności:** `M8.2` i `M2.4`.
 
 **Dozwolony obszar plików:** Core/GameData World/Locations/Hints, Atlas UI, tests.
 
@@ -5638,7 +6076,7 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 ---
 
-## `M7.4` — Historical route-resource observations
+## `M8.4` — Historical route-resource observations
 
 **Status:** `Planned`
 **Priority:** P1 product pillar
@@ -5657,11 +6095,11 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 - Commit a complete sample only on final arrival; commit an optional partial lower bound on death/abandon according to the contract.
 - Add profile DTO migration, missing-definition handling, atlas query model, and UI states for rumor versus partial versus historical range.
 - Show route segment count beside aggregate supply and current health/resource context without computing a “best” route.
-- Add explicit leg/observation scenarios and compare the resulting profile aggregate. Extend replay rules/version/hash only if M8.7 is already accepted.
+- Add explicit leg/observation scenarios and compare the resulting profile aggregate. Extend replay rules/version/hash only if M9.7 is already accepted.
 
 **Non-goals:** No guarantee of ordinary loot on the next run, hidden-loot leakage, per-tile memory, cloud analytics, inventory, or automatic route recommendation.
 
-**Dependencies:** `M7.3`, `M3.12`, `M4.6`, and accepted O-008.
+**Dependencies:** `M8.3`, `M3.12`, `M4.6`, and accepted O-008.
 
 **Allowed file area:** Core Profile/Travel/Knowledge/Persistence, Atlas query/presentation, resource definitions/configs, tests, and migration fixtures.
 
@@ -5674,9 +6112,9 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 - only observable/revealed supply contributes; hidden content remains unknown;
 - profile observations survive death/new run and actual loot remains run/board state;
 - unknown resource-family IDs degrade to a controlled placeholder without destroying other knowledge.
-- repeated authored leg scenarios produce explicit expected accumulator, observation event, and profile aggregate values; after M8.7 acceptance, replay also covers these fields and rejects omitted required contributions.
+- repeated authored leg scenarios produce explicit expected accumulator, observation event, and profile aggregate values; after M9.7 acceptance, replay also covers these fields and rejects omitted required contributions.
 
-**Test plan:** EditMode merge/idempotency/min-max/partial/hidden/reload/revisit scenarios; schema round-trip and v2 migration; replay/version/hash expansion only after M8.7 acceptance; PlayMode complete and partial multi-board routes; atlas readability test comparing rumor, one sample, range, and taken current-run resources.
+**Test plan:** EditMode merge/idempotency/min-max/partial/hidden/reload/revisit scenarios; schema round-trip and v2 migration; replay/version/hash expansion only after M9.7 acceptance; PlayMode complete and partial multi-board routes; atlas readability test comparing rumor, one sample, range, and taken current-run resources.
 
 **Save and compatibility impact:** New additive profile schema plus active-leg accumulator in run schema. Existing profiles migrate with empty observations. Published edge/resource IDs require alias/migration when renamed.
 
@@ -5684,7 +6122,7 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 ---
 
-## `M7.5` — Fixed tool sources and persistent atlas icons
+## `M8.5` — Fixed tool sources and persistent atlas icons
 
 **Status:** `Planned`
 **Priority:** P1
@@ -5696,11 +6134,11 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 **Expected outcome:** Authored `ToolSourceDefinition` records stable source ID, tool-definition ID, physical edge-segment binding, and an optional atlas anchor for presentation. First sight permanently reveals the correct atlas icon. Each new run restores one instance at every fixed source; pickup marks it `taken` only for the current run.
 
-**Scope:** Source definitions and validation, deterministic `BoardAddress` binding, optional node/segment atlas anchor, sight event, profile discovered-source IDs, current-run taken state, atlas query/presentation, M5 tool-pickup integration, explicit sight/take/reload scenarios, and content examples with multiple axe/shovel sources. Replay/version/hash expansion is conditional on M8.7 acceptance.
+**Scope:** Source definitions and validation, deterministic `BoardAddress` binding, optional node/segment atlas anchor, sight event, profile discovered-source IDs, current-run taken state, atlas query/presentation, M5 tool-pickup integration, explicit sight/take/reload scenarios, and content examples with multiple axe/shovel sources. Replay/version/hash expansion is conditional on M9.7 acceptance.
 
 **Non-goals:** No guarantee for ordinary random consumables, tool respawn within the same run, permanent carried tools, shop, crafting, repair, or mandatory exit requiring a tool.
 
-**Dependencies:** `M5.6`, `M7.3`, `M3.11`, and accepted O-008.
+**Dependencies:** `M5.6`, `M8.3`, `M3.11`, and accepted O-008.
 
 **Allowed file area:** Core/GameData World/Tools/Profile/Travel/Persistence, Generation fixed-feature binding, Atlas presentation, tests, and migration fixtures.
 
@@ -5713,9 +6151,9 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 - the same source returns once in the next run and every authored fixed source is present for supported seeds/fallbacks;
 - multiple sources of the same tool remain independently discoverable;
 - validator proves every mandatory exit has a tool-free path.
-- sight/take/reload scenarios reproduce explicit discovered/taken state; after M8.7 acceptance, replay also covers both authoritative fields and rejects missing contributions.
+- sight/take/reload scenarios reproduce explicit discovered/taken state; after M9.7 acceptance, replay also covers both authoritative fields and rejects missing contributions.
 
-**Test plan:** Definition/ID validation, profile migration/idempotency, explicit sight/take/reload sequences, replay/version/hash expansion only after M8.7 acceptance, generator and fallback presence across representative seeds, PlayMode sight/pickup/reload/death/new run, atlas icon/taken-state readability, and softlock validation.
+**Test plan:** Definition/ID validation, profile migration/idempotency, explicit sight/take/reload sequences, replay/version/hash expansion only after M9.7 acceptance, generator and fallback presence across representative seeds, PlayMode sight/pickup/reload/death/new run, atlas icon/taken-state readability, and softlock validation.
 
 **Save and compatibility impact:** New additive profile list of discovered source IDs and run state for taken source IDs; missing definitions use controlled placeholders/diagnostics. World-definition version changes when published source bindings change.
 
@@ -5723,7 +6161,7 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 ---
 
-## `M7.6` — Finał i jawne zwycięstwo
+## `M8.6` — Finał i jawne zwycięstwo
 
 **Status:** `Planned`  
 **Priorytet:** P1  
@@ -5739,7 +6177,7 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 **Non-goals:** Bez cutsceny wysokobudżetowej, new game+, boss fight jako tradycyjna walka i obowiązku kompletnego atlasu.
 
-**Zależności:** `M7.1`–`M7.5`, bramki M3–M6 oraz rozstrzygnięcie O-001 przed finalnym tekstem.
+**Zależności:** `M8.1`–`M8.5`, bramki M3-M7 oraz rozstrzygnięcie O-001 przed finalnym tekstem.
 
 **Dozwolony obszar plików:** Core outcome/session, final GameData/scene/presentation, tests.
 
@@ -5753,7 +6191,7 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 ---
 
-## `M7.7` — Podsumowanie wyprawy i dziennik trasy
+## `M8.7` — Podsumowanie wyprawy i dziennik trasy
 
 **Status:** `Planned`  
 **Priorytet:** P1  
@@ -5769,7 +6207,7 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 **Non-goals:** Bez publicznego leaderboardu, oceniania „optymalności”, trwałych bonusów mocy i śledzenia danych bez zgody.
 
-**Zależności:** `M7.6`, `M7.4`, `M7.5`, and `M5.7`; O-005 resolves that private summary precedes any online feature.
+**Zależności:** `M8.6`, `M8.4`, `M8.5`, and `M5.7`; O-005 resolves that private summary precedes any online feature.
 
 **Dozwolony obszar plików:** Core Summary/Profile, Presentation Summary/Atlas/Notes, persistence, tests.
 
@@ -5783,7 +6221,7 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 ---
 
-## `M7.8` — Stabilizacja, dostępność i playtest vertical slice
+## `M8.8` — Stabilizacja, dostępność i playtest vertical slice
 
 **Status:** `Planned`  
 **Priorytet:** P0 release gate  
@@ -5799,7 +6237,7 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 **Non-goals:** Bez nowych głównych mechanik, monetyzacji, kampanii 40-dniowej, publicznego uploadu telemetryki i poprawiania wszystkich sugestii testerów bez priorytetu.
 
-**Zależności:** `M7.1`–`M7.7` oraz wszystkie wcześniejsze bramki.
+**Zależności:** `M8.1`–`M8.7` oraz wszystkie wcześniejsze bramki.
 
 **Dozwolony obszar plików:** Najpierw tests/docs/config; każda poprawka produkcyjna powstaje jako osobny child ticket z własnym zakresem i review.
 
@@ -5809,19 +6247,19 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 **Wpływ na save i kompatybilność:** Test aktualizacji z ostatniego wspieranego schema; backup i recovery obowiązkowe.
 
-**Wymagany handoff:** Release report with results, defects, and qualitative metrics; one core verdict (`expand`, `iterate core loop`, or `stop/pivot`) plus a separate inventory verdict (`proceed to M9`, `defer M9`, or `reject/revise M9`).
+**Wymagany handoff:** Release report with results, defects, and qualitative metrics; one core verdict (`expand`, `iterate core loop`, or `stop/pivot`) plus a separate inventory verdict (`proceed to M10`, `defer M10`, or `reject/revise M10`).
 
-### Bramka M7
+### Bramka M8
 
-Vertical slice is complete only after `Accept` of `M7.8`. Implementing the feature list is insufficient: observed players must understand atlas knowledge, route observations, predictable turns, and why they would begin another run. M9 remains deferred until its separate verdict is `proceed to M9` or the owner explicitly overrides that gate.
-
----
-
-# M8 — Po vertical slice: zadania świadomie odroczone
+Vertical slice is complete only after `Accept` of `M8.8`. Implementing the feature list is insufficient: observed players must understand atlas knowledge, route observations, predictable turns, and why they would begin another run. M10 remains deferred until its separate verdict is `proceed to M10` or the owner explicitly overrides that gate.
 
 ---
 
-## `M8.1` — Snapshot i wznowienie środka planszy
+# M9 — Po vertical slice: zadania świadomie odroczone
+
+---
+
+## `M9.1` — Snapshot i wznowienie środka planszy
 
 **Status:** `Deferred`
 
@@ -5833,17 +6271,17 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 
 **Oczekiwany rezultat:** `Continue` po wyjściu do menu, kontrolowanym zamknięciu aplikacji lub awarii odtwarza ostatni atomowo zapisany, zakończony stan tury. Ponowne wczytywanie nie przywraca zużytych zasobów, zebranych łupów, pokonanych przeciwników ani zniszczonych przeszkód i nie pozwala rerollować wyniku RNG.
 
-**Zakres:** Versioned DTO for full `BoardState`, entity identities/state, actors, run resources, completed turn number/phase, active route address and observation accumulator, tools, obstacles, ground items, effects, noise, and deterministic RNG streams. If activated after M9, it also includes satiety, carried item instances, bag placements, and both pockets. Atomic checkpoint at a completed-turn boundary, mandatory flush before `Exit to Menu`/controlled shutdown, migration, backup, recovery, and exact-turn resume.
+**Zakres:** Versioned DTO for full `BoardState`, entity identities/state, actors, run resources, completed turn number/phase, active route address and observation accumulator, tools, obstacles, ground items, effects, noise, and deterministic RNG streams. If activated after M10, it also includes satiety, carried item instances, bag placements, and both pockets. Atomic checkpoint at a completed-turn boundary, mandatory flush before `Exit to Menu`/controlled shutdown, migration, backup, recovery, and exact-turn resume.
 
 **Non-goals:** Cloud sync, zapis w trakcie animacji lub nierozstrzygniętej komendy, serializacja `GameObject`, `Transform`, colliderów, prefabów albo Unity `InstanceID`.
 
-**Zależności:** `M3.2`, `M3.5`, `M3.10`, `M3.11`–`M3.12`, all dynamic systems included in the snapshot, and `M7.8`. If M9 ships before this card is activated, M9.1–M9.6 are additional dependencies; otherwise M8.1 must be reopened when M9 adds inventory state.
+**Zależności:** `M3.2`, `M3.5`, `M3.10`, `M3.11`–`M3.12`, all dynamic systems included in the snapshot, and `M8.8`. If M10 ships before this card is activated, M10.1–M10.6 are additional dependencies; otherwise M9.1 must be reopened when M10 adds inventory state.
 
 **Dozwolony obszar plików:** Core Persistence/Board/Turns i testy.
 
-**Kryteria akceptacji:** After representative turns, Exit to Menu -> Continue and process restart preserve every inventoried board/run/completed-turn field and the next command's explicit expected result. Repeated Continue restores neither loot, health, satiety/legacy food, tool charges, enemies, obstacles, nor route observations and does not change gameplay RNG. If M9 is present, it cannot restore consumed/discarded items or an earlier bag/pocket layout. A snapshot never represents half a command or modal draft; corruption returns to one coherent backup. Missing/older snapshots have an explicit migration or accepted fallback to the safe M1.10 boundary. Diagnostic hash parity is additional coverage only after M8.7 acceptance.
+**Kryteria akceptacji:** After representative turns, Exit to Menu -> Continue and process restart preserve every inventoried board/run/completed-turn field and the next command's explicit expected result. Repeated Continue restores neither loot, health, satiety/legacy food, tool charges, enemies, obstacles, nor route observations and does not change gameplay RNG. If M10 is present, it cannot restore consumed/discarded items or an earlier bag/pocket layout. A snapshot never represents half a command or modal draft; corruption returns to one coherent backup. Missing/older snapshots have an explicit migration or accepted fallback to the safe M1.10 boundary. Diagnostic hash parity is additional coverage only after M9.7 acceptance.
 
-**Plan testów:** Per-field/entity round-trip; explicit state and next-command assertions before exit and after Continue; pickup, obstacle destruction, tool use, damage, enemy movement/death, repeated Continue, process restart, crash injection before/during/after atomic replacement, and previous-schema migration. Add replay/hash parity only if M8.7 is already accepted.
+**Plan testów:** Per-field/entity round-trip; explicit state and next-command assertions before exit and after Continue; pickup, obstacle destruction, tool use, damage, enemy movement/death, repeated Continue, process restart, crash injection before/during/after atomic replacement, and previous-schema migration. Add replay/hash parity only if M9.7 is already accepted.
 
 **Wpływ na save:** Nowa wersja schema z migracją. Dotychczasowy zapis granicy M1.10 pozostaje jednoznacznym fallbackiem dla save'ów bez snapshotu, jeśli migracja nie może odtworzyć stanu środka planszy.
 
@@ -5851,7 +6289,7 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 
 ---
 
-## `M8.2` — Rozbudowa kampanii do 20–25 dni
+## `M9.2` — Rozbudowa kampanii do 20–25 dni
 
 **Status:** `Deferred`  
 **Powiązany kontrakt:** sekcje 7.1, 17, 19 i 20.  
@@ -5860,7 +6298,7 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 **Oczekiwany rezultat:** Dłuższy pacing bez rozmycia wiedzy atlasu.  
 **Zakres:** Graph, variable route-segment lists, content/supply budgets, and combinations of learned rules; pacing includes total boards, turns, and estimated session time rather than day count alone.
 **Non-goals:** Automatyczne 30–40 dni i losowy makrograf.  
-**Zależności:** Pozytywna decyzja `expand` z `M7.8`.
+**Zależności:** Pozytywna decyzja `expand` z `M8.8`.
 **Dozwolony obszar plików:** Zostanie określony przed `Ready`.  
 **Kryteria akceptacji:** Każdy nowy odcinek wnosi kombinację decyzji, graf pozostaje osiągalny, a pacing nie wymaga kompletowania atlasu.  
 **Plan testów:** Walidacja całego grafu, seed gate per biome oraz playtest długości/retencji sesji.  
@@ -5869,7 +6307,7 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 
 ---
 
-## `M8.3` — Pory roku
+## `M9.3` — Pory roku
 
 **Status:** `Deferred`  
 **Powiązany kontrakt:** sekcja 15.  
@@ -5878,7 +6316,7 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 **Oczekiwany rezultat:** Tylko po osobnym prototypie mechanicznie znaczący cykl sezonowy.  
 **Zakres:** Do ustalenia po playtestcie.
 **Non-goals:** Sezon jako reskin.  
-**Zależności:** `M8.2` i osobna decyzja kontraktu.
+**Zależności:** `M9.2` i osobna decyzja kontraktu.
 **Dozwolony obszar plików:** Niedookreślony — karta nie może przejść na `Ready`.  
 **Kryteria akceptacji:** Sezon tworzy odrębne decyzje i nie zaciera kierunku podróży.  
 **Plan testów:** Osobny prototyp A/B oraz playtest rozumienia osi geografia–czas przed produkcją contentu.  
@@ -5887,7 +6325,7 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 
 ---
 
-## `M8.4` — Daily/Endless Mode
+## `M9.4` — Daily/Endless Mode
 
 **Status:** `Deferred`  
 **Powiązany kontrakt:** sekcja 19.  
@@ -5896,7 +6334,7 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 **Oczekiwany rezultat:** Osobne, jasno oznaczone tryby po stabilizacji core.  
 **Zakres:** Seed rules, scoring i oddzielny lifecycle do zaprojektowania.  
 **Non-goals:** Włączenie ich do MVP.  
-**Zależności:** `M7.8` i osobna decyzja produktu.
+**Zależności:** `M8.8` i osobna decyzja produktu.
 **Dozwolony obszar plików:** Niedookreślony.  
 **Kryteria akceptacji:** Reprodukowalny daily, brak uszkodzenia profilu kampanii i jasny cel endless.  
 **Plan testów:** Cross-machine seed vectors, lifecycle isolation, offline mode i playtest motywacji.  
@@ -5905,7 +6343,7 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 
 ---
 
-## `M8.5` — Tradycyjna walka, crafting i trwała moc
+## `M9.5` — Tradycyjna walka, crafting i trwała moc
 
 **Status:** `Deferred`  
 **Powiązany kontrakt:** sekcje 1, 3, 13.1, 19 i 20.  
@@ -5913,7 +6351,7 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 **Obecne zachowanie:** Konflikt opiera się na pozycji, zasobach, intentach i narzędziach użytkowych.  
 **Oczekiwany rezultat:** Brak implementacji bez jawnej zmiany kontraktu i prototypu dowodzącego wartości.  
 **Zakres:** Tylko przyszły design spike.  
-**Non-goals:** Damage numbers, loot rarity, skill tree w bieżącej roadmapie. The accepted M9 spatial bag, consumables, and satiety pressure are explicitly not part of this deferred combat/crafting/permanent-power proposal.
+**Non-goals:** Damage numbers, loot rarity, skill tree w bieżącej roadmapie. The accepted M10 spatial bag, consumables, and satiety pressure are explicitly not part of this deferred combat/crafting/permanent-power proposal.
 **Zależności:** Osobna zmiana `GameDesignContract.md`.  
 **Dozwolony obszar plików:** Brak do czasu nowej karty.  
 **Kryteria akceptacji:** Muszą zostać napisane po jawnej zmianie decyzji; ticket nie może wcześniej przejść na `Ready`.  
@@ -5923,7 +6361,7 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 
 ---
 
-## `M8.6` — Publiczny leaderboard
+## `M9.6` — Publiczny leaderboard
 
 **Status:** `Deferred` — wymaga przyszłej, osobnej decyzji produktowej i modelu bezpieczeństwa
 **Powiązany kontrakt:** sekcje 19, 21.5, O-005 i Appendix A.  
@@ -5932,7 +6370,7 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 **Oczekiwany rezultat:** Jeśli dane uzasadnią funkcję, nowa metryka i kontrolowany backend bez sekretu w kliencie.  
 **Zakres:** Osobny projekt po MVP.  
 **Non-goals:** Ponowne osadzenie prywatnego klucza.  
-**Zależności:** `M7.8`, ponowne otwarcie O-005 oraz nowa decyzja infrastrukturalna i bezpieczeństwa.
+**Zależności:** `M8.8`, ponowne otwarcie O-005 oraz nowa decyzja infrastrukturalna i bezpieczeństwa.
 **Dozwolony obszar plików:** Niedookreślony.  
 **Kryteria akceptacji:** Zaakceptowany threat model, brak sekretu w kliencie, offline fallback i jawna polityka danych.  
 **Plan testów:** Security review, abuse/rate-limit tests, awaria sieci i brak zależności profilu od usługi.  
@@ -5941,7 +6379,7 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 
 ---
 
-## `M8.7` - Portable bug replay for real testers and players
+## `M9.7` - Portable bug replay for real testers and players
 
 **Status:** `Deferred` - owner decision 2026-10-13; not an M3, generator, save, atlas, or inventory gate.
 **Priority:** P2 until a concrete user need is demonstrated
@@ -5963,7 +6401,7 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 
 **Non-goals:** No network/anti-cheat, automatic telemetry/upload, animation video, player-save migration, mid-board resume, arbitrary CLR-type materialization, duplicated rules, or unconditional release recording.
 
-**Dependencies:** The activation trigger and all accepted mechanics included in the initial coverage inventory. Use actual accepted BoardAddress/generator APIs when available; neither M9 nor optional M8.1 is mandatory unless its state is already shipped.
+**Dependencies:** The activation trigger and all accepted mechanics included in the initial coverage inventory. Use actual accepted BoardAddress/generator APIs when available; neither M10 nor optional M9.1 is mandatory unless its state is already shipped.
 
 **Allowed file area:** None until Ready. Define a closed source/test/build scope per child; keep artifacts and validation reports outside the Unity project. No package, assembly, scene, prefab, or settings changes are implicitly authorized.
 
@@ -5973,57 +6411,57 @@ Vertical slice is complete only after `Accept` of `M7.8`. Implementing the featu
 
 ---
 
-## `M8.7.1` - Define complete portable inputs and canonical comparison
+## `M9.7.1` - Define complete portable inputs and canonical comparison
 
 **Status:** `Deferred`
 **Rationale:** A transferred bug report is useful only if it carries every input that affects the recorded decisions, not merely a seed and actor positions.
 **Scope:** Inventory shipped owners/fields; define versioned explicit command tags, immutable initial descriptions, public independent restoration, deterministic framed encoding, independently required contributions, canonical state hash, and a strict structured JSON codec. Include full current route/resource/tool/enemy/inventory inputs where shipped; do not freeze the old node-only M3 assumptions.
 **Acceptance criteria:** Synthetic round-trips preserve all fields and semantic order; culture and unordered insertion do not change canonical values. Per-field mutations and omitted owners are detected. Duplicate/unknown fields, invalid associations, commands/tags, and unsupported versions fail before execution; type-name-driven object creation is disabled.
 **Test plan:** Focused codec/capture/encoding/coverage EditMode vectors and malformed-input tests, defined before Ready.
-**Dependencies:** M8.7 activation and accepted public read/restore APIs. Missing access requires a separately scoped prerequisite.
+**Dependencies:** M9.7 activation and accepted public read/restore APIs. Missing access requires a separately scoped prerequisite.
 
 ---
 
-## `M8.7.2` - Reproduce artifacts through the existing controller
+## `M9.7.2` - Reproduce artifacts through the existing controller
 
 **Status:** `Deferred`
 **Rationale:** Reproduction must run the real gameplay rules; a second decision implementation could agree with itself while missing the reported bug.
 **Scope:** Rebuild fresh owners, restore initial locked plans without replanning, decode the ordered attempts, and call the existing controller once per attempt. Compare initial/post-attempt state hashes and accepted/rejected results; report the first mismatch with build/rules/seed/address, attempt index, accepted-turn count, command, and expected/actual values.
 **Acceptance criteria:** Equal traces pass; injected initial/command/result/state changes report the earliest boundary. Rejected and post-terminal attempts cost nothing. No mutable owners are shared with the recording run, and malformed artifacts cannot partially execute.
 **Test plan:** Authored turn traces plus intentional divergence, missing/extra-frame, rejection, and terminal EditMode cases.
-**Dependencies:** `M8.7.1`.
+**Dependencies:** `M9.7.1`.
 
 ---
 
-## `M8.7.3` - Add opt-in bounded Development recording and export
+## `M9.7.3` - Add opt-in bounded Development recording and export
 
 **Status:** `Deferred`
 **Rationale:** A replay format without a way for real testers to collect the failing sequence does not solve bug-report reproduction.
 **Scope:** Add an explicitly enabled Editor/Development recording boundary around completed command attempts. Observe the sole controller result without resolving/planning again; distinguish attempts from accepted turns. Retain a complete initial state and bounded trace. When the limit is reached, stop/mark recording incomplete or use another explicitly approved reconstructible boundary; never silently discard the required command prefix. Manually export to an explicit external location. Exclude release recording and short-circuit the disabled path before capture/hash work.
 **Acceptance criteria:** One admitted command has one resolution and one recorded frame; rejected results preserve state. Lifecycle replacement/cancellation cannot mix boards. Length/size limits have explicit behavior; unsupported/incomplete traces are diagnosed. Release and disabled paths create no diagnostic snapshots, hashes, history, or file writes.
 **Test plan:** Command-count/state-isolation, enabled/disabled/release compilation, bounded-history, cancellation/replacement, and export checks; no tests touch real player storage.
-**Dependencies:** `M8.7.2` and a named tester handoff workflow.
+**Dependencies:** `M9.7.2` and a named tester handoff workflow.
 
 ---
 
-## `M8.7.4` - Validate tester reproduction and measured overhead
+## `M9.7.4` - Validate tester reproduction and measured overhead
 
 **Status:** `Deferred`
 **Rationale:** The feature is justified by a working bug-report workflow and acceptable measured costs, not merely passing serialization tests.
 **Scope:** Collect a real or representative tester trace, export/decode/reproduce it in a fresh process, and introduce a controlled first divergence. Profile representative turns with recording on/off, retained memory/allocations, and explicit export latency. Verify release recording exclusion and parity of the shared rules in all builds. Agree budgets before measurements; record an owner Accept/Revise/Defer verdict.
 **Acceptance criteria:** A recipient can reproduce the reported sequence from the artifact without private profile files. The earliest mismatch is actionable; all shipped owner/field coverage is audited. Limits and measured CPU/allocation/memory/export costs meet the agreed budgets, and disabled/release paths perform no recorder work. No external upload is required.
 **Test plan:** End-to-end local artifact workflow, fresh automated reports, profiler captures, and representative Development/release build checks.
-**Dependencies:** `M8.7.1`-`M8.7.3`.
+**Dependencies:** `M9.7.1`-`M9.7.3`.
 
 ---
 
-# M9 — Spatial Inventory and Resource Pressure
+# M10 — Spatial Inventory and Resource Pressure
 
-M9 is intentionally listed last and remains **Deferred** until the owner has played the complete no-backpack vertical slice. It may begin only after an explicit `proceed to M9` verdict from `M7.8` or a later explicit owner override. It does not require optional M8 work.
+M10 is intentionally listed last and remains **Deferred** until the owner has played the complete no-backpack vertical slice. It may begin only after an explicit `proceed to M10` verdict from `M8.8` or a later explicit owner override. It does not require optional M9 work.
 
 ---
 
-## `M9.1` — Item catalogue and spatial `InventoryState`
+## `M10.1` — Item catalogue and spatial `InventoryState`
 
 **Status:** `Deferred`
 **Priority:** P1 after inventory gate
@@ -6039,7 +6477,7 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 
 **Non-goals:** No `RunState` integration or save migration yet; no use effects, pickup, UI, turn command, rotation, irregular shapes, stacks, weight, expansion, crafting, spoilage, rarity, or drop-to-ground.
 
-**Dependencies:** Positive M9 verdict, `M4.4`, `M5.2`, `M5.6`, and accepted O-009.
+**Dependencies:** Positive M10 verdict, `M4.4`, `M5.2`, `M5.6`, and accepted O-009.
 
 **Allowed file area:** Core Items/Inventory definitions and tests; GameData item definitions only if required for validation. No scenes or prefabs.
 
@@ -6055,16 +6493,16 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 
 **Test plan:** Exhaustive placement tests for all anchors/footprints on `3×3`, overlap/duplicate/pocket compatibility, immutability/copy isolation, catalogue validation, and property-based random layout validation.
 
-**Save and compatibility impact:** None in this card because the model is not yet attached to authoritative `RunState`. DTO shape and migration are owned by M9.3.
+**Save and compatibility impact:** None in this card because the model is not yet attached to authoritative `RunState`. DTO shape and migration are owned by M10.3.
 
 **Required handoff:** Item definition/instance/container ownership diagram, placement invariants, rejected-case catalogue, and proof that tool equipment remains separate.
 
 ---
 
-## `M9.2` — Health cap, satiety, and consumable effects
+## `M10.2` — Health cap, satiety, and consumable effects
 
 **Status:** `Deferred`
-**Priority:** P1 after M9.1
+**Priority:** P1 after M10.1
 **Related contract:** sections 10, 19, 25, and 27.5.
 
 **Rationale:** The bag matters only when carried resources create decisions. Health and satiety need one bounded, deterministic policy before item use, bag transactions, and route UI can reason about their outcomes.
@@ -6073,11 +6511,11 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 
 **Expected outcome:** `RunState` has one authoritative `Satiety` value in `0..200`, initially `100`, and health in `0..100`. An action-cost policy samples satiety at command start (`1` at `<=100`, `2` above `100`). Pure, data-driven consumable effects resolve before the selected cost and report capped/wasted amounts.
 
-**Scope:** Resource configuration/invariants, `Food`->`Satiety` domain migration, health cap, cost policy, item-effect definitions/registry, effect events, terminal ordering, run DTO migration for resources, explicit resource/effect command scenarios, and a temporary adapter preserving automatic board-food behavior until M9.5. Replay-rules/version/hash expansion is required only after M8.7 acceptance.
+**Scope:** Resource configuration/invariants, `Food`->`Satiety` domain migration, health cap, cost policy, item-effect definitions/registry, effect events, terminal ordering, run DTO migration for resources, explicit resource/effect command scenarios, and a temporary adapter preserving automatic board-food behavior until M10.5. Replay-rules/version/hash expansion is required only after M9.7 acceptance.
 
 **Non-goals:** No bag integration, manual consumable pickup, inventory UI, quick use, spoilage, buffs, combat stats, or balancing a large item catalogue.
 
-**Dependencies:** `M9.1`, `M3.5`, and accepted O-002/O-009.
+**Dependencies:** `M10.1`, `M3.5`, and accepted O-002/O-009.
 
 **Allowed file area:** Core State/Resources/Items/Turns/Persistence, legacy automatic-food adapter, focused presentation labels, migration fixtures, and tests.
 
@@ -6091,9 +6529,9 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 - starvation/exit priority still follows O-002;
 - runtime has no synchronized duplicate `Food` and `Satiety` fields;
 - legacy run saves migrate deterministically and current no-bag play remains functional through the temporary adapter.
-- explicit command scenarios assert satiety, health caps, selected cost tier, and consumable effects; after M8.7 acceptance, replay captures all renamed/new fields and rejects omitted required contributions.
+- explicit command scenarios assert satiety, health caps, selected cost tier, and consumable effects; after M9.7 acceptance, replay captures all renamed/new fields and rejects omitted required contributions.
 
-**Test plan:** Boundary table for health/satiety/cost, effect-before-cost sequences, starvation/exit, rejected actions, caps/waste events, schema round-trip and legacy migration, explicit multi-turn resource scenarios, plus M3 turn regression. Add replay/version/hash divergence coverage only after M8.7 acceptance.
+**Test plan:** Boundary table for health/satiety/cost, effect-before-cost sequences, starvation/exit, rejected actions, caps/waste events, schema round-trip and legacy migration, explicit multi-turn resource scenarios, plus M3 turn regression. Add replay/version/hash divergence coverage only after M9.7 acceptance.
 
 **Save and compatibility impact:** New run schema maps old `food` to clamped satiety and adds explicit configuration/version semantics. Invalid legacy values produce a controlled migration result; profile save is unchanged.
 
@@ -6101,7 +6539,7 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 
 ---
 
-## `M9.3` - Inventory persistence and RunState integration
+## `M10.3` - Inventory persistence and RunState integration
 
 **Status:** `Deferred`
 **Priority:** P1
@@ -6109,17 +6547,17 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 
 **Rationale:** A carried item is a run resource. Versioned saves and explicit save/load scenarios must prevent duplication, loss, or changed layouts after Continue. Portable replay is not required to prove those invariants.
 
-**Current behavior:** `RunState`/run DTO store resources and two tool slots but no item instances, spatial placements, pockets, or inventory revision. Portable replay is deferred to M8.7.
+**Current behavior:** `RunState`/run DTO store resources and two tool slots but no item instances, spatial placements, pockets, or inventory revision. Portable replay is deferred to M9.7.
 
-**Expected outcome:** Every active run owns one empty-or-populated `InventoryState` and a monotonic inventory revision. Any accepted operation that changes inventory advances it, and every accepted `ManageInventoryCommand` advances it even when its final layout/actions are a no-op. Run DTO, validation, backup/recovery, and explicit round-trip scenarios preserve item instances, main-grid placements, pocket references, and revision using stable IDs only. Portable replay coverage is conditional on M8.7 acceptance.
+**Expected outcome:** Every active run owns one empty-or-populated `InventoryState` and a monotonic inventory revision. Any accepted operation that changes inventory advances it, and every accepted `ManageInventoryCommand` advances it even when its final layout/actions are a no-op. Run DTO, validation, backup/recovery, and explicit round-trip scenarios preserve item instances, main-grid placements, pocket references, and revision using stable IDs only. Portable replay coverage is conditional on M9.7 acceptance.
 
-**Scope:** Attach inventory to `RunState`; mapper/DTO/schema migration; load validation; unknown/missing item handling policy; explicit field/layout/revision scenarios; two-run isolation; save-boundary integration. Add a canonical hash/replay contribution only if M8.7 is already accepted. Old saves receive an empty backpack and pockets.
+**Scope:** Attach inventory to `RunState`; mapper/DTO/schema migration; load validation; unknown/missing item handling policy; explicit field/layout/revision scenarios; two-run isolation; save-boundary integration. Add a canonical hash/replay contribution only if M9.7 is already accepted. Old saves receive an empty backpack and pockets.
 
 **Non-goals:** No bag/pickup/quick-use command, UI, mid-board snapshot, profile inventory, item transfer between profiles, or persistence of modal drafts.
 
-**Dependencies:** `M9.1`, `M9.2`, `M3.10`, and accepted atomic persistence.
+**Dependencies:** `M10.1`, `M10.2`, `M3.10`, and accepted atomic persistence.
 
-**Allowed file area:** Core State/Inventory/Persistence/Session, migration fixtures, and tests; Diagnostics only for an already accepted M8.7 extension. No scenes/prefabs.
+**Allowed file area:** Core State/Inventory/Persistence/Session, migration fixtures, and tests; Diagnostics only for an already accepted M9.7 extension. No scenes/prefabs.
 
 **Acceptance criteria:**
 
@@ -6127,19 +6565,19 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 - old run schema migrates with empty inventory without changing profile knowledge;
 - load rejects overlap, out-of-bounds, duplicate placement, incompatible pocket, duplicate instance ID, and unknown required effect safely;
 - two runs share no mutable inventory collection or instance;
-- explicit round-trip scenarios check every authoritative inventory field and reject unknown save versions/IDs; after M8.7 acceptance, replay/hash coverage also detects each field change and rejects unknown diagnostic versions;
+- explicit round-trip scenarios check every authoritative inventory field and reject unknown save versions/IDs; after M9.7 acceptance, replay/hash coverage also detects each field change and rejects unknown diagnostic versions;
 - repeating an already accepted no-op management payload with the old expected revision is rejected as stale and cannot consume another turn;
 - failed write/replace recovers one coherent pre- or post-change state, never a mixed inventory.
 
-**Test plan:** DTO round-trip matrix, legacy migration, corrupt/unknown ID fixtures, backup/crash injection, explicit item/layout/revision checks, two-run isolation, and repeated save/load with full inventory. Canonical diagnostic ordering/hash is additional coverage only after M8.7 acceptance.
+**Test plan:** DTO round-trip matrix, legacy migration, corrupt/unknown ID fixtures, backup/crash injection, explicit item/layout/revision checks, two-run isolation, and repeated save/load with full inventory. Canonical diagnostic ordering/hash is additional coverage only after M9.7 acceptance.
 
-**Save and compatibility impact:** New run schema. Profile schema is unchanged. Mid-board modal/draft state is intentionally absent; M8.1 must include committed inventory if it is implemented later.
+**Save and compatibility impact:** New run schema. Profile schema is unchanged. Mid-board modal/draft state is intentionally absent; M9.1 must include committed inventory if it is implemented later.
 
-**Required handoff:** Complete domain-to-DTO field map, migration/recovery matrix, explicit round-trip evidence, and redacted sample save with every container represented. Include diagnostic hash evidence only for an accepted M8.7 extension.
+**Required handoff:** Complete domain-to-DTO field map, migration/recovery matrix, explicit round-trip evidence, and redacted sample save with every container represented. Include diagnostic hash evidence only for an accepted M9.7 extension.
 
 ---
 
-## `M9.4` — Atomic one-turn backpack session
+## `M10.4` — Atomic one-turn backpack session
 
 **Status:** `Deferred`
 **Priority:** P1
@@ -6151,11 +6589,11 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 
 **Expected outcome:** `ManageInventoryCommand(expectedRevision, actions[0..2], finalLayout)` validates a complete draft and atomically commits up to two ordered `Use`/`Discard` actions plus arbitrary repacking. Any accepted finish—including no-op—advances the inventory revision exactly once, costs exactly one turn/resource payment, and triggers one hostile/environment phase.
 
-**Scope:** Command/result/events, draft DTO separate from authoritative state, full prevalidation, use/discard effect ordering, permanent discard, final-layout commit, stale revision handling, resolver/controller integration, and a minimal test/debug presenter. Final art and HUD belong to M9.7.
+**Scope:** Command/result/events, draft DTO separate from authoritative state, full prevalidation, use/discard effect ordering, permanent discard, final-layout commit, stale revision handling, resolver/controller integration, and a minimal test/debug presenter. Final art and HUD belong to M10.7.
 
 **Non-goals:** No quick-pocket modifier, ground pickup, drop-to-ground, third action, per-drag turn cost, partial commit, persisted draft, or pause-time item use.
 
-**Dependencies:** `M9.3`, `M3.5`, `M3.6`, and accepted O-009.
+**Dependencies:** `M10.3`, `M3.5`, `M3.6`, and accepted O-009.
 
 **Allowed file area:** Core Inventory/Items/Turns/State, minimal Presentation/Inventory adapter, tests, and only explicitly allowlisted UI assets.
 
@@ -6168,17 +6606,17 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 - stale revision, invalid effect/target, invalid layout, duplicate action, or rapid resubmit applies nothing and costs nothing;
 - discarded carried items are destroyed and do not appear in `BoardState`;
 - quick use cannot be attached, and newly pocketed items are unavailable until the command fully resolves;
-- explicit command scenarios assert ordered effects and the final layout; portable replay parity is added only after M8.7 acceptance.
+- explicit command scenarios assert ordered effects and the final layout; portable replay parity is added only after M9.7 acceptance.
 
-**Test plan:** EditMode action/layout cross-product, ordering/caps/starvation, stale/invalid atomic rollback, no-op finish, discard destruction, and explicit multi-turn inventory scenarios; replay/hash only after M8.7 acceptance. PlayMode modal input lock, rapid submit, one enemy phase, and animations disabled.
+**Test plan:** EditMode action/layout cross-product, ordering/caps/starvation, stale/invalid atomic rollback, no-op finish, discard destruction, and explicit multi-turn inventory scenarios; replay/hash only after M9.7 acceptance. PlayMode modal input lock, rapid submit, one enemy phase, and animations disabled.
 
-**Save and compatibility impact:** Only the committed post-turn inventory is saved. Drafts are never saved. Existing M9.3 schema should not change unless events require a separately justified version.
+**Save and compatibility impact:** Only the committed post-turn inventory is saved. Drafts are never saved. Existing M10.3 schema should not change unless events require a separately justified version.
 
 **Required handoff:** Command payload, validation/commit chronology, state-before/state-after examples for all action mixes, proof of one hostile phase, and complete rejection matrix.
 
 ---
 
-## `M9.5` — Ground pickup decision and atomic board-to-run transfer
+## `M10.5` — Ground pickup decision and atomic board-to-run transfer
 
 **Status:** `Deferred`
 **Priority:** P1
@@ -6190,11 +6628,11 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 
 **Expected outcome:** Entering a consumable tile presents `Use now`, `Store`, or `Leave` before final command submission. Item-producing interactions such as a shovel cache use the same decision within their interaction command. The accepted composite command either uses/removes, stores/removes, or leaves the exact same ground instance. Tool pickup continues to use M5.6's separate equipment flow.
 
-**Scope:** Pickup query/options and availability reasons, move- and interaction-based composite payloads, placement choice/preview, all-or-nothing BoardState-to-RunState transfer, entry-trigger behavior, M5.5 cache-adapter migration, removal of the legacy automatic-food path, presentation modal, and explicit command/event scenarios. Replay integration is conditional on M8.7 acceptance.
+**Scope:** Pickup query/options and availability reasons, move- and interaction-based composite payloads, placement choice/preview, all-or-nothing BoardState-to-RunState transfer, entry-trigger behavior, M5.5 cache-adapter migration, removal of the legacy automatic-food path, presentation modal, and explicit command/event scenarios. Replay integration is conditional on M9.7 acceptance.
 
 **Non-goals:** No automatic best placement, drop-to-ground, bag rearrangement during pickup, multiple ground items on one cell, shopping, crafting, or tool storage in the bag.
 
-**Dependencies:** `M9.4`, `M5.1`, `M5.6`, and the M9.2 temporary adapter, which this card removes.
+**Dependencies:** `M10.4`, `M5.1`, `M5.6`, and the M10.2 temporary adapter, which this card removes.
 
 **Allowed file area:** Core Board/Interaction/Items/Inventory/Turns, Presentation Pickup/Inventory, legacy food adapter removal, tests, and explicit UI assets.
 
@@ -6209,15 +6647,15 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 - a revealed shovel-cache reward follows the same choice, remains the same ground instance on `Leave`, and never restores a resource through a bypass;
 - automatic food pickup no longer exists after this card, and O-003 transition is documented in handoff.
 
-**Test plan:** EditMode every option with empty/full/fragmented bag, capped/illegal effect, leave/re-entry, stale IDs, transfer rollback, duplicate submit, and explicit transfer sequences; replay only after M8.7 acceptance. PlayMode prompt/input/re-entry/reload plus regression for tool pickup.
+**Test plan:** EditMode every option with empty/full/fragmented bag, capped/illegal effect, leave/re-entry, stale IDs, transfer rollback, duplicate submit, and explicit transfer sequences; replay only after M9.7 acceptance. PlayMode prompt/input/re-entry/reload plus regression for tool pickup.
 
-**Save and compatibility impact:** Uses M9.3 inventory and existing board-boundary persistence. If M8.1 exists, the same exact ground/carried instance transition must survive mid-board snapshot without duplication.
+**Save and compatibility impact:** Uses M10.3 inventory and existing board-boundary persistence. If M9.1 exists, the same exact ground/carried instance transition must survive mid-board snapshot without duplication.
 
 **Required handoff:** Option availability table, atomic transfer sequence, before/after entity identity evidence, O-003 migration note, and video/screenshots of leave then re-entry.
 
 ---
 
-## `M9.6` — Quick-pocket composite turn
+## `M10.6` — Quick-pocket composite turn
 
 **Status:** `Deferred`
 **Priority:** P1
@@ -6225,17 +6663,17 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 
 **Rationale:** Side pockets are valuable because preparation avoids a separate bag turn. Allowing both pockets—or a pocket plus bag actions—before one enemy response would erase the tactical cost, so quick use must be one modifier on one ordinary command.
 
-**Current behavior:** Pockets can be persisted after M9.3 but have no runtime use path. Every effect is otherwise a standalone part of its owning command.
+**Current behavior:** Pockets can be persisted after M10.3 but have no runtime use path. Every effect is otherwise a standalone part of its owning command.
 
 **Expected outcome:** An optional `QuickItemUse` from either pocket may wrap one accepted non-inventory primary command. At most one item resolves, then the primary action/resource/hostile phases complete as one atomic turn. `Wait` supports intentional quick use without movement.
 
-**Scope:** Command envelope/modifier, compatibility query for primary command types, validation and ordering, pocket removal/effect events, rejection atomicity, explicit composite-command scenarios, input selection, and minimal feedback. Replay/hash is conditional on M8.7 acceptance.
+**Scope:** Command envelope/modifier, compatibility query for primary command types, validation and ordering, pocket removal/effect events, rejection atomicity, explicit composite-command scenarios, input selection, and minimal feedback. Replay/hash is conditional on M9.7 acceptance.
 
 **Non-goals:** No two-pocket use in one turn, quick use with `ManageInventoryCommand`, free standalone use, automatic emergency consumption, action queue, or moving an item into a pocket and using it in the same bag turn.
 
-**Dependencies:** `M9.4`, `M9.5`, `M3.5`, and accepted O-009.
+**Dependencies:** `M10.4`, `M10.5`, `M3.5`, and accepted O-009.
 
-**Allowed file area:** Core Turns/Inventory/Items/Interaction/Tools, Presentation HUD/Input, tests, and explicitly allowlisted UI assets; replay sources only for an already accepted M8.7 extension.
+**Allowed file area:** Core Turns/Inventory/Items/Interaction/Tools, Presentation HUD/Input, tests, and explicitly allowlisted UI assets; replay sources only for an already accepted M9.7 extension.
 
 **Acceptance criteria:**
 
@@ -6244,17 +6682,17 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 - rejected/stale primary command consumes neither item, satiety, tool charge, nor turn;
 - bag command, empty/ineligible pocket, duplicate submit, and two-item payload are rejected atomically;
 - either pocket can be used on consecutive turns, and `Wait` is a legal primary action;
-- explicit scenarios assert the exact pocket, item, effect, primary command, and resulting state; replay/hash parity is added only after M8.7 acceptance.
+- explicit scenarios assert the exact pocket, item, effect, primary command, and resulting state; replay/hash parity is added only after M9.7 acceptance.
 
-**Test plan:** Matrix of both pockets x supported primary commands x accepted/rejected/stale, two-item and bag incompatibility, starvation/exit/tool charge order, rapid input, explicit composite sequences, and PlayMode enemy-phase count. Add portable replay only after M8.7 acceptance.
+**Test plan:** Matrix of both pockets x supported primary commands x accepted/rejected/stale, two-item and bag incompatibility, starvation/exit/tool charge order, rapid input, explicit composite sequences, and PlayMode enemy-phase count. Add portable replay only after M9.7 acceptance.
 
-**Save and compatibility impact:** No new persistent shape beyond M9.3. After M8.7 acceptance, new command tags require an explicit diagnostic-version update. Save boundaries contain only the completed result, never a pending modifier.
+**Save and compatibility impact:** No new persistent shape beyond M10.3. After M9.7 acceptance, new command tags require an explicit diagnostic-version update. Save boundaries contain only the completed result, never a pending modifier.
 
 **Required handoff:** Supported-command matrix, exact event chronology, explicit unchanged-state rejection evidence, and proof that two quick items cannot resolve in one turn.
 
 ---
 
-## `M9.7` — Backpack, hotbar, and route-context UI
+## `M10.7` — Backpack, hotbar, and route-context UI
 
 **Status:** `Deferred`
 **Priority:** P1
@@ -6270,9 +6708,9 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 
 **Non-goals:** No final mobile layout, controller radial menu, drag physics as game logic, automatic packing, optimal-route score, full art polish, or new inventory rules.
 
-**Dependencies:** `M9.4`–`M9.6`, `M3.6`, `M7.4`, `M7.5`, and accepted PC reference platform O-004.
+**Dependencies:** `M10.4`–`M10.6`, `M3.6`, `M8.4`, `M8.5`, and accepted PC reference platform O-004.
 
-**Allowed file area:** Presentation Inventory/HUD/Atlas/Input, required scenes/prefabs/assets under a closed allowlist, localization, and PlayMode tests. Domain changes require returning to the owning M9 card.
+**Allowed file area:** Presentation Inventory/HUD/Atlas/Input, required scenes/prefabs/assets under a closed allowlist, localization, and PlayMode tests. Domain changes require returning to the owning M10 card.
 
 **Acceptance criteria:**
 
@@ -6293,30 +6731,30 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 
 ---
 
-## `M9.8` — Inventory content, economy integration, and release gate
+## `M10.8` — Inventory content, economy integration, and release gate
 
 **Status:** `Deferred`
-**Priority:** P0 M9 gate
+**Priority:** P0 M10 gate
 **Related contract:** sections 2, 3, 7, 17, 19, 22, 25, and 27.
 
-**Rationale:** Correct inventory code can still make the game slower, encourage obsessive cleanup, or trivialize route decisions. M9 succeeds only if the complete economy creates understandable trade-offs and preserves the logic-first identity.
+**Rationale:** Correct inventory code can still make the game slower, encourage obsessive cleanup, or trivialize route decisions. M10 succeeds only if the complete economy creates understandable trade-offs and preserves the logic-first identity.
 
-**Current behavior:** Individual M9 systems may pass focused tests, but there is no representative item set, route supply tuning, complete migration/scenario gate, or evidence that players use the bag and atlas as intended.
+**Current behavior:** Individual M10 systems may pass focused tests, but there is no representative item set, route supply tuning, complete migration/scenario gate, or evidence that players use the bag and atlas as intended.
 
-**Expected outcome:** A small data-driven content set and controlled route supply produce food-versus-healing and carry-versus-use choices. Full automated validation, smoke, migration/recovery, and comparative playtests yield an explicit `Accept`, `Revise`, or `Remove/Defer` decision for M9.
+**Expected outcome:** A small data-driven content set and controlled route supply produce food-versus-healing and carry-versus-use choices. Full automated validation, smoke, migration/recovery, and comparative playtests yield an explicit `Accept`, `Revise`, or `Remove/Defer` decision for M10.
 
 **Scope:** Representative items (including `1×1` berries, `1×2` drink, medicine, at least one elongated quick item, and one intentionally weak but legible item), supply budgets/variation, fixed-source/tool interaction regression, full tests, performance/accessibility, and 8–12 observed sessions compared with the no-backpack baseline.
 
 **Non-goals:** No large loot catalogue, rarity treadmill, crafting, shops, combat weapons, permanent inventory upgrades, telemetry upload, or content expansion before the gate passes.
 
-**Dependencies:** `M9.1`–`M9.7` and accepted M7/M9 gate inputs.
+**Dependencies:** `M10.1`–`M10.7` and accepted M8/M10 gate inputs.
 
 **Allowed file area:** First tests/docs/config/GameData; production fixes are separate child tickets with closed allowlists and independent review.
 
 **Acceptance criteria:**
 
 - zero known duplication/silent-loss paths and no P0/P1 defects;
-- full EditMode/PlayMode, explicit command scenarios, save migration/recovery, generator supply, fixed-source, and deterministic batch gates pass twice; replay/hash joins the gate only if M8.7 is already accepted;
+- full EditMode/PlayMode, explicit command scenarios, save migration/recovery, generator supply, fixed-source, and deterministic batch gates pass twice; replay/hash joins the gate only if M9.7 is already accepted;
 - caps, cost tier, pickup, two-action bag budget, quick-use limit, and one-hostile-phase atomicity match section 27;
 - route rumors never lie and observed ranges are not mistaken for guarantees;
 - testers make at least some route choices from current health/satiety/capacity plus atlas knowledge;
@@ -6324,15 +6762,15 @@ M9 is intentionally listed last and remains **Deferred** until the owner has pla
 - session length and interaction time remain acceptable relative to the no-backpack baseline;
 - the owner records `Accept`, `Revise`, or `Remove/Defer` with evidence.
 
-**Test plan:** Complete automated suites twice, 10,000-seed supply/softlock gate, old-save migration and crash recovery, full PC smoke, accessibility/input matrix, explicit resource/inventory command sequences, and pre-scripted comparative playtests with behavioral observations rather than preference-only surveys. Add replay divergence injection only after M8.7 acceptance.
+**Test plan:** Complete automated suites twice, 10,000-seed supply/softlock gate, old-save migration and crash recovery, full PC smoke, accessibility/input matrix, explicit resource/inventory command sequences, and pre-scripted comparative playtests with behavioral observations rather than preference-only surveys. Add replay divergence injection only after M9.7 acceptance.
 
-**Save and compatibility impact:** Validate upgrade from the last supported pre-M9 schemas and all intermediate M9 schemas; backup/recovery is mandatory. Failure may disable/retire the active run only through an explicit safe policy and must never erase the profile/atlas.
+**Save and compatibility impact:** Validate upgrade from the last supported pre-M10 schemas and all intermediate M10 schemas; backup/recovery is mandatory. Failure may disable/retire the active run only through an explicit safe policy and must never erase the profile/atlas.
 
-**Required handoff:** M9 release report, item/supply registry, all exact test results, migration matrix, unresolved defects, anonymized playtest observations, comparison to no-bag baseline, and final owner verdict.
+**Required handoff:** M10 release report, item/supply registry, all exact test results, migration matrix, unresolved defects, anonymized playtest observations, comparison to no-bag baseline, and final owner verdict.
 
-### M9 gate
+### M10 gate
 
-M9 is complete only after `Accept` of `M9.8`. A technically functional bag is not sufficient: the feature must improve route/resource decisions without item loss, hidden action costs, excessive session friction, or erosion of the game's knowledge-first progression.
+M10 is complete only after `Accept` of `M10.8`. A technically functional bag is not sufficient: the feature must improve route/resource decisions without item loss, hidden action costs, excessive session friction, or erosion of the game's knowledge-first progression.
 
 ---
 
@@ -6340,7 +6778,7 @@ M9 is complete only after `Accept` of `M9.8`. A technically functional bag is no
 
 | Decyzja | Najpóźniej przed | Działanie Coordinatora |
 | --- | --- | --- |
-| O-001 — atlas fiction/ownership | `M7.6` final narrative and `M7.7` summary | agree with the owner, then update the contract and player-facing text |
+| O-001 — atlas fiction/ownership | `M8.6` final narrative and `M8.7` summary | agree with the owner, then update the contract and player-facing text |
 
 O-002, O-003, O-004, O-005, O-006, O-007, O-008, and O-009 are resolved in `GameDesignContract.md` for their stated scopes and are not execution blockers. A card may reopen one only through an explicit product decision; it must not keep a stale “unresolved” status.
 
@@ -6354,9 +6792,10 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 
 The next safe sequence is:
 
-1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. The owner then separately authorized solo M6.6: its technical preparation passed full EditMode 1237 tests plus the existing Explicit skip and graphics PlayMode 188/188, with self-review only. M6.6 remains Active until 5-8 real sessions and the landmark decision in `Docs/Validation/M6.6.md`; neither exception closes M4.9 or authorizes M7. Preserve independent review on later cards unless separately waived;
-2. complete the no-backpack vertical slice through `M7.8`, preserving its playtest requirements and the earlier M4.9 gate, then make the explicit M9 verdict;
-3. keep M9 deferred and last unless the owner explicitly changes that order; activate M8.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M9.
+1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. The owner then separately authorized solo M6.6: its technical preparation passed full EditMode 1237 tests plus the existing Explicit skip and graphics PlayMode 188/188, with self-review only. M6.6 remains Active until 5-8 real sessions and the landmark decision in `Docs/Validation/M6.6.md`; neither exception closes M4.9 or authorizes M8. Future cards use the current Lead implementation and Reviewer/self-review policy in `AGENTS.md`, without changing these historical review attributions;
+2. prepare and execute the new `M7.1`-`M7.8` repair/onboarding milestone after the required earlier gates, or under a separately recorded owner exception. The 2026-10-28 request authorizes this roadmap amendment only; it is not implementation or human-gate acceptance;
+3. complete the no-backpack vertical slice through `M8.8`, preserving its playtest requirements and the earlier M4.9/M6.6/M7 gates, then make the explicit M10 verdict;
+4. keep M10 deferred and last unless the owner explicitly changes that order; activate M9.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M10.
 
 `M0.9` remains deferred by owner decision. No implementation agent performs external history rewriting, exposes historical values, or runs BFG without a separate explicit request.
 
@@ -6418,7 +6857,7 @@ the owner authorized direct replacement, validation and self-review. The bounded
 finds both real outcomes and the manual no-axe alternative, executes found decisions on fresh
 owners and separates exhaustive failure from incomplete budget stops. Focused EditMode passed
 26/26 and full EditMode passed 1225 tests with the pre-existing Explicit skip. No runtime, save,
-content or M8.7 change was introduced; PlayMode was not rerun. No independent verdict is claimed.
+content or M9.7 change was introduced; PlayMode was not rerun. No independent verdict is claimed.
 At that closeout M4.9 remained Pending without human results; M6.6 remained Planned and needed
 the later separate owner authorization recorded below.
 No commit or push was performed.
@@ -6431,7 +6870,7 @@ coverage, desktop/portrait previews and isolated session boundaries are ready. F
 passed 1237 tests with the existing Explicit skip; graphics PlayMode passed 188/188; production
 landmark cases passed 7/7. Review was self-review, not independent. The
 [protocol and actual matrix](Validation/M6.6.md) record zero participants and Pending human
-results. M6.6 remains Active; M4.9 is still Pending; no M6 acceptance or M7 authorization is
+results. M6.6 remains Active; M4.9 is still Pending; no M6 acceptance or M8 authorization is
 claimed. No commit or push was performed.
 
 # Zasada aktualizacji roadmapy
