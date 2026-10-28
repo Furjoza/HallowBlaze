@@ -94,15 +94,15 @@ New or materially changed public and protected C# APIs MUST use English XML docu
 - Private or internal implementation details do not require XML documentation when their purpose and behavior are clear from naming and structure.
 - Keep documentation accurate in the same change as the code. Do not perform repository-wide documentation backfills unless the active task explicitly includes them.
 
-Exactly one agent may write project files during an implementation iteration.
+The Lead is also the implementation developer and the only project-file writer. It owns scoped changes, builds, tests, corrections, and final acceptance; there is no separate Developer handoff.
 
-Read-only analysis may run separately, but review begins only after the implementation writer has finished.
+The Reviewer is read-only and begins only after implementation and required validation finish. Use the configured `reviewer` without a runtime model override. GitHub Copilot is the intended review service, but an omitted model alone does not guarantee provider routing.
 
-Before a normal ticket begins, the coordinator must verify that the worktree is clean and record the Git root, branch, and `HEAD`. The user commits and pushes any manual changes before starting agent work. If unexpected pre-existing changes are present, stop and ask the user how to proceed.
+If review cannot be invoked because allowance is exhausted or the service/model is unavailable, the Lead may continue autonomously with explicit self-review. Record the concrete invocation failure and the absence of independent review; do not silently switch providers or repeatedly retry. The owner may explicitly request solo work. Material review findings, missing required validation, and unresolved product decisions still block acceptance, not qualify as unavailability.
 
-Before native delegation, the Lead defines a closed write scope and prepares the worktree. The Lead mechanically checks the actual filesystem changes, Git diff, compilation, tests, and acceptance criteria after the writer returns. Do not burden the Developer with baseline administration or a change-transfer protocol.
+Before a normal ticket begins, the Lead must verify that the worktree is clean and record the Git root, branch, and `HEAD`, unless the owner explicitly authorizes continuation with identified existing changes. If unexpected pre-existing changes are present, stop and ask the user how to proceed. Never clean the worktree automatically.
 
-For controlled local-worker experiments, use disposable Git worktrees. Record intentional historical fixture preparation separately from worker changes. A returned compile failure, test failure, scope violation, or materially incomplete implementation is FAIL; the Lead does not repair or retry the failed implementation within that experiment.
+Define a closed write scope before implementation. The Lead checks actual filesystem changes, Git diff, compilation, tests, and acceptance criteria, and corrects in-scope failures directly. No worker packet, local-attempt classification, or rescue protocol is needed for normal work. Benchmarks require a separate explicit user request and their own agreed scope and gates.
 
 ## 5. Architecture invariants
 
@@ -126,13 +126,13 @@ When existing legacy code violates these rules, migrate only within the scope of
 
 Treat pre-existing tracked and untracked changes as user-owned baseline.
 
-### Git baseline before a writer
+### Git baseline before implementation
 
-For a new ticket, record the real Git root, branch, and `HEAD`, then require `git status --short --branch --untracked-files=normal` to show no staged, unstaged, or untracked project changes. The clean commit is the recovery baseline; do not create a separate snapshot.
+For a new ticket, record the real Git root, branch, and `HEAD`, then inspect `git status --short --branch --untracked-files=normal`. Require no staged, unstaged, or untracked project changes unless the owner explicitly authorizes the identified existing changes as baseline. Record that exception and preserve those changes; do not create a separate snapshot.
 
-Define a closed repo-relative write scope before delegating through native `runSubagent`. After the writer returns, compare the repository changes with the recorded baseline, prepared input, and scope before review. Worktree preparation and integrity checks belong to the Lead, not the local Developer.
+Define a closed repo-relative write scope before editing. Compare repository changes with the recorded baseline and scope before review. Baseline protection, implementation, and integrity checks belong to the Lead.
 
-Normal ticket corrections continue from the current ticket state without creating a new baseline or snapshot. Never automatically take over failed local work. In controlled benchmarks, record FAIL and discard the disposable worktree rather than repairing or delegating a rescue iteration. The Developer may iterate on its own implementation and validation before returning.
+Normal ticket corrections continue from the current ticket state without creating a new baseline or snapshot. The Lead repairs its implementation and reruns affected checks. Disposable worktrees are not required for normal work; use them only for an explicit task or isolation need.
 
 If a path outside the allowlist changes or baseline content disappears, stop the normal workflow. Preserve the evidence and do not restore automatically; recovery requires an explicit user decision.
 
@@ -284,7 +284,7 @@ Gameplay and cosmetic randomness must not share the same RNG stream.
 
 Run checks and inspect results; unavailable: `Not run` and cause.
 
-Keep review evidence in packets; reports only for failures/blockers or explicit requests.
+Give the Reviewer a concise task/diff/validation summary when available. Use the same evidence for Lead self-review when independent review is unavailable. Separate reports are required only for failures/blockers or explicit requests.
 
 ## 10. Definition of done
 
@@ -297,7 +297,8 @@ A task is complete only when:
 - scope did not silently expand;
 - save changes include compatible versioning/migration or an explicitly approved reset;
 - documentation/configuration was updated when the task changed a public contract;
-- implementation received the required independent review; controlled worker benchmarks use the Lead's brief final acceptance review without implementation repairs.
+- implementation received independent review when available, or the Lead completed and explicitly disclosed self-review under the fallback policy in section 4;
+- material review findings are resolved and required checks were not bypassed because the Reviewer was unavailable.
 
 Successful closeout: status/date and brief summary; no test reports or `Implementation handoff`, regardless of templates.
 

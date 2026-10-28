@@ -1,6 +1,6 @@
 ---
 name: unity-validate
-description: Validate HallowBlaze C# changes with scoped compilation and focused Unity EditMode or PlayMode tests. The Developer may use it for a bounded self-check; the Lead uses it for the independent acceptance gate.
+description: Validate HallowBlaze C# changes with scoped compilation and focused Unity EditMode or PlayMode tests. The Lead implements, runs the checks, and supplies actual results for review or explicit self-review.
 ---
 
 # Unity Validation
@@ -11,13 +11,14 @@ Normally this is the active project workspace. If the Lead explicitly assigns a 
 
 # Ownership
 
-Developer self-check and Lead acceptance validation are different things:
+The Lead owns implementation and acceptance validation:
 
-- The Developer may run a focused check to get feedback while implementing. This is bounded scratch validation.
-- After the Developer returns, the Lead runs the independent acceptance validation.
-- Only the Lead-owned validation gate is acceptance evidence passed to the Reviewer.
+- Run focused checks while implementing and after relevant corrections.
+- Validate the final filesystem state against the acceptance criteria.
+- Supply actual results to the read-only Reviewer when available, otherwise use them for explicitly disclosed Lead self-review.
+- Reviewer unavailability does not waive required compilation, tests, or other checks.
 
-The XML produced by `unity test --output` is simply the Unity Test Framework's machine-readable test report. It records which tests ran, counts, failures, and result. It is not a source artifact and not a Developer deliverable.
+The XML produced by `unity test --output` is simply the Unity Test Framework's machine-readable test report. It records which tests ran, counts, failures, and result. It is validation evidence, not a source artifact or implementation deliverable.
 
 # Windows invocation
 
@@ -27,11 +28,7 @@ Always pass the exact absolute Unity project directory to `unity test` or `unity
 
 `dotnet test` on Unity-generated projects is not a substitute for the Unity Test Framework.
 
-Do not probe `unity pipeline list` or `unity command` during normal validation.
-Use those only when the Lead explicitly asks to diagnose or use a currently open Unity Editor connection.
-
-Do not use Pipeline availability as a preflight or environment-discovery step.
-For normal automated work, go directly to `unity test` or `unity run` as appropriate.
+Follow `AGENTS.md`: first run `unity pipeline list`, then `unity command` to discover the connected Editor's commands. Prefer an appropriate live command when available. If the live connection is unavailable, diagnose it with the CLI and use the existing batchmode `unity test` or `unity run` when appropriate; do not fall back automatically to legacy Unity MCP.
 
 If an edit seems invisible, inspect the source on disk at the exact project path being tested. A chat preview or tool-completion message is not evidence of what Unity compiled.
 
@@ -113,19 +110,15 @@ A success-looking CLI message alone is not enough. A nonzero CLI exit does not b
 
 If XML is absent, read the complete log to diagnose startup, licensing, project lock, package, compilation, or other environment failures.
 
-# Developer bounded self-check
+# Focused correction loop
 
-The Developer should normally perform at most two focused validation attempts for a microtask:
+`implement -> focused validation -> inspect failure -> scoped correction -> rerun affected checks`
 
-`implement -> focused self-check -> inspect failure -> one bounded correction -> self-check again`
-
-If the second check still fails, stop and return the actual failed state. Do not weaken assertions or filters to manufacture PASS and do not keep iterating indefinitely.
-
-Developer scratch XML/log files do not need to be preserved after the session. Report the observed result/counts, not a ceremonial path.
+The Lead corrects its implementation directly. Do not weaken assertions or filters to manufacture PASS. Stop for a concrete blocker or missing product decision, not because a separate worker's attempt budget was exhausted.
 
 # Lead acceptance gate
 
-After the Developer returns, the Lead independently validates the returned filesystem state.
+Validate the final filesystem state; previous results do not cover later behavior-changing edits automatically.
 
 The Lead should record or report:
 
@@ -135,4 +128,4 @@ The Lead should record or report:
 - compilation/result status;
 - concrete failure text when relevant.
 
-The Reviewer needs this validation summary plus the actual diff and acceptance criteria. The raw XML file does not need to live in the repository or be treated as a Developer artifact.
+The Reviewer needs this validation summary plus the actual diff and acceptance criteria. If independent review is unavailable, the Lead uses the same evidence for self-review and discloses that limitation. The raw XML does not need to live in the repository.
