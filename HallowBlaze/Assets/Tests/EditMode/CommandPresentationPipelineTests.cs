@@ -91,6 +91,41 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(coordinator.CanSubmit, Is.True);
         }
 
+        /// <summary>Transient turn feedback resets once per accepted replay, never for rejection, admission failure or recovery.</summary>
+        [Test]
+        public void BeginReplayHookRunsOnlyOnceAtAcceptedPresentationStart()
+        {
+            coordinator.Dispose();
+            int starts = 0;
+            dispatcher = new OrderedEventDispatcher(value => diagnostic = value, () => recoveryCount++, () =>
+            {
+                starts++;
+                Assert.That(gate.State, Is.EqualTo(PresentationGateState.Presenting));
+                trace.Add("Begin");
+            });
+            dispatcher.Register<EntityWaitedEvent>((gameEvent, token) => Record(gameEvent));
+            dispatcher.Register<ActionCostAppliedEvent>((gameEvent, token) => Record(gameEvent));
+            dispatcher.Register<EntityMovedEvent>((gameEvent, token) => Task.FromException(new InvalidOperationException("replay fault")));
+            coordinator = new CommandPresentationCoordinator(runtime, gate, dispatcher, value => rejection = value);
+            Assert.That(coordinator.SubmitAsync(null).Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+            Assert.That(coordinator.SubmitAsync(new MoveCommand(Direction.West)).Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+            gate.SetBlocked(PresentationInputBlock.Modal, true);
+            Assert.That(coordinator.SubmitAsync(new WaitCommand()).Result.Status, Is.EqualTo(CommandSubmissionStatus.Blocked));
+            gate.SetBlocked(PresentationInputBlock.Modal, false);
+            using (var canceled = new CancellationTokenSource())
+            {
+                canceled.Cancel();
+                Assert.That(coordinator.SubmitAsync(new WaitCommand(), canceled.Token).Result.Status, Is.EqualTo(CommandSubmissionStatus.Canceled));
+            }
+            Assert.That(starts, Is.Zero);
+            Assert.That(coordinator.SubmitAsync(new WaitCommand()).Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(trace, Is.EqualTo(new[] { "Begin", "EntityWaited", "ActionCostApplied" }));
+            Assert.That(starts, Is.EqualTo(1));
+            Assert.That(coordinator.SubmitAsync(new MoveCommand(Direction.East)).Result.Status, Is.EqualTo(CommandSubmissionStatus.PresentationFailed));
+            Assert.That(starts, Is.EqualTo(2));
+            Assert.That(recoveryCount, Is.EqualTo(1));
+        }
+
         [UnityTest]
         public IEnumerator CompletionHook_RunsOnceAfterReplayBeforeGateRelease()
         {

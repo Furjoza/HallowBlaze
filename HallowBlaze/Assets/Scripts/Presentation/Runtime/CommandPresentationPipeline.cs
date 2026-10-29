@@ -129,15 +129,18 @@ namespace HallowBlaze.Presentation.Runtime
             new Dictionary<Type, Func<GameEvent, CancellationToken, Task>>();
         private readonly Action<PresentationDiagnostic> reportDiagnostic;
         private readonly Action resynchronize;
+        private readonly Action beginReplay;
         private bool replaying;
 
         /// <summary>Creates a dispatcher with mandatory diagnostic and authoritative recovery sinks.</summary>
         /// <param name="reportDiagnostic">Receives the identity of an aborted event.</param>
         /// <param name="resynchronize">Snaps views and refreshes HUD from domain state; never resolves again.</param>
-        public OrderedEventDispatcher(Action<PresentationDiagnostic> reportDiagnostic, Action resynchronize)
+        /// <param name="beginReplay">Optional view-only reset once before a new accepted batch; rejection and recovery do not invoke it.</param>
+        public OrderedEventDispatcher(Action<PresentationDiagnostic> reportDiagnostic, Action resynchronize, Action beginReplay = null)
         {
             this.reportDiagnostic = reportDiagnostic ?? throw new ArgumentNullException(nameof(reportDiagnostic));
             this.resynchronize = resynchronize ?? throw new ArgumentNullException(nameof(resynchronize));
+            this.beginReplay = beginReplay;
         }
 
         /// <summary>Registers exactly one handler for an event type before replay begins.</summary>
@@ -169,6 +172,7 @@ namespace HallowBlaze.Presentation.Runtime
             GameEvent current = null;
             try
             {
+                beginReplay?.Invoke();
                 for (index = 0; index < events.Count; index++)
                 {
                     current = events[index];

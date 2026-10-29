@@ -106,6 +106,35 @@ namespace HallowBlaze.Tests.EditMode
             Assert.Throws<InvalidOperationException>(() => session.GetCurrentRun());
         }
 
+        /// <summary>Health feedback reports only committed positive mutations and retains the exact run and applied amount.</summary>
+        [Test]
+        public void HealthRestorationNotifiesOnlySuccessfulPositiveEffects()
+        {
+            GameSession session = new GameSession(CreateProfile());
+            RunState first = session.StartNewRun("healing-first", 1, CreateConfiguration());
+            var amounts = new List<int>();
+            var runs = new List<RunState>();
+            session.OnHealthRestored += (run, amount) =>
+            {
+                runs.Add(run);
+                amounts.Add(amount);
+                Assert.That(run, Is.SameAs(session.ActiveRun));
+            };
+            session.RestoreHealth(0);
+            Assert.That(amounts, Is.Empty);
+            session.RestoreHealth(7);
+            Assert.That(first.Health, Is.EqualTo(107));
+            Assert.Throws<ArgumentOutOfRangeException>(() => session.RestoreHealth(-1));
+            Assert.Throws<OverflowException>(() => session.RestoreHealth(int.MaxValue));
+            Assert.That(first.Health, Is.EqualTo(107));
+            session.MarkDead();
+            Assert.Throws<InvalidOperationException>(() => session.RestoreHealth(1));
+            RunState second = session.StartNewRun("healing-second", 2, CreateConfiguration());
+            session.RestoreHealth(5);
+            Assert.That(amounts, Is.EqualTo(new[] { 7, 5 }));
+            Assert.That(runs, Is.EqualTo(new[] { first, second }));
+        }
+
         [Test]
         public void ResourceAndDayMutationsDelegateToRunAndNotifyOnceEach()
         {

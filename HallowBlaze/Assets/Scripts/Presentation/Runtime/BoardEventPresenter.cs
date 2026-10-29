@@ -24,6 +24,17 @@ namespace HallowBlaze.Presentation.Runtime
         void Refresh(int health, int food);
     }
 
+    /// <summary>Retains positive applied resource gains separately from totals until the next accepted replay or disposal.</summary>
+    public interface ITurnResourceGains
+    {
+        /// <summary>Accumulates actual positive restoration, never a configured reward or net final-minus-initial difference.</summary>
+        /// <param name="health">Applied health restored; zero leaves health feedback unchanged.</param>
+        /// <param name="food">Applied Food restored; zero leaves Food feedback unchanged.</param>
+        void AddResourceGains(int health, int food);
+        /// <summary>Clears only transient gains without changing displayed totals, resources or another input owner.</summary>
+        void ClearResourceGains();
+    }
+
     /// <summary>Presents stable rejection and informational feedback without applying gameplay effects.</summary>
     public interface ITurnFeedback
     {
@@ -109,7 +120,8 @@ namespace HallowBlaze.Presentation.Runtime
             NoiseDisplay = noiseOwner.AddComponent<BoardNoisePresenter>();
             NoiseDisplay.Bind(runtime.BoardState, () => disposed || runtime.IsDisposed || runtime.Controller.IsTerminal
                 ? null : runtime.BoardState);
-            Dispatcher = new OrderedEventDispatcher(diagnostic, SynchronizeFromState);
+            Dispatcher = new OrderedEventDispatcher(diagnostic, SynchronizeFromState,
+                () => (hud as ITurnResourceGains)?.ClearResourceGains());
             Coordinator = new CommandPresentationCoordinator(runtime, new PresentationGate(), Dispatcher,
                 feedback.ShowRejection, result =>
                 {
@@ -227,6 +239,7 @@ namespace HallowBlaze.Presentation.Runtime
         public void SynchronizeFromState()
         {
             (feedback as IPlayerStepAudio)?.StopStep();
+            (hud as ITurnResourceGains)?.ClearResourceGains();
             if (disposed || runtime.IsDisposed)
             {
                 CloseIntents();
@@ -406,6 +419,7 @@ namespace HallowBlaze.Presentation.Runtime
         private Task RefreshFood(FoodRestoredEvent gameEvent)
         {
             RefreshHud();
+            (hud as ITurnResourceGains)?.AddResourceGains(0, gameEvent.Amount);
             feedback.ShowEvent(gameEvent);
             return Task.CompletedTask;
         }
@@ -432,6 +446,7 @@ namespace HallowBlaze.Presentation.Runtime
 
         private Task NotifyOutcome(GameEvent gameEvent)
         {
+            (hud as ITurnResourceGains)?.ClearResourceGains();
             CloseIntents();
             NoiseDisplay.Dispose();
             InteractionDisplay.Dispose();
@@ -461,6 +476,7 @@ namespace HallowBlaze.Presentation.Runtime
         public void Dispose()
         {
             (feedback as IPlayerStepAudio)?.StopStep();
+            (hud as ITurnResourceGains)?.ClearResourceGains();
             if (disposed)
                 return;
             disposed = true;

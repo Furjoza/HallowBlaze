@@ -311,8 +311,125 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(session.ActiveRun.Food, Is.EqualTo(10));
             Assert.That(session.ActiveRun.Status, Is.EqualTo(RunStatus.Active));
             Assert.That(food.activeSelf, Is.False);
-            Assert.That(foodText.text, Is.EqualTo("Food: 10"));
+            Assert.That(foodText.text, Is.EqualTo("Food: 10 +10"));
             Assert.That(runtime.BoardState.Count, Is.EqualTo(runtime.Views.Count - 1));
+            Assert.That(TrySubmit(player, new MoveCommand(Direction.South), out Task<CommandSubmission> rejected), Is.True);
+            Assert.That(rejected.Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+            Assert.That(foodText.text, Is.EqualTo("Food: 10 +10"));
+            session.RestoreFood(13);
+            session.ConsumeFood(1);
+            BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter");
+            var replay = presenter.Dispatcher.ReplayAsync(new GameEvent[]
+            {
+                new FoodRestoredEvent(runtime.PlayerId, runtime.PlayerId, 4),
+                new FoodRestoredEvent(runtime.PlayerId, runtime.PlayerId, 9),
+                new ActionCostAppliedEvent(runtime.PlayerId, 1)
+            });
+            while (!replay.IsCompleted) yield return null;
+            Assert.That(replay.Result, Is.Null);
+            Assert.That(foodText.text, Is.EqualTo("Food: 22 +13"));
+            Assert.That(TrySubmit(player, new WaitCommand(), out Task<CommandSubmission> accepted), Is.True);
+            while (!accepted.IsCompleted) yield return null;
+            Assert.That(foodText.text, Is.EqualTo("Food: 21"));
+            ((ITurnResourceGains)player).AddResourceGains(0, 5);
+            presenter.SynchronizeFromState();
+            Assert.That(foodText.text, Is.EqualTo("Food: 21"));
+        }
+
+        /// <summary>Applied healing is shown separately from later damage and survives rejection until the next accepted turn.</summary>
+        [UnityTest]
+        public IEnumerator HealthGainSurvivesDamageAndRejectionUntilTheNextTurn()
+        {
+            GameObject playerObject = CreatePlayer("Health gain player", 0.05f);
+            Component player = playerObject.GetComponent(playerType);
+            Text healthText = Track(new GameObject("Health gain HUD")).AddComponent<Text>();
+            SetField(player, "healthText", healthText);
+            ComposeRuntime(playerObject);
+            yield return null;
+            session.TakeDamage(20);
+            ((IRunHud)player).Refresh(session.ActiveRun.Health, session.ActiveRun.Food);
+            session.RestoreHealth(10);
+            Assert.That(healthText.text, Is.EqualTo("Health: 90 +10"));
+            session.TakeDamage(7);
+            ((IRunHud)player).Refresh(session.ActiveRun.Health, session.ActiveRun.Food);
+            Assert.That(healthText.text, Is.EqualTo("Health: 83 +10"));
+            session.RestoreHealth(5);
+            Assert.That(healthText.text, Is.EqualTo("Health: 88 +15"));
+            Assert.That(TrySubmit(player, new MoveCommand(Direction.West), out Task<CommandSubmission> rejected), Is.True);
+            Assert.That(rejected.Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+            Assert.That(healthText.text, Is.EqualTo("Health: 88 +15"));
+            Assert.That(TrySubmit(player, new WaitCommand(), out Task<CommandSubmission> accepted), Is.True);
+            while (!accepted.IsCompleted) yield return null;
+            Assert.That(healthText.text, Is.EqualTo("Health: 88"));
+        }
+
+        /// <summary>Actual resource text meshes include both totals and gains at desktop and minimum portrait sizes.</summary>
+        [TestCase(1280, 720)]
+        [TestCase(320, 480)]
+        public void ResourceTotalsAndGainsRenderWithoutClipping(int width, int height)
+        {
+            GameObject playerObject = CreatePlayer("Rendered gain player", 0.05f);
+            Component player = playerObject.GetComponent(playerType);
+            var canvasObject = Track(new GameObject("Rendered resource canvas", typeof(RectTransform), typeof(Canvas)));
+            Canvas canvas = canvasObject.GetComponent<Canvas>();
+            var cameraObject = Track(new GameObject("Rendered gain camera"));
+            Camera camera = cameraObject.AddComponent<Camera>();
+            camera.enabled = false;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
+            canvas.renderMode = RenderMode.ScreenSpaceCamera;
+            canvas.worldCamera = camera;
+            canvas.planeDistance = 1;
+            Text[] labels = new Text[2];
+            for (int index = 0; index < labels.Length; index++)
+            {
+                var owner = new GameObject("Resource " + index, typeof(RectTransform), typeof(Text));
+                owner.transform.SetParent(canvasObject.transform, false);
+                Text text = owner.GetComponent<Text>();
+                text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                text.fontSize = 16;
+                text.color = Color.white;
+                text.horizontalOverflow = HorizontalWrapMode.Overflow;
+                text.verticalOverflow = VerticalWrapMode.Truncate;
+                text.rectTransform.anchorMin = text.rectTransform.anchorMax = text.rectTransform.pivot = new Vector2(0, 1);
+                text.rectTransform.anchoredPosition = new Vector2(8 + index * width / 2f, -8);
+                text.rectTransform.sizeDelta = new Vector2(width / 2f - 16, 32);
+                labels[index] = text;
+            }
+            SetField(player, "foodText", labels[0]);
+            SetField(player, "healthText", labels[1]);
+            var target = new RenderTexture(width, height, 24);
+            var pixels = new Texture2D(width, height, TextureFormat.RGB24, false);
+            RenderTexture previous = RenderTexture.active;
+            try
+            {
+                camera.targetTexture = target;
+                ((IRunHud)player).Refresh(88, 173);
+                ((ITurnResourceGains)player).AddResourceGains(10, 10);
+                Canvas.ForceUpdateCanvases();
+                foreach (Text label in labels)
+                {
+                    Assert.That(label.preferredWidth, Is.LessThanOrEqualTo(label.rectTransform.rect.width));
+                    Assert.That(label.preferredHeight, Is.LessThanOrEqualTo(label.rectTransform.rect.height));
+                    Assert.That(label.text, Does.EndWith(" +10"));
+                }
+                camera.Render();
+                RenderTexture.active = target;
+                pixels.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                pixels.Apply();
+                Assert.That(pixels.GetPixels32().Count(pixel => pixel.r > 180 && pixel.g > 180 && pixel.b > 180), Is.GreaterThan(100));
+                File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M75-gains-" + width + "x" + height + ".png"), pixels.EncodeToPNG());
+                ((ITurnResourceGains)player).ClearResourceGains();
+                Assert.That(labels[0].text, Is.EqualTo("Food: 173"));
+                Assert.That(labels[1].text, Is.EqualTo("Health: 88"));
+            }
+            finally
+            {
+                camera.targetTexture = null;
+                RenderTexture.active = previous;
+                UnityEngine.Object.DestroyImmediate(pixels);
+                UnityEngine.Object.DestroyImmediate(target);
+            }
         }
 
         [UnityTest]
@@ -510,7 +627,7 @@ namespace HallowBlaze.Tests.PlayMode
                     yield return null;
                 Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
                 Assert.That(session.ActiveRun.Food, Is.EqualTo(initialFood + 19));
-                Assert.That(foodText.text, Is.EqualTo("Food: " + (initialFood + 19)));
+                Assert.That(foodText.text, Is.EqualTo("Food: " + (initialFood + 19) + " +20"));
                 Assert.That(playerObject.transform.position, Is.EqualTo(Vector3.right));
                 Assert.That(soda.activeSelf, Is.False);
                 Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(animated ? 2 : 1));

@@ -363,6 +363,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         {
             session.OnRunStarted += OnRunStarted;
             session.OnRunAbandoned += OnRunAbandoned;
+            session.OnHealthRestored += OnHealthRestored;
         }
         if (activeIntentOwner != null)
         {
@@ -385,6 +386,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         {
             session.OnRunStarted -= OnRunStarted;
             session.OnRunAbandoned -= OnRunAbandoned;
+            session.OnHealthRestored -= OnHealthRestored;
         }
         if (activeIntents != null && !activeIntents.IsDisposed)
             activeIntents.Clear();
@@ -1090,6 +1092,15 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         SetRouteChoices(NoRouteChoices);
     }
 
+    private void OnHealthRestored(RunState run, int amount)
+    {
+        if (activePlayerView == null || activeBoardRuntime == null || activeBoardRuntime.IsDisposed ||
+            !ReferenceEquals(run, session.ActiveRun) || !ReferenceEquals(run, activeBoardRuntime.RunState))
+            return;
+        activePlayerView.Refresh(run.Health, run.Food);
+        activePlayerView.AddResourceGains(amount, 0);
+    }
+
     private void OnRunAbandoned(RunState runState)
     {
         if (!handlingBoardOutcome)
@@ -1249,9 +1260,11 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         {
             session.OnRunStarted -= OnRunStarted;
             session.OnRunAbandoned -= OnRunAbandoned;
+            session.OnHealthRestored -= OnHealthRestored;
             session = new GameSession(profile);
             session.OnRunStarted += OnRunStarted;
             session.OnRunAbandoned += OnRunAbandoned;
+            session.OnHealthRestored += OnHealthRestored;
         }
 
         lifecycle = new RunLifecycleService(session, saveStore);
@@ -1287,9 +1300,11 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
         session.OnRunStarted -= OnRunStarted;
         session.OnRunAbandoned -= OnRunAbandoned;
+        session.OnHealthRestored -= OnHealthRestored;
         session = new GameSession(freshProfile);
         session.OnRunStarted += OnRunStarted;
         session.OnRunAbandoned += OnRunAbandoned;
+        session.OnHealthRestored += OnHealthRestored;
         lifecycle = new RunLifecycleService(session, saveStore);
         EnsureFieldNotes();
         worldDefinition = null;
