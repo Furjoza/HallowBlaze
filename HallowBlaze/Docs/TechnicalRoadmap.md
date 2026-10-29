@@ -5669,7 +5669,7 @@ claimed; the integrated human/visual acceptance remains an explicit M7.8 gate.
 
 ## `M7.2` - Clean Day, board and overlay presentation boundaries
 
-**Status:** `Planned`
+**Status:** `Done` (2026-10-29)
 **Priority:** P1
 **Related contract:** sections 18 and 20; M3.12 Day/board publication contract.
 
@@ -5697,6 +5697,10 @@ clear-color workaround, or widening of the inspectable board behind modal conten
 **Allowed file area:** Presentation Day/Board/Camera/HUD/Legend/FieldNotes and their lifecycle
 integration; graphics PlayMode tests. List any necessary scene/prefab assets before Ready.
 
+**Closed write scope (2026-10-29):** `Assets/Scripts/GameManager.cs`,
+`Assets/Tests/PlayMode/GameSessionLifecycleTests.cs`, `Docs/Testing.md` and this roadmap.
+No scene, prefab, package, project setting or domain/save change is required.
+
 **Acceptance criteria:** From the first rendered setup frame until Day ends, the player, board
 and gameplay HUD are hidden. Gameplay has no Day backing layer. Opening/closing either overlay
 does not recolor unrelated regions; closing or leaving a board leaves no legend/Notes residue.
@@ -5713,6 +5717,16 @@ draft or new run/profile schema. Resume must project the existing committed boun
 
 **Required handoff:** Reproduction and diagnosed owner for each reported artifact, visibility
 matrix, before/after frames and explicit evidence that no old-board pixels survive.
+
+**Implementation (2026-10-29):** Production regressions reproduce an unmasked world during
+Day, uncleared pixels outside the reserved gameplay viewport and a legend retained under
+Notes. The lifecycle now owns the world camera mask, a full-viewport no-object clear using
+the authored camera background, overlay closure and cancellation of delayed Day callbacks.
+The visibility matrix and focused graphics procedure are in `Docs/Testing.md`. Render-target
+checks cover desktop/portrait, consecutive tinted boards and both animation modes. The
+reported historical screenshots are not claimed as exact reconstructed frames; owner visual
+smoke remains open at M7.8. Full graphics PlayMode passed 196/196 and independent review
+passed; no scene, prefab, domain or persistence format changed.
 
 ---
 
@@ -6818,7 +6832,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 The next safe sequence is:
 
 1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. The owner then separately authorized solo M6.6: its technical preparation passed full EditMode 1237 tests plus the existing Explicit skip and graphics PlayMode 188/188, with self-review only. M6.6 remains Active until 5-8 real sessions and the landmark decision in `Docs/Validation/M6.6.md`; neither exception closes M4.9 or authorizes M8. Future cards use the current Lead implementation and Reviewer/self-review policy in `AGENTS.md`, without changing these historical review attributions;
-2. continue the `M7.2`-`M7.8` repair/onboarding milestone after M7.1 was completed on 2026-10-29 with independent review and compatible opening/checkpoint recovery. The owner authorized proceeding before the outstanding M4.9/M6.6 human gates; those gates remain open and no human-test result is implied;
+2. continue the `M7.3`-`M7.8` repair/onboarding milestone after M7.1 and M7.2 were completed on 2026-10-29 with independent review, compatible opening/checkpoint recovery and clean presentation boundaries. The owner authorized proceeding before the outstanding M4.9/M6.6 human gates; those gates remain open and no human-test result is implied;
 3. complete the no-backpack vertical slice through `M8.8`, preserving its playtest requirements and the earlier M4.9/M6.6/M7 gates, then make the explicit M10 verdict;
 4. keep M10 deferred and last unless the owner explicitly changes that order; activate M9.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M10.
 

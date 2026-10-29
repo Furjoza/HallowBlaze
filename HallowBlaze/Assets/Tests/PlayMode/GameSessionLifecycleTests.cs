@@ -343,6 +343,8 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(foodText.transform.parent, Is.SameAs(levelImage.transform.parent));
             Assert.That(healthText.transform.parent, Is.SameAs(levelImage.transform.parent));
             Assert.That(levelImage.activeSelf, Is.True);
+            Assert.That(Camera.main.cullingMask, Is.Zero,
+                "The board and player must not render behind the Day transition.");
             Assert.That(foodText.activeInHierarchy, Is.False);
             Assert.That(healthText.activeInHierarchy, Is.False);
             Assert.That(GetField<Text>(manager, "levelText").text, Is.EqualTo("Day: 1"));
@@ -352,7 +354,7 @@ namespace HallowBlaze.Tests.PlayMode
             if (SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null)
             {
                 string screenshot = Path.Combine(Path.GetTempPath(), "HB-M312-Day1-" + Screen.width + "x" + Screen.height + ".png");
-                Texture2D capture = CaptureProductionCanvas();
+                Texture2D capture = CaptureProductionCanvas(manager, Screen.width, Screen.height);
                 Assert.That(capture, Is.Not.Null);
                 try
                 {
@@ -364,32 +366,223 @@ namespace HallowBlaze.Tests.PlayMode
             }
             Invoke(manager, "HideLevelImage");
             yield return null;
+            Assert.That(Camera.main.cullingMask, Is.Not.Zero);
+            Assert.That(levelImage.activeSelf, Is.False);
             Assert.That(foodText.activeInHierarchy && healthText.activeInHierarchy, Is.True);
         }
 
-        private static Texture2D CaptureProductionCanvas()
+        /// <summary>Every rendered frame clears reserved margins instead of retaining the previous board image.</summary>
+        [UnityTest]
+        public IEnumerator BoardViewportClearsOutsideTheGameplayCamera()
         {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            Invoke(manager, "HideLevelImage");
+            yield return null;
             Camera camera = Camera.main;
-            Assert.That(camera, Is.Not.Null);
-            Canvas[] overlays = UnityEngine.Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None)
-                .Where(canvas => canvas.renderMode == RenderMode.ScreenSpaceOverlay).ToArray();
-            Camera[] previousCameras = overlays.Select(canvas => canvas.worldCamera).ToArray();
-            float[] previousDistances = overlays.Select(canvas => canvas.planeDistance).ToArray();
-            RenderTexture previousTarget = camera.targetTexture;
+            Assert.That(camera.rect.height, Is.LessThan(1));
+            Assert.That(GetField<Camera>(manager, "viewportClearCamera").isActiveAndEnabled, Is.True);
+            Texture2D capture = CaptureWorldCameras();
+            try
+            {
+                Color margin = capture.GetPixel(0, capture.height - 1);
+                Assert.That(Vector4.Distance(margin, Color.magenta), Is.GreaterThan(0.1f),
+                    "A reserved margin must be cleared each frame, not retain prior board pixels.");
+            }
+            finally { UnityEngine.Object.DestroyImmediate(capture); }
+        }
+
+        /// <summary>Notes, legend and board-owned controls cannot leak across modal and board publication boundaries.</summary>
+        [UnityTest]
+        public IEnumerator BoardOverlaysCloseAtModalAndSceneBoundaries()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            Invoke(manager, "HideLevelImage");
+            yield return null;
+            EnemyIntentLegend legend = GetField<EnemyIntentLegend>(manager, "activeIntentLegend");
+            FieldNotesPresenter notes = GetProperty<FieldNotesPresenter>(manager, "FieldNotes");
+            ToolHudPresenter tools = GetProperty<ToolHudPresenter>(manager, "ActiveToolHud");
+            legend.Show();
+            Assert.That(notes.Open(), Is.True);
+            Assert.That(legend.IsVisible, Is.False);
+            Assert.That(legend.Root.activeInHierarchy, Is.False);
+            Assert.That(tools.Root.activeInHierarchy, Is.False);
+            notes.Close();
+            yield return null;
+            Assert.That(legend.Root.activeInHierarchy, Is.True);
+            Assert.That(legend.IsVisible, Is.False);
+            Assert.That(tools.Root.activeInHierarchy, Is.True);
+
+            Assert.That(notes.Open(), Is.True);
+            Invoke(manager, "BlockBoardStartup");
+            Assert.That(notes.IsOpen, Is.False);
+            Assert.That(notes.Root.activeInHierarchy, Is.False);
+            Assert.That(legend.Root.activeInHierarchy, Is.False);
+            Assert.That(Camera.main.cullingMask, Is.Zero);
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            legend = GetField<EnemyIntentLegend>(manager, "activeIntentLegend");
+            Assert.That(legend.IsVisible, Is.False);
+            Assert.That(notes.IsOpen, Is.False);
+            Assert.That(GetField<GameObject>(manager, "levelImage").activeSelf, Is.False);
+            Assert.That((bool)Invoke(manager, "HandleBoardOutcome",
+                BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"))), Is.True);
+            Assert.That(notes.Root.activeInHierarchy, Is.False);
+            Assert.That(Camera.main.cullingMask, Is.Zero);
+        }
+
+        private static Texture2D CaptureWorldCameras()
+        {
+            Camera[] cameras = SceneManager.GetActiveScene().GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<Camera>())
+                .Where(camera => camera.isActiveAndEnabled).OrderBy(camera => camera.depth).ToArray();
+            RenderTexture[] previousTargets = cameras.Select(camera => camera.targetTexture).ToArray();
             RenderTexture previousActive = RenderTexture.active;
-            RenderTexture target = new RenderTexture(Screen.width, Screen.height, 24);
+            var target = new RenderTexture(Screen.width, Screen.height, 24);
             target.Create();
             try
             {
-                camera.targetTexture = target;
+                RenderTexture.active = target;
+                GL.Clear(true, true, Color.magenta);
+                foreach (Camera camera in cameras)
+                {
+                    camera.targetTexture = target;
+                    camera.Render();
+                }
+                RenderTexture.active = target;
+                var capture = new Texture2D(target.width, target.height, TextureFormat.RGB24, false);
+                capture.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
+                capture.Apply();
+                return capture;
+            }
+            finally
+            {
+                for (int index = 0; index < cameras.Length; index++)
+                    cameras[index].targetTexture = previousTargets[index];
+                RenderTexture.active = previousActive;
+                target.Release();
+                UnityEngine.Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>Real production layers remain coherent across desktop, portrait, overlay and differently colored board frames.</summary>
+        [UnityTest]
+        public IEnumerator ProductionLayerPixelsStayCleanAcrossResizeAndBoards()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            ((MonoBehaviour)manager).CancelInvoke("HideLevelImage");
+            FieldNotesPresenter notes = GetProperty<FieldNotesPresenter>(manager, "FieldNotes");
+            foreach (Vector2Int size in new[] { new Vector2Int(1280, 720), new Vector2Int(320, 480), new Vector2Int(320, 640) })
+            {
+                Texture2D intro = CaptureProductionCanvas(manager, size.x, size.y);
+                try
+                {
+                    Assert.That(Camera.main.cullingMask, Is.Zero);
+                    Assert.That(intro.GetPixels32().Distinct().Count(), Is.GreaterThan(2));
+                    File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M72-Day-" + size.x + "x" + size.y + ".png"), intro.EncodeToPNG());
+                }
+                finally { UnityEngine.Object.DestroyImmediate(intro); }
+            }
+            Invoke(manager, "HideLevelImage");
+            yield return null;
+            foreach (bool animations in new[] { false, true })
+            {
+                GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").AnimationsEnabled = animations;
+                BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+                foreach (GameObject view in runtime.Views.Values)
+                    foreach (SpriteRenderer renderer in view.GetComponentsInChildren<SpriteRenderer>())
+                        renderer.color = animations ? Color.green : Color.red;
+                foreach (Vector2Int size in new[] { new Vector2Int(1280, 720), new Vector2Int(320, 480), new Vector2Int(320, 640) })
+                {
+                    EnemyIntentLegend legend = GetField<EnemyIntentLegend>(manager, "activeIntentLegend");
+                    legend.Show();
+                    Assert.That(notes.Open(), Is.True);
+                    Texture2D modal = CaptureProductionCanvas(manager, size.x, size.y);
+                    try
+                    {
+                        Color top = modal.GetPixel(4, size.y - 4);
+                        Assert.That(Vector4.Distance(top, (Color)new Color32(239, 244, 241, 255)), Is.LessThan(0.05f));
+                        File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M72-Notes-" + size.x + "x" + size.y + ".png"), modal.EncodeToPNG());
+                    }
+                    finally { UnityEngine.Object.DestroyImmediate(modal); }
+                    notes.Close();
+                    yield return null;
+                    Assert.That(legend.IsVisible, Is.False);
+                    Texture2D board = CaptureProductionCanvas(manager, size.x, size.y);
+                    try
+                    {
+                        Color margin = board.GetPixel(0, size.y - 1);
+                        Color background = Camera.main.backgroundColor;
+                        Assert.That(Vector3.Distance(new Vector3(margin.r, margin.g, margin.b),
+                            new Vector3(background.r, background.g, background.b)), Is.LessThan(0.05f));
+                        Assert.That(GetField<GameObject>(manager, "levelImage").activeSelf, Is.False);
+                        File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M72-Board-" + size.x + "x" + size.y + ".png"), board.EncodeToPNG());
+                    }
+                    finally { UnityEngine.Object.DestroyImmediate(board); }
+                }
+                if (!animations)
+                {
+                    Assert.That((bool)Invoke(manager, "HandleBoardOutcome",
+                        BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"))), Is.True);
+                    Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
+                    yield return null;
+                    yield return null;
+                    Invoke(manager, "HideLevelImage");
+                    yield return null;
+                }
+            }
+        }
+
+        private static Texture2D CaptureProductionCanvas(Component manager, int width, int height)
+        {
+            Camera camera = Camera.main;
+            Assert.That(camera, Is.Not.Null);
+            Camera[] cameras = camera.transform.root.GetComponentsInChildren<Camera>()
+                .Where(item => item.isActiveAndEnabled).OrderBy(item => item.depth).ToArray();
+            Canvas[] overlays = SceneManager.GetActiveScene().GetRootGameObjects().Concat(new[] { manager.transform.root.gameObject })
+                .SelectMany(root => root.GetComponentsInChildren<Canvas>())
+                .Where(canvas => canvas.isActiveAndEnabled && canvas.renderMode == RenderMode.ScreenSpaceOverlay).Distinct().ToArray();
+            Camera[] previousCameras = overlays.Select(canvas => canvas.worldCamera).ToArray();
+            float[] previousDistances = overlays.Select(canvas => canvas.planeDistance).ToArray();
+            Transform[] graphics = overlays.SelectMany(canvas => canvas.GetComponentsInChildren<Transform>(true)).Distinct().ToArray();
+            int[] previousLayers = graphics.Select(item => item.gameObject.layer).ToArray();
+            RenderTexture[] previousTargets = cameras.Select(item => item.targetTexture).ToArray();
+            Rect previousRect = camera.rect;
+            float previousSize = camera.orthographicSize;
+            RenderTexture previousActive = RenderTexture.active;
+            RenderTexture target = new RenderTexture(width, height, 24);
+            var uiOwner = new GameObject("Production capture UI camera");
+            Camera uiCamera = uiOwner.AddComponent<Camera>();
+            uiCamera.enabled = false;
+            uiCamera.clearFlags = CameraClearFlags.Depth;
+            uiCamera.cullingMask = 1 << LayerMask.NameToLayer("UI");
+            uiCamera.targetTexture = target;
+            target.Create();
+            try
+            {
+                foreach (Camera item in cameras) item.targetTexture = target;
+                var size = new Vector2(width, height);
+                Invoke(manager, "ReserveIntentCameraMargin", size);
+                GetProperty<ToolHudPresenter>(manager, "ActiveToolHud")?.Resize(size);
+                GetProperty<FieldNotesPresenter>(manager, "FieldNotes")?.Resize(size);
+                GetField<EnemyIntentLegend>(manager, "activeIntentLegend")?.Resize(size, (Rect)Invoke(manager, "InspectedBoardArea"));
+                foreach (Transform item in graphics) item.gameObject.layer = LayerMask.NameToLayer("UI");
                 foreach (Canvas canvas in overlays)
                 {
                     canvas.renderMode = RenderMode.ScreenSpaceCamera;
-                    canvas.worldCamera = camera;
-                    canvas.planeDistance = camera.nearClipPlane + 1;
+                    canvas.worldCamera = uiCamera;
+                    canvas.planeDistance = uiCamera.nearClipPlane + 1;
                 }
                 Canvas.ForceUpdateCanvases();
-                camera.Render();
+                RenderTexture.active = target;
+                GL.Clear(true, true, Color.magenta);
+                foreach (Camera item in cameras) item.Render();
+                uiCamera.Render();
                 RenderTexture.active = target;
                 Texture2D capture = new Texture2D(target.width, target.height, TextureFormat.RGB24, false);
                 capture.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
@@ -404,8 +597,16 @@ namespace HallowBlaze.Tests.PlayMode
                     overlays[index].worldCamera = previousCameras[index];
                     overlays[index].planeDistance = previousDistances[index];
                 }
-                camera.targetTexture = previousTarget;
+                for (int index = 0; index < graphics.Length; index++) graphics[index].gameObject.layer = previousLayers[index];
+                for (int index = 0; index < cameras.Length; index++) cameras[index].targetTexture = previousTargets[index];
+                camera.rect = previousRect;
+                camera.orthographicSize = previousSize;
+                var size = new Vector2(Screen.width, Screen.height);
+                GetProperty<ToolHudPresenter>(manager, "ActiveToolHud")?.Resize(size);
+                GetProperty<FieldNotesPresenter>(manager, "FieldNotes")?.Resize(size);
+                GetField<EnemyIntentLegend>(manager, "activeIntentLegend")?.Resize(size, (Rect)Invoke(manager, "InspectedBoardArea"));
                 RenderTexture.active = previousActive;
+                UnityEngine.Object.DestroyImmediate(uiOwner);
                 target.Release();
                 UnityEngine.Object.DestroyImmediate(target);
                 Canvas.ForceUpdateCanvases();
