@@ -5793,7 +5793,7 @@ Independent review passed. The owner visual smoke remains part of M7.8.
 
 ## `M7.4` - One short footstep per accepted player step
 
-**Status:** `Planned`
+**Status:** `Done` (2026-10-29)
 **Priority:** P2
 **Related contract:** sections 9, 10 and 18; presentation must not own turn resolution.
 
@@ -5816,6 +5816,11 @@ stretched to fit a long clip, or changes to unrelated axe/enemy/audio assets.
 **Allowed file area:** Player-movement audio presentation and focused PlayMode tests; only the
 exact step clip/import settings or prefab explicitly listed before Ready.
 
+**Closed write scope (2026-10-29):** `Assets/Scripts/PlayerScript.cs`,
+`Assets/Scripts/Presentation/Runtime/BoardEventPresenter.cs`,
+`Assets/Tests/PlayMode/PlayModeInfrastructureTests.cs` and this roadmap.
+The authored clips and import settings remain unchanged.
+
 **Acceptance criteria:** One accepted step triggers one short cue, with no loop, stacking or
 next-turn tail during rapid steps. Rejected movement, Wait and non-moving actions trigger no
 player footstep. Recovery/Continue does not replay a step; board change, death and cancellation
@@ -5829,6 +5834,20 @@ call alone is not evidence that the actual clip sounds short.
 
 **Required handoff:** Clip identity, measured duration/playback limit, trigger matrix and actual
 listening result, with any unavailable audio verification stated explicitly.
+
+**Implementation (2026-10-29):** The previous handler started the complete clip after
+interpolation. `scavengers_footstep1.aif` measures 0.884989 seconds and
+`scavengers_footstep2.aif` 1.047596 seconds. Player movement and atomic pushing now start one
+non-looping cue on a player-owned source at presentation start, bounded by the shorter of
+100 ms and the movement duration. Completion, cancellation, recovery, disposal and player
+disable stop only that source; unrelated effects retain their shared source. Instant or
+animation-disabled movement is explicitly silent rather than leaving deferred playback.
+Wait, rejected commands and enemy movement do not produce a player step. Rapid steps reuse
+one source; saved/live mute settings remain respected. Tests check actual imported sample
+prefixes, scheduled stop, trigger counts and cancellation. These measurements are not an
+actual listening verdict: owner audio smoke is not performed and remains open at M7.8.
+Full EditMode passed 1239 tests with the existing Explicit seed skip; graphics PlayMode
+passed 200/200 and focused movement/audio passed 15/15. Independent review passed.
 
 ---
 
@@ -6849,7 +6868,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 The next safe sequence is:
 
 1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. The owner then separately authorized solo M6.6: its technical preparation passed full EditMode 1237 tests plus the existing Explicit skip and graphics PlayMode 188/188, with self-review only. M6.6 remains Active until 5-8 real sessions and the landmark decision in `Docs/Validation/M6.6.md`; neither exception closes M4.9 or authorizes M8. Future cards use the current Lead implementation and Reviewer/self-review policy in `AGENTS.md`, without changing these historical review attributions;
-2. continue the `M7.4`-`M7.8` repair/onboarding milestone after M7.1-M7.3 were completed on 2026-10-29 with independent review, compatible opening/checkpoint recovery, clean presentation boundaries and stable Notes controls. The owner authorized proceeding before the outstanding M4.9/M6.6 human gates; those gates remain open and no human-test result is implied;
+2. continue the `M7.5`-`M7.8` repair/onboarding milestone after M7.1-M7.4 were completed on 2026-10-29 with independent review, compatible opening/checkpoint recovery, clean presentation boundaries, stable Notes controls and bounded footsteps. The owner authorized proceeding before the outstanding M4.9/M6.6 human gates; those gates remain open and no human-test result is implied;
 3. complete the no-backpack vertical slice through `M8.8`, preserving its playtest requirements and the earlier M4.9/M6.6/M7 gates, then make the explicit M10 verdict;
 4. keep M10 deferred and last unless the owner explicitly changes that order; activate M9.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M10.
 

@@ -117,8 +117,122 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(playerObject.transform.position, Is.EqualTo(Vector3.right));
             Assert.That(GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.EqualTo(1));
             Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(1));
-            Assert.That(audio.clip, Is.SameAs(moveSound));
+            Assert.That(playerObject.GetComponent<AudioSource>().clip, Is.SameAs(moveSound));
+            Assert.That(audio.isPlaying, Is.False);
             Assert.That(runtime.Controller.IsTerminal, Is.False);
+        }
+
+        /// <summary>An accepted animated step cannot leave a long audio tail after movement presentation completes.</summary>
+        [UnityTest]
+        public IEnumerator PlayerStepAudioEndsWithMovementPresentation()
+        {
+            GameObject playerObject = CreatePlayer("Bounded step player", 0.1f);
+            Component player = playerObject.GetComponent(playerType);
+            AudioClip longStep = Track(AudioClip.Create("Two second footstep", 88200, 1, 44100, false));
+            SetField(player, "moveSound1", longStep);
+            SetField(player, "moveSound2", longStep);
+            CreateSoundManager(Track(new GameObject("Bounded step audio")));
+            ComposeRuntime(playerObject);
+            yield return null;
+            Assert.That(TrySubmit(player, new MoveCommand(Direction.East), out Task<CommandSubmission> pending), Is.True);
+            while (!pending.IsCompleted)
+                yield return null;
+            Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(1));
+            Assert.That(playerObject.GetComponents<AudioSource>().All(source => !source.isPlaying), Is.True);
+            Component soundManager = (Component)soundManagerType.GetField("instance").GetValue(null);
+            Assert.That(GetField<AudioSource>(soundManager, "efxSource").isPlaying, Is.False,
+                "The movement cue must not begin a full-length clip after interpolation has finished.");
+            int cues = 1;
+            foreach (Direction direction in new[] { Direction.West, Direction.East, Direction.West, Direction.East })
+            {
+                Assert.That(TrySubmit(player, new MoveCommand(direction), out pending), Is.True);
+                while (!pending.IsCompleted) yield return null;
+                Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(++cues));
+                Assert.That(playerObject.GetComponents<AudioSource>(), Has.Length.EqualTo(1));
+                Assert.That(playerObject.GetComponent<AudioSource>().isPlaying, Is.False);
+            }
+            Assert.That(TrySubmit(player, new WaitCommand(), out pending), Is.True);
+            while (!pending.IsCompleted) yield return null;
+            Assert.That(TrySubmit(player, new MoveCommand(Direction.South), out pending), Is.True);
+            Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+            Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(cues));
+        }
+
+        /// <summary>Real authored clips contain an audible prefix and stop within the cap without affecting mute or unrelated effects.</summary>
+        [UnityTest]
+        public IEnumerator AuthoredFootstepsAreBoundedAndRespectMute()
+        {
+#if UNITY_EDITOR
+            GameObject playerObject = CreatePlayer("Authored footstep player", 0.3f);
+            if (UnityEngine.Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None).Length == 0)
+                playerObject.AddComponent<AudioListener>();
+            Component player = playerObject.GetComponent(playerType);
+            AudioSource effects = CreateSoundManager(Track(new GameObject("Authored footstep audio")));
+            Component sounds = (Component)soundManagerType.GetField("instance").GetValue(null);
+            bool hadSound = PlayerPrefs.HasKey("Sound");
+            string previousSound = PlayerPrefs.GetString("Sound", "On");
+            try
+            {
+                foreach (string name in new[] { "scavengers_footstep1.aif", "scavengers_footstep2.aif" })
+                {
+                    AudioClip clip = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/" + name);
+                    Assert.That(clip, Is.Not.Null);
+                    var prefix = new float[Mathf.Min(clip.samples, Mathf.CeilToInt(clip.frequency * 0.1f)) * clip.channels];
+                    Assert.That(clip.GetData(prefix, 0), Is.True);
+                    double energy = Math.Sqrt(prefix.Select(value => (double)value * value).Average());
+                    Assert.That(energy, Is.GreaterThan(0.0001), "The bounded prefix must contain actual footstep samples.");
+                    TestContext.WriteLine(name + ": original=" + clip.length + "s, cap=0.1s, prefixRms=" + energy);
+                    SetField(player, "moveSound1", clip);
+                    SetField(player, "moveSound2", clip);
+                    Invoke(sounds, "SetSoundEnabled", false);
+                    ((IPlayerStepAudio)player).BeginStep(0.3f);
+                    AudioSource step = playerObject.GetComponent<AudioSource>();
+                    Assert.That(step.clip, Is.SameAs(clip));
+                    Assert.That(step.loop, Is.False);
+                    Assert.That(step.mute, Is.True);
+                    ((IPlayerStepAudio)player).StopStep();
+                    Invoke(sounds, "SetSoundEnabled", true);
+                    ((IPlayerStepAudio)player).BeginStep(0.3f);
+                    Assert.That(step.mute, Is.False);
+                    Assert.That(effects.clip, Is.Null);
+                    Invoke(sounds, "SetSoundEnabled", false);
+                    yield return null;
+                    Assert.That(step.mute, Is.True, "Mute changes during playback also reach the owned step source.");
+                    yield return new WaitForSecondsRealtime(0.16f);
+                    Assert.That(step.isPlaying, Is.False, "The real step cannot play its full authored tail.");
+                    ((IPlayerStepAudio)player).BeginStep(0f);
+                    Assert.That(step.isPlaying, Is.False, "Instant movement has no deferred audio tail.");
+                }
+            }
+            finally
+            {
+                if (hadSound) PlayerPrefs.SetString("Sound", previousSound);
+                else PlayerPrefs.DeleteKey("Sound");
+            }
+#else
+            yield return null;
+#endif
+        }
+
+        /// <summary>Cancellation and recovery stop only the owned step, without replaying it or leaving a source alive.</summary>
+        [UnityTest]
+        public IEnumerator CancelledMovementStopsItsFootstepWithoutReplay()
+        {
+            GameObject playerObject = CreatePlayer("Cancelled footstep player", 0.5f);
+            Component player = playerObject.GetComponent(playerType);
+            AudioClip clip = Track(AudioClip.Create("Cancelled long step", 88200, 1, 44100, false));
+            SetField(player, "moveSound1", clip);
+            CreateSoundManager(Track(new GameObject("Cancelled movement audio")));
+            ComposeRuntime(playerObject);
+            yield return null;
+            Assert.That(TrySubmit(player, new MoveCommand(Direction.East), out Task<CommandSubmission> pending), Is.True);
+            BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter");
+            presenter.Dispose();
+            while (!pending.IsCompleted) yield return null;
+            presenter.SynchronizeFromState();
+            Assert.That(playerObject.GetComponents<AudioSource>().All(source => !source.isPlaying), Is.True);
+            Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(1));
         }
 
         [UnityTest]
@@ -224,7 +338,8 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(pending.IsCompleted, Is.True);
             Assert.That(session.ActiveRun.Food, Is.EqualTo(9));
             Assert.That(playerObject.transform.position.x, Is.EqualTo(1f).Within(0.01f));
-            Assert.That(audioSource.clip, Is.SameAs(moveSound));
+            Assert.That(playerObject.GetComponent<AudioSource>().clip, Is.SameAs(moveSound));
+            Assert.That(audioSource.isPlaying, Is.False);
             Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
         }
 
@@ -369,7 +484,7 @@ namespace HallowBlaze.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator AnimationModesHaveSameSodaPickupHudAndAudio()
+        public IEnumerator AnimationModesHaveSameSodaPickupHudWithInstantStepsSilent()
         {
             foreach (bool animated in new[] { true, false })
             {
@@ -398,7 +513,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(foodText.text, Is.EqualTo("Food: " + (initialFood + 19)));
                 Assert.That(playerObject.transform.position, Is.EqualTo(Vector3.right));
                 Assert.That(soda.activeSelf, Is.False);
-                Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(2));
+                Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(animated ? 2 : 1));
             }
         }
 
