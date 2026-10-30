@@ -1,5 +1,45 @@
 # HallowBlaze Testing
 
+## M7.7 Centered Board And Resource HUD
+
+The gameplay viewport and Food/Health group share horizontal center `windowWidth / 2`.
+For widths at least 800 px the left and right reservations are both 224 px. Narrower
+windows use symmetric 56 px side reservations for the Notes book, plus a 160 px bottom
+legend area. All sizes reserve the existing 68 px top equipment band and an 80 px resource
+band below gameplay. The camera fits the unchanged authoritative board bounds into the
+remaining area; the old authored overscan is not retained during gameplay. Its original
+rect/size are restored when the board presentation ends.
+
+The resource group is centered, at most 720 px wide, with 8 px outer padding. Its fixed
+64 px content area uses two columns at widths at least 600 px, otherwise two 32 px rows.
+Labels retain the prototype font at a fixed size of 14, centered and wrapped, without
+viewport-dependent best-fit font scaling. Gain feedback does not resize the frames.
+Legend placement excludes the union of the board and resource bounds. No scene/prefab,
+grid coordinate, board identity, run value or gain-lifetime change is part of this repair.
+Committed discovery feedback uses the legend's free panel rectangle. Opening the informational
+legend temporarily obscures feedback without acknowledging or dropping the discovery queue;
+closing it or ending the board restores unacknowledged feedback. Notes modal ownership is
+unchanged. This shared slot prevents the previous notification from covering the portrait board.
+
+`GameSessionLifecycleTests.ProductionBoardAndResourceHudStayCenteredAndFit` captures the
+real scene at 1280x720, 1920x720, 320x480 and 320x640, across two consecutive boards.
+It checks the shared center, complete board bounds (at least 160 px), long Int32 totals,
+the accumulated `+137438953408` suffix, generated glyph/word/height bounds, nonblank label
+pixels, digit-count frame stability and no overlap with tools, Notes or the open legend.
+The fixture injects an observation at the production recorder boundary, asserts real isolated
+profile persistence and visible feedback, then cycles Notes and legend, resize and board end.
+It does not claim to execute a pit command in that layout case; the existing Field Notes
+suite separately covers actual pit/axe/Listener presentation and discovery.
+Before/after files are outside the project:
+`%TEMP%/HB-M77-layout-before-<width>x<height>.png` and
+`%TEMP%/HB-M77-layout-after-board<0|1>-<width>x<height>.png`.
+The before test failed with a 112 px desktop offset and labels outside portrait screens.
+Existing layer tests also cycle Day, Notes and tinted boards with animation on/off.
+
+These are explicitly resized render targets with production layout calls, not a claim
+of manual OS-window resizing or owner visual acceptance. Live-window resize and visual/audio
+smoke remain required at M7.8. Use the lifecycle CLI command below without `-nographics`.
+
 ## M7.2 Presentation Boundaries
 
 The production lifecycle fixture covers the initial Day, consumed-intro Continue, overlay

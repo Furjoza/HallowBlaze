@@ -539,7 +539,152 @@ namespace HallowBlaze.Tests.PlayMode
             }
         }
 
-        private static Texture2D CaptureProductionCanvas(Component manager, int width, int height)
+        /// <summary>The production board and long resource totals/gains share the window center without clipped labels at supported aspect ratios.</summary>
+        [UnityTest]
+        public IEnumerator ProductionBoardAndResourceHudStayCenteredAndFit()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            Invoke(manager, "HideLevelImage");
+            yield return null;
+            Component player = FindSceneComponent(playerType, "Main");
+            Invoke(manager, "ObservePresentedObservation", FactObservation.ShamblerTrappedPresented);
+            FieldNotesPresenter notes = GetProperty<FieldNotesPresenter>(manager, "FieldNotes");
+            Assert.That(notes.FeedbackTitle, Is.EqualTo("Held by the ground"));
+            Assert.That(new FileSystemSaveStore(persistenceRoot).LoadProfile().Data.DiscoveredFactIds,
+                Does.Contain("PIT_TRAPS_SHAMBLER"));
+            var failures = new List<string>();
+            for (int boardIndex = 0; boardIndex < 2; boardIndex++)
+            {
+            Assert.That(notes.Open(), Is.True);
+            notes.Close();
+            yield return null;
+            ((IRunHud)player).Refresh(int.MaxValue, int.MaxValue);
+            for (int index = 0; index < 64; index++)
+                ((ITurnResourceGains)player).AddResourceGains(int.MaxValue, int.MaxValue);
+            foreach (Vector2Int size in new[] { new Vector2Int(1280, 720), new Vector2Int(1920, 720),
+                new Vector2Int(320, 480), new Vector2Int(320, 640) })
+            {
+                var resourceFrames = new List<Rect>();
+                Texture2D capture = CaptureProductionCanvas(manager, size.x, size.y, () =>
+                {
+                    Rect board = (Rect)Invoke(manager, "InspectedBoardArea");
+                    if (Mathf.Abs(board.center.x - size.x / 2f) > 1)
+                        failures.Add(size + " board center " + board.center.x + " != " + size.x / 2f);
+                    Rect viewport = new Rect(0, 0, size.x, size.y);
+                    if (!viewport.Contains(board.min) || !viewport.Contains(board.max))
+                        failures.Add(size + " board outside viewport: " + board);
+                    if (Mathf.Min(board.width, board.height) < 160)
+                        failures.Add(size + " inspected board below 160 pixels: " + board);
+                    Rect ScreenBounds(RectTransform rect)
+                    {
+                        var corners = new Vector3[4];
+                        rect.GetWorldCorners(corners);
+                        Canvas canvas = rect.GetComponentInParent<Canvas>();
+                        Vector2 minimum = RectTransformUtility.WorldToScreenPoint(canvas.worldCamera, corners[0]);
+                        Vector2 maximum = RectTransformUtility.WorldToScreenPoint(canvas.worldCamera, corners[2]);
+                        return Rect.MinMaxRect(minimum.x, minimum.y, maximum.x, maximum.y);
+                    }
+                    Text[] labels = { GetField<Text>(player, "foodText"), GetField<Text>(player, "healthText") };
+                    Rect[] frames = labels.Select(text => ScreenBounds(text.rectTransform)).ToArray();
+                    Rect group = Rect.MinMaxRect(frames.Min(rect => rect.xMin), frames.Min(rect => rect.yMin),
+                        frames.Max(rect => rect.xMax), frames.Max(rect => rect.yMax));
+                    if (Mathf.Abs(group.center.x - board.center.x) > 1)
+                        failures.Add(size + " resource center differs from board: " + group);
+                    EnemyIntentLegend legend = GetField<EnemyIntentLegend>(manager, "activeIntentLegend");
+                    Rect tools = GetProperty<ToolHudPresenter>(manager, "ActiveToolHud").Bounds;
+                    Button book = GetProperty<FieldNotesPresenter>(manager, "FieldNotes").Root
+                        .GetComponentsInChildren<Button>(true).Single(button => button.name == "Open Field Notes");
+                    Rect bookBounds = ScreenBounds((RectTransform)book.transform);
+                    RectTransform notice = notes.Root.GetComponentsInChildren<RectTransform>(true)
+                        .Single(rect => rect.name == "Committed discovery");
+                    Assert.That(notice.gameObject.activeInHierarchy, Is.True);
+                    Rect noticeBounds = ScreenBounds(notice);
+                    foreach (Text label in notice.GetComponentsInChildren<Text>())
+                        if (label.preferredHeight > label.rectTransform.rect.height + 1)
+                            failures.Add(size + " discovery text overflows: " + label.name);
+                    legend.Show();
+                    Invoke(manager, "LayoutFieldNotesFeedback");
+                    Assert.That(notice.gameObject.activeSelf, Is.False);
+                    legend.Hide();
+                    Invoke(manager, "LayoutFieldNotesFeedback");
+                    Assert.That(notice.gameObject.activeInHierarchy, Is.True);
+                    Assert.That(notes.DiscoveryFeedbackCount, Is.EqualTo(1));
+                    foreach (Rect reserved in new[] { legend.ControlBounds, legend.PanelBounds, tools, bookBounds, noticeBounds })
+                        if (reserved.Overlaps(board) || reserved.Overlaps(group))
+                            failures.Add(size + " control overlaps board/resources: " + reserved);
+                    foreach (Text text in labels)
+                    {
+                        Rect frame = ScreenBounds(text.rectTransform);
+                        resourceFrames.Add(frame);
+                        Vector2 minimum = frame.min;
+                        Vector2 maximum = frame.max;
+                        if (minimum.x < 0 || maximum.x > size.x || minimum.y < 0 || maximum.y > size.y)
+                            failures.Add(size + " resource bounds " + text.name + ": " + minimum + ".." + maximum);
+                        if (text.preferredHeight > text.rectTransform.rect.height + 1)
+                            failures.Add(size + " resource height " + text.name + ": " + text.preferredHeight + " > " + text.rectTransform.rect.height);
+                        TextGenerationSettings settings = text.GetGenerationSettings(Vector2.zero);
+                        foreach (string word in text.text.Split(' '))
+                            if (text.cachedTextGeneratorForLayout.GetPreferredWidth(word, settings) / text.pixelsPerUnit > text.rectTransform.rect.width + 1)
+                                failures.Add(size + " resource word does not fit: " + text.name + " " + word);
+                        IList<UIVertex> vertices = text.cachedTextGenerator.verts;
+                        if (vertices.Count <= 4)
+                            failures.Add(size + " no resource glyphs: " + text.name);
+                        foreach (UIVertex vertex in vertices.Take(Mathf.Max(0, vertices.Count - 4)))
+                        {
+                            Vector3 point = vertex.position / text.pixelsPerUnit;
+                            Rect glyphFrame = text.rectTransform.rect;
+                            if (point.x < glyphFrame.xMin - 1 || point.x > glyphFrame.xMax + 1 ||
+                                point.y < glyphFrame.yMin - 1 || point.y > glyphFrame.yMax + 1)
+                                failures.Add(size + " glyph outside resource frame: " + text.name);
+                        }
+                    }
+                    ((IRunHud)player).Refresh(9, 9);
+                    Canvas.ForceUpdateCanvases();
+                    for (int index = 0; index < labels.Length; index++)
+                        if (ScreenBounds(labels[index].rectTransform) != frames[index])
+                            failures.Add(size + " resource frame moved with digit count");
+                    ((IRunHud)player).Refresh(int.MaxValue, int.MaxValue);
+                    Canvas.ForceUpdateCanvases();
+                });
+                try
+                {
+                    foreach (Rect frame in resourceFrames)
+                    {
+                        int left = Mathf.Clamp(Mathf.CeilToInt(frame.xMin), 0, size.x - 1);
+                        int bottom = Mathf.Clamp(Mathf.CeilToInt(frame.yMin), 0, size.y - 1);
+                        int width = Mathf.Min(Mathf.FloorToInt(frame.width), size.x - left);
+                        int height = Mathf.Min(Mathf.FloorToInt(frame.height), size.y - bottom);
+                        if (capture.GetPixels(left, bottom, width, height).Distinct().Count() < 3)
+                            failures.Add(size + " resource raster is blank: " + frame);
+                    }
+                    File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M77-layout-after-board" + boardIndex + "-" + size.x + "x" + size.y + ".png"), capture.EncodeToPNG());
+                }
+                finally { UnityEngine.Object.DestroyImmediate(capture); }
+            }
+            if (boardIndex == 0)
+            {
+                Assert.That((bool)Invoke(manager, "HandleBoardOutcome",
+                    BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"))), Is.True);
+                Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
+                yield return null;
+                yield return null;
+                Invoke(manager, "HideLevelImage");
+                yield return null;
+                player = FindSceneComponent(playerType, "Main");
+            }
+            }
+            Assert.That(failures, Is.Empty, string.Join("\n", failures));
+            GetField<EnemyIntentLegend>(manager, "activeIntentLegend").Show();
+            Invoke(manager, "LayoutFieldNotesFeedback");
+            Invoke(manager, "DisposeIntentUi");
+            Assert.That(notes.Root.GetComponentsInChildren<RectTransform>(true)
+                .Single(rect => rect.name == "Committed discovery").gameObject.activeSelf, Is.True,
+                "Ending a board must not leave its unacknowledged discovery hidden by a disposed legend.");
+        }
+
+        private static Texture2D CaptureProductionCanvas(Component manager, int width, int height, Action inspectLayout = null)
         {
             Camera camera = Camera.main;
             Assert.That(camera, Is.Not.Null);
@@ -571,7 +716,8 @@ namespace HallowBlaze.Tests.PlayMode
                 Invoke(manager, "ReserveIntentCameraMargin", size);
                 GetProperty<ToolHudPresenter>(manager, "ActiveToolHud")?.Resize(size);
                 GetProperty<FieldNotesPresenter>(manager, "FieldNotes")?.Resize(size);
-                GetField<EnemyIntentLegend>(manager, "activeIntentLegend")?.Resize(size, (Rect)Invoke(manager, "InspectedBoardArea"));
+                GetField<EnemyIntentLegend>(manager, "activeIntentLegend")?.Resize(size, (Rect)Invoke(manager, "LegendInspectedArea"));
+                Invoke(manager, "LayoutFieldNotesFeedback");
                 foreach (Transform item in graphics) item.gameObject.layer = LayerMask.NameToLayer("UI");
                 foreach (Canvas canvas in overlays)
                 {
@@ -580,6 +726,7 @@ namespace HallowBlaze.Tests.PlayMode
                     canvas.planeDistance = uiCamera.nearClipPlane + 1;
                 }
                 Canvas.ForceUpdateCanvases();
+                inspectLayout?.Invoke();
                 RenderTexture.active = target;
                 GL.Clear(true, true, Color.magenta);
                 foreach (Camera item in cameras) item.Render();
@@ -603,9 +750,11 @@ namespace HallowBlaze.Tests.PlayMode
                 camera.rect = previousRect;
                 camera.orthographicSize = previousSize;
                 var size = new Vector2(Screen.width, Screen.height);
+                Invoke(manager, "ReserveIntentCameraMargin", size);
                 GetProperty<ToolHudPresenter>(manager, "ActiveToolHud")?.Resize(size);
                 GetProperty<FieldNotesPresenter>(manager, "FieldNotes")?.Resize(size);
-                GetField<EnemyIntentLegend>(manager, "activeIntentLegend")?.Resize(size, (Rect)Invoke(manager, "InspectedBoardArea"));
+                GetField<EnemyIntentLegend>(manager, "activeIntentLegend")?.Resize(size, (Rect)Invoke(manager, "LegendInspectedArea"));
+                Invoke(manager, "LayoutFieldNotesFeedback");
                 RenderTexture.active = previousActive;
                 UnityEngine.Object.DestroyImmediate(uiOwner);
                 target.Release();

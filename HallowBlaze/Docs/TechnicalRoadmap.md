@@ -6018,7 +6018,8 @@ passed 204/204. Independent review passed, with its test-coverage wording clarif
 
 ## `M7.7` - Center the board and resource HUD in one responsive layout
 
-**Status:** `Planned`
+**Status:** `Done` - 2026-10-30. Centered viewport/resource layout and persistent-discovery
+placement passed graphics regression and independent review; owner smoke remains at M7.8.
 **Priority:** P1
 **Related contract:** section 18; existing inspectable-board and reserved-HUD rules.
 
@@ -6044,6 +6045,12 @@ resource renaming, new UI framework, or unrelated HUD redesign.
 **Allowed file area:** Presentation camera/viewport/HUD layout and graphics PlayMode tests;
 exact UI scene/prefab assets only if explicitly listed before Ready.
 
+**Closed write scope (2026-10-30):** `Assets/Scripts/GameManager.cs`,
+`Assets/Scripts/PlayerScript.cs`, `Assets/Tests/PlayMode/GameSessionLifecycleTests.cs`,
+`Assets/Scripts/Presentation/Runtime/FieldNotes/FieldNotesPresenter.cs`,
+`Docs/Testing.md`, `Docs/GameDesignContract.md` and this roadmap. No scene, prefab,
+domain, save, generator, package or project-setting changes.
+
 **Acceptance criteria:** Board and resource group have the same horizontal center in the
 declared gameplay area; the area remains centered in the window with documented symmetric
 reservations. Food/Health totals and `+X` fit without clipping, overlap or layout jumps as
@@ -6058,6 +6065,16 @@ overlay/Day cycles. Compare captures against the shared center and reserved-area
 
 **Required handoff:** Viewport/HUD dimensions and center definition, text-fit assertions and
 uncropped before/after captures for every tested aspect ratio.
+
+**Acceptance (2026-10-30):** Symmetric side reservations replace the 112 px desktop offset;
+the complete board and fixed Food/Health group share the window center. Production captures
+at 1280x720, 1920x720, 320x480 and 320x640 verify long totals/gains, glyph and raster bounds,
+digit stability and two consecutive boards. Legend/Notes/tool reservations leave the board
+and resources clear. Independent review found an overlapping discovery notice; its shared
+legend slot and unacknowledged-queue recovery were reproduced, corrected and re-reviewed PASS.
+Final graphics PlayMode passed 205/205. Exact dimensions, before/after locations and the
+distinction between render-target checks and real-window owner smoke are in `Docs/Testing.md`.
+No scene/prefab, domain, generation or save identity changed.
 
 ---
 
@@ -6927,7 +6944,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 The next safe sequence is:
 
 1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. The owner then separately authorized solo M6.6: its technical preparation passed full EditMode 1237 tests plus the existing Explicit skip and graphics PlayMode 188/188, with self-review only. M6.6 remains Active until 5-8 real sessions and the landmark decision in `Docs/Validation/M6.6.md`; neither exception closes M4.9 or authorizes M8. Future cards use the current Lead implementation and Reviewer/self-review policy in `AGENTS.md`, without changing these historical review attributions;
-2. continue the `M7.7`-`M7.8` repair/onboarding milestone after M7.1-M7.6 were completed with independent review, compatible opening/checkpoint recovery, clean presentation boundaries, stable Notes controls, bounded footsteps, turn-scoped resource gains and versioned bounded entry safety (M7.6 accepted 2026-10-30). The owner authorized proceeding before the outstanding M4.9/M6.6 human gates; those gates and the M7.8 owner smoke remain open and no human-test result is implied;
+2. complete the `M7.8` integrated repair gate after M7.1-M7.7 were completed with independent review, compatible opening/checkpoint recovery, clean presentation boundaries, stable Notes controls, bounded footsteps, turn-scoped resource gains, versioned bounded entry safety and centered responsive board/resources (M7.6-M7.7 accepted 2026-10-30). The owner authorized proceeding before the outstanding M4.9/M6.6 human gates; those gates and the M7.8 owner visual/audio/live-resize verdict remain open and no human-test result is implied;
 3. complete the no-backpack vertical slice through `M8.8`, preserving its playtest requirements and the earlier M4.9/M6.6/M7 gates, then make the explicit M10 verdict;
 4. keep M10 deferred and last unless the owner explicitly changes that order; activate M9.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M10.
 
