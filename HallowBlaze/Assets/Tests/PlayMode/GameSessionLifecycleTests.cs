@@ -7,6 +7,8 @@ using System.Reflection;
 using System.Threading.Tasks;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
+using HallowBlaze.Core.Generation;
+using HallowBlaze.Core.Generation.Pipeline;
 using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
@@ -166,9 +168,10 @@ namespace HallowBlaze.Tests.PlayMode
             GameSession session = GetProperty<GameSession>(manager, "Session");
             RunState run = session.ActiveRun;
             Assert.That(run, Is.Not.Null);
-            Assert.That(run.CurrentDay, Is.EqualTo(1));
-            Assert.That(run.CompletedDayCount, Is.Zero);
+            Assert.That(run.CurrentDay, Is.EqualTo(2));
+            Assert.That(run.CompletedDayCount, Is.EqualTo(1));
 
+            int expectedFood = run.Food - 14;
             session.ConsumeFood(14);
             session.TakeDamage(11);
             Component firstPlayer = FindSceneComponent(playerType, "Main");
@@ -177,7 +180,7 @@ namespace HallowBlaze.Tests.PlayMode
             BoardEventPresenter oldPresenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
             oldPresenter.SynchronizeFromState();
             int firstPlayerInstanceId = firstPlayer.GetInstanceID();
-            Assert.That(GetField<Text>(firstPlayer, "foodText").text, Is.EqualTo("Food: 86"));
+            Assert.That(GetField<Text>(firstPlayer, "foodText").text, Is.EqualTo("Food: " + expectedFood));
             Assert.That(GetField<Text>(firstPlayer, "healthText").text, Is.EqualTo("Health: 89"));
 
             AsyncOperation reload = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
@@ -190,15 +193,15 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(reloadedManager, Is.SameAs(manager));
             Assert.That(GetProperty<GameSession>(reloadedManager, "Session"), Is.SameAs(session));
             Assert.That(session.ActiveRun, Is.SameAs(run));
-            Assert.That(run.CurrentDay, Is.EqualTo(1));
-            Assert.That(run.Food, Is.EqualTo(86));
+            Assert.That(run.CurrentDay, Is.EqualTo(2));
+            Assert.That(run.Food, Is.EqualTo(expectedFood));
             Assert.That(run.Health, Is.EqualTo(89));
             Assert.That(replacementPlayer, Is.Not.Null);
             Assert.That(replacementPlayer.GetInstanceID(), Is.Not.EqualTo(firstPlayerInstanceId));
             Assert.That(oldRuntime.IsDisposed, Is.True);
             Assert.That(oldPresenter.Coordinator.CanSubmit, Is.False);
             Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
-            Assert.That(GetField<Text>(replacementPlayer, "foodText").text, Is.EqualTo("Food: 86"));
+            Assert.That(GetField<Text>(replacementPlayer, "foodText").text, Is.EqualTo("Food: " + expectedFood));
             Assert.That(GetField<Text>(replacementPlayer, "healthText").text, Is.EqualTo("Health: 89"));
             Assert.That(GetField<GameObject>(manager, "levelImage").activeSelf, Is.False,
                 "Reload of Consumed must not repeat the intro.");
@@ -219,7 +222,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(((Behaviour)manager).enabled, Is.False);
             Assert.That(restartButton.activeSelf, Is.True);
             Assert.That(menuButton.activeSelf, Is.True);
-            Assert.That(PlayerPrefs.GetInt("HighScore"), Is.Zero);
+            Assert.That(PlayerPrefs.GetInt("HighScore"), Is.EqualTo(1));
 
             Component restartController = restartButton.GetComponent(restartButtonType);
             Assert.That(restartController, Is.Not.Null);
@@ -236,12 +239,16 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(session.Profile, Is.SameAs(profile));
             Assert.That(restartedRun, Is.Not.SameAs(run));
             Assert.That(restartedRun.Status, Is.EqualTo(RunStatus.Active));
-            Assert.That(restartedRun.CurrentDay, Is.Zero);
+            Assert.That(restartedRun.CurrentDay, Is.EqualTo(1));
+            Assert.That(restartedRun.CompletedDayCount, Is.Zero);
             Assert.That(restartedRun.Food, Is.EqualTo(100));
             Assert.That(restartedRun.Health, Is.EqualTo(100));
             Assert.That(((Behaviour)manager).enabled, Is.True);
-            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
-            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Null);
+            Assert.That(restartedRun.WorldNodeId, Is.EqualTo("shelter.warm-up"));
+            Assert.That(restartedRun.ActiveLeg.EdgeId, Is.EqualTo("road.shelter-warm-up"));
+            Assert.That(restartedRun.ActiveLeg.DayNumber, Is.EqualTo(1));
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Not.Null);
 
             Scene cleanupScene = SceneManager.CreateScene("M1.4 Smoke Cleanup " + Guid.NewGuid().ToString("N"));
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
@@ -322,9 +329,7 @@ namespace HallowBlaze.Tests.PlayMode
             yield return null;
 
             Component manager = GetStaticField(gameManagerType, "instance") as Component;
-            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
-            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Null);
-            yield return StartFirstRoute(manager);
+            AssertOpeningWarmUp(manager);
             Component player = FindSceneComponent(playerType, "Main");
             GameObject levelImage = GetField<GameObject>(manager, "levelImage");
             GameObject foodText = GetField<Text>(player, "foodText").gameObject;
@@ -338,6 +343,8 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(foodText.transform.parent, Is.SameAs(levelImage.transform.parent));
             Assert.That(healthText.transform.parent, Is.SameAs(levelImage.transform.parent));
             Assert.That(levelImage.activeSelf, Is.True);
+            Assert.That(Camera.main.cullingMask, Is.Zero,
+                "The board and player must not render behind the Day transition.");
             Assert.That(foodText.activeInHierarchy, Is.False);
             Assert.That(healthText.activeInHierarchy, Is.False);
             Assert.That(GetField<Text>(manager, "levelText").text, Is.EqualTo("Day: 1"));
@@ -347,7 +354,7 @@ namespace HallowBlaze.Tests.PlayMode
             if (SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Null)
             {
                 string screenshot = Path.Combine(Path.GetTempPath(), "HB-M312-Day1-" + Screen.width + "x" + Screen.height + ".png");
-                Texture2D capture = CaptureProductionCanvas();
+                Texture2D capture = CaptureProductionCanvas(manager, Screen.width, Screen.height);
                 Assert.That(capture, Is.Not.Null);
                 try
                 {
@@ -359,32 +366,223 @@ namespace HallowBlaze.Tests.PlayMode
             }
             Invoke(manager, "HideLevelImage");
             yield return null;
+            Assert.That(Camera.main.cullingMask, Is.Not.Zero);
+            Assert.That(levelImage.activeSelf, Is.False);
             Assert.That(foodText.activeInHierarchy && healthText.activeInHierarchy, Is.True);
         }
 
-        private static Texture2D CaptureProductionCanvas()
+        /// <summary>Every rendered frame clears reserved margins instead of retaining the previous board image.</summary>
+        [UnityTest]
+        public IEnumerator BoardViewportClearsOutsideTheGameplayCamera()
         {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            Invoke(manager, "HideLevelImage");
+            yield return null;
             Camera camera = Camera.main;
-            Assert.That(camera, Is.Not.Null);
-            Canvas[] overlays = UnityEngine.Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None)
-                .Where(canvas => canvas.renderMode == RenderMode.ScreenSpaceOverlay).ToArray();
-            Camera[] previousCameras = overlays.Select(canvas => canvas.worldCamera).ToArray();
-            float[] previousDistances = overlays.Select(canvas => canvas.planeDistance).ToArray();
-            RenderTexture previousTarget = camera.targetTexture;
+            Assert.That(camera.rect.height, Is.LessThan(1));
+            Assert.That(GetField<Camera>(manager, "viewportClearCamera").isActiveAndEnabled, Is.True);
+            Texture2D capture = CaptureWorldCameras();
+            try
+            {
+                Color margin = capture.GetPixel(0, capture.height - 1);
+                Assert.That(Vector4.Distance(margin, Color.magenta), Is.GreaterThan(0.1f),
+                    "A reserved margin must be cleared each frame, not retain prior board pixels.");
+            }
+            finally { UnityEngine.Object.DestroyImmediate(capture); }
+        }
+
+        /// <summary>Notes, legend and board-owned controls cannot leak across modal and board publication boundaries.</summary>
+        [UnityTest]
+        public IEnumerator BoardOverlaysCloseAtModalAndSceneBoundaries()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            Invoke(manager, "HideLevelImage");
+            yield return null;
+            EnemyIntentLegend legend = GetField<EnemyIntentLegend>(manager, "activeIntentLegend");
+            FieldNotesPresenter notes = GetProperty<FieldNotesPresenter>(manager, "FieldNotes");
+            ToolHudPresenter tools = GetProperty<ToolHudPresenter>(manager, "ActiveToolHud");
+            legend.Show();
+            Assert.That(notes.Open(), Is.True);
+            Assert.That(legend.IsVisible, Is.False);
+            Assert.That(legend.Root.activeInHierarchy, Is.False);
+            Assert.That(tools.Root.activeInHierarchy, Is.False);
+            notes.Close();
+            yield return null;
+            Assert.That(legend.Root.activeInHierarchy, Is.True);
+            Assert.That(legend.IsVisible, Is.False);
+            Assert.That(tools.Root.activeInHierarchy, Is.True);
+
+            Assert.That(notes.Open(), Is.True);
+            Invoke(manager, "BlockBoardStartup");
+            Assert.That(notes.IsOpen, Is.False);
+            Assert.That(notes.Root.activeInHierarchy, Is.False);
+            Assert.That(legend.Root.activeInHierarchy, Is.False);
+            Assert.That(Camera.main.cullingMask, Is.Zero);
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            legend = GetField<EnemyIntentLegend>(manager, "activeIntentLegend");
+            Assert.That(legend.IsVisible, Is.False);
+            Assert.That(notes.IsOpen, Is.False);
+            Assert.That(GetField<GameObject>(manager, "levelImage").activeSelf, Is.False);
+            Assert.That((bool)Invoke(manager, "HandleBoardOutcome",
+                BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"))), Is.True);
+            Assert.That(notes.Root.activeInHierarchy, Is.False);
+            Assert.That(Camera.main.cullingMask, Is.Zero);
+        }
+
+        private static Texture2D CaptureWorldCameras()
+        {
+            Camera[] cameras = SceneManager.GetActiveScene().GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<Camera>())
+                .Where(camera => camera.isActiveAndEnabled).OrderBy(camera => camera.depth).ToArray();
+            RenderTexture[] previousTargets = cameras.Select(camera => camera.targetTexture).ToArray();
             RenderTexture previousActive = RenderTexture.active;
-            RenderTexture target = new RenderTexture(Screen.width, Screen.height, 24);
+            var target = new RenderTexture(Screen.width, Screen.height, 24);
             target.Create();
             try
             {
-                camera.targetTexture = target;
+                RenderTexture.active = target;
+                GL.Clear(true, true, Color.magenta);
+                foreach (Camera camera in cameras)
+                {
+                    camera.targetTexture = target;
+                    camera.Render();
+                }
+                RenderTexture.active = target;
+                var capture = new Texture2D(target.width, target.height, TextureFormat.RGB24, false);
+                capture.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
+                capture.Apply();
+                return capture;
+            }
+            finally
+            {
+                for (int index = 0; index < cameras.Length; index++)
+                    cameras[index].targetTexture = previousTargets[index];
+                RenderTexture.active = previousActive;
+                target.Release();
+                UnityEngine.Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>Real production layers remain coherent across desktop, portrait, overlay and differently colored board frames.</summary>
+        [UnityTest]
+        public IEnumerator ProductionLayerPixelsStayCleanAcrossResizeAndBoards()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            ((MonoBehaviour)manager).CancelInvoke("HideLevelImage");
+            FieldNotesPresenter notes = GetProperty<FieldNotesPresenter>(manager, "FieldNotes");
+            foreach (Vector2Int size in new[] { new Vector2Int(1280, 720), new Vector2Int(320, 480), new Vector2Int(320, 640) })
+            {
+                Texture2D intro = CaptureProductionCanvas(manager, size.x, size.y);
+                try
+                {
+                    Assert.That(Camera.main.cullingMask, Is.Zero);
+                    Assert.That(intro.GetPixels32().Distinct().Count(), Is.GreaterThan(2));
+                    File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M72-Day-" + size.x + "x" + size.y + ".png"), intro.EncodeToPNG());
+                }
+                finally { UnityEngine.Object.DestroyImmediate(intro); }
+            }
+            Invoke(manager, "HideLevelImage");
+            yield return null;
+            foreach (bool animations in new[] { false, true })
+            {
+                GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").AnimationsEnabled = animations;
+                BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+                foreach (GameObject view in runtime.Views.Values)
+                    foreach (SpriteRenderer renderer in view.GetComponentsInChildren<SpriteRenderer>())
+                        renderer.color = animations ? Color.green : Color.red;
+                foreach (Vector2Int size in new[] { new Vector2Int(1280, 720), new Vector2Int(320, 480), new Vector2Int(320, 640) })
+                {
+                    EnemyIntentLegend legend = GetField<EnemyIntentLegend>(manager, "activeIntentLegend");
+                    legend.Show();
+                    Assert.That(notes.Open(), Is.True);
+                    Texture2D modal = CaptureProductionCanvas(manager, size.x, size.y);
+                    try
+                    {
+                        Color top = modal.GetPixel(4, size.y - 4);
+                        Assert.That(Vector4.Distance(top, (Color)new Color32(239, 244, 241, 255)), Is.LessThan(0.05f));
+                        File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M72-Notes-" + size.x + "x" + size.y + ".png"), modal.EncodeToPNG());
+                    }
+                    finally { UnityEngine.Object.DestroyImmediate(modal); }
+                    notes.Close();
+                    yield return null;
+                    Assert.That(legend.IsVisible, Is.False);
+                    Texture2D board = CaptureProductionCanvas(manager, size.x, size.y);
+                    try
+                    {
+                        Color margin = board.GetPixel(0, size.y - 1);
+                        Color background = Camera.main.backgroundColor;
+                        Assert.That(Vector3.Distance(new Vector3(margin.r, margin.g, margin.b),
+                            new Vector3(background.r, background.g, background.b)), Is.LessThan(0.05f));
+                        Assert.That(GetField<GameObject>(manager, "levelImage").activeSelf, Is.False);
+                        File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M72-Board-" + size.x + "x" + size.y + ".png"), board.EncodeToPNG());
+                    }
+                    finally { UnityEngine.Object.DestroyImmediate(board); }
+                }
+                if (!animations)
+                {
+                    Assert.That((bool)Invoke(manager, "HandleBoardOutcome",
+                        BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"))), Is.True);
+                    Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
+                    yield return null;
+                    yield return null;
+                    Invoke(manager, "HideLevelImage");
+                    yield return null;
+                }
+            }
+        }
+
+        private static Texture2D CaptureProductionCanvas(Component manager, int width, int height)
+        {
+            Camera camera = Camera.main;
+            Assert.That(camera, Is.Not.Null);
+            Camera[] cameras = camera.transform.root.GetComponentsInChildren<Camera>()
+                .Where(item => item.isActiveAndEnabled).OrderBy(item => item.depth).ToArray();
+            Canvas[] overlays = SceneManager.GetActiveScene().GetRootGameObjects().Concat(new[] { manager.transform.root.gameObject })
+                .SelectMany(root => root.GetComponentsInChildren<Canvas>())
+                .Where(canvas => canvas.isActiveAndEnabled && canvas.renderMode == RenderMode.ScreenSpaceOverlay).Distinct().ToArray();
+            Camera[] previousCameras = overlays.Select(canvas => canvas.worldCamera).ToArray();
+            float[] previousDistances = overlays.Select(canvas => canvas.planeDistance).ToArray();
+            Transform[] graphics = overlays.SelectMany(canvas => canvas.GetComponentsInChildren<Transform>(true)).Distinct().ToArray();
+            int[] previousLayers = graphics.Select(item => item.gameObject.layer).ToArray();
+            RenderTexture[] previousTargets = cameras.Select(item => item.targetTexture).ToArray();
+            Rect previousRect = camera.rect;
+            float previousSize = camera.orthographicSize;
+            RenderTexture previousActive = RenderTexture.active;
+            RenderTexture target = new RenderTexture(width, height, 24);
+            var uiOwner = new GameObject("Production capture UI camera");
+            Camera uiCamera = uiOwner.AddComponent<Camera>();
+            uiCamera.enabled = false;
+            uiCamera.clearFlags = CameraClearFlags.Depth;
+            uiCamera.cullingMask = 1 << LayerMask.NameToLayer("UI");
+            uiCamera.targetTexture = target;
+            target.Create();
+            try
+            {
+                foreach (Camera item in cameras) item.targetTexture = target;
+                var size = new Vector2(width, height);
+                Invoke(manager, "ReserveIntentCameraMargin", size);
+                GetProperty<ToolHudPresenter>(manager, "ActiveToolHud")?.Resize(size);
+                GetProperty<FieldNotesPresenter>(manager, "FieldNotes")?.Resize(size);
+                GetField<EnemyIntentLegend>(manager, "activeIntentLegend")?.Resize(size, (Rect)Invoke(manager, "InspectedBoardArea"));
+                foreach (Transform item in graphics) item.gameObject.layer = LayerMask.NameToLayer("UI");
                 foreach (Canvas canvas in overlays)
                 {
                     canvas.renderMode = RenderMode.ScreenSpaceCamera;
-                    canvas.worldCamera = camera;
-                    canvas.planeDistance = camera.nearClipPlane + 1;
+                    canvas.worldCamera = uiCamera;
+                    canvas.planeDistance = uiCamera.nearClipPlane + 1;
                 }
                 Canvas.ForceUpdateCanvases();
-                camera.Render();
+                RenderTexture.active = target;
+                GL.Clear(true, true, Color.magenta);
+                foreach (Camera item in cameras) item.Render();
+                uiCamera.Render();
                 RenderTexture.active = target;
                 Texture2D capture = new Texture2D(target.width, target.height, TextureFormat.RGB24, false);
                 capture.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
@@ -399,8 +597,16 @@ namespace HallowBlaze.Tests.PlayMode
                     overlays[index].worldCamera = previousCameras[index];
                     overlays[index].planeDistance = previousDistances[index];
                 }
-                camera.targetTexture = previousTarget;
+                for (int index = 0; index < graphics.Length; index++) graphics[index].gameObject.layer = previousLayers[index];
+                for (int index = 0; index < cameras.Length; index++) cameras[index].targetTexture = previousTargets[index];
+                camera.rect = previousRect;
+                camera.orthographicSize = previousSize;
+                var size = new Vector2(Screen.width, Screen.height);
+                GetProperty<ToolHudPresenter>(manager, "ActiveToolHud")?.Resize(size);
+                GetProperty<FieldNotesPresenter>(manager, "FieldNotes")?.Resize(size);
+                GetField<EnemyIntentLegend>(manager, "activeIntentLegend")?.Resize(size, (Rect)Invoke(manager, "InspectedBoardArea"));
                 RenderTexture.active = previousActive;
+                UnityEngine.Object.DestroyImmediate(uiOwner);
                 target.Release();
                 UnityEngine.Object.DestroyImmediate(target);
                 Canvas.ForceUpdateCanvases();
@@ -418,7 +624,10 @@ namespace HallowBlaze.Tests.PlayMode
             Component manager = GetStaticField(gameManagerType, "instance") as Component;
             GameSession firstSession = GetProperty<GameSession>(manager, "Session");
             RunState firstRun = firstSession.ActiveRun;
-            Assert.That(firstRun.CurrentDay, Is.Zero);
+            AssertOpeningWarmUp(manager);
+            BoardAddress openingAddress = GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address;
+            Assert.That(firstRun.CurrentDay, Is.EqualTo(1));
+            Assert.That(firstRun.CompletedDayCount, Is.Zero);
             firstSession.ConsumeFood(9);
             Assert.That((bool)Invoke(manager, "ExitToMenu"), Is.True);
             Assert.That(firstSession.ActiveRun, Is.Null);
@@ -431,12 +640,230 @@ namespace HallowBlaze.Tests.PlayMode
 
             GameSession continuedSession = GetProperty<GameSession>(manager, "Session");
             Assert.That(continuedSession.ActiveRun.RunId, Is.EqualTo(firstRun.RunId));
-            Assert.That(continuedSession.ActiveRun.CurrentDay, Is.Zero);
+            Assert.That(continuedSession.ActiveRun.CurrentDay, Is.EqualTo(1));
+            Assert.That(continuedSession.ActiveRun.CompletedDayCount, Is.Zero);
             Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(continuedSession.ActiveRun.ActiveLeg.IntroState, Is.EqualTo(DayIntroState.Consumed));
+            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime").Request.Address,
+                Is.EqualTo(openingAddress));
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
 
             Scene cleanupScene = SceneManager.CreateScene("M1.7 Continue Cleanup " + Guid.NewGuid().ToString("N"));
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
             yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
+        /// <summary>Failed opening checkpoints never authorize a route choice, a board, or a second day on retry.</summary>
+        [UnityTest]
+        public IEnumerator OpeningCheckpointFailuresRetryWithoutSkippingOrRepeatingDay()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            AssertOpeningWarmUp(manager);
+            Invoke(manager, "BlockBoardStartup");
+            Invoke(manager, "StartNewRun");
+            RunState run = GetProperty<GameSession>(manager, "Session").ActiveRun;
+            string runPath = Path.Combine(persistenceRoot, "run.json");
+            File.Delete(runPath);
+            Directory.CreateDirectory(runPath);
+
+            LogAssert.Expect(LogType.Error, "Opening warm-up checkpoint failed: IoError");
+            Assert.That((bool)Invoke(manager, "TryStartOpeningWarmUp"), Is.False);
+            Assert.That(run.ActiveLeg, Is.Null);
+            Assert.That(run.CurrentDay, Is.Zero);
+            Assert.That(run.TraversalSequence, Is.Zero);
+            Assert.That((bool)Invoke(manager, "BeginRouteChoice"), Is.False);
+            Assert.That((bool)Invoke(manager, "ChooseRoute", "road.shelter-warm-up"), Is.False);
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
+            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Null);
+
+            Directory.Delete(runPath);
+            Assert.That((bool)Invoke(manager, "RetryTravelCheckpoint"), Is.True);
+            AssertOpeningWarmUp(manager);
+            Assert.That(run.TraversalSequence, Is.EqualTo(1));
+            Assert.That((bool)Invoke(manager, "RetryTravelCheckpoint"), Is.False);
+
+            Invoke(manager, "BlockBoardStartup");
+            Invoke(manager, "StartNewRun");
+            run = GetProperty<GameSession>(manager, "Session").ActiveRun;
+            Assert.That((bool)Invoke(manager, "TryStartOpeningWarmUp"), Is.True);
+            BoardAddress pendingAddress = BoardAddressFactory.CreateFromState(run);
+            File.Delete(runPath);
+            Directory.CreateDirectory(runPath);
+            LogAssert.Expect(LogType.Error, "Day intro checkpoint failed: IoError");
+            Invoke(manager, "InitGame");
+            Assert.That(run.ActiveLeg.IntroState, Is.EqualTo(DayIntroState.Pending));
+            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Null);
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
+
+            Directory.Delete(runPath);
+            Assert.That((bool)Invoke(manager, "RetryTravelCheckpoint"), Is.True);
+            AssertOpeningWarmUp(manager);
+            Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address, Is.EqualTo(pendingAddress));
+            Assert.That(run.TraversalSequence, Is.EqualTo(1));
+
+            BoardOutcome completion = BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"));
+            File.Delete(runPath);
+            Directory.CreateDirectory(runPath);
+            LogAssert.Expect(LogType.Error, "Segment checkpoint failed: IoError");
+            Assert.That((bool)Invoke(manager, "HandleBoardOutcome", completion), Is.False);
+            Assert.That(run.ActiveLeg, Is.Not.Null);
+            Assert.That(run.CompletedDayCount, Is.Zero);
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+
+            Directory.Delete(runPath);
+            Assert.That((bool)Invoke(manager, "RetryTravelCheckpoint"), Is.True);
+            Assert.That(run.ActiveLeg, Is.Null);
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.CompletedDayCount, Is.EqualTo(1));
+            Assert.That(run.TravelHistory, Has.Count.EqualTo(1));
+            Assert.That(run.WorldNodeId, Is.EqualTo("forest.start"));
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+            Assert.That((bool)Invoke(manager, "HandleBoardOutcome", completion), Is.False);
+            Assert.That((bool)Invoke(manager, "RetryTravelCheckpoint"), Is.False);
+            Assert.That(new FileSystemSaveStore(persistenceRoot).LoadRun().Data.CompletedDayCount, Is.EqualTo(1));
+        }
+
+        /// <summary>Retrying exit discovery preserves the completed opening and opens the first choice exactly once.</summary>
+        [UnityTest]
+        public IEnumerator OpeningExitDiscoveryFailureRetriesWithoutRepeatingArrival()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            AssertOpeningWarmUp(manager);
+            RunState run = GetProperty<GameSession>(manager, "Session").ActiveRun;
+            WorldMapService map = GetField<WorldMapService>(manager, "worldMap");
+            string profilePath = Path.Combine(persistenceRoot, "profile.json");
+            Action<WorldDiscoveryEvent> blockExitDiscovery = discovery =>
+            {
+                if (discovery.Operation != WorldDiscoveryOperation.TraversedEdge)
+                    return;
+                File.Delete(profilePath);
+                Directory.CreateDirectory(profilePath);
+            };
+            map.OnDiscovery += blockExitDiscovery;
+            BoardOutcome completion = BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"));
+            LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("^Route choice could not begin:"));
+            Assert.That((bool)Invoke(manager, "HandleBoardOutcome", completion), Is.False);
+            map.OnDiscovery -= blockExitDiscovery;
+            Assert.That(Directory.Exists(profilePath), Is.True);
+            Assert.That(run.CompletedDayCount, Is.EqualTo(1));
+            Assert.That(run.TravelHistory, Has.Count.EqualTo(1));
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
+
+            Directory.Delete(profilePath);
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+            Assert.That(GetProperty<IReadOnlyList<WorldMapExitOption>>(manager, "RouteChoices"), Has.Count.EqualTo(2));
+            Assert.That(run.CompletedDayCount, Is.EqualTo(1));
+            Assert.That(run.TravelHistory, Has.Count.EqualTo(1));
+            Assert.That((bool)Invoke(manager, "HandleBoardOutcome", completion), Is.False);
+            Assert.That((bool)Invoke(manager, "RetryTravelCheckpoint"), Is.True);
+            Assert.That(run.CompletedDayCount, Is.EqualTo(1));
+            Assert.That(run.TravelHistory, Has.Count.EqualTo(1));
+            Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-east-creek"), Is.True);
+            yield return null;
+            yield return null;
+            Assert.That(run.CompletedDayCount, Is.EqualTo(1));
+            Assert.That(run.CurrentDay, Is.EqualTo(2));
+            Assert.That(run.TraversalSequence, Is.EqualTo(2));
+            Assert.That(run.ActiveLeg.EdgeId, Is.EqualTo("road.start-east-creek"));
+        }
+
+        /// <summary>A scene reload republishes the first committed choice without replaying the opening.</summary>
+        [UnityTest]
+        public IEnumerator OpeningCompletedChoiceSurvivesSceneReload()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            AssertOpeningWarmUp(manager);
+            RunState run = GetProperty<GameSession>(manager, "Session").ActiveRun;
+            Assert.That((bool)Invoke(manager, "HandleBoardOutcome",
+                BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"))), Is.True);
+            Assert.That(GetProperty<IReadOnlyList<WorldMapExitOption>>(manager, "RouteChoices"), Has.Count.EqualTo(2));
+
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+            Assert.That(GetProperty<IReadOnlyList<WorldMapExitOption>>(manager, "RouteChoices"), Has.Count.EqualTo(2));
+            Assert.That(run.CompletedDayCount, Is.EqualTo(1));
+            Assert.That(run.TravelHistory, Has.Count.EqualTo(1));
+            Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
+            yield return null;
+            yield return null;
+            Assert.That(run.CompletedDayCount, Is.EqualTo(1));
+            Assert.That(run.CurrentDay, Is.EqualTo(2));
+            Assert.That(run.TraversalSequence, Is.EqualTo(2));
+        }
+
+        /// <summary>A scene reload retries the exact first selection after its run checkpoint failed.</summary>
+        [UnityTest]
+        public IEnumerator OpeningSelectedRouteSaveFailureRecoversOnSceneReload()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            AssertOpeningWarmUp(manager);
+            RunState run = GetProperty<GameSession>(manager, "Session").ActiveRun;
+            Assert.That((bool)Invoke(manager, "HandleBoardOutcome",
+                BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"))), Is.True);
+            string runPath = Path.Combine(persistenceRoot, "run.json");
+            File.Delete(runPath);
+            Directory.CreateDirectory(runPath);
+            LogAssert.Expect(LogType.Error, "Route choice save failed for Run: IoError");
+            Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.False);
+            Assert.That(run.ActiveLeg, Is.Null);
+            Assert.That(run.TraversalSequence, Is.EqualTo(1));
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
+
+            Directory.Delete(runPath);
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            yield return null;
+            Assert.That(run.ActiveLeg.EdgeId, Is.EqualTo("road.start-west-trail"));
+            Assert.That(run.CompletedDayCount, Is.EqualTo(1));
+            Assert.That(run.CurrentDay, Is.EqualTo(2));
+            Assert.That(run.TraversalSequence, Is.EqualTo(2));
+            Assert.That(run.TravelHistory, Has.Count.EqualTo(1));
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+            Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Not.Null);
+            Assert.That(new FileSystemSaveStore(persistenceRoot).LoadRun().Data.ActiveLeg.EdgeId,
+                Is.EqualTo("road.start-west-trail"));
+        }
+
+        /// <summary>Dying in the opening records no completed day and a fresh restart retains profile knowledge.</summary>
+        [UnityTest]
+        public IEnumerator OpeningDeathNeverOffersFirstChoiceAndRestartRetainsKnowledge()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            AssertOpeningWarmUp(manager);
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            ProfileState profile = session.Profile;
+            profile.DiscoverFact("known-before-opening-death");
+            RunState deadRun = session.ActiveRun;
+            BoardRequest oldRequest = GetProperty<BoardRequest>(manager, "ActiveBoardRequest");
+            yield return PresentHealthDeath(manager);
+            Assert.That(session.ActiveRun, Is.Null);
+            Assert.That(deadRun.CompletedDayCount, Is.Zero);
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+            Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-east-creek"), Is.False);
+            Assert.That((bool)Invoke(manager, "HandleBoardOutcome", BoardOutcome.ExitReached(oldRequest)), Is.False);
+
+            Invoke(manager, "RestartGame");
+            yield return null;
+            yield return null;
+            Assert.That(session.Profile, Is.SameAs(profile));
+            Assert.That(profile.DiscoveredFactIds, Does.Contain("known-before-opening-death"));
+            Assert.That(session.ActiveRun, Is.Not.SameAs(deadRun));
+            AssertOpeningWarmUp(manager);
         }
 
         /// <summary>Verifies real scene travel and save boundaries on fixed-identity, combat-free traversal fixtures.</summary>
@@ -595,16 +1022,19 @@ namespace HallowBlaze.Tests.PlayMode
 
             Component manager = GetStaticField(gameManagerType, "instance") as Component;
             Assert.That(manager, Is.Not.Null);
+            AssertOpeningWarmUp(manager);
             GameSession firstSession = GetProperty<GameSession>(manager, "Session");
-            Assert.That(firstSession.Profile.GetNodeDiscoveryState("forest.start"),
+            Assert.That(firstSession.Profile.GetNodeDiscoveryState("shelter.warm-up"),
                 Is.EqualTo(NodeDiscoveryState.Visited));
+            Assert.That(firstSession.Profile.GetNodeDiscoveryState("forest.start"),
+                Is.EqualTo(NodeDiscoveryState.Unknown));
 
             Component player = FindSceneComponent(playerType, "Main");
             yield return PresentExit(manager);
             Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
             yield return null;
             yield return null;
-            yield return PresentExit(manager);
+            yield return PresentExit(manager, useTraversalFixture: true);
 
             Assert.That(firstSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
                 Is.EqualTo(NodeDiscoveryState.Visited));
@@ -631,12 +1061,10 @@ namespace HallowBlaze.Tests.PlayMode
 
             GameSession newGameSession = GetProperty<GameSession>(manager, "Session");
             Assert.That(newGameSession.Profile, Is.Not.SameAs(firstSession.Profile));
-            Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.start"),
+            Assert.That(newGameSession.Profile.GetNodeDiscoveryState("shelter.warm-up"),
                 Is.EqualTo(NodeDiscoveryState.Visited));
-            Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
-                Is.EqualTo(NodeDiscoveryState.Sighted));
-            Assert.That(newGameSession.Profile.GetEdgeDiscoveryState("road.start-west-trail"),
-                Is.EqualTo(EdgeDiscoveryState.Sighted));
+            Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.start"),
+                Is.EqualTo(NodeDiscoveryState.Unknown));
             Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.old-road"),
                 Is.EqualTo(NodeDiscoveryState.Unknown));
             Assert.That(newGameSession.Profile.GetEdgeDiscoveryState("road.west-trail-old-road"),
@@ -645,6 +1073,8 @@ namespace HallowBlaze.Tests.PlayMode
             Component newGamePlayer = FindSceneComponent(playerType, "Main");
             yield return PresentExit(manager);
 
+            Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.start"),
+                Is.EqualTo(NodeDiscoveryState.Visited));
             Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.west-trail"),
                 Is.EqualTo(NodeDiscoveryState.Sighted));
             Assert.That(newGameSession.Profile.GetEdgeDiscoveryState("road.start-west-trail"),
@@ -688,17 +1118,17 @@ namespace HallowBlaze.Tests.PlayMode
                 (bool)Invoke(manager, "HandleBoardOutcome", BoardOutcome.ExitReached(staleRequest)),
                 Is.False);
             Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
-            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.CurrentDay, Is.EqualTo(2));
 
             BoardOutcome exit = BoardOutcome.ExitReached(request);
             int loads = 0;
             SetField(manager, "sceneLoader", new Action<string>(_ => loads++));
             Assert.That((bool)Invoke(manager, "HandleBoardOutcome", exit), Is.True);
             Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
-            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.CurrentDay, Is.EqualTo(2));
             Assert.That(run.ActiveLeg.SegmentIndex, Is.EqualTo(1));
             Assert.That((bool)Invoke(manager, "HandleBoardOutcome", exit), Is.False);
-            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.CurrentDay, Is.EqualTo(2));
             Assert.That(loads, Is.EqualTo(1));
             Invoke(manager, "HideLevelImage");
             Invoke(manager, "SetGameplayInputBlocked", false);
@@ -1014,6 +1444,16 @@ namespace HallowBlaze.Tests.PlayMode
 
         private static IEnumerator StartFirstRoute(Component manager)
         {
+            RunState run = GetProperty<GameSession>(manager, "Session").ActiveRun;
+            if (!GetProperty<bool>(manager, "IsRouteChoiceActive") &&
+                run != null &&
+                string.Equals(run.WorldNodeId, "shelter.warm-up", StringComparison.Ordinal))
+            {
+                AssertOpeningWarmUp(manager);
+                SetField(manager, "levelStartDelay", 100f);
+                yield return PresentExit(manager);
+            }
+
             Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
             SetField(manager, "levelStartDelay", 100f);
             Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-east-creek"), Is.True);
@@ -1022,6 +1462,40 @@ namespace HallowBlaze.Tests.PlayMode
                 yield return null;
             yield return null;
             Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Not.Null);
+        }
+
+        private static void AssertOpeningWarmUp(Component manager)
+        {
+            RunState run = GetProperty<GameSession>(manager, "Session").ActiveRun;
+            BoardRequest opening = GetProperty<BoardRequest>(manager, "ActiveBoardRequest");
+            Assert.That(run, Is.Not.Null);
+            Assert.That(run.WorldNodeId, Is.EqualTo("shelter.warm-up"));
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.CompletedDayCount, Is.Zero);
+            Assert.That(run.Health, Is.EqualTo(100));
+            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.ActiveLeg.EdgeId, Is.EqualTo("road.shelter-warm-up"));
+            Assert.That(run.ActiveLeg.DayNumber, Is.EqualTo(1));
+            Assert.That(run.ActiveLeg.Segments, Has.Count.EqualTo(1));
+            Assert.That(opening, Is.Not.Null);
+            Assert.That(opening.Address.EdgeId, Is.EqualTo("road.shelter-warm-up"));
+            Assert.That(opening.Address.SegmentId, Is.EqualTo("segment.shelter-warm-up.day1"));
+            Assert.That(opening.Address.GenerationConfigurationId, Is.EqualTo("ordinary.board.v1"));
+            Assert.That(opening.Address.GenerationVersion, Is.EqualTo(2));
+            Assert.That(opening.CurrentDay, Is.EqualTo(1));
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+            Assert.That(GetProperty<IReadOnlyList<WorldMapExitOption>>(manager, "RouteChoices"), Is.Empty);
+
+            Component boardScript = GetField<Component>(manager, "boardScript");
+            BoardGenerationResult generation =
+                GetProperty<BoardGenerationResult>(boardScript, "ActiveGenerationResult");
+            Assert.That(generation, Is.Not.Null);
+            Assert.That(generation.Blueprint.Config.EnemyCount.Minimum, Is.Zero);
+            Assert.That(generation.Blueprint.Config.EnemyCount.Maximum, Is.Zero);
+            InitialResourceManifestEntry food = generation.Blueprint.InitialResources
+                .Single(resource => resource.ResourceFamilyId == "food");
+            Assert.That(food.ItemCount, Is.InRange(2, 5));
+            Assert.That(generation.Blueprint.Items.Any(item => item.ResourceFamilyId == "tools"), Is.False);
         }
 
         /// <summary>A missing or already finalized run produces a useful assertion instead of a null dereference.</summary>

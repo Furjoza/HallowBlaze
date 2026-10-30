@@ -5566,10 +5566,10 @@ M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego
 
 # M7 - Playtest Repairs and Opening Warm-up
 
-**Planning date:** 2026-10-28. All cards below are `Planned`; no implementation or fix is
-claimed. This milestone precedes the expanded vertical slice, not the existing human gates.
-M4.9 and M6.6 keep their recorded status and evidence requirements. Any implementation before
-those gates close still needs a separate, explicit owner authorization.
+**Planning date:** 2026-10-28. The owner authorized execution of this repair milestone on
+2026-10-29 before the outstanding M4.9 and M6.6 human gates. Individual card statuses below
+record implementation progress; the authorization does not close either earlier gate or
+claim human-session evidence. This milestone precedes the expanded vertical slice.
 
 **Reported evidence:** The owner's three session screenshots are observations, not a recovered
 seed or a confirmed technical diagnosis. Screenshot #1 shows white regions around Field Notes
@@ -5594,9 +5594,12 @@ blinking icon, long footstep, missing resource gains and alignment issues were a
 
 ## `M7.1` - Warm-up first day before the first route choice
 
-**Status:** `Planned`
+**Status:** `Done` (2026-10-29)
 **Priority:** P1
 **Related contract:** sections 7, 9, 18 and 20; accepted route-leg/intro rules in M3.11-M3.12.
+
+**Owner authorization (2026-10-29):** Proceed with M7 before the outstanding M4.9 and M6.6
+human-session gates. This does not close either gate or claim player-test evidence.
 
 **Rationale:** Choosing a route before experiencing movement, turns and an exit asks for a
 strategic decision before the player has practical context.
@@ -5612,6 +5615,15 @@ movement/intent/exit rules, and integrate its start, completion, Day presentatio
 route-choice checkpoint. Before Ready, specify the opening's board count, stable address,
 initial threat/supply and how it counts toward the campaign and landmark days. Reconcile the
 former immediate-choice assumption without treating a node ID as a board address.
+
+**Opening definition:** One automatically started, one-segment Day 1 leg from
+`shelter.warm-up` to `forest.start`, with stable edge `road.shelter-warm-up` and segment
+`segment.shelter-warm-up.day1` using `ordinary.board.v1` generation version 2. It uses the
+existing Day 1 budget (zero enemies, 2–5 food items), starts with 100 health/food and grants
+no tool. Successful exit completes Day 1; the first player-selected leg begins Day 2, moving
+the shortest Radio Tower arrival from Day 5 to Day 6. Existing saves at `forest.start` or an
+active leg continue unchanged. See the accepted opening-flow contract in section 27.2 of
+`Docs/GameDesignContract.md`.
 
 **Non-goals:** No new tutorial engine, forced tool grant, new mechanic, atlas knowledge reset,
 automatic route recommendation, or silent change to later landmark/finale pacing.
@@ -5640,11 +5652,24 @@ Do not prepend a warm-up to an already-started run, replay its reward, or erase 
 **Required handoff:** Before/after flow and day/address table, authored opening limits, contract
 amendment, checkpoint/migration matrix and observed opening smoke outcome.
 
+**Implementation (2026-10-29):** The production New Game/new-run/restart flow starts the
+opening before any route modal. Existing active and checkpoint saves retain their original
+boundary and numbering. Section 27.2 of `Docs/GameDesignContract.md` records the before/after
+flow, address and compatibility matrix. Technical validation covers the real Main scene,
+New Game, death/restart, Continue, first exit/choice, duplicate outcomes and failed
+start/intro/completion checkpoint retries. Recovery also covers pending exit discovery,
+scene reload at the first choice and a failed first route-selection save without replaying
+arrival or allocating a second leg. Full EditMode passed 1239 tests with the existing
+Explicit seed-milestone skip; graphics PlayMode passed 193/193. Independent review passed
+after the recovery corrections. The Day 1 production-canvas
+capture was recorded at 640x480. No first-time-player response or owner smoke acceptance is
+claimed; the integrated human/visual acceptance remains an explicit M7.8 gate.
+
 ---
 
 ## `M7.2` - Clean Day, board and overlay presentation boundaries
 
-**Status:** `Planned`
+**Status:** `Done` (2026-10-29)
 **Priority:** P1
 **Related contract:** sections 18 and 20; M3.12 Day/board publication contract.
 
@@ -5672,6 +5697,10 @@ clear-color workaround, or widening of the inspectable board behind modal conten
 **Allowed file area:** Presentation Day/Board/Camera/HUD/Legend/FieldNotes and their lifecycle
 integration; graphics PlayMode tests. List any necessary scene/prefab assets before Ready.
 
+**Closed write scope (2026-10-29):** `Assets/Scripts/GameManager.cs`,
+`Assets/Tests/PlayMode/GameSessionLifecycleTests.cs`, `Docs/Testing.md` and this roadmap.
+No scene, prefab, package, project setting or domain/save change is required.
+
 **Acceptance criteria:** From the first rendered setup frame until Day ends, the player, board
 and gameplay HUD are hidden. Gameplay has no Day backing layer. Opening/closing either overlay
 does not recolor unrelated regions; closing or leaving a board leaves no legend/Notes residue.
@@ -5689,11 +5718,21 @@ draft or new run/profile schema. Resume must project the existing committed boun
 **Required handoff:** Reproduction and diagnosed owner for each reported artifact, visibility
 matrix, before/after frames and explicit evidence that no old-board pixels survive.
 
+**Implementation (2026-10-29):** Production regressions reproduce an unmasked world during
+Day, uncleared pixels outside the reserved gameplay viewport and a legend retained under
+Notes. The lifecycle now owns the world camera mask, a full-viewport no-object clear using
+the authored camera background, overlay closure and cancellation of delayed Day callbacks.
+The visibility matrix and focused graphics procedure are in `Docs/Testing.md`. Render-target
+checks cover desktop/portrait, consecutive tinted boards and both animation modes. The
+reported historical screenshots are not claimed as exact reconstructed frames; owner visual
+smoke remains open at M7.8. Full graphics PlayMode passed 196/196 and independent review
+passed; no scene, prefab, domain or persistence format changed.
+
 ---
 
 ## `M7.3` - Stable Field Notes control, label and input lifetime
 
-**Status:** `Planned`
+**Status:** `Done` (2026-10-29)
 **Priority:** P1
 **Related contract:** sections 4, 5.4 and 18; M5.7 observation/read-only ownership.
 
@@ -5719,6 +5758,10 @@ label offset used to hide a second rendered instance.
 **Allowed file area:** Presentation FieldNotes/HUD/Legend layout and lifecycle; focused PlayMode
 tests. No domain/persistence changes or asset edits outside an explicit Ready allowlist.
 
+**Closed write scope (2026-10-29):**
+`Assets/Scripts/Presentation/Runtime/FieldNotes/FieldNotesPresenter.cs`,
+`Assets/Tests/PlayMode/FieldNotesPresentationTests.cs` and this roadmap.
+
 **Acceptance criteria:** Exactly one active Notes control/label is rendered. Movement, Wait,
 resource refresh and rejected commands do not blink, duplicate or shift it. Open/close, pause,
 death, new run, scene reload and Continue retain correct ownership without leaked listeners.
@@ -5733,11 +5776,24 @@ opening/canceling remains free and cannot release another modal's movement block
 **Required handoff:** Proven duplicate/blink cause, control ownership and refresh rules, lifecycle
 assertions and before/after label captures.
 
+**Implementation (2026-10-29):** The hover reproduction retained the book tooltip after its
+button was hidden, allowing the close tooltip to occupy the same root-level rectangle.
+Tooltips now belong to their controls and close explicitly at view/lifecycle transitions.
+The book keeps one UI lifetime and a stable visual while temporary busy states still block
+interaction; no per-turn control recreation or arbitrary duplicate-hiding offset is used.
+Focused coverage executes Move, Wait and rejection, checks stable identity/position/color,
+and compares actual idle/busy book pixels at 1280x720 and 320x480. Existing cases retain
+pause/modal ownership, death/new run/reset and post-death resize coverage. Captures remain
+outside the project at `%TEMP%/HB-M73-control-<width>x<height>.png`.
+Full graphics PlayMode passed 197/197; after the final close-tooltip placement correction,
+the complete Notes fixture passed 7/7 with visible desktop/portrait hover assertions.
+Independent review passed. The owner visual smoke remains part of M7.8.
+
 ---
 
 ## `M7.4` - One short footstep per accepted player step
 
-**Status:** `Planned`
+**Status:** `Done` (2026-10-29)
 **Priority:** P2
 **Related contract:** sections 9, 10 and 18; presentation must not own turn resolution.
 
@@ -5760,6 +5816,11 @@ stretched to fit a long clip, or changes to unrelated axe/enemy/audio assets.
 **Allowed file area:** Player-movement audio presentation and focused PlayMode tests; only the
 exact step clip/import settings or prefab explicitly listed before Ready.
 
+**Closed write scope (2026-10-29):** `Assets/Scripts/PlayerScript.cs`,
+`Assets/Scripts/Presentation/Runtime/BoardEventPresenter.cs`,
+`Assets/Tests/PlayMode/PlayModeInfrastructureTests.cs` and this roadmap.
+The authored clips and import settings remain unchanged.
+
 **Acceptance criteria:** One accepted step triggers one short cue, with no loop, stacking or
 next-turn tail during rapid steps. Rejected movement, Wait and non-moving actions trigger no
 player footstep. Recovery/Continue does not replay a step; board change, death and cancellation
@@ -5773,6 +5834,20 @@ call alone is not evidence that the actual clip sounds short.
 
 **Required handoff:** Clip identity, measured duration/playback limit, trigger matrix and actual
 listening result, with any unavailable audio verification stated explicitly.
+
+**Implementation (2026-10-29):** The previous handler started the complete clip after
+interpolation. `scavengers_footstep1.aif` measures 0.884989 seconds and
+`scavengers_footstep2.aif` 1.047596 seconds. Player movement and atomic pushing now start one
+non-looping cue on a player-owned source at presentation start, bounded by the shorter of
+100 ms and the movement duration. Completion, cancellation, recovery, disposal and player
+disable stop only that source; unrelated effects retain their shared source. Instant or
+animation-disabled movement is explicitly silent rather than leaving deferred playback.
+Wait, rejected commands and enemy movement do not produce a player step. Rapid steps reuse
+one source; saved/live mute settings remain respected. Tests check actual imported sample
+prefixes, scheduled stop, trigger counts and cancellation. These measurements are not an
+actual listening verdict: owner audio smoke is not performed and remains open at M7.8.
+Full EditMode passed 1239 tests with the existing Explicit seed skip; graphics PlayMode
+passed 200/200 and focused movement/audio passed 15/15. Independent review passed.
 
 ---
 
@@ -6793,7 +6868,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 The next safe sequence is:
 
 1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. The owner then separately authorized solo M6.6: its technical preparation passed full EditMode 1237 tests plus the existing Explicit skip and graphics PlayMode 188/188, with self-review only. M6.6 remains Active until 5-8 real sessions and the landmark decision in `Docs/Validation/M6.6.md`; neither exception closes M4.9 or authorizes M8. Future cards use the current Lead implementation and Reviewer/self-review policy in `AGENTS.md`, without changing these historical review attributions;
-2. prepare and execute the new `M7.1`-`M7.8` repair/onboarding milestone after the required earlier gates, or under a separately recorded owner exception. The 2026-10-28 request authorizes this roadmap amendment only; it is not implementation or human-gate acceptance;
+2. continue the `M7.5`-`M7.8` repair/onboarding milestone after M7.1-M7.4 were completed on 2026-10-29 with independent review, compatible opening/checkpoint recovery, clean presentation boundaries, stable Notes controls and bounded footsteps. The owner authorized proceeding before the outstanding M4.9/M6.6 human gates; those gates remain open and no human-test result is implied;
 3. complete the no-backpack vertical slice through `M8.8`, preserving its playtest requirements and the earlier M4.9/M6.6/M7 gates, then make the explicit M10 verdict;
 4. keep M10 deferred and last unless the owner explicitly changes that order; activate M9.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M10.
 

@@ -1344,6 +1344,19 @@ The game must remain playable while the no-backpack vertical slice is tested. At
 
 - Committing an outgoing edge starts one route leg and one player-facing day.
 - The first leg is `Day 1`; no player-facing `Day 0` exists.
+- A fresh run begins at `shelter.warm-up` and automatically starts the single-board
+  `road.shelter-warm-up` leg to `forest.start`. Its stable segment is
+  `segment.shelter-warm-up.day1`, using `ordinary.board.v1` generation version 2.
+  The ordinary Day 1 generation target has zero enemies and 2–5 food items; the run starts
+  with 100 health and 100 food, with no tool grant. This mandatory opening is not a route
+  recommendation or a player route choice.
+- Completing that opening leg commits Day 1 and only then opens the first route choice at
+  `forest.start`. The chosen route therefore begins on Day 2, and the existing five-edge
+  shortest path to the Radio Tower now reaches it on Day 6. This is an intentional campaign
+  pacing change; all later day numbers are one greater than before.
+- A run already saved at `forest.start` or on any active route leg continues from its exact
+  saved boundary and is never prepended with the opening. The opening is used for New Game
+  and every genuinely fresh run, including a restart after death.
 - An edge owns an ordered, non-empty list of stable route-segment IDs. Different edges may have different lengths; five boards is an initial content target, not a hard-coded invariant.
 - Starting a leg creates one persisted run-local `routeLegId`/traversal ID. Reusing the same directed edge later in the same run creates a different leg ID.
 - Each segment creates one local board with an address containing at least run ID, route-leg ID, edge ID, stable segment ID, day number, generation version/configuration, and deterministic board seed.
@@ -1363,6 +1376,31 @@ Several short tactical situations can make one strategic route choice meaningful
 - Board seeds never derive from node/day alone.
 - `Continue` restores the same route segment and never repeats a consumed day transition or accepts an outcome from another leg/segment.
 - Published segment IDs are migration-sensitive content IDs; reordering a list must not silently change identity.
+
+#### Opening boundaries and compatibility
+
+| Flow | Before the opening repair | Fresh runs after the opening repair |
+| --- | --- | --- |
+| Initial reached node | `forest.start`, before Day 1 | `shelter.warm-up`, before Day 1 |
+| Day 1 | First selected five-segment road | Automatic one-segment `road.shelter-warm-up` |
+| First route choice | Before the first board | After reaching `forest.start` and completing Day 1 |
+| First selected road | Day 1 | Day 2 |
+| Shortest Radio Tower arrival | Day 5 | Day 6; the inbound landmark still owns the final segment |
+
+| Committed save boundary | Continue or retry policy |
+| --- | --- |
+| Fresh run at `shelter.warm-up`, no active leg | Start and save the opening before publishing a board or route choice. |
+| Opening leg with `Pending` intro | Keep its exact run/leg/segment/day/configuration/seed address; save `Consumed` before publishing. |
+| Opening leg with `Consumed` intro | Recreate the same board without replaying the intro or allocating a second leg. |
+| Opening completed at `forest.start` | Reconcile discovery idempotently and offer the first route choice; never repeat Day 1 or its observation sample. |
+| Older run at `forest.start`, including completed-day count zero | Keep the existing checkpoint and its original day numbering; offer its routes without prepending an opening. |
+| Any older active leg, including legacy generation or a selected landmark | Preserve the saved address, seed, generation/template selection, resources and day numbering. |
+| Failed start, intro or completion checkpoint | Remain blocked at the last committed boundary; explicit retry cannot skip a day or complete it twice. |
+| Death during the opening | Do not offer a route choice; the next fresh run starts its own opening while retaining profile knowledge. |
+
+No run/profile schema changes or migration are required: the opening uses existing textual
+node/edge/segment IDs and the existing route-leg and intro checkpoints. New Game retains its
+explicit profile-reset semantics; New Run and a restart after death do not reset knowledge.
 
 ### 27.3. Route-resource knowledge and fixed tool sources
 
