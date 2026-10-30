@@ -18,6 +18,7 @@ namespace HallowBlaze.Presentation.Runtime
         private readonly Queue<FieldNoteEntry> notices = new Queue<FieldNoteEntry>();
         private readonly HashSet<string> notified = new HashSet<string>(StringComparer.Ordinal);
         private readonly List<GameObject> rows = new List<GameObject>();
+        private readonly List<GameObject> hints = new List<GameObject>();
         private readonly Dictionary<string, Sprite> icons = new Dictionary<string, Sprite>(StringComparer.Ordinal);
         private readonly List<Texture2D> textures = new List<Texture2D>();
         private GameObject panel;
@@ -63,6 +64,7 @@ namespace HallowBlaze.Presentation.Runtime
             Root.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
             Root.GetComponent<Canvas>().sortingOrder = 110;
             openButton = ButtonAt("Open Field Notes", Root.transform, OpenFromButton, "book");
+            openButton.transition = Selectable.Transition.None;
             Place((RectTransform)openButton.transform, 8, 76, 44, 44);
             Hint(openButton, "Field Notes");
             panel = new GameObject("Field Notes", typeof(RectTransform), typeof(Image));
@@ -111,6 +113,7 @@ namespace HallowBlaze.Presentation.Runtime
         {
             if (!Usable() || IsOpen || releaseAfterFrame >= 0 || !mayOpen()) return false;
             IsOpen = true;
+            HideHints();
             ownInput(true);
             try { Refresh(); panel.SetActive(true); openButton.gameObject.SetActive(false); notice.SetActive(false); }
             catch { CloseImmediately(); throw; }
@@ -122,6 +125,7 @@ namespace HallowBlaze.Presentation.Runtime
         {
             if (!IsOpen) return;
             IsOpen = false;
+            HideHints();
             panel.SetActive(false);
             openButton.gameObject.SetActive(true);
             RefreshNotice();
@@ -266,6 +270,7 @@ namespace HallowBlaze.Presentation.Runtime
             bool held = IsOpen || releaseAfterFrame >= 0;
             IsOpen = false;
             releaseAfterFrame = -1;
+            HideHints();
             if (panel != null) panel.SetActive(false);
             if (openButton != null) openButton.gameObject.SetActive(true);
             if (held) ownInput?.Invoke(false);
@@ -286,6 +291,7 @@ namespace HallowBlaze.Presentation.Runtime
             owner.transform.SetParent(parent, false);
             owner.GetComponent<Image>().color = new Color32(219, 230, 224, 255);
             Button button = owner.GetComponent<Button>();
+            button.targetGraphic = owner.GetComponent<Image>();
             button.onClick.AddListener(() => click());
             var imageOwner = new GameObject("Icon", typeof(RectTransform), typeof(Image));
             imageOwner.transform.SetParent(owner.transform, false);
@@ -336,9 +342,11 @@ namespace HallowBlaze.Presentation.Runtime
 
         private void Hint(Button button, string value)
         {
-            Text hint = TextAt("Tooltip", Root.transform, value, 14);
-            Place(hint.rectTransform, 64, 76, 230, 36);
+            Text hint = TextAt("Tooltip", button.transform, value, 14);
+            Place(hint.rectTransform, button == openButton ? 56 : -242,
+                button == openButton ? 0 : 42, 230, button == openButton ? 44 : 18);
             hint.gameObject.SetActive(false);
+            hints.Add(hint.gameObject);
             EventTrigger trigger = button.gameObject.AddComponent<EventTrigger>();
             var enter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
             enter.callback.AddListener(_ => hint.gameObject.SetActive(true));
@@ -346,6 +354,12 @@ namespace HallowBlaze.Presentation.Runtime
             exit.callback.AddListener(_ => hint.gameObject.SetActive(false));
             trigger.triggers.Add(enter);
             trigger.triggers.Add(exit);
+        }
+
+        private void HideHints()
+        {
+            foreach (GameObject hint in hints)
+                if (hint != null) hint.SetActive(false);
         }
 
         private Sprite Icon(string id)

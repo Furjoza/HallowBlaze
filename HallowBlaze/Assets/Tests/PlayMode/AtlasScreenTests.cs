@@ -51,6 +51,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Directory.Delete(persistenceRoot, true);
         }
 
+        /// <summary>Checks atlas presentation and retained discovery using compatible pre-opening checkpoint runs.</summary>
         [UnityTest]
         public IEnumerator AtlasRendersKnownInformationAndCarriesDiscoveryIntoSecondRun()
         {
@@ -207,7 +208,8 @@ namespace HallowBlaze.Tests.PlayMode
             StringAssert.Contains("CURRENT ROUTE / SOLID", advancedText);
             StringAssert.Contains("TRAVERSED  SOLID", advancedText);
 
-            Invoke(manager, "StartNewRun");
+            session.StartNewRun("atlas-second-checkpoint", 8,
+                new RunStateConfiguration(100, 100, 0, "forest.start"));
             RunState secondRun = session.ActiveRun;
             Assert.That(secondRun, Is.Not.SameAs(run));
             Assert.That(session.Profile, Is.SameAs(profile));
@@ -237,7 +239,8 @@ namespace HallowBlaze.Tests.PlayMode
             SetField(manager, "worldDefinitionJson", worldDefinition);
             SetField(manager, "sceneLoader", (Action<string>)(_ => { }));
             Invoke(manager, "EnsurePersistence");
-            Invoke(manager, "StartNewRun");
+            GetProperty<GameSession>(manager, "Session").StartNewRun("atlas-first-checkpoint", 7,
+                new RunStateConfiguration(100, 100, 0, "forest.start"));
             Assert.That((bool)Invoke(manager, "TryEnterCurrentWorldNode"), Is.True);
             return manager;
         }

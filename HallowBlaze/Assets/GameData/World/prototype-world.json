@@ -1,11 +1,11 @@
 {
   "worldDefinitionId": "world-1",
   "version": 1,
-  "startNodeId": "forest.start",
+  "startNodeId": "shelter.warm-up",
   "goalNodeId": "landmark.radio-tower",
   "nodes": [
     {
-      "nodeId": "forest.start",
+      "nodeId": "shelter.warm-up",
       "atlasX": 0,
       "atlasY": 0,
       "distanceLayer": 0,
@@ -13,63 +13,81 @@
       "biomeFamilyKey": "temperate-forest"
     },
     {
-      "nodeId": "forest.west-trail",
-      "atlasX": -2,
+      "nodeId": "forest.start",
+      "atlasX": 0,
       "atlasY": 1,
       "distanceLayer": 1,
+      "placeKind": "shelter",
+      "biomeFamilyKey": "temperate-forest"
+    },
+    {
+      "nodeId": "forest.west-trail",
+      "atlasX": -2,
+      "atlasY": 2,
+      "distanceLayer": 2,
       "placeKind": "trail",
       "biomeFamilyKey": "temperate-forest"
     },
     {
       "nodeId": "forest.east-creek",
       "atlasX": 2,
-      "atlasY": 1,
-      "distanceLayer": 1,
+      "atlasY": 2,
+      "distanceLayer": 2,
       "placeKind": "creek",
       "biomeFamilyKey": "wet-forest"
     },
     {
       "nodeId": "forest.old-road",
       "atlasX": 0,
-      "atlasY": 2,
-      "distanceLayer": 2,
+      "atlasY": 3,
+      "distanceLayer": 3,
       "placeKind": "crossroads",
       "biomeFamilyKey": "temperate-forest"
     },
     {
       "nodeId": "forest.west-grove",
       "atlasX": -2,
-      "atlasY": 3,
-      "distanceLayer": 3,
+      "atlasY": 4,
+      "distanceLayer": 4,
       "placeKind": "grove",
       "biomeFamilyKey": "temperate-forest"
     },
     {
       "nodeId": "forest.east-quarry",
       "atlasX": 2,
-      "atlasY": 3,
-      "distanceLayer": 3,
+      "atlasY": 4,
+      "distanceLayer": 4,
       "placeKind": "quarry",
       "biomeFamilyKey": "rocky-foothills"
     },
     {
       "nodeId": "forest.ridge",
       "atlasX": 0,
-      "atlasY": 4,
-      "distanceLayer": 4,
+      "atlasY": 5,
+      "distanceLayer": 5,
       "placeKind": "ridge",
       "biomeFamilyKey": "rocky-foothills"
     },
     {
       "nodeId": "landmark.radio-tower",
       "atlasX": 0,
-      "atlasY": 5,
-      "distanceLayer": 5,
+      "atlasY": 6,
+      "distanceLayer": 6,
       "placeKind": "landmark",
       "biomeFamilyKey": "rocky-foothills"
     }
   ],
   "edges": [
+    {
+      "edgeId": "road.shelter-warm-up",
+      "fromNodeId": "shelter.warm-up",
+      "toNodeId": "forest.start",
+      "direction": "north",
+      "clueKey": "clue.shelter-trail",
+      "segments": [
+        { "segmentId": "segment.shelter-warm-up.day1", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 2 }
+      ]
+    },
     {
       "edgeId": "road.start-west-trail",
       "fromNodeId": "forest.start",

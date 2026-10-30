@@ -1,5 +1,39 @@
 # HallowBlaze Testing
 
+## M7.2 Presentation Boundaries
+
+The production lifecycle fixture covers the initial Day, consumed-intro Continue, overlay
+cancellation, first route choice and scene reload. Graphics cases additionally exercise
+1280x720, 320x480 and 320x640 render targets with two distinctly tinted consecutive boards
+and animation enabled/disabled. Captures remain outside the project at
+`%TEMP%/HB-M72-{Day|Notes|Board}-<width>x<height>.png`.
+
+| State | World | Resource HUD | Board Controls | Field Notes |
+| --- | --- | --- | --- | --- |
+| Setup / Day | Hidden by the original camera's zero culling mask | Hidden | Hidden | Closed and unavailable |
+| Gameplay / legend | Visible | Visible | Visible; legend is informational | Available |
+| Notes modal | Behind the opaque Notes canvas | Behind Notes | Legend closed; legend and tool controls hidden | Owns only its modal input block |
+| Route choice | Hidden | Hidden | Disposed or hidden | Closed and unavailable |
+| Death / terminal | Hidden | Hidden | Disposed or hidden | Available after death with its existing profile lifetime |
+| Leaving Main | Scene owns its original mask again | Scene-owned | Disposed | Closed and unavailable |
+
+The original camera previously continued to draw the player during Day and cleared only its
+reduced viewport. A scene-owned, no-object full-viewport clear camera now clears the complete
+display first using the original camera's authored background color. It does not alter the
+board geometry, viewport reservations, save data or gameplay camera color. A magenta previous
+frame regression proves that reserved margins are overwritten rather than retaining pixels.
+Board boundaries close/dispose overlays and cancel the previous delayed Day callback.
+
+Run the graphics fixture through Unity CLI, without `-nographics`:
+
+```powershell
+unity test D:/Repos/HallowBlaze/HallowBlaze --mode PlayMode --filter HallowBlaze.Tests.PlayMode.GameSessionLifecycleTests --output "$env:TEMP/HB-M72-lifecycle.xml" -- -logFile "$env:TEMP/HB-M72-lifecycle.log"
+```
+
+Inspect fresh XML identities, nonzero executed counts and failures. These tests reproduce
+mechanisms in the production scene; they do not reconstruct the owner's historical frames
+or replace the explicit M7.8 owner visual/audio smoke gate.
+
 ## M6.6 Curated Landmark Variants
 
 [Protocol, variant/cost matrix and actual evidence](Validation/M6.6.md) separate technical
