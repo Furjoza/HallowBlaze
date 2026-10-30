@@ -4,8 +4,10 @@ using System.Globalization;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Generation;
+using HallowBlaze.Core.Generation.Pipeline;
 using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.State;
+using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.Turns.Resolution;
 using NUnit.Framework;
 
@@ -267,6 +269,95 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(report.Metrics.MinimumEnemyStartDistance, Is.EqualTo(2));
             Assert.That(report.Metrics.InitialThreatsByCell[new GridPosition(1, 0)], Is.EqualTo(1));
             Assert.That(report.Metrics.InitialThreatsByCell.ContainsKey(new GridPosition(0, 1)), Is.False);
+        }
+
+        /// <summary>A synthetic corner has a safe first move yet no surviving escape through four real accepted commands at low health.</summary>
+        [Test]
+        public void SyntheticTwoEnemyCornerHasNoFourCommandEscapeDespiteSafeFirstMove()
+        {
+            List<BoardEntityState> entities = Entities();
+            entities.Add(Entity(400, BoardLayer.Actor, EntityKind.Enemy, "enemy", 2, 0));
+            entities.Add(Entity(401, BoardLayer.Actor, EntityKind.Enemy, "enemy", 2, 1));
+            entities.Add(Entity(402, BoardLayer.Obstacle, EntityKind.Obstacle, "wall", 0, 2, false));
+            BoardBlueprint blueprint = Blueprint(entities);
+            BoardValidationReport report = BoardValidator.Validate(blueprint, Catalog());
+            Assert.That(report.IsValid, Is.True);
+            Assert.That(report.Metrics.SafeStartMoves, Is.EqualTo(1));
+            BoardEntrySafetyResult bounded = BoardEntrySafety.Check(blueprint, Catalog(), 10, 20);
+            Assert.That(bounded.HasEscape, Is.False);
+            Assert.That(bounded.EvaluatedCommands, Is.LessThanOrEqualTo(780));
+            PlayerCommand[] choices = { new MoveCommand(Direction.North), new MoveCommand(Direction.East),
+                new MoveCommand(Direction.West), new MoveCommand(Direction.South), new WaitCommand() };
+            int escaped = 0;
+            int died = 0;
+            for (int sequence = 0; sequence < 625; sequence++)
+            {
+                BoardState board = blueprint.CreateState();
+                var run = new RunState("synthetic-entry-trap", 0, new RunStateConfiguration(10, 20, 0, "synthetic"));
+                var enemies = new[] { new ShamblerState(new EntityId(400), new ShamblerDefinition(10)),
+                    new ShamblerState(new EntityId(401), new ShamblerDefinition(10)) };
+                var planner = new ShamblerPlanner();
+                foreach (ShamblerState enemy in enemies)
+                    enemy.LockIntent(planner.Plan(board, enemy, new EntityId(100)));
+                var phases = new EnemyBatchTurnPhases(enemies);
+                var controller = new TurnController(board, run, new EntityId(100), new TurnResolver(), phases.Handlers);
+                int decisions = sequence;
+                for (int step = 0; step < 4 && !controller.IsTerminal; step++)
+                {
+                    PlayerCommand command = choices[decisions % choices.Length];
+                    decisions /= choices.Length;
+                    TurnResult result = controller.Resolve(command);
+                    if (!result.Accepted) continue;
+                    if (run.Health > 0 && board.TryGetEntity(new EntityId(100), out BoardEntityState player) &&
+                        player.Position.ManhattanDistance(blueprint.Start) >= 3)
+                    {
+                        escaped++;
+                        break;
+                    }
+                }
+                if (run.Health == 0) died++;
+            }
+            Assert.That(died, Is.GreaterThan(0));
+            Assert.That(escaped, Is.Zero,
+                "Synthetic fixture only: two enemies, 10 HP, 20 Food, four accepted-command horizon; not a recovered player seed.");
+        }
+
+        /// <summary>The v3 criterion rejects the synthetic trap while preserving a narrow surviving escape and deterministic caller state.</summary>
+        [Test]
+        public void EntrySafetyRejectsTwoEnemyTrapButAcceptsNarrowSurvivingRoute()
+        {
+            List<BoardEntityState> entities = Entities();
+            entities.Add(Entity(400, BoardLayer.Actor, EntityKind.Enemy, "enemy", 2, 0));
+            entities.Add(Entity(401, BoardLayer.Actor, EntityKind.Enemy, "enemy", 2, 1));
+            entities.Add(Entity(402, BoardLayer.Obstacle, EntityKind.Obstacle, "wall", 0, 2, false));
+            BoardGenerationConfig original = Config();
+            var config = new BoardGenerationConfig("ordinary.board.v1", 3, original.PathLength, original.BranchPoints,
+                original.ObstacleCount, original.EnemyCount, original.MaximumConcurrentThreats, original.MinimumSafeStartMoves,
+                original.AllowedContentIds, original.ResourceBudgets);
+            var trap = new BoardBlueprint(Address(config), config, entities, Array.Empty<BoardItemSpawn>());
+            CollectionAssert.Contains(Codes(BoardValidator.Validate(trap, Catalog())), "EntryEscapeHorizon");
+            entities.RemoveAll(entity => entity.Id.Equals(new EntityId(401)));
+            var narrow = new BoardBlueprint(Address(config), config, entities, Array.Empty<BoardItemSpawn>());
+            string originalHash = narrow.ContentHash;
+            Assert.That(BoardValidator.Validate(narrow, Catalog()).IsValid, Is.True);
+            BoardEntrySafetyResult first = BoardEntrySafety.Check(narrow, Catalog());
+            BoardEntrySafetyResult repeat = BoardEntrySafety.Check(narrow, Catalog());
+            Assert.That(first.HasEscape, Is.True);
+            Assert.That(first.EscapeCommands.Count, Is.LessThanOrEqualTo(4));
+            Assert.That(repeat.EvaluatedCommands, Is.EqualTo(first.EvaluatedCommands));
+            Assert.That(narrow.ContentHash, Is.EqualTo(originalHash));
+            Assert.That(BoardEntrySafety.Check(narrow, Catalog(), 1, 1).HasEscape, Is.False,
+                "Starvation costs still apply; a bounded witness does not promise survival with arbitrary Food.");
+            var request = new BoardGenerationRequest(trap.Address, config, Catalog(), 0);
+            var fallbacks = new[] { new BoardGenerationFallback("synthetic.narrow-safe", _ => narrow) };
+            BoardGenerationResult selected = BoardGenerationPipeline.Generate(request, (_, __) => trap, fallbacks, 2);
+            BoardGenerationResult selectedAgain = BoardGenerationPipeline.Generate(request, (_, __) => trap, fallbacks, 2);
+            Assert.That(selected.IsSuccess, Is.True);
+            Assert.That(selected.UsedFallback, Is.True);
+            Assert.That(selected.Attempts.Count, Is.EqualTo(3));
+            Assert.That(selected.FallbackId, Is.EqualTo("synthetic.narrow-safe"));
+            Assert.That(selectedAgain.Blueprint.ContentHash, Is.EqualTo(selected.Blueprint.ContentHash));
+            Assert.That(selectedAgain.ToString(), Is.EqualTo(selected.ToString()));
         }
 
         /// <summary>Distinct enemy intents sharing one destination count separately even when movement later conflicts.</summary>

@@ -42,7 +42,7 @@ namespace HallowBlaze.Presentation.Runtime
                 });
         }
 
-        /// <summary>Resolves retained single-candidate v1 or bounded pipeline v2 budgets; arbitrary IDs/versions are rejected.</summary>
+        /// <summary>Resolves retained v1/v2 budgets or version-3 entry-safe generation; arbitrary IDs/versions are rejected.</summary>
         /// <param name="address">The actual segment identity; day affects obstacle/enemy pressure, not board size.</param>
         /// <returns>A detached inclusive budget; this is a first-family preset, not final balance.</returns>
         /// <exception cref="ArgumentException">The generation family or version is unsupported.</exception>
@@ -52,6 +52,7 @@ namespace HallowBlaze.Presentation.Runtime
             if (address == null) throw new ArgumentNullException(nameof(address));
             if (address.GenerationConfigurationId != OrdinaryBoardGenerator.ConfigurationId ||
                 (address.GenerationVersion != OrdinaryBoardGenerator.ConfigurationVersion &&
+                address.GenerationVersion != 2 &&
                 address.GenerationVersion != BoardGenerationPipeline.OrdinaryConfigurationVersion))
                 throw new ArgumentException("Unsupported ordinary generation identity: " + address.GenerationConfigurationId +
                     "/" + address.GenerationVersion, nameof(address));

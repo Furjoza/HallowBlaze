@@ -13,7 +13,7 @@ namespace HallowBlaze.Core.Session
 
         /// <summary>
         /// Validates published road/segment/configuration associations and derives the persisted address.
-        /// Named publication upgrades from legacy v1 or ordinary version 1 to ordinary version 2 retain
+        /// Named publication upgrades from legacy v1 or ordinary versions 1/2 to ordinary version 3 retain
         /// saved identity, seed and algorithm. The named radio-tower arrival upgrade also retains previously saved
         /// legacy/ordinary layouts rather than replacing a board already in progress. Other drift is rejected.
         /// </summary>
@@ -42,9 +42,11 @@ namespace HallowBlaze.Core.Session
                 published.GenerationConfigurationId == saved.GenerationConfigurationId) ||
                 (saved.GenerationConfigurationId == "legacy.board.v1" && saved.GenerationVersion == 1 &&
                 published.GenerationConfigurationId == "ordinary.board.v1" &&
-                (published.GenerationVersion == 1 || published.GenerationVersion == 2)) ||
+                (published.GenerationVersion == 1 || published.GenerationVersion == 2 || published.GenerationVersion == 3)) ||
                 (saved.GenerationConfigurationId == "ordinary.board.v1" && saved.GenerationVersion == 1 &&
-                published.GenerationConfigurationId == "ordinary.board.v1" && published.GenerationVersion == 2) ||
+                published.GenerationConfigurationId == "ordinary.board.v1" && (published.GenerationVersion == 2 || published.GenerationVersion == 3)) ||
+                (saved.GenerationConfigurationId == "ordinary.board.v1" && saved.GenerationVersion == 2 &&
+                published.GenerationConfigurationId == "ordinary.board.v1" && published.GenerationVersion == 3) ||
                 (published.SegmentId == "segment.ridge-radio-tower.arrival" &&
                 published.GenerationConfigurationId == "landmark.radio-tower.board" && published.GenerationVersion == 1 &&
                 ((saved.GenerationConfigurationId == "ordinary.board.v1" && (saved.GenerationVersion == 1 || saved.GenerationVersion == 2)) ||

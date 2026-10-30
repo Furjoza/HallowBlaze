@@ -5930,7 +5930,9 @@ Independent review passed. No run/profile format, restoration rule or item mecha
 
 ## `M7.6` - Reproduce and prevent unavoidable board-entry corner traps
 
-**Status:** `Planned`
+**Status:** `Done` - 2026-10-30. Bounded entry validation, versioned publication and saved-board
+compatibility passed Unity regression and independent review. Original-seed recovery and
+owner smoke remain explicit evidence limitations, not completed human gates.
 **Priority:** P0 investigation; confirm the defect and affected generation version before a fix.
 **Related contract:** sections 9, 12, 16 and 22; M4.3 validator and M4.5-M4.6 fallback/seed gates.
 
@@ -5962,6 +5964,17 @@ original seed is an evidence limitation, not permission to claim a confirmed ori
 if the investigation identifies that owner and a closed Ready scope is updated first. Relevant
 generator configs/fallbacks only when explicitly listed; no unrelated landmark redesign.
 
+**Closed write scope (2026-10-29):** `Assets/GameData/World/prototype-world.json`,
+`Assets/Scripts/BoardManager.cs`, `Assets/Scripts/Core/Generation/Pipeline/BoardGenerationPipeline.cs`,
+`Assets/Scripts/Core/Generation/Validation/BoardValidator.cs`, new
+`Assets/Scripts/Core/Generation/Validation/BoardEntrySafety.cs` with Unity-generated metadata,
+`Assets/Scripts/Core/Session/BoardAddressFactory.cs`, `Assets/Scripts/Core/Session/RouteTravelService.cs`,
+`Assets/Scripts/Presentation/Runtime/OrdinaryBoardContent.cs`,
+`Assets/Tests/EditMode/BoardValidatorTests.cs`, `Assets/Tests/EditMode/BoardGenerationSeedSeriesTests.cs`,
+`Assets/Tests/EditMode/RouteLegTests.cs`, `Assets/Tests/EditMode/WorldDefinitionTests.cs`,
+`Assets/Tests/PlayMode/GameSessionLifecycleTests.cs`, `Docs/BoardGeneration.md`,
+`Docs/GameDesignContract.md` and this roadmap. No enemy/turn-rule, scene, prefab or save schema change.
+
 **Acceptance criteria:** An initial corner/two-enemy fixture that forces death before any legal
 escape within the declared criterion is rejected or corrected; a valid narrow but survivable
 fixture remains accepted. Tests use actual initial intents and accepted/rejected command costs,
@@ -5984,6 +5997,22 @@ No profile reset or diagnostic export containing private saves.
 **Required handoff:** Confirmed facts versus missing evidence, reproducible seed/address/fixture,
 initial state and failing/legal command sequences, safety bound, generator-version decision,
 fallback/seed results and remaining tactical guarantees that are not proved.
+
+**Implementation (2026-10-29):** The original screenshot's seed/resources/history remain
+unrecovered. An explicitly synthetic two-enemy corner passes the old first-step metric but
+fails a four-command real-controller escape check; a separate pinned v2 Day-9 series case
+also lacks that bounded witness. Neither establishes the historical screenshot's cause.
+Version 3 now requires a no-hit Move/Wait escape to distance three or a surviving exit in
+four accepted commands at one HP/five Food. Exhaustion is a criterion failure, not proof
+that the whole board has no solution. New ordinary publication uses /3; saved /1 and /2
+and imported legacy RNG retain their exact old generation. The safety bound, reproduction
+identity and compatibility limitations are documented in `Docs/BoardGeneration.md`.
+The 10,000-board gate passed twice with zero invalid/fallback boards, identical hash and
+34.18/33.64-second passes against the predeclared zero-invalid/1%-fallback/300-second limits.
+Production PlayMode executes a Day-4 two-enemy witness with one HP/five Food and view/model
+parity. Owner smoke and the unrecovered original seed remain explicit M7.8 limitations.
+Final EditMode passed 1247 tests plus the existing Explicit seed skip; graphics PlayMode
+passed 204/204. Independent review passed, with its test-coverage wording clarified.
 
 ---
 
@@ -6898,7 +6927,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 The next safe sequence is:
 
 1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. The owner then separately authorized solo M6.6: its technical preparation passed full EditMode 1237 tests plus the existing Explicit skip and graphics PlayMode 188/188, with self-review only. M6.6 remains Active until 5-8 real sessions and the landmark decision in `Docs/Validation/M6.6.md`; neither exception closes M4.9 or authorizes M8. Future cards use the current Lead implementation and Reviewer/self-review policy in `AGENTS.md`, without changing these historical review attributions;
-2. continue the `M7.6`-`M7.8` repair/onboarding milestone after M7.1-M7.5 were completed on 2026-10-29 with independent review, compatible opening/checkpoint recovery, clean presentation boundaries, stable Notes controls, bounded footsteps and turn-scoped resource gains. The owner authorized proceeding before the outstanding M4.9/M6.6 human gates; those gates remain open and no human-test result is implied;
+2. continue the `M7.7`-`M7.8` repair/onboarding milestone after M7.1-M7.6 were completed with independent review, compatible opening/checkpoint recovery, clean presentation boundaries, stable Notes controls, bounded footsteps, turn-scoped resource gains and versioned bounded entry safety (M7.6 accepted 2026-10-30). The owner authorized proceeding before the outstanding M4.9/M6.6 human gates; those gates and the M7.8 owner smoke remain open and no human-test result is implied;
 3. complete the no-backpack vertical slice through `M8.8`, preserving its playtest requirements and the earlier M4.9/M6.6/M7 gates, then make the explicit M10 verdict;
 4. keep M10 deferred and last unless the owner explicitly changes that order; activate M9.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M10.
 

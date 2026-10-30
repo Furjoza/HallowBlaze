@@ -1346,7 +1346,7 @@ The game must remain playable while the no-backpack vertical slice is tested. At
 - The first leg is `Day 1`; no player-facing `Day 0` exists.
 - A fresh run begins at `shelter.warm-up` and automatically starts the single-board
   `road.shelter-warm-up` leg to `forest.start`. Its stable segment is
-  `segment.shelter-warm-up.day1`, using `ordinary.board.v1` generation version 2.
+	`segment.shelter-warm-up.day1`, using the current `ordinary.board.v1` generation version 3.
   The ordinary Day 1 generation target has zero enemies and 2–5 food items; the run starts
   with 100 health and 100 food, with no tool grant. This mandatory opening is not a route
   recommendation or a player route choice.
@@ -1401,6 +1401,9 @@ Several short tactical situations can make one strategic route choice meaningful
 No run/profile schema changes or migration are required: the opening uses existing textual
 node/edge/segment IDs and the existing route-leg and intro checkpoints. New Game retains its
 explicit profile-reset semantics; New Run and a restart after death do not reset knowledge.
+M7.6 publishes version 3 with bounded entry-safety validation for new ordinary legs. Already
+saved version-1/version-2 segments retain their original identity and generation unchanged;
+this version upgrade does not replay the opening or silently repair pinned old boards.
 
 ### 27.3. Route-resource knowledge and fixed tool sources
 
