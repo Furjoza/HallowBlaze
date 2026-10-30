@@ -270,6 +270,36 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(events[0], Is.SameAs(retry.DiscoveryEvent));
         }
 
+        /// <summary>Recovery retries the original pending discovery before another operation without advancing the run.</summary>
+        [Test]
+        public void PendingDiscoveryRecoveryPublishesOnceAndUnblocksOtherOperations()
+        {
+            ProfileState profile = CreateProfile();
+            GameSession session = CreateSession(profile);
+            FakeSaveStore store = new FakeSaveStore { FailProfileSave = true };
+            WorldMapService service = new WorldMapService(CreateWorld(), session, store);
+            List<WorldDiscoveryEvent> events = Subscribe(service);
+
+            Assert.That(service.RetryPendingDiscovery().Status, Is.EqualTo(WorldMapCommandStatus.NoChange));
+            Assert.That(store.SaveProfileCallCount, Is.Zero);
+            Assert.That(service.ObserveCurrentExits().Status, Is.EqualTo(WorldMapCommandStatus.PersistenceFailed));
+            Assert.That(service.EnterCurrentNode().Status, Is.EqualTo(WorldMapCommandStatus.Rejected));
+            Assert.That(service.RetryPendingDiscovery().Status, Is.EqualTo(WorldMapCommandStatus.PersistenceFailed));
+            Assert.That(events, Is.Empty);
+
+            store.FailProfileSave = false;
+            WorldMapCommandResult recovered = service.RetryPendingDiscovery();
+            Assert.That(recovered.Status, Is.EqualTo(WorldMapCommandStatus.Applied));
+            Assert.That(recovered.DiscoveryEvent.Operation, Is.EqualTo(WorldDiscoveryOperation.ObservedExits));
+            Assert.That(events, Has.Count.EqualTo(1));
+            Assert.That(events[0], Is.SameAs(recovered.DiscoveryEvent));
+            Assert.That(service.RetryPendingDiscovery().Status, Is.EqualTo(WorldMapCommandStatus.NoChange));
+            Assert.That(store.SaveProfileCallCount, Is.EqualTo(3));
+            Assert.That(events, Has.Count.EqualTo(1));
+            Assert.That(service.EnterCurrentNode().Status, Is.EqualTo(WorldMapCommandStatus.Applied));
+            AssertRunUnchanged(session.ActiveRun, StartNodeId, 0, Array.Empty<string>());
+        }
+
         [Test]
         public void DiscoveriesRemainAvailableAcrossRunsWithoutDuplicateSave()
         {

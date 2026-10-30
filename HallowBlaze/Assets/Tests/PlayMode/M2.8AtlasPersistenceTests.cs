@@ -199,7 +199,8 @@ namespace HallowBlaze.Tests.PlayMode
             SetField(manager, "worldDefinitionJson", worldDefinition);
             SetField(manager, "sceneLoader", (Action<string>)(_ => { }));
             Invoke(manager, "EnsurePersistence");
-            Invoke(manager, "StartNewRun");
+            GetProperty<GameSession>(manager, "Session").StartNewRun("atlas-persistence-checkpoint-" + Guid.NewGuid().ToString("N"), 7,
+                new RunStateConfiguration(100, 100, 0, "forest.start"));
             Assert.That((bool)Invoke(manager, "TryEnterCurrentWorldNode"), Is.True);
             return manager;
         }
