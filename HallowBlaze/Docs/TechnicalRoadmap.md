@@ -5732,7 +5732,7 @@ passed; no scene, prefab, domain or persistence format changed.
 
 ## `M7.3` - Stable Field Notes control, label and input lifetime
 
-**Status:** `Planned`
+**Status:** `Done` (2026-10-29)
 **Priority:** P1
 **Related contract:** sections 4, 5.4 and 18; M5.7 observation/read-only ownership.
 
@@ -5758,6 +5758,10 @@ label offset used to hide a second rendered instance.
 **Allowed file area:** Presentation FieldNotes/HUD/Legend layout and lifecycle; focused PlayMode
 tests. No domain/persistence changes or asset edits outside an explicit Ready allowlist.
 
+**Closed write scope (2026-10-29):**
+`Assets/Scripts/Presentation/Runtime/FieldNotes/FieldNotesPresenter.cs`,
+`Assets/Tests/PlayMode/FieldNotesPresentationTests.cs` and this roadmap.
+
 **Acceptance criteria:** Exactly one active Notes control/label is rendered. Movement, Wait,
 resource refresh and rejected commands do not blink, duplicate or shift it. Open/close, pause,
 death, new run, scene reload and Continue retain correct ownership without leaked listeners.
@@ -5771,6 +5775,19 @@ opening/canceling remains free and cannot release another modal's movement block
 
 **Required handoff:** Proven duplicate/blink cause, control ownership and refresh rules, lifecycle
 assertions and before/after label captures.
+
+**Implementation (2026-10-29):** The hover reproduction retained the book tooltip after its
+button was hidden, allowing the close tooltip to occupy the same root-level rectangle.
+Tooltips now belong to their controls and close explicitly at view/lifecycle transitions.
+The book keeps one UI lifetime and a stable visual while temporary busy states still block
+interaction; no per-turn control recreation or arbitrary duplicate-hiding offset is used.
+Focused coverage executes Move, Wait and rejection, checks stable identity/position/color,
+and compares actual idle/busy book pixels at 1280x720 and 320x480. Existing cases retain
+pause/modal ownership, death/new run/reset and post-death resize coverage. Captures remain
+outside the project at `%TEMP%/HB-M73-control-<width>x<height>.png`.
+Full graphics PlayMode passed 197/197; after the final close-tooltip placement correction,
+the complete Notes fixture passed 7/7 with visible desktop/portrait hover assertions.
+Independent review passed. The owner visual smoke remains part of M7.8.
 
 ---
 
@@ -6832,7 +6849,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 The next safe sequence is:
 
 1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. The owner then separately authorized solo M6.6: its technical preparation passed full EditMode 1237 tests plus the existing Explicit skip and graphics PlayMode 188/188, with self-review only. M6.6 remains Active until 5-8 real sessions and the landmark decision in `Docs/Validation/M6.6.md`; neither exception closes M4.9 or authorizes M8. Future cards use the current Lead implementation and Reviewer/self-review policy in `AGENTS.md`, without changing these historical review attributions;
-2. continue the `M7.3`-`M7.8` repair/onboarding milestone after M7.1 and M7.2 were completed on 2026-10-29 with independent review, compatible opening/checkpoint recovery and clean presentation boundaries. The owner authorized proceeding before the outstanding M4.9/M6.6 human gates; those gates remain open and no human-test result is implied;
+2. continue the `M7.4`-`M7.8` repair/onboarding milestone after M7.1-M7.3 were completed on 2026-10-29 with independent review, compatible opening/checkpoint recovery, clean presentation boundaries and stable Notes controls. The owner authorized proceeding before the outstanding M4.9/M6.6 human gates; those gates remain open and no human-test result is implied;
 3. complete the no-backpack vertical slice through `M8.8`, preserving its playtest requirements and the earlier M4.9/M6.6/M7 gates, then make the explicit M10 verdict;
 4. keep M10 deferred and last unless the owner explicitly changes that order; activate M9.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M10.
 

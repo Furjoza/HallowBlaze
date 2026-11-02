@@ -96,6 +96,55 @@ namespace HallowBlaze.Tests.PlayMode
             }
         }
 
+        /// <summary>Hover labels belong to the visible control and busy input never fades or recreates the book button.</summary>
+        [UnityTest]
+        public IEnumerator NotesControlAndTooltipHaveOneStableLifetime()
+        {
+            Fixture fixture = CreateFixture(false, true);
+            yield return null;
+            FieldNotesPresenter notes = fixture.Notes;
+            Button open = notes.Root.GetComponentsInChildren<Button>(true).Single(button => button.name == "Open Field Notes");
+            Button close = notes.Root.GetComponentsInChildren<Button>(true).Single(button => button.name == "Close Field Notes");
+            var pointer = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current);
+            UnityEngine.EventSystems.ExecuteEvents.Execute(open.gameObject, pointer, UnityEngine.EventSystems.ExecuteEvents.pointerEnterHandler);
+            Assert.That(notes.Root.GetComponentsInChildren<Text>().Count(text => text.name == "Tooltip"), Is.EqualTo(1));
+            Assert.That(notes.Open(), Is.True);
+            Assert.That(notes.Root.GetComponentsInChildren<Text>().Count(text => text.name == "Tooltip"), Is.Zero,
+                "Hiding the hovered book must also hide its label without relying on PointerExit.");
+            UnityEngine.EventSystems.ExecuteEvents.Execute(close.gameObject, pointer, UnityEngine.EventSystems.ExecuteEvents.pointerEnterHandler);
+            Assert.That(notes.Root.GetComponentsInChildren<Text>().Where(text => text.name == "Tooltip").Select(text => text.text),
+                Is.EqualTo(new[] { "Close Field Notes" }));
+            notes.Close();
+            yield return null;
+            Assert.That(notes.Root.GetComponentsInChildren<Text>().Count(text => text.name == "Tooltip"), Is.Zero);
+            Color idle = open.targetGraphic.canvasRenderer.GetColor();
+            Vector3 position = open.transform.position;
+            Invoke(fixture.Manager, "SetGameplayInputBlocked", true);
+            yield return new WaitForSecondsRealtime(0.2f);
+            Assert.That(open.interactable, Is.False);
+            Assert.That(open.targetGraphic.canvasRenderer.GetColor(), Is.EqualTo(idle));
+            Assert.That(open.gameObject.activeInHierarchy, Is.True);
+            Assert.That(open.transform.position, Is.EqualTo(position));
+            Assert.That(notes.Root.GetComponentsInChildren<Button>(true).Count(button => button.name == "Open Field Notes"), Is.EqualTo(1));
+            Invoke(fixture.Manager, "SetGameplayInputBlocked", false);
+            yield return null;
+            foreach (PlayerCommand command in new PlayerCommand[] { new MoveCommand(Direction.North),
+                new MoveCommand(Direction.South), new WaitCommand(), new MoveCommand(Direction.West) })
+            {
+                var operation = fixture.Presenter.Coordinator.SubmitAsync(command);
+                while (!operation.IsCompleted)
+                {
+                    yield return null;
+                    Assert.That(open.gameObject.activeInHierarchy, Is.True);
+                    Assert.That(open.targetGraphic.canvasRenderer.GetColor(), Is.EqualTo(idle));
+                    Assert.That(open.transform.position, Is.EqualTo(position));
+                }
+                yield return null;
+                Assert.That(notes.Root.GetComponentsInChildren<Button>(true).Single(button => button.name == "Open Field Notes"), Is.SameAs(open));
+                Assert.That(open.gameObject.activeInHierarchy, Is.True);
+            }
+        }
+
         /// <summary>Actual Shambler entry persists once; death and a new run retain notes while explicit New Game replaces the profile and UI lifetime.</summary>
         [UnityTest]
         public IEnumerator TrapDiscoveryReopensAfterDeathAndNewRunButNewGameResetsProfile()
@@ -195,7 +244,16 @@ namespace HallowBlaze.Tests.PlayMode
                 Canvas.ForceUpdateCanvases();
                 notes.Refresh();
                 Assert.That(notes.Select("LISTENER_FOLLOWS_NOISE"), Is.True);
+                Button closeControl = notes.Root.GetComponentsInChildren<Button>().Single(button => button.name == "Close Field Notes");
+                var hover = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current);
+                UnityEngine.EventSystems.ExecuteEvents.Execute(closeControl.gameObject, hover,
+                    UnityEngine.EventSystems.ExecuteEvents.pointerEnterHandler);
                 Canvas.ForceUpdateCanvases();
+                Text tooltip = closeControl.GetComponentsInChildren<Text>().Single(text => text.name == "Tooltip");
+                RectTransform title = notes.Root.transform.Find("Field Notes/Title").GetComponent<RectTransform>();
+                Bounds tooltipBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(notes.Root.transform, tooltip.rectTransform);
+                Bounds titleBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(notes.Root.transform, title);
+                Assert.That(tooltipBounds.Intersects(titleBounds), Is.False, "A visible close tooltip must not overwrite the Notes title.");
                 foreach (Text text in notes.Root.GetComponentsInChildren<Text>())
                     Assert.That(text.preferredHeight, Is.LessThanOrEqualTo(text.rectTransform.rect.height + 1), text.name + ": " + text.text);
                 Assert.That(notes.Entries, Has.Count.EqualTo(4));
@@ -212,6 +270,23 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(notes.Select("missing.fact"), Is.True);
                 Assert.That(notes.SelectedText, Does.Contain("Uncatalogued observation").And.Not.Contain("missing.fact"));
                 Assert.That(profile.DiscoveredFactIds, Does.Contain("missing.fact"));
+                notes.Close();
+                Canvas.ForceUpdateCanvases();
+                camera.Render();
+                RenderTexture.active = target;
+                pixels.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                pixels.Apply();
+                Color[] idleBook = pixels.GetPixels(8, height - 120, 44, 44);
+                Button book = notes.Root.GetComponentsInChildren<Button>().Single(button => button.name == "Open Field Notes");
+                book.interactable = false;
+                camera.Render();
+                RenderTexture.active = target;
+                pixels.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                pixels.Apply();
+                Assert.That(pixels.GetPixels(8, height - 120, 44, 44), Is.EqualTo(idleBook),
+                    "A busy book must keep the same rendered pixels, not blink through a disabled tint.");
+                Assert.That(idleBook.Distinct().Count(), Is.GreaterThan(1));
+                File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M73-control-" + width + "x" + height + ".png"), pixels.EncodeToPNG());
             }
             finally
             {
