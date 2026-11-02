@@ -6,8 +6,10 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>Samples complete PC commands and presents authoritative resources/audio; never applies gameplay rules.</summary>
-public class PlayerScript : MovingObject, IRunHud, ITurnFeedback
+public class PlayerScript : MovingObject, IRunHud, ITurnFeedback, IPlayerStepAudio
 {
+    /// <summary>Maximum player-step playback in seconds, additionally bounded by the movement presentation.</summary>
+    public const float MaximumStepSeconds = 0.1f;
     public float restartLevelDelay = 1f;
     public int wallDamage = 1;
     public int pointsPerFood = 10;
@@ -27,12 +29,15 @@ public class PlayerScript : MovingObject, IRunHud, ITurnFeedback
     public bool animationsEnabled = true;
 
     private readonly PcCommandSource commandSource = new PcCommandSource();
+    private AudioSource stepSource;
 
     /// <summary>Gets the number of actual ordered audio cues played by this view during its lifetime.</summary>
     public int PresentedSoundCount { get; private set; }
 
     private async void Update()
     {
+        if (stepSource != null && SoundManager.instance != null && SoundManager.instance.efxSource != null)
+            stepSource.mute = !SoundManager.instance.SoundEnabled || SoundManager.instance.efxSource.mute;
 #if UNITY_EDITOR || UNITY_STANDALONE
         if (!TrySubmitInput(commandSource, out Task<CommandSubmission> submission))
             return;
@@ -41,7 +46,45 @@ public class PlayerScript : MovingObject, IRunHud, ITurnFeedback
 #endif
     }
 
-    private void OnDisable() => commandSource.CancelDraft();
+    private void OnDisable()
+    {
+        commandSource.CancelDraft();
+        StopStep();
+    }
+
+    /// <inheritdoc />
+    public void BeginStep(float duration)
+    {
+        StopStep();
+        SoundManager sounds = SoundManager.instance;
+        if (duration <= 0f || sounds == null || sounds.efxSource == null ||
+            moveSound1 == null && moveSound2 == null)
+            return;
+        if (stepSource == null)
+        {
+            stepSource = gameObject.AddComponent<AudioSource>();
+            stepSource.playOnAwake = false;
+        }
+        stepSource.loop = false;
+        stepSource.spatialBlend = 0f;
+        stepSource.volume = sounds.efxSource.volume;
+        stepSource.outputAudioMixerGroup = sounds.efxSource.outputAudioMixerGroup;
+        stepSource.mute = !sounds.SoundEnabled || sounds.efxSource.mute;
+        stepSource.pitch = UnityEngine.Random.Range(sounds.lowPitchRange, sounds.highPitchRange);
+        stepSource.clip = moveSound1 != null && moveSound2 != null
+            ? (UnityEngine.Random.Range(0, 2) == 0 ? moveSound1 : moveSound2)
+            : (moveSound1 != null ? moveSound1 : moveSound2);
+        stepSource.Play();
+        stepSource.SetScheduledEndTime(AudioSettings.dspTime + Mathf.Min(duration, MaximumStepSeconds));
+        PresentedSoundCount++;
+    }
+
+    /// <inheritdoc />
+    public void StopStep()
+    {
+        if (stepSource != null)
+            stepSource.Stop();
+    }
 
     /// <summary>Forwards a complete intent through the same gate as production PC polling.</summary>
     /// <param name="command">The complete command; this view never resolves it.</param>
@@ -97,9 +140,7 @@ public class PlayerScript : MovingObject, IRunHud, ITurnFeedback
     /// <inheritdoc />
     public void ShowEvent(GameEvent gameEvent)
     {
-        if (gameEvent is EntityMovedEvent || gameEvent is BoulderPushedEvent)
-            PlaySound(moveSound1, moveSound2);
-        else if (gameEvent is FoodRestoredEvent restored)
+        if (gameEvent is FoodRestoredEvent restored)
         {
             BoardRuntime runtime = GameManager.instance == null ? null : GameManager.instance.ActiveBoardRuntime;
             bool soda = runtime != null && !runtime.IsDisposed &&

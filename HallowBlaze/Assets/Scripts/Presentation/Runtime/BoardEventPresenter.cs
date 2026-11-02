@@ -33,6 +33,16 @@ namespace HallowBlaze.Presentation.Runtime
         void ShowEvent(GameEvent gameEvent);
     }
 
+    /// <summary>Optionally bounds player-step audio to its movement presentation; instant steps are silent.</summary>
+    public interface IPlayerStepAudio
+    {
+        /// <summary>Starts at most one short non-looping cue within the supplied unscaled movement duration.</summary>
+        /// <param name="duration">Movement presentation duration in seconds; zero requests silence.</param>
+        void BeginStep(float duration);
+        /// <summary>Stops only this player's current step cue on completion, recovery or disposal.</summary>
+        void StopStep();
+    }
+
     /// <summary>The injectable guarded lifecycle boundary for ordered terminal events.</summary>
     public interface IBoardOutcomeSink
     {
@@ -216,6 +226,7 @@ namespace HallowBlaze.Presentation.Runtime
         /// </summary>
         public void SynchronizeFromState()
         {
+            (feedback as IPlayerStepAudio)?.StopStep();
             if (disposed || runtime.IsDisposed)
             {
                 CloseIntents();
@@ -320,24 +331,30 @@ namespace HallowBlaze.Presentation.Runtime
                 throw new InvalidOperationException("Move event disagrees with authoritative position: " + gameEvent.EntityId);
             Vector3 origin = view.transform.position;
             Vector3 target = Position(entity.Position, origin.z);
-            if (AnimationsEnabled && MoveDuration > 0f)
+            IPlayerStepAudio stepAudio = gameEvent.EntityId.Equals(runtime.PlayerId) ? feedback as IPlayerStepAudio : null;
+            stepAudio?.BeginStep(AnimationsEnabled ? MoveDuration : 0f);
+            try
             {
-                float elapsed = 0f;
-                while (elapsed < MoveDuration)
+                if (AnimationsEnabled && MoveDuration > 0f)
                 {
-                    await Task.Yield();
-                    token.ThrowIfCancellationRequested();
-                    if (runtime.IsDisposed || view == null)
-                        throw new InvalidOperationException("The board or moving view was disposed during presentation.");
-                    elapsed += Time.unscaledDeltaTime;
-                    view.transform.position = Vector3.Lerp(origin, target, Mathf.Clamp01(elapsed / MoveDuration));
+                    float elapsed = 0f;
+                    while (elapsed < MoveDuration)
+                    {
+                        await Task.Yield();
+                        token.ThrowIfCancellationRequested();
+                        if (runtime.IsDisposed || view == null)
+                            throw new InvalidOperationException("The board or moving view was disposed during presentation.");
+                        elapsed += Time.unscaledDeltaTime;
+                        view.transform.position = Vector3.Lerp(origin, target, Mathf.Clamp01(elapsed / MoveDuration));
+                    }
                 }
+                token.ThrowIfCancellationRequested();
+                view.transform.position = target;
+                if (!runtime.BoardState.TryGetEntity(gameEvent.EntityId, out entity) || !entity.Position.Equals(gameEvent.To))
+                    throw new InvalidOperationException("Authoritative position changed during presentation: " + gameEvent.EntityId);
+                feedback.ShowEvent(gameEvent);
             }
-            token.ThrowIfCancellationRequested();
-            view.transform.position = target;
-            if (!runtime.BoardState.TryGetEntity(gameEvent.EntityId, out entity) || !entity.Position.Equals(gameEvent.To))
-                throw new InvalidOperationException("Authoritative position changed during presentation: " + gameEvent.EntityId);
-            feedback.ShowEvent(gameEvent);
+            finally { stepAudio?.StopStep(); }
         }
 
         private async Task PushAsync(BoulderPushedEvent gameEvent, CancellationToken token)
@@ -349,26 +366,32 @@ namespace HallowBlaze.Presentation.Runtime
             Vector3 boulderOrigin = boulderView.transform.position;
             Vector3 playerTarget = Position(gameEvent.PlayerTo, playerOrigin.z);
             Vector3 boulderTarget = Position(gameEvent.BoulderTo, boulderOrigin.z);
-            if (AnimationsEnabled && MoveDuration > 0f)
+            IPlayerStepAudio stepAudio = feedback as IPlayerStepAudio;
+            stepAudio?.BeginStep(AnimationsEnabled ? MoveDuration : 0f);
+            try
             {
-                float elapsed = 0f;
-                while (elapsed < MoveDuration)
+                if (AnimationsEnabled && MoveDuration > 0f)
                 {
-                    await Task.Yield();
-                    token.ThrowIfCancellationRequested();
-                    if (runtime.IsDisposed || playerView == null || boulderView == null)
-                        throw new InvalidOperationException("A push participant was disposed during presentation.");
-                    elapsed += Time.unscaledDeltaTime;
-                    float progress = Mathf.Clamp01(elapsed / MoveDuration);
-                    playerView.transform.position = Vector3.Lerp(playerOrigin, playerTarget, progress);
-                    boulderView.transform.position = Vector3.Lerp(boulderOrigin, boulderTarget, progress);
+                    float elapsed = 0f;
+                    while (elapsed < MoveDuration)
+                    {
+                        await Task.Yield();
+                        token.ThrowIfCancellationRequested();
+                        if (runtime.IsDisposed || playerView == null || boulderView == null)
+                            throw new InvalidOperationException("A push participant was disposed during presentation.");
+                        elapsed += Time.unscaledDeltaTime;
+                        float progress = Mathf.Clamp01(elapsed / MoveDuration);
+                        playerView.transform.position = Vector3.Lerp(playerOrigin, playerTarget, progress);
+                        boulderView.transform.position = Vector3.Lerp(boulderOrigin, boulderTarget, progress);
+                    }
                 }
+                token.ThrowIfCancellationRequested();
+                playerView.transform.position = playerTarget;
+                boulderView.transform.position = boulderTarget;
+                ValidatePushPositions(gameEvent);
+                feedback.ShowEvent(gameEvent);
             }
-            token.ThrowIfCancellationRequested();
-            playerView.transform.position = playerTarget;
-            boulderView.transform.position = boulderTarget;
-            ValidatePushPositions(gameEvent);
-            feedback.ShowEvent(gameEvent);
+            finally { stepAudio?.StopStep(); }
         }
 
         private void ValidatePushPositions(BoulderPushedEvent gameEvent)
@@ -437,6 +460,7 @@ namespace HallowBlaze.Presentation.Runtime
         /// <summary>Cancels replay and closes owned attack/intent display lifetimes without destroying the borrowed runtime or views.</summary>
         public void Dispose()
         {
+            (feedback as IPlayerStepAudio)?.StopStep();
             if (disposed)
                 return;
             disposed = true;
