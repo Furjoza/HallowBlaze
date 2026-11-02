@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using HallowBlaze.Core.Persistence.Storage;
+using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
 using HallowBlaze.Core.World;
 using NUnit.Framework;
@@ -36,14 +38,14 @@ namespace HallowBlaze.Tests.EditMode
 
             Assert.That(world.WorldDefinitionId, Is.EqualTo("world-1"));
             Assert.That(world.Version, Is.EqualTo(1));
-            Assert.That(world.StartNodeId, Is.EqualTo("forest.start"));
+            Assert.That(world.StartNodeId, Is.EqualTo("shelter.warm-up"));
             Assert.That(world.GoalNodeId, Is.EqualTo("landmark.radio-tower"));
             Assert.That(world.WorldDefinitionId, Is.EqualTo(profile.WorldDefinitionId));
             Assert.That(world.Version, Is.EqualTo(profile.WorldDefinitionVersion));
             Assert.That(world.TryGetNode(world.StartNodeId, out WorldNodeDefinition start), Is.True);
             Assert.That(world.TryGetNode(world.GoalNodeId, out WorldNodeDefinition goal), Is.True);
             Assert.That(start.DistanceLayer, Is.Zero);
-            Assert.That(goal.DistanceLayer, Is.EqualTo(5));
+            Assert.That(goal.DistanceLayer, Is.EqualTo(6));
             Assert.That(goal.PlaceKind, Is.EqualTo("landmark"));
         }
 
@@ -52,8 +54,8 @@ namespace HallowBlaze.Tests.EditMode
         {
             WorldDefinition world = LoadPrototypeWorld();
 
-            Assert.That(world.Nodes, Has.Count.EqualTo(8));
-            Assert.That(world.Edges, Has.Count.EqualTo(9));
+            Assert.That(world.Nodes, Has.Count.EqualTo(9));
+            Assert.That(world.Edges, Has.Count.EqualTo(10));
             Assert.That(
                 world.Nodes.Select(node => node.NodeId),
                 Is.Unique.And.All.Not.Empty);
@@ -83,6 +85,7 @@ namespace HallowBlaze.Tests.EditMode
                         "road.old-road-east-quarry|forest.old-road|forest.east-quarry|northeast",
                         "road.old-road-west-grove|forest.old-road|forest.west-grove|northwest",
                         "road.ridge-radio-tower|forest.ridge|landmark.radio-tower|north",
+                        "road.shelter-warm-up|shelter.warm-up|forest.start|north",
                         "road.start-east-creek|forest.start|forest.east-creek|northeast",
                         "road.start-west-trail|forest.start|forest.west-trail|northwest",
                         "road.west-grove-ridge|forest.west-grove|forest.ridge|northeast",
@@ -107,16 +110,16 @@ namespace HallowBlaze.Tests.EditMode
                 world.StartNodeId,
                 world.GoalNodeId);
             Assert.That(routes, Has.Count.EqualTo(4));
-            Assert.That(routes.Select(route => route.Count), Is.All.EqualTo(5));
+            Assert.That(routes.Select(route => route.Count), Is.All.EqualTo(6));
             Assert.That(
                 routes.Select(RouteSnapshot).OrderBy(route => route, StringComparer.Ordinal),
                 Is.EqualTo(
                     new[]
                     {
-                        "road.start-east-creek>road.east-creek-old-road>road.old-road-east-quarry>road.east-quarry-ridge>road.ridge-radio-tower",
-                        "road.start-east-creek>road.east-creek-old-road>road.old-road-west-grove>road.west-grove-ridge>road.ridge-radio-tower",
-                        "road.start-west-trail>road.west-trail-old-road>road.old-road-east-quarry>road.east-quarry-ridge>road.ridge-radio-tower",
-                        "road.start-west-trail>road.west-trail-old-road>road.old-road-west-grove>road.west-grove-ridge>road.ridge-radio-tower"
+                        "road.shelter-warm-up>road.start-east-creek>road.east-creek-old-road>road.old-road-east-quarry>road.east-quarry-ridge>road.ridge-radio-tower",
+                        "road.shelter-warm-up>road.start-east-creek>road.east-creek-old-road>road.old-road-west-grove>road.west-grove-ridge>road.ridge-radio-tower",
+                        "road.shelter-warm-up>road.start-west-trail>road.west-trail-old-road>road.old-road-east-quarry>road.east-quarry-ridge>road.ridge-radio-tower",
+                        "road.shelter-warm-up>road.start-west-trail>road.west-trail-old-road>road.old-road-west-grove>road.west-grove-ridge>road.ridge-radio-tower"
                     }));
             Assert.That(routes[0].Count + 1, Is.LessThan(world.Nodes.Count));
             Assert.That(
@@ -148,6 +151,15 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(
                 outgoing.Select(road => road.ToNodeId),
                 Is.EqualTo(new[] { "forest.east-creek", "forest.west-trail" }));
+            Assert.That(
+                world.GetOutgoingEdges(world.StartNodeId).Select(road => road.EdgeId),
+                Is.EqualTo(new[] { "road.shelter-warm-up" }));
+            WorldEdgeDefinition opening = world.GetOutgoingEdges(world.StartNodeId).Single();
+            Assert.That(opening.ToNodeId, Is.EqualTo("forest.start"));
+            Assert.That(opening.Segments, Has.Count.EqualTo(1));
+            Assert.That(opening.Segments[0].SegmentId, Is.EqualTo("segment.shelter-warm-up.day1"));
+            Assert.That(opening.Segments[0].GenerationConfigurationId, Is.EqualTo("ordinary.board.v1"));
+            Assert.That(opening.Segments[0].GenerationVersion, Is.EqualTo(2));
             Assert.That(world.GetOutgoingEdges(world.GoalNodeId), Is.Empty);
             Assert.Throws<KeyNotFoundException>(() => world.GetOutgoingEdges("unknown.node"));
         }
@@ -204,8 +216,8 @@ namespace HallowBlaze.Tests.EditMode
             sourceNodes.Clear();
             sourceEdges.Clear();
 
-            Assert.That(world.Nodes, Has.Count.EqualTo(8));
-            Assert.That(world.Edges, Has.Count.EqualTo(9));
+            Assert.That(world.Nodes, Has.Count.EqualTo(9));
+            Assert.That(world.Edges, Has.Count.EqualTo(10));
             Assert.Throws<NotSupportedException>(
                 () => ((IList<WorldNodeDefinition>)world.Nodes).Clear());
             Assert.Throws<NotSupportedException>(
@@ -228,6 +240,64 @@ namespace HallowBlaze.Tests.EditMode
                 referencedAssemblies.Any(
                     name => name.StartsWith("UnityEngine", StringComparison.Ordinal)),
                 Is.False);
+        }
+
+        /// <summary>Checks that the opening is a durable single day and never repeats its arrival on retry or Continue.</summary>
+        [Test]
+        public void OpeningTravelRoundTripCompletesOnceBeforeSelectedDayTwo()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "HB-M71-Travel-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                WorldDefinition world = LoadPrototypeWorld();
+                var session = new GameSession(new ProfileState("opening-profile", world.WorldDefinitionId, world.Version));
+                session.Profile.DiscoverFact("known-before-opening");
+                session.StartNewRun("opening-run", 12346, new RunStateConfiguration(100, 100, 0, world.StartNodeId));
+                var store = new FileSystemSaveStore(root);
+                var map = new WorldMapService(world, session, store);
+                Assert.That(map.EnterCurrentNode().IsSuccess, Is.True);
+                Assert.That(map.Travel.StartRoute("road.shelter-warm-up").IsSuccess, Is.True);
+                BoardRequest pending = BoardRequest.CreateFromRun(session.ActiveRun, world);
+                Assert.That(session.ActiveRun.CurrentDay, Is.EqualTo(1));
+                Assert.That(session.ActiveRun.CompletedDayCount, Is.Zero);
+                Assert.That(map.BeginRouteChoice().IsSuccess, Is.False);
+
+                SaveStoreResult<RunState> saved = store.LoadRun();
+                Assert.That(saved.IsSuccess, Is.True);
+                session.ContinueRun(saved.Data);
+                map = new WorldMapService(world, session, store);
+                Assert.That(BoardRequest.CreateFromRun(session.ActiveRun, world).Address, Is.EqualTo(pending.Address));
+                Assert.That(map.Travel.ConsumeIntro(out bool showIntro).IsSuccess, Is.True);
+                Assert.That(showIntro, Is.True);
+                Assert.That(map.Travel.ConsumeIntro(out showIntro).IsSuccess, Is.True);
+                Assert.That(showIntro, Is.False);
+
+                Assert.That(map.Travel.TryCompleteSegment(pending, out SaveStoreResult checkpoint, out bool arrived), Is.True);
+                Assert.That(checkpoint.IsSuccess, Is.True);
+                Assert.That(arrived, Is.True);
+                Assert.That(map.Travel.TryCompleteSegment(pending, out _, out _), Is.False);
+                Assert.That(map.ReconcileCompletedTravel().IsSuccess, Is.True);
+                Assert.That(map.BeginRouteChoice().IsSuccess, Is.True);
+                Assert.That(session.ActiveRun.CurrentDay, Is.EqualTo(1));
+                Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(1));
+                Assert.That(session.ActiveRun.TravelHistory, Has.Count.EqualTo(1));
+                Assert.That(session.ActiveRun.WorldNodeId, Is.EqualTo("forest.start"));
+
+                Assert.That(store.LoadRun().IsSuccess, Is.True);
+                session.ContinueRun(store.LoadRun().Data);
+                map = new WorldMapService(world, session, store);
+                Assert.That(map.ReconcileCompletedTravel().IsSuccess, Is.True);
+                Assert.That(map.BeginRouteChoice().IsSuccess, Is.True);
+                Assert.That(map.ChooseRoute("road.start-east-creek").Status, Is.EqualTo(RouteChoiceCommandStatus.Applied));
+                Assert.That(session.ActiveRun.ActiveLeg.DayNumber, Is.EqualTo(2));
+                Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(1));
+                Assert.That(session.ActiveRun.TraversalSequence, Is.EqualTo(2));
+                Assert.That(session.Profile.DiscoveredFactIds, Does.Contain("known-before-opening"));
+            }
+            finally
+            {
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+            }
         }
 
         private static WorldDefinition LoadPrototypeWorld()
@@ -317,7 +387,7 @@ namespace HallowBlaze.Tests.EditMode
         {
             WorldDefinition world = LoadPrototypeWorld();
             string[] roads = { "east-creek-old-road", "east-quarry-ridge", "old-road-east-quarry",
-                "old-road-west-grove", "ridge-radio-tower", "start-east-creek", "start-west-trail",
+                "old-road-west-grove", "ridge-radio-tower", "shelter-warm-up", "start-east-creek", "start-west-trail",
                 "west-grove-ridge", "west-trail-old-road" };
             string[] names = { "entry", "stretch", "clearing", "approach", "arrival" };
             Assert.That(world.Edges.Select(edge => edge.EdgeId), Is.EqualTo(roads.Select(road => "road." + road)));
@@ -325,7 +395,8 @@ namespace HallowBlaze.Tests.EditMode
             {
                 Assert.That(world.TryGetEdge("road." + road, out WorldEdgeDefinition edge), Is.True);
                 Assert.That(edge.Segments.Select(segment => segment.SegmentId),
-                    Is.EqualTo(names.Select(name => "segment." + road + "." + name)));
+                    Is.EqualTo((road == "shelter-warm-up" ? new[] { "day1" } : names)
+                        .Select(name => "segment." + road + "." + name)));
                 foreach (RouteSegmentDefinition segment in edge.Segments)
                     if (segment.SegmentId == "segment.ridge-radio-tower.arrival")
                     {

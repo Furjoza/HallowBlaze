@@ -54,9 +54,9 @@ namespace HallowBlaze.Tests.PlayMode
 
             GameObject managerObject = Track(new GameObject("M1.4 Movement GameManager"));
             gameManager = managerObject.AddComponent(gameManagerType);
-            Invoke(gameManager, "StartNewRun");
             session = GetProperty<GameSession>(gameManager, "Session");
-            session.ConsumeFood(90);
+            session.StartNewRun("movement-contract-checkpoint", 12346,
+                new RunStateConfiguration(100, 10, 0, "forest.start"));
             SetField(gameManager, "worldDefinitionJson", Track(new TextAsset(File.ReadAllText(
                 Path.Combine(Application.dataPath, "GameData/World/prototype-world.json")))));
         }

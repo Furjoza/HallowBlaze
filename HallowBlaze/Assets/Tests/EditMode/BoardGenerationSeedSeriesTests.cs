@@ -303,9 +303,9 @@ namespace HallowBlaze.Tests.EditMode
                 int ordinaryCount = edge.Segments.Count(segment => segment.GenerationConfigurationId == OrdinaryBoardGenerator.ConfigurationId);
                 bool inboundPrefix = ordinaryCount != edge.SegmentCount;
                 if (inboundPrefix && inboundPrefixSweeps >= 5) continue;
-                if (cases.Count + ordinaryCount > count) throw new InvalidOperationException("A sweep must contain complete ordinary traversals or inbound prefixes.");
+                if (cases.Count + ordinaryCount > count) continue;
                 if (inboundPrefix) inboundPrefixSweeps++;
-                int day = 1 + traversal % 10;
+                int day = edge.FromNodeId == world.StartNodeId ? 1 : 1 + traversal / world.Edges.Count % 10;
                 int rootSeed = traversal % 2 == 0 ? traversal / 2 : -(traversal / 2) - 1;
                 var run = new RunState("series-run-" + traversal.ToString(CultureInfo.InvariantCulture), rootSeed,
                     new RunStateConfiguration(100, 100, day - 1, edge.FromNodeId));
@@ -325,7 +325,7 @@ namespace HallowBlaze.Tests.EditMode
                         Assert.That(run.TryAdvanceSegment(run.ActiveLeg.LegId, address.SegmentId), Is.True);
                 }
             }
-            Assert.That(cases.Select(sample => sample.Request.Address.SegmentId).Distinct().Count(), Is.EqualTo(44));
+            Assert.That(cases.Select(sample => sample.Request.Address.SegmentId).Distinct().Count(), Is.EqualTo(45));
             Assert.That(cases.Select(sample => sample.Request.Address.DayNumber).Distinct().Count(), Is.EqualTo(10));
             return cases;
         }

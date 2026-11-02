@@ -740,6 +740,18 @@ namespace HallowBlaze.Core.Session
         }
 
         /// <summary>
+        /// Retries the outstanding discovery checkpoint before recovery starts a different operation.
+        /// A successful retry emits the original discovery event once and does not advance run progress.
+        /// </summary>
+        /// <returns>The pending profile-save result, or no change when no discovery is pending.</returns>
+        public WorldMapCommandResult RetryPendingDiscovery()
+        {
+            return pendingDiscovery == null
+                ? WorldMapCommandResult.NoChange()
+                : Persist(pendingDiscovery);
+        }
+
+        /// <summary>
         /// Reconciles profile discovery from durable completed-traversal history after arrival or recovery.
         /// A crash between run and profile saves cannot require replaying the final segment.
         /// </summary>

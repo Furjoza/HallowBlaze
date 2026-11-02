@@ -21,7 +21,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 {
     private const int InitialHealth = 100;
     private const int InitialFood = 100;
-    private const string InitialWorldNodeId = "forest.start";
+    private const string OpeningWarmUpOriginNodeId = "shelter.warm-up";
+    private const string OpeningWarmUpEdgeId = "road.shelter-warm-up";
     private const string MenuSceneName = "Menu";
     private static readonly IReadOnlyList<WorldMapExitOption> NoRouteChoices =
         Array.AsReadOnly(new WorldMapExitOption[0]);
@@ -86,6 +87,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     private bool boardOutcomeHandled;
     private BoardOutcome pendingBoardOutcome;
     private bool arrivalCheckpointCommitted;
+    private bool arrivalDiscoveryCommitted;
     private string pendingChosenEdgeId;
     private IReadOnlyList<WorldMapExitOption> routeChoices = NoRouteChoices;
     private bool terminalActionRequested;
@@ -237,15 +239,17 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     }
 
     /// <summary>
-    /// Observes reached-checkpoint exits and blocks gameplay until a legal route is chosen.
+    /// Opens route choice at an arrived checkpoint, never during the mandatory opening leg.
     /// </summary>
-    /// <returns>Whether the atlas is ready, including a terminal catalogue node with no outgoing road.</returns>
+    /// <returns>Whether route choice is ready, including a terminal node with no outgoing road.</returns>
     public bool BeginRouteChoice()
     {
-        if (IsRouteChoiceActive ||
-            session == null ||
-            session.ActiveRun == null ||
-            session.ActiveRun.Status != RunStatus.Active ||
+        RunState currentRun = session?.ActiveRun;
+        if (session == null ||
+            currentRun == null ||
+            currentRun.Status != RunStatus.Active ||
+            (currentRun.ActiveLeg == null &&
+                string.Equals(currentRun.WorldNodeId, OpeningWarmUpOriginNodeId, StringComparison.Ordinal)) ||
             !TryEnsureWorldMap())
         {
             return false;
@@ -314,6 +318,15 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             return HandleBoardOutcome(pendingBoardOutcome);
         if (worldMap?.ChoiceState == RouteChoiceState.RunSavePending)
             return ChooseRoute(pendingChosenEdgeId);
+        if (session?.ActiveRun != null && activeBoardRuntime == null &&
+            session.ActiveRun.ActiveLeg == null &&
+            string.Equals(session.ActiveRun.WorldNodeId, OpeningWarmUpOriginNodeId, StringComparison.Ordinal))
+        {
+            if (!TryEnterCurrentWorldNode() || !TryStartOpeningWarmUp())
+                return false;
+            InitGame();
+            return activeBoardRuntime != null;
+        }
         if (session?.ActiveRun?.ActiveLeg != null && activeBoardRuntime == null)
         {
             InitGame();
@@ -425,8 +438,20 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         }
 
         requestedLaunchMode = RunLaunchMode.NewRun;
+        if (worldMap?.ChoiceState == RouteChoiceState.RunSavePending)
+        {
+            ChooseRoute(pendingChosenEdgeId);
+            return;
+        }
         if (!TryEnterCurrentWorldNode())
             return;
+
+        if (session.ActiveRun.ActiveLeg == null &&
+            string.Equals(session.ActiveRun.WorldNodeId, OpeningWarmUpOriginNodeId, StringComparison.Ordinal) &&
+            !TryStartOpeningWarmUp())
+        {
+            return;
+        }
 
         if (session.ActiveRun.ActiveLeg != null)
             InitGame();
@@ -447,6 +472,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         boardOutcomeHandled = false;
         pendingBoardOutcome = null;
         arrivalCheckpointCommitted = false;
+        arrivalDiscoveryCommitted = false;
         SetRouteChoices(NoRouteChoices);
         SetGameplayInputBlocked(true);
     }
@@ -881,11 +907,15 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
                     }
                     arrivalCheckpointCommitted = true;
                 }
-                WorldMapCommandResult discovery = worldMap.ReconcileCompletedTravel();
-                if (!discovery.IsSuccess)
+                if (!arrivalDiscoveryCommitted)
                 {
-                    Debug.LogError("Arrival discovery checkpoint failed: " + discovery.ErrorMessage);
-                    return false;
+                    WorldMapCommandResult discovery = worldMap.ReconcileCompletedTravel();
+                    if (!discovery.IsSuccess)
+                    {
+                        Debug.LogError("Arrival discovery checkpoint failed: " + discovery.ErrorMessage);
+                        return false;
+                    }
+                    arrivalDiscoveryCommitted = true;
                 }
                 if (!BeginRouteChoice())
                     return false;
@@ -984,6 +1014,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         boardOutcomeHandled = false;
         pendingBoardOutcome = null;
         arrivalCheckpointCommitted = false;
+        arrivalDiscoveryCommitted = false;
         pendingChosenEdgeId = null;
         if (!boardStartupInProgress)
         {
@@ -1019,7 +1050,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             InitialHealth,
             InitialFood,
             0,
-            InitialWorldNodeId);
+            OpeningWarmUpOriginNodeId);
         string runId = session.Profile.ProfileId + "-run-" +
             System.Guid.NewGuid().ToString("N");
 
@@ -1176,7 +1207,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             InitialHealth,
             InitialFood,
             0,
-            InitialWorldNodeId);
+            OpeningWarmUpOriginNodeId);
         RunState freshRun = new RunState(
             freshProfile.ProfileId + "-run-" + System.Guid.NewGuid().ToString("N"),
             12345 + nextRunSequence,
@@ -1235,12 +1266,20 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (!TryEnsureWorldMap())
             return false;
 
+        WorldMapCommandResult pendingDiscovery = worldMap.RetryPendingDiscovery();
+        if (!pendingDiscovery.IsSuccess)
+        {
+            Debug.LogError("Discovery recovery failed: " + pendingDiscovery.ErrorMessage);
+            return false;
+        }
+
         WorldMapCommandResult arrival = worldMap.ReconcileCompletedTravel();
         if (!arrival.IsSuccess)
         {
             Debug.LogError("Arrival recovery failed: " + arrival.ErrorMessage);
             return false;
         }
+
         WorldMapCommandResult result = worldMap.EnterCurrentNode();
         if (result.IsSuccess)
             return true;
@@ -1251,6 +1290,37 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
                 ? string.Empty
                 : " (" + result.ErrorMessage + ")"));
         return false;
+    }
+
+    private bool TryStartOpeningWarmUp()
+    {
+        if (!TryEnsureWorldMap())
+            return false;
+
+        RunState run = session.ActiveRun;
+        if (run == null || run.Status != RunStatus.Active ||
+            run.ActiveLeg != null ||
+            !string.Equals(run.WorldNodeId, OpeningWarmUpOriginNodeId, StringComparison.Ordinal))
+        {
+            Debug.LogError("Opening warm-up cannot start from the current run checkpoint.");
+            return false;
+        }
+
+        if (!worldDefinition.TryGetEdge(OpeningWarmUpEdgeId, out WorldEdgeDefinition openingEdge) ||
+            !string.Equals(openingEdge.FromNodeId, OpeningWarmUpOriginNodeId, StringComparison.Ordinal))
+        {
+            Debug.LogError("Opening warm-up route is missing or has an invalid origin.");
+            return false;
+        }
+
+        SaveStoreResult result = worldMap.Travel.StartRoute(OpeningWarmUpEdgeId);
+        if (result.IsFailure)
+        {
+            Debug.LogError("Opening warm-up checkpoint failed: " + result.Type);
+            return false;
+        }
+
+        return true;
     }
 
     private void SetRouteChoices(IReadOnlyList<WorldMapExitOption> choices)

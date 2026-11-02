@@ -12,11 +12,11 @@ namespace HallowBlaze.Tests.EditMode
     public sealed class WorldGraphValidatorTests
     {
         [Test]
-        public void PrototypeFixturePassesAtExpectedGoalDayFive()
+        public void PrototypeFixturePassesAtExpectedGoalDaySix()
         {
             WorldDefinition world = LoadPrototypeWorld();
 
-            WorldGraphValidationResult result = WorldGraphValidator.Validate(world, 5);
+            WorldGraphValidationResult result = WorldGraphValidator.Validate(world, 6);
 
             Assert.That(result.IsValid, Is.True);
             Assert.That(result.Diagnostics, Is.Empty);
