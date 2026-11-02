@@ -6,7 +6,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>Samples complete PC commands and presents authoritative resources/audio; never applies gameplay rules.</summary>
-public class PlayerScript : MovingObject, IRunHud, ITurnFeedback, IPlayerStepAudio
+public class PlayerScript : MovingObject, IRunHud, ITurnFeedback, IPlayerStepAudio, ITurnResourceGains
 {
     /// <summary>Maximum player-step playback in seconds, additionally bounded by the movement presentation.</summary>
     public const float MaximumStepSeconds = 0.1f;
@@ -30,6 +30,10 @@ public class PlayerScript : MovingObject, IRunHud, ITurnFeedback, IPlayerStepAud
 
     private readonly PcCommandSource commandSource = new PcCommandSource();
     private AudioSource stepSource;
+    private int displayedHealth;
+    private int displayedFood;
+    private long healthGain;
+    private long foodGain;
 
     /// <summary>Gets the number of actual ordered audio cues played by this view during its lifetime.</summary>
     public int PresentedSoundCount { get; private set; }
@@ -118,10 +122,30 @@ public class PlayerScript : MovingObject, IRunHud, ITurnFeedback, IPlayerStepAud
     /// <inheritdoc />
     public void Refresh(int health, int food)
     {
+        displayedHealth = health;
+        displayedFood = food;
         if (foodText != null)
-            foodText.text = "Food: " + food;
+            foodText.text = "Food: " + food + (foodGain > 0 ? " +" + foodGain : "");
         if (healthText != null)
-            healthText.text = "Health: " + health;
+            healthText.text = "Health: " + health + (healthGain > 0 ? " +" + healthGain : "");
+    }
+
+    /// <inheritdoc />
+    public void AddResourceGains(int health, int food)
+    {
+        if (health < 0) throw new ArgumentOutOfRangeException(nameof(health));
+        if (food < 0) throw new ArgumentOutOfRangeException(nameof(food));
+        healthGain = checked(healthGain + health);
+        foodGain = checked(foodGain + food);
+        Refresh(displayedHealth, displayedFood);
+    }
+
+    /// <inheritdoc />
+    public void ClearResourceGains()
+    {
+        healthGain = 0;
+        foodGain = 0;
+        Refresh(displayedHealth, displayedFood);
     }
 
     /// <summary>Hides the current resource HUD during route selection and the full-screen day intro.</summary>

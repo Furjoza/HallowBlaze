@@ -5853,7 +5853,7 @@ passed 200/200 and focused movement/audio passed 15/15. Independent review passe
 
 ## `M7.5` - Turn-scoped Food and Health gain feedback
 
-**Status:** `Planned`
+**Status:** `Done` (2026-10-29)
 **Priority:** P1
 **Related contract:** sections 9, 10 and 18; existing effect-before-cost resource ordering.
 
@@ -5880,6 +5880,14 @@ mutation from UI, persisted suffix, or deferred inventory work from M10.
 **Allowed file area:** Presentation resource HUD/event handlers and focused tests; a narrowly
 scoped result/event field only if the real applied amount is unavailable, with its contract tested.
 
+**Closed write scope (2026-10-29):** `Assets/Scripts/PlayerScript.cs`,
+`Assets/Scripts/GameManager.cs`, `Assets/Scripts/Core/Session/GameSession.cs`,
+`Assets/Scripts/Presentation/Runtime/BoardEventPresenter.cs`,
+`Assets/Scripts/Presentation/Runtime/CommandPresentationPipeline.cs`,
+`Assets/Tests/EditMode/GameSessionTests.cs`,
+`Assets/Tests/EditMode/CommandPresentationPipelineTests.cs`,
+`Assets/Tests/PlayMode/PlayModeInfrastructureTests.cs` and this roadmap.
+
 **Acceptance criteria:** A +10 reward followed by Food -1 still reports `+10`, not net `+9`.
 Health gains remain separate from later damage. Displayed totals always match the presented
 state; suffixes use actual applied amounts, not unconditionally configured rewards. Rejection,
@@ -5895,6 +5903,28 @@ not extra restored resources or new persisted run/profile fields.
 
 **Required handoff:** Event-to-total/gain table, lifetime/reset rules and captures across the
 pickup, later hostile phase, completed turn and following accepted turn.
+
+**Implementation (2026-10-29):** The HUD retains independent positive gain totals alongside
+its authoritative resource values. `FoodRestoredEvent.Amount` contributes Food; successful
+positive `GameSession.RestoreHealth` reports its applied amount to the current board's HUD.
+The existing uncapped health restoration rule is unchanged; zero, invalid and overflowing
+operations do not fabricate a gain. No healing item behavior is introduced.
+
+| Input | Total | Turn Gain |
+| --- | --- | --- |
+| Food reward 10 followed by cost 1 | Current authoritative Food | `+10`, not `+9` |
+| Multiple applied rewards | Current authoritative resource | Sum of this replay's applied gains |
+| Healing followed by damage | Current authoritative Health | Healing only; damage does not subtract from gain |
+| Refresh / rejected command / preview | Current authoritative resource | Retain the previous accepted turn's gain |
+| Next accepted replay / recovery / board or terminal disposal | Current authoritative resource | Clear without restoring resources |
+
+The dispatcher resets gains once at accepted replay start, not per event or same-frame
+refresh. Instant/animated paths use the same lifetime. Gain state is never saved and recovery
+does not replay it. Graphics checks cover actual total/suffix text meshes at 1280x720 and
+320x480; shared production viewport centering and long-value fit remain owned by M7.7.
+Full EditMode passed 1241 tests with the existing Explicit seed skip; graphics PlayMode
+passed 203/203, focused session/replay passed 48/48 and movement/HUD passed 18/18.
+Independent review passed. No run/profile format, restoration rule or item mechanic changed.
 
 ---
 
@@ -6868,7 +6898,7 @@ M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3
 The next safe sequence is:
 
 1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. The owner then separately authorized solo M6.6: its technical preparation passed full EditMode 1237 tests plus the existing Explicit skip and graphics PlayMode 188/188, with self-review only. M6.6 remains Active until 5-8 real sessions and the landmark decision in `Docs/Validation/M6.6.md`; neither exception closes M4.9 or authorizes M8. Future cards use the current Lead implementation and Reviewer/self-review policy in `AGENTS.md`, without changing these historical review attributions;
-2. continue the `M7.5`-`M7.8` repair/onboarding milestone after M7.1-M7.4 were completed on 2026-10-29 with independent review, compatible opening/checkpoint recovery, clean presentation boundaries, stable Notes controls and bounded footsteps. The owner authorized proceeding before the outstanding M4.9/M6.6 human gates; those gates remain open and no human-test result is implied;
+2. continue the `M7.6`-`M7.8` repair/onboarding milestone after M7.1-M7.5 were completed on 2026-10-29 with independent review, compatible opening/checkpoint recovery, clean presentation boundaries, stable Notes controls, bounded footsteps and turn-scoped resource gains. The owner authorized proceeding before the outstanding M4.9/M6.6 human gates; those gates remain open and no human-test result is implied;
 3. complete the no-backpack vertical slice through `M8.8`, preserving its playtest requirements and the earlier M4.9/M6.6/M7 gates, then make the explicit M10 verdict;
 4. keep M10 deferred and last unless the owner explicitly changes that order; activate M9.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M10.
 

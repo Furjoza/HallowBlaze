@@ -15,6 +15,8 @@ namespace HallowBlaze.Core.Session
         public event Action<RunState> OnRunStarted;
         public event Action<RunState> OnRunChanged;
         public event Action<RunState> OnRunAbandoned;
+        /// <summary>Raised after successful positive session healing with its applied amount; zero, rejected and failed mutations do not notify.</summary>
+        public event Action<RunState, int> OnHealthRestored;
 
         public ProfileState Profile { get; }
         public RunState ActiveRun => activeRunState;
@@ -78,9 +80,17 @@ namespace HallowBlaze.Core.Session
             Mutate(run => run.TakeDamage(amount));
         }
 
+        /// <summary>Applies existing health restoration and reports the positive applied amount independently of later damage or refreshes.</summary>
+        /// <param name="amount">Non-negative health to restore under the current uncapped health rules.</param>
+        /// <exception cref="ArgumentOutOfRangeException">The amount is negative.</exception>
+        /// <exception cref="InvalidOperationException">There is no active mutable run.</exception>
+        /// <exception cref="OverflowException">The restored total would overflow.</exception>
         public void RestoreHealth(int amount)
         {
+            RunState restoredRun = GetCurrentRun();
             Mutate(run => run.RestoreHealth(amount));
+            if (amount > 0)
+                OnHealthRestored?.Invoke(restoredRun, amount);
         }
 
         public void AdvanceDay()
