@@ -29,11 +29,13 @@ namespace HallowBlaze.Presentation.Runtime
         private Text detail;
         private Text empty;
         private Text noticeTitle;
+        private Text noticeLabel;
         private Image noticeIcon;
         private Button openButton;
         private string selectedId;
         private Vector2 viewport;
         private bool available = true;
+        private bool discoveryObscured;
         private int releaseAfterFrame = -1;
 
         /// <summary>Gets the transient canvas, never a profile serialization container.</summary>
@@ -92,7 +94,7 @@ namespace HallowBlaze.Presentation.Runtime
             noticeIcon = new GameObject("Observation icon", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
             noticeIcon.transform.SetParent(notice.transform, false);
             Place(noticeIcon.rectTransform, 8, 12, 28, 28);
-            Text noticeLabel = TextAt("Discovery", notice.transform, "Observation recorded", 13);
+            noticeLabel = TextAt("Discovery", notice.transform, "Observation recorded", 13);
             noticeLabel.color = new Color32(163, 231, 205, 255);
             Place(noticeLabel.rectTransform, 44, 6, 150, 22);
             noticeTitle = TextAt("Discovery title", notice.transform, "", 16);
@@ -229,6 +231,20 @@ namespace HallowBlaze.Presentation.Runtime
             if (profile != null && detail != null) Refresh();
         }
 
+        /// <summary>Places durable feedback in a borrowed free panel area; an informational overlay may hide it temporarily without acknowledging any queued discovery.</summary>
+        /// <param name="area">Free bounds in the most recently supplied viewport's bottom-left pixels.</param>
+        /// <param name="obscured">Whether the legend currently owns that area; queued feedback resumes when false.</param>
+        public void SetDiscoveryArea(Rect area, bool obscured)
+        {
+            if (IsDisposed || notice == null) return;
+            discoveryObscured = obscured;
+            float height = Mathf.Min(104, area.height);
+            Place((RectTransform)notice.transform, area.xMin, viewport.y - area.yMin - height, area.width, height);
+            Place(noticeLabel.rectTransform, 44, 6, area.width - 80, 22);
+            Place(noticeTitle.rectTransform, 44, 30, area.width - 56, height - 38);
+            RefreshNotice();
+        }
+
         /// <summary>Closes input ownership and releases owned UI/icon resources only; profile and run state remain untouched.</summary>
         public void Dispose()
         {
@@ -279,7 +295,7 @@ namespace HallowBlaze.Presentation.Runtime
         private void RefreshNotice()
         {
             if (notice == null) return;
-            notice.SetActive(notices.Count > 0 && !IsOpen);
+            notice.SetActive(notices.Count > 0 && !IsOpen && !discoveryObscured);
             if (notices.Count == 0) return;
             noticeTitle.text = notices.Peek().Title;
             noticeIcon.sprite = Icon(notices.Peek().IconId);

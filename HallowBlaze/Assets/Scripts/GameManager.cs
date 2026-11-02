@@ -82,6 +82,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     private Camera intentLayoutCamera;
     private Rect originalIntentCameraRect;
     private float originalIntentCameraSize;
+    private Rect resourceHudBounds;
     private Camera boardVisibilityCamera;
     private Camera viewportClearCamera;
     private int gameplayCullingMask;
@@ -624,6 +625,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             ReserveIntentCameraMargin(intentViewport);
         }
         activeIntentLegend = CreateIntentLegend();
+        LayoutFieldNotesFeedback();
         UpdatePresentationBlocks();
     }
 
@@ -631,14 +633,14 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     {
         try
         {
-            return new EnemyIntentLegend(activeIntentOwner.transform, intentViewport, InspectedBoardArea());
+            return new EnemyIntentLegend(activeIntentOwner.transform, intentViewport, LegendInspectedArea());
         }
         catch (ArgumentException exception) when (exception.ParamName == "inspectedArea" &&
             Camera.main != null && Camera.main.orthographic && intentLayoutCamera == null)
         {
             BorrowIntentLayoutCamera();
             ReserveIntentCameraMargin(intentViewport);
-            return new EnemyIntentLegend(activeIntentOwner.transform, intentViewport, InspectedBoardArea());
+            return new EnemyIntentLegend(activeIntentOwner.transform, intentViewport, LegendInspectedArea());
         }
     }
 
@@ -653,14 +655,28 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     {
         if (intentLayoutCamera == null)
             return;
-        intentLayoutCamera.rect = size.x >= 800
-            ? new Rect(0, 0, (size.x - 224) / size.x, (size.y - ToolHudPresenter.ReservedHeight) / size.y)
-            : new Rect(0, 160 / size.y, 1, (size.y - 160 - ToolHudPresenter.ReservedHeight) / size.y);
+        float side = size.x >= 800 ? 224 : 56;
+        float legendHeight = size.x >= 800 ? 0 : 160;
+        float bottom = legendHeight + 80;
+        float top = ToolHudPresenter.ReservedHeight;
+        intentLayoutCamera.rect = new Rect(side / size.x, bottom / size.y,
+            (size.x - 2 * side) / size.x, (size.y - bottom - top) / size.y);
         var bounds = activeBoardRuntime.BoardState.Bounds;
         float width = (float)bounds.MaxX - bounds.MinX + 1;
         float height = (float)bounds.MaxY - bounds.MinY + 1;
-        intentLayoutCamera.orthographicSize = Mathf.Max(originalIntentCameraSize,
-            height / 2, width / (2 * intentLayoutCamera.aspect));
+        float aspect = (size.x - 2 * side) / (size.y - bottom - top);
+        intentLayoutCamera.orthographicSize = Mathf.Max(height / 2, width / (2 * aspect));
+        float resourceWidth = Mathf.Min(720, size.x - (size.x >= 800 ? 2 * side : 0) - 16);
+        resourceHudBounds = new Rect((size.x - resourceWidth) / 2, legendHeight + 8, resourceWidth, 64);
+        activePlayerView?.ResizeHud(size, resourceHudBounds);
+    }
+
+    private Rect LegendInspectedArea()
+    {
+        Rect board = InspectedBoardArea();
+        return Rect.MinMaxRect(Mathf.Min(board.xMin, resourceHudBounds.xMin),
+            Mathf.Min(board.yMin, resourceHudBounds.yMin), Mathf.Max(board.xMax, resourceHudBounds.xMax),
+            Mathf.Max(board.yMax, resourceHudBounds.yMax));
     }
 
     private Rect InspectedBoardArea()
@@ -692,23 +708,27 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             return;
         Vector2 size = new Vector2(Screen.width, Screen.height);
         if (size == intentViewport)
+        {
+            LayoutFieldNotesFeedback();
             return;
+        }
         try
         {
             activeToolHud?.Resize(size);
             ReserveIntentCameraMargin(size);
             try
             {
-                activeIntentLegend.Resize(size, InspectedBoardArea());
+                activeIntentLegend.Resize(size, LegendInspectedArea());
             }
             catch (ArgumentException exception) when (exception.ParamName == "inspectedArea" &&
                 Camera.main != null && Camera.main.orthographic && intentLayoutCamera == null)
             {
                 BorrowIntentLayoutCamera();
                 ReserveIntentCameraMargin(size);
-                activeIntentLegend.Resize(size, InspectedBoardArea());
+                activeIntentLegend.Resize(size, LegendInspectedArea());
             }
             intentViewport = size;
+            LayoutFieldNotesFeedback();
         }
         catch (Exception exception)
         {
@@ -718,11 +738,19 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         }
     }
 
+    private void LayoutFieldNotesFeedback()
+    {
+        if (activeIntentLegend != null)
+            fieldNotes?.SetDiscoveryArea(activeIntentLegend.PanelBounds, activeIntentLegend.IsVisible);
+    }
+
     private void DisposeIntentUi()
     {
         if (activeIntents != null)
             activeIntents.Dispose();
         activeIntents = null;
+        if (activeIntentLegend != null)
+            fieldNotes?.SetDiscoveryArea(activeIntentLegend.PanelBounds, false);
         activeIntentLegend?.Dispose();
         activeIntentLegend = null;
         activeToolHud?.Dispose();

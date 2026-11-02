@@ -148,6 +148,36 @@ public class PlayerScript : MovingObject, IRunHud, ITurnFeedback, IPlayerStepAud
         Refresh(displayedHealth, displayedFood);
     }
 
+    /// <summary>Places the borrowed scene labels in a fixed resource band without changing values or gain lifetime.</summary>
+    /// <param name="viewport">Viewport dimensions in pixels.</param>
+    /// <param name="area">Centered resource band in bottom-left viewport pixels, excluding board, tool and legend space.</param>
+    public void ResizeHud(Vector2 viewport, Rect area)
+    {
+        bool stacked = area.width < 600;
+        Text[] labels = { foodText, healthText };
+        for (int index = 0; index < labels.Length; index++)
+        {
+            Text label = labels[index];
+            if (label == null) continue;
+            Canvas canvas = label.GetComponentInParent<Canvas>();
+            float scale = canvas != null ? canvas.scaleFactor : 1;
+            RectTransform rect = label.rectTransform;
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0);
+            rect.pivot = new Vector2(0.5f, 0);
+            float width = stacked ? area.width : (area.width - 16) / 2;
+            float height = stacked ? area.height / 2 : area.height;
+            float offset = stacked ? 0 : (index == 0 ? -1 : 1) * (width + 16) / 2;
+            rect.anchoredPosition = new Vector2(area.center.x - viewport.x / 2 + offset,
+                area.yMin + (stacked && index == 0 ? height : 0)) / scale;
+            rect.sizeDelta = new Vector2(width, height) / scale;
+            label.alignment = TextAnchor.MiddleCenter;
+            label.fontSize = 14;
+            label.resizeTextForBestFit = false;
+            label.horizontalOverflow = HorizontalWrapMode.Wrap;
+            label.verticalOverflow = VerticalWrapMode.Truncate;
+        }
+    }
+
     /// <summary>Hides the current resource HUD during route selection and the full-screen day intro.</summary>
     /// <param name="visible">Whether gameplay resource labels may be shown.</param>
     public void SetHudVisible(bool visible)

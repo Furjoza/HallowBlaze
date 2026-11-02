@@ -1037,6 +1037,13 @@ Podstawowe informacje muszą być czytelne także przy wyłączonych animacjach.
 
 The full-screen transition shown once at the start of a route leg displays only `Day N`; gameplay health, satiety/food, pockets, and tool HUD are hidden behind it. Day numbering is player-facing from `1`, never `0`.
 
+During gameplay the complete board and the Food/Health resource group share the window's
+horizontal center. Symmetric side reservations and distinct resource, tool and legend bands
+must prevent overlap. Resource totals and retained `+X` gains use fixed frames with wrapped
+text rather than clipping or shifting as digits change. Responsive camera framing must not
+move authoritative grid/entity coordinates. The current pixel contract and automated versus
+owner-smoke evidence are recorded in `Docs/Testing.md` under M7.7.
+
 After M9, the persistent bottom HUD order is `Left pocket | Tool slot 1 | Tool slot 2 | Right pocket`. Tool slots are generic even if the first content set contains only an axe and a shovel.
 
 ### Rationale — dlaczego
