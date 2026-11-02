@@ -10,6 +10,7 @@ using HallowBlaze.Core.Generation.Pipeline;
 using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
+using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.Turns.Resolution;
 using HallowBlaze.Core.World;
 using HallowBlaze.Presentation.Runtime;
@@ -106,7 +107,8 @@ namespace HallowBlaze.Tests.EditMode
             {
                 SeedSeriesCase original = Sample(index);
                 var address = new BoardAddress("supply-" + (index / 2).ToString(CultureInfo.InvariantCulture), "leg.1", "road",
-                    "segment-" + (index % 2).ToString(CultureInfo.InvariantCulture), 1, OrdinaryBoardGenerator.ConfigurationId, 2, index);
+                    "segment-" + (index % 2).ToString(CultureInfo.InvariantCulture), 1, OrdinaryBoardGenerator.ConfigurationId,
+                    BoardGenerationPipeline.OrdinaryConfigurationVersion, index);
                 BoardGenerationConfig config = original.Request.Configuration;
                 config = new BoardGenerationConfig(config.Id, config.Version, config.PathLength, config.BranchPoints, config.ObstacleCount,
                     config.EnemyCount, config.MaximumConcurrentThreats, config.MinimumSafeStartMoves, config.AllowedContentIds,
@@ -266,6 +268,38 @@ namespace HallowBlaze.Tests.EditMode
         [Explicit("Run this 10,000-seed gate explicitly before accepting a generation milestone.")]
         [Timeout(650000)]
         public void Milestone10000SeedsHaveNoInvalidBoardsAndRepeatExactly() => RunGate(10000, TimeSpan.FromSeconds(300));
+
+        /// <summary>Audits real ordinary layouts at explicitly low resources without changing their pinned generation or pretending to recover the reported seed.</summary>
+        [Test]
+        [Timeout(300000)]
+        public void Published1000BoardsHaveAFourCommandEntryEscape()
+        {
+            foreach (SeedSeriesCase sample in ProductionCases(1000))
+            {
+                BoardGenerationResult generated = BoardGenerationPipeline.GenerateOrdinary(sample.Request);
+                Assert.That(generated.IsSuccess, Is.True, generated.ToString());
+                BoardEntrySafetyResult audit = BoardEntrySafety.Check(generated.Blueprint, sample.Request.Catalog);
+                Assert.That(audit.HasEscape, Is.True,
+                    "Conservative one HP / five Food entry audit, four accepted-command horizon: " + sample.Request.Address);
+                Assert.That(audit.EvaluatedCommands, Is.LessThanOrEqualTo(780));
+            }
+        }
+
+        /// <summary>The pinned v2 diagnostic remains unchanged and is not mislabeled as the owner's unrecovered day-four seed.</summary>
+        [Test]
+        public void RetainedVersionTwoDiagnosticKeepsItsLayoutAndBoundedFailure()
+        {
+            var address = new BoardAddress("series-run-188", "leg.1", "road.west-grove-ridge",
+                "segment.west-grove-ridge.stretch", 9, OrdinaryBoardGenerator.ConfigurationId, 2, 2125458236);
+            BoardValidationCatalog catalog = OrdinaryBoardContent.CreateCatalog();
+            var request = new BoardGenerationRequest(address, OrdinaryBoardContent.CreateConfiguration(address), catalog, 94);
+            BoardGenerationResult first = BoardGenerationPipeline.GenerateOrdinary(request);
+            BoardGenerationResult repeat = BoardGenerationPipeline.GenerateOrdinary(request);
+            Assert.That(first.IsSuccess, Is.True, first.ToString());
+            Assert.That(repeat.Blueprint.ContentHash, Is.EqualTo(first.Blueprint.ContentHash));
+            Assert.That(first.Blueprint.Address, Is.EqualTo(address));
+            Assert.That(BoardEntrySafety.Check(first.Blueprint, catalog, 10, 20).HasEscape, Is.False);
+        }
 
         private static void RunGate(int count, TimeSpan timeLimit)
         {

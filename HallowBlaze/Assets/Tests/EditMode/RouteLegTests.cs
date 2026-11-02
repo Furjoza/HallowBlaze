@@ -240,7 +240,8 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(restored.ActiveLeg.Segments.Select(segment => segment.GenerationConfigurationId),
                 Is.All.EqualTo("legacy.board.v1"));
             Assert.That(BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 2)), Is.EqualTo(before));
-            Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 3)));
+            Assert.That(BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 3)), Is.EqualTo(before));
+            Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 4)));
             Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("unknown", 1)));
             restored.TryConsumeIntro(restored.ActiveLeg.LegId);
             restored.TryAdvanceSegment(restored.ActiveLeg.LegId, "segment.1");
@@ -252,6 +253,8 @@ namespace HallowBlaze.Tests.EditMode
         [TestCase(true, 1)]
         [TestCase(false, 2)]
         [TestCase(true, 2)]
+        [TestCase(false, 3)]
+        [TestCase(true, 3)]
         public void OrdinaryRouteStartPersistsTheCorrectGenerationFamily(bool legacyRandom, int generationVersion)
         {
             var session = new GameSession(new ProfileState("profile.test", "world.test", 1));
@@ -277,10 +280,15 @@ namespace HallowBlaze.Tests.EditMode
             RunState restored = PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(run));
             Assert.That(BoardRequest.CreateFromRun(restored, WorldWithGeneration("ordinary.board.v1", 2)).Address, Is.EqualTo(original));
             Assert.That(restored.ActiveLeg.CurrentSegment.GenerationVersion, Is.EqualTo(1));
-            Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 3)));
+            Assert.That(BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 3)), Is.EqualTo(original));
+            Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 4)));
             var session = new GameSession(new ProfileState("profile.test", "world.test", 1));
             session.ContinueRun(NewRun());
             new RouteTravelService(session, WorldWithGeneration("ordinary.board.v1", 2), new TravelSaveStore()).StartRoute("edge");
+            BoardAddress versionTwo = BoardAddressFactory.Create(session.ActiveRun, WorldWithGeneration("ordinary.board.v1", 2));
+            RunState restoredTwo = PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(session.ActiveRun));
+            Assert.That(BoardAddressFactory.Create(restoredTwo, WorldWithGeneration("ordinary.board.v1", 3)), Is.EqualTo(versionTwo));
+            Assert.That(restoredTwo.ActiveLeg.CurrentSegment.GenerationVersion, Is.EqualTo(2));
             Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(session.ActiveRun, WorldWithGeneration("ordinary.board.v1", 1)));
         }
 

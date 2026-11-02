@@ -179,7 +179,7 @@ public class BoardManager : MonoBehaviour
 
     /// <summary>
     /// Creates and validates the addressed layout before publishing one authoritative runtime.
-    /// Ordinary version 2 uses bounded retry/fallback; version 1, checkpoint and legacy boards retain their original generation.
+    /// Ordinary version 3 adds bounded entry safety; versions 1/2, checkpoint and legacy boards retain their original generation.
     /// Authored landmarks require the exact durably selected template/version/variant and use the same runtime/resolver.
     /// A failed setup destroys its staged views and leaves no active request or runtime.
     /// Ordinary enemy rules come from the catalog; legacy variants retain prefab 10/20 HP data.
@@ -354,7 +354,7 @@ public class BoardManager : MonoBehaviour
             throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, "ordinary:bounds-player-or-identity");
         BoardValidationCatalog catalog = landmark == null ? OrdinaryBoardContent.CreateCatalog() : RadioTowerLandmark.CreateCatalog();
         BoardGenerationConfig config = landmark?.Blueprint.Config ?? OrdinaryBoardContent.CreateConfiguration(request.Address);
-        BoardGenerationResult generation = landmark == null && config.Version == BoardGenerationPipeline.OrdinaryConfigurationVersion
+        BoardGenerationResult generation = landmark == null && (config.Version == 2 || config.Version == BoardGenerationPipeline.OrdinaryConfigurationVersion)
             ? BoardGenerationPipeline.GenerateOrdinary(new BoardGenerationRequest(request.Address, config, catalog, request.RunSeed)) : null;
         if (generation != null && !generation.IsSuccess)
             throw new InvalidOperationException("Ordinary generation exhausted its attempts and fallbacks: " + generation);

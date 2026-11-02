@@ -39,8 +39,10 @@ namespace HallowBlaze.Core.Generation.Validation
         }
 
         /// <summary>
-        /// Checks static topology, catalogs, budgets and the current Shambler opening without simulating later turns.
+        /// Checks static topology, catalogs, budgets and the current Shambler opening, preserving legacy static checks.
         /// Reachability ignores actors and optional loot/tools; opening threats use the actual initial locked-intent planner.
+        /// Ordinary version 3 additionally requires a real-controller four-command entry escape at one HP and five Food.
+        /// Exhausting that bounded criterion is a rejection, not a proof that no later solution exists.
         /// </summary>
         /// <param name="blueprint">A structurally constructed initial layout; all logical exits are required.</param>
         /// <param name="catalog">Authoritative definitions and fixed sources, independent of the candidate's claims.</param>
@@ -186,6 +188,9 @@ namespace HallowBlaze.Core.Generation.Validation
                 if (!budgeted)
                     errors.Add(new BoardValidationError("UnbudgetedResource", "No initial item-count budget exists for family " + entry.ResourceFamilyId + ".", context));
             }
+            if (errors.Count == 0 && blueprint.Config.Id == "ordinary.board.v1" && blueprint.Config.Version == 3 &&
+                !BoardEntrySafety.Check(blueprint, catalog).HasEscape)
+                errors.Add(new BoardValidationError("EntryEscapeHorizon", "No surviving Move/Wait witness reaches distance three or an exit within four accepted commands at one HP and five Food.", context, blueprint.Start));
             return new BoardValidationReport(blueprint.Address, blueprint.Config, errors,
                 new BoardValidationMetrics(distances.Count, branches, obstacles, enemies, exits,
                     completeThreats ? safeMoves : (int?)null, completeThreats ? maximumThreats : (int?)null,

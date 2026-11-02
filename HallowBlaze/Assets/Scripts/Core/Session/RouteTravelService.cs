@@ -29,7 +29,7 @@ namespace HallowBlaze.Core.Session
         /// <summary>
         /// Starts and checkpoints a Pending leg without changing discovery, history, or the reached node.
         /// A failed save restores the previous boundary so a retry cannot allocate another traversal.
-        /// Imported legacy-RNG runs retain legacy v1 generation on roads upgraded to ordinary versions 1 or 2.
+        /// Imported legacy-RNG runs retain legacy v1 generation on roads upgraded to ordinary versions 1, 2 or 3.
         /// </summary>
         /// <param name="edgeId">An authored outgoing road from the reached checkpoint.</param>
         /// <returns>The durable checkpoint result; failure never authorizes board input.</returns>
@@ -50,7 +50,7 @@ namespace HallowBlaze.Core.Session
                 {
                     bool preserveLegacy = run.RandomAlgorithmId == RunState.LegacyRandomAlgorithmId &&
                         segment.GenerationConfigurationId == "ordinary.board.v1" &&
-                        (segment.GenerationVersion == 1 || segment.GenerationVersion == 2);
+                        (segment.GenerationVersion == 1 || segment.GenerationVersion == 2 || segment.GenerationVersion == 3);
                     return new RouteSegmentState(segment.SegmentId,
                         preserveLegacy ? "legacy.board.v1" : segment.GenerationConfigurationId,
                         preserveLegacy ? 1 : segment.GenerationVersion);

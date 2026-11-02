@@ -9,6 +9,7 @@ using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Generation;
 using HallowBlaze.Core.Generation.Pipeline;
+using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
@@ -837,6 +838,58 @@ namespace HallowBlaze.Tests.PlayMode
                 Is.EqualTo("road.start-west-trail"));
         }
 
+        /// <summary>A real two-enemy day-four entry retains its initial plans and executes the bounded no-hit witness without presentation drift.</summary>
+        [UnityTest]
+        public IEnumerator EntrySafetyWitnessExecutesOnProductionDayFourBoard()
+        {
+            var fixtureSession = new GameSession(new ProfileState("entry-safety-profile", "world-1", 1));
+            var fixtureLifecycle = new RunLifecycleService(fixtureSession, new FileSystemSaveStore(persistenceRoot));
+            Assert.That(fixtureLifecycle.StartNewRun("entry-safety-day-four", 904,
+                new RunStateConfiguration(1, 5, 3, "forest.start")).IsSuccess, Is.True);
+            InvokeStatic(gameManagerType, "RequestContinue");
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
+            yield return null;
+            yield return null;
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            Component adapter = manager.GetComponent(RequireType(gameManagerType.Assembly, "BoardManager"));
+            BoardBlueprint blueprint = GetProperty<BoardBlueprint>(adapter, "ActiveBlueprint");
+            Assert.That(runtime.Request.Address.GenerationVersion, Is.EqualTo(3));
+            Assert.That(runtime.Enemies, Has.Count.EqualTo(2));
+            BoardEntrySafetyResult audit = BoardEntrySafety.Check(blueprint, OrdinaryBoardContent.CreateCatalog());
+            Assert.That(audit.HasEscape, Is.True, runtime.Request.Address.ToString());
+            Invoke(manager, "HideLevelImage");
+            yield return null;
+            void AssertRetainedIntentViews()
+            {
+                EnemyIntentPresenter intents = GetField<EnemyIntentPresenter>(manager, "activeIntents");
+                foreach (var enemy in runtime.Enemies)
+                {
+                    Assert.That(runtime.BoardState.TryGetEntity(enemy.ActorId, out BoardEntityState actor), Is.True);
+                    EnemyIntentProjection expected = EnemyIntentProjection.FromRetainedIntent(enemy.LockedIntent, actor.Position);
+                    Assert.That(intents.Views[enemy.ActorId].Projection, Is.EqualTo(expected));
+                }
+            }
+            AssertRetainedIntentViews();
+            foreach (PlayerCommand command in audit.EscapeCommands)
+            {
+                Assert.That((bool)Invoke(manager, "TrySubmitCommand", new object[] { command, null }), Is.True);
+                BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
+                while (presenter.Coordinator.Gate.State != PresentationGateState.Idle) yield return null;
+                Assert.That(runtime.RunState.Health, Is.EqualTo(1));
+                AssertRetainedIntentViews();
+                foreach (BoardEntityState actor in runtime.BoardState.GetEntities())
+                    if (actor.Definition.Layer == BoardLayer.Actor)
+                        Assert.That(runtime.Views[actor.Id].transform.position,
+                            Is.EqualTo(new Vector3(actor.Position.X, actor.Position.Y, runtime.Views[actor.Id].transform.position.z)));
+            }
+            Assert.That(runtime.BoardState.TryGetEntity(runtime.PlayerId, out BoardEntityState player), Is.True);
+            Assert.That(player.Position.ManhattanDistance(blueprint.Start), Is.GreaterThanOrEqualTo(3));
+            Assert.That(runtime.RunState.Food, Is.GreaterThan(0));
+        }
+
         /// <summary>Dying in the opening records no completed day and a fresh restart retains profile knowledge.</summary>
         [UnityTest]
         public IEnumerator OpeningDeathNeverOffersFirstChoiceAndRestartRetainsKnowledge()
@@ -1481,7 +1534,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(opening.Address.EdgeId, Is.EqualTo("road.shelter-warm-up"));
             Assert.That(opening.Address.SegmentId, Is.EqualTo("segment.shelter-warm-up.day1"));
             Assert.That(opening.Address.GenerationConfigurationId, Is.EqualTo("ordinary.board.v1"));
-            Assert.That(opening.Address.GenerationVersion, Is.EqualTo(2));
+            Assert.That(opening.Address.GenerationVersion, Is.EqualTo(3));
             Assert.That(opening.CurrentDay, Is.EqualTo(1));
             Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
             Assert.That(GetProperty<IReadOnlyList<WorldMapExitOption>>(manager, "RouteChoices"), Is.Empty);

@@ -8,6 +8,48 @@ bounded retries, authored fallbacks and recovery diagnostics under generation ve
 M4.6 adds test-only daily/milestone seed sweeps and detached aggregate diagnostics.
 This remains the first ordinary family, not final balance.
 
+## M7.6 Bounded Entry Safety
+
+The original day-four screenshot has no recovered run address, initial resources or command
+history. It is not an exact reproduction. An authored corner with enemies at `(2,0)` and
+`(2,1)`, player `(0,0)`, and a wall at `(0,2)` passes the old first-command check but has no
+surviving four-command escape at 10 HP / 20 Food. A separate deterministic production-v2
+diagnostic was found at `series-run-188`, root seed `94`, `leg.1`,
+`road.west-grove-ridge`, `segment.west-grove-ridge.stretch`, Day 9, board seed `2125458236`.
+It fails the declared four-command criterion, not a proof that all later solutions fail.
+Neither fixture is represented as the owner's lost run or an unsafe real player save.
+
+`ordinary.board.v1/3` requires a witness through the real `TurnController`, `TurnResolver`
+and initial locked Shambler plans/cadence. At most four accepted Move/Wait commands must
+reach Manhattan distance three from the spawn or a surviving exit. Production validation
+uses one HP and five Food: the witness cannot rely on tanking damage, optional tools or
+mandatory food. Initial terrain, actors, automatic food and accepted/rejected costs are
+the actual rule inputs. Rejected commands do not consume a turn or create search edges.
+The deterministic depth-first tree has at most 780 controller calls; there is no timeout
+that can be confused with a proof of safety. No witness means `EntryEscapeHorizon`
+rejection, not a whole-board `NoSolution` result. This conservative horizon can reject
+otherwise survivable longer openings; it does not promise survival after arbitrary choices,
+below five starting Food, on subsequent turns, or through the campaign.
+
+The existing eight-attempt/two-fallback pipeline validates each candidate and fallback with
+the same versioned rule. The safety check copies state, does not share gameplay/cosmetic RNG,
+and cannot alter the input blueprint, saved address or run. EditMode accepts the synthetic
+narrow surviving fixture. PlayMode executes a separate production Day-4 witness with
+view/model and retained-intent parity.
+
+Fresh ordinary legs publish version 3. Saved ordinary versions 1/2 retain their own address,
+seed, selection algorithm and initial plans against the newer publication; imported legacy
+RNG also retains legacy version 1 on future ordinary legs. Landmark generation is unchanged.
+No save/profile format changes, resets or silent repairs of old pinned boards are performed.
+Any requested treatment of a recovered unsafe real save requires a separate owner decision.
+
+The predeclared milestone gate was 10,000 boards twice, zero invalid boards, at most 1%
+fallbacks and 300 seconds per pass. Both passes had zero invalid boards and zero fallbacks,
+in 34.18 / 33.64 seconds, with identical fingerprint
+`b34eb98ddcd6d17e9451199e8d9fc2c4f2f3b38b4504425efaab810a1c47969b`.
+The focused synthetic retry/fallback test separately forces safety rejection and checks the
+same selected safe fallback twice. Owner smoke of the synthetic case remains open at M7.8.
+
 ## Ownership and construction
 
 - `BoardBlueprint` is an immutable initial ordinary 8x8 board with inclusive coordinates
