@@ -6080,7 +6080,8 @@ No scene/prefab, domain, generation or save identity changed.
 
 ## `M7.8` - Integrated repair regression and owner smoke gate
 
-**Status:** `Planned`
+**Status:** `Active` - 2026-10-30. Integrated technical regression passed;
+owner visual/audio/live-window resize verdict is Pending, so the milestone is not accepted.
 **Priority:** P0 milestone gate
 **Related contract:** sections 18, 20 and 22.
 
@@ -6106,6 +6107,10 @@ exception authorizes the repair work without declaring those gates complete.
 **Allowed file area:** Relevant tests, Docs/Testing.md and this roadmap; a separate bounded defect
 card owns any additional production correction. Do not create a success-report file by default.
 
+**Closed write scope (2026-10-30):** `Assets/Tests/PlayMode/GameSessionLifecycleTests.cs`,
+`Docs/Testing.md` and this roadmap. No production, scene/prefab, package, settings, generator,
+save or protected-agent changes. The exact standalone SENTIS token exception remains ignored.
+
 **Acceptance criteria:** No known P0/P1 regression remains in scope. Start -> warm-up Day ->
 first completion -> first route choice -> later boards/days, with repeated legend/Notes use,
 passes without flash, residue, white fill, blinking, duplicate labels or clipping. A step sounds
@@ -6124,6 +6129,15 @@ or legacy generation policy; profile knowledge and existing pinned addresses rem
 
 **Required handoff:** Issue -> reproduction -> owning fix -> test/smoke result matrix, honest
 remaining limitations, actual owner verdict and brief dated milestone status.
+
+**Technical checkpoint (2026-10-30):** The issue-to-evidence matrix and owner smoke procedure
+are in `Docs/Testing.md`. The integrated real-command warm-up/Day-2/Notes/Continue case passed
+with animations on/off, full EditMode passed 1247 plus the existing Explicit skip, graphics
+PlayMode passed 206/206, and explicit 10k x2 passed with zero invalid/fallbacks and identical
+fingerprint (34.81/34.55 s). Independent review passed this technical candidate, not the full
+owner gate. No production correction was needed in this card. Owner verdict,
+actual OS-window resize and listening remain Not run; the original screenshot seed/resources
+are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not advance to M8.
 
 ### M7 gate
 

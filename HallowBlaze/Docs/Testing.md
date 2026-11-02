@@ -1,5 +1,66 @@
 # HallowBlaze Testing
 
+## M7.8 Integrated Repair Gate
+
+**Status (2026-10-30):** Technical validation passed; owner visual/audio/live-window
+resize verdict **Not run / Pending**. M7.1-M7.7 are independently reviewed fixes, not owner
+acceptance of the complete milestone. M4.9 and M6.6 human gates also remain open. No M8
+authorization or original screenshot-seed reconstruction follows from these automated checks.
+
+| Report / requirement | Reproduction and owning repair | Automated evidence | Remaining owner check |
+| --- | --- | --- | --- |
+| First choice follows the first playable day | M7.1 automatic warm-up leg; old checkpoints unchanged | Lifecycle opening/death/retry/Continue cases and integrated real-command opening | Confirm first playable flow and Day readability |
+| Flash, white areas, residual board/legend | M7.2 world visibility and full-viewport clear ownership | `BoardViewportClearsOutsideTheGameplayCamera`, `ProductionLayerPixelsStayCleanAcrossResizeAndBoards`; tinted consecutive boards and overlay pixels | Observe real-window transitions without flashes/residue |
+| Notes duplicate label / blinking book | M7.3 parented hover hints and stable control visual state | `FieldNotesPresentationTests`, including real busy/hover/control lifetime and portrait bounds | Hover and move repeatedly; inspect book and close hints |
+| Long step audio | M7.4 movement-owned source, at most 100 ms and no later than movement end; instant steps silent | Infrastructure authored-clip duration/mute/cancel/rapid-step tests; integrated step versus food-cue counts | Listen to real clips, rapid steps, mute and animation modes |
+| Lost Food/Health `+X` | M7.5 applied gains survive accepted-turn replay and free rejection, clear at next accepted replay/boundaries | Infrastructure food/health/rejection tests; integrated actual restore, rejection and food reward feedback | Inspect gain readability through a complete turn |
+| Suspected corner entry trap | M7.6 explicit synthetic trap plus retained v2 diagnostic; new v3 bounded real-rule witness | Validator trap/narrow/fallback tests, published 1000-board audit, explicit 10k x2, production Day-4 witness | Smoke clearly labeled synthetic case; original seed/resources/history still missing |
+| Board/resource alignment and clipping | M7.7 symmetric viewport, fixed resource frames, shared legend/discovery slot | `ProductionBoardAndResourceHudStayCenteredAndFit`: four aspect ratios, two boards, long gains, glyph/raster/control bounds and durable discovery | Actual OS-window resize and visual inspection at desktop/portrait |
+| Combined opening / later board / overlays / Continue | M7.8 regression only, no production expansion | `IntegratedRepairOpeningOverlaysAndContinueStayCoherent`, both animation modes, isolated persistent profile/run | Complete production smoke and explicit Accept or Revise |
+
+The integrated fixture fixes run identity/seed, executes real commands to leave the generated
+enemy-free warm-up, checks the first persisted route and Day 2, then executes the real bounded
+entry witness with unchanged health. It checks rejected-command cost/sound/feedback, actual
+restoration and food gain feedback, distinct food/step cues, repeated Notes/legend use and
+production overlay captures. Continue restores the same pinned address and board-entry
+checkpoint resources without replaying Day; committed profile knowledge survives. Board
+progress remains transient by the existing checkpoint contract. This is not full tactical
+completion of every later board. Fact feedback is injected at the recorder boundary, not
+represented as an actual pit command. Existing separate mechanics tests execute that command.
+
+Run final gates sequentially with the existing Unity CLI against this exact project, using
+external temporary XML/log paths and no second Editor. Inspect each fresh XML for identity,
+nonzero execution, zero failures and expected Explicit skip; run the milestone explicitly.
+
+```powershell
+unity test D:/Repos/HallowBlaze/HallowBlaze --mode EditMode --output "$env:TEMP/HB-M78-editmode.xml" -- -nographics -logFile "$env:TEMP/HB-M78-editmode.log"
+unity test D:/Repos/HallowBlaze/HallowBlaze --mode PlayMode --output "$env:TEMP/HB-M78-playmode.xml" -- -logFile "$env:TEMP/HB-M78-playmode.log"
+unity test D:/Repos/HallowBlaze/HallowBlaze --mode EditMode --filter HallowBlaze.Tests.EditMode.BoardGenerationSeedSeriesTests.Milestone10000SeedsHaveNoInvalidBoardsAndRepeatExactly --output "$env:TEMP/HB-M78-10000.xml" -- -nographics -logFile "$env:TEMP/HB-M78-10000.log"
+```
+
+For owner smoke, use isolated playtest storage, never reset or overwrite the real profile.
+Start from the warm-up, leave via actual commands, choose a route, visit later boards/days,
+and repeatedly open/close legend and Notes, including an unacknowledged discovery notice.
+Resize the real window between desktop, wide and portrait sizes; inspect all resources,
+suffixes, controls and board edges. Listen with sound enabled, disabled and animation off.
+Also inspect the clearly labeled synthetic entry case; do not label it screenshot #3.
+Record date, build/commit, sizes, observed issues and explicit **Accept** or **Revise**.
+Until that evidence exists M7.8 stays Active and M7 is not complete. Automated captures are
+render-target evidence, not a substitute owner verdict or a human survey session.
+
+**Actual final automated results (2026-10-30):** Full EditMode passed 1247 tests with zero
+failures and the existing Explicit 10k skip; full graphics PlayMode passed 206/206, including
+the integrated case in both animation modes. The separately selected milestone passed
+10,000 boards twice with zero invalid/fallbacks, unchanged predeclared 1% fallback and
+300-second limits, 34.81 / 34.55 seconds and identical fingerprint
+`b34eb98ddcd6d17e9451199e8d9fc2c4f2f3b38b4504425efaab810a1c47969b`.
+Fresh XML/log evidence is outside the project at
+`%TEMP%/HB-M71-resume-20261029/m78-{integrated|editmode|playmode|10000}.{xml|log}`.
+Independent read-only review passed the technical candidate on 2026-10-30. This verdict
+accepts the test implementation and evidence checkpoint only, not the full M7.8 owner gate.
+No human visual/audio verdict, actual OS-window resize, survey response or recovered original
+day-four seed is claimed. Those omissions continue to block final M7 acceptance.
+
 ## M7.7 Centered Board And Resource HUD
 
 The gameplay viewport and Food/Health group share horizontal center `windowWidth / 2`.
