@@ -82,6 +82,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     private Camera intentLayoutCamera;
     private Rect originalIntentCameraRect;
     private float originalIntentCameraSize;
+    private Camera boardVisibilityCamera;
+    private Camera viewportClearCamera;
+    private int gameplayCullingMask;
     private PlayerScript activePlayerView;
     private bool handlingBoardOutcome;
     private bool boardOutcomeHandled;
@@ -396,6 +399,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     {
         DisposeFieldNotes();
         DisposeActiveBoardRuntime();
+        ReleaseBoardCamera();
         if (instance == this)
             instance = null;
     }
@@ -407,6 +411,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             fieldNotesGameplayScene = false;
             fieldNotes?.SetAvailable(false);
             DisposeActiveBoardRuntime();
+            ReleaseBoardCamera();
             return;
         }
 
@@ -466,6 +471,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void BlockBoardStartup()
     {
+        CancelInvoke(nameof(HideLevelImage));
         boardStartupInProgress = true;
         doingSetup = true;
         DisposeActiveBoardRuntime();
@@ -678,6 +684,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void LateUpdate()
     {
+        UpdateBoardVisibility();
         activeToolHud?.Refresh();
         if (activeIntentLegend == null || activeBoardRuntime == null || activeBoardRuntime.IsDisposed)
             return;
@@ -764,6 +771,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     private void SetFieldNotesInputBlocked(bool blocked)
     {
         fieldNotesInputBlocked = blocked;
+        if (blocked)
+            activeIntentLegend?.Hide();
         if (!blocked) gameplayInputResumeFrame = Time.frameCount;
         UpdatePresentationBlocks();
     }
@@ -793,12 +802,20 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void UpdatePresentationBlocks()
     {
+        UpdateBoardVisibility();
         fieldNotes?.SetAvailable((enabled || fieldNotesAfterDeath) && fieldNotesGameplayScene &&
-            !doingSetup && !boardStartupInProgress && !terminalActionRequested);
+            !doingSetup && !boardStartupInProgress && !terminalActionRequested &&
+            (fieldNotesAfterDeath || !IsRouteChoiceActive && !boardOutcomeHandled));
         if (activeIntentOwner != null)
             activeIntentOwner.SetActive(enabled && !doingSetup && !boardStartupInProgress &&
-                !boardOutcomeHandled && !terminalActionRequested &&
+                !IsRouteChoiceActive && !boardOutcomeHandled && !terminalActionRequested &&
                 activeBoardRuntime != null && !activeBoardRuntime.IsDisposed);
+        if (activeIntentLegend != null)
+            activeIntentLegend.Root.SetActive(!fieldNotesInputBlocked);
+        if (activeToolHud != null)
+            activeToolHud.Root.SetActive(!fieldNotesInputBlocked);
+        if (IsRouteChoiceActive || boardOutcomeHandled)
+            activePlayerView?.SetHudVisible(false);
         if (activeBoardPresenter == null)
             return;
         PresentationGate gate = activeBoardPresenter.Coordinator.Gate;
@@ -807,6 +824,53 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         gate.SetBlocked(PresentationInputBlock.FieldNotes, fieldNotesInputBlocked);
         gate.SetBlocked(PresentationInputBlock.Disabled, !enabled || boardOutcomeHandled ||
             terminalActionRequested || Time.frameCount <= gameplayInputResumeFrame);
+    }
+
+    private void UpdateBoardVisibility()
+    {
+        if (!fieldNotesGameplayScene)
+        {
+            ReleaseBoardCamera();
+            return;
+        }
+        Camera camera = Camera.main;
+        if (camera == null)
+            return;
+        if (boardVisibilityCamera != camera)
+        {
+            ReleaseBoardCamera();
+            boardVisibilityCamera = camera;
+            gameplayCullingMask = camera.cullingMask;
+            var clearOwner = new GameObject("Board viewport clear") { hideFlags = HideFlags.DontSave };
+            clearOwner.transform.SetParent(camera.transform, false);
+            viewportClearCamera = clearOwner.AddComponent<Camera>();
+            viewportClearCamera.cullingMask = 0;
+            viewportClearCamera.clearFlags = CameraClearFlags.SolidColor;
+            viewportClearCamera.useOcclusionCulling = false;
+        }
+        viewportClearCamera.rect = new Rect(0, 0, 1, 1);
+        viewportClearCamera.depth = camera.depth - 1;
+        viewportClearCamera.backgroundColor = camera.backgroundColor;
+        viewportClearCamera.targetDisplay = camera.targetDisplay;
+        viewportClearCamera.targetTexture = camera.targetTexture;
+        viewportClearCamera.enabled = camera.isActiveAndEnabled;
+        bool visible = enabled && !doingSetup && !boardStartupInProgress && !IsRouteChoiceActive &&
+            !boardOutcomeHandled && !terminalActionRequested &&
+            activeBoardRuntime != null && !activeBoardRuntime.IsDisposed;
+        camera.cullingMask = visible ? gameplayCullingMask : 0;
+    }
+
+    private void ReleaseBoardCamera()
+    {
+        if (boardVisibilityCamera != null)
+            boardVisibilityCamera.cullingMask = gameplayCullingMask;
+        boardVisibilityCamera = null;
+        if (viewportClearCamera != null)
+        {
+            viewportClearCamera.enabled = false;
+            Destroy(viewportClearCamera.gameObject);
+        }
+        viewportClearCamera = null;
     }
 
     /// <summary>Maps an ordered terminal event from the exact active runtime to its guarded lifecycle outcome.</summary>
@@ -960,6 +1024,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (session == null || session.ActiveRun == null)
             return;
 
+        CancelInvoke(nameof(HideLevelImage));
         RunState run = session.ActiveRun;
         if (run.Status == RunStatus.Active)
         {
