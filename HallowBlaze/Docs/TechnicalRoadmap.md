@@ -1,7 +1,7 @@
 # HallowBlaze — Technical Roadmap
 
-> Status dokumentu: **Accepted / execution roadmap v0.7 - M7 playtest repairs planned; existing M7-M9 shifted to M8-M10; M9.7 and M10 remain deferred**
-> Data ostatniej weryfikacji: 2026-10-28
+> Status dokumentu: **Accepted / execution roadmap v0.10 - F interaction and free Q/E visual turns planned; small board editor includes route-segment assignments; stones follow the expanded repair gate**
+> Data ostatniej weryfikacji: 2026-11-03
 > Status and execution owner: **Lead (also implementation developer)**
 > Kontrakt produktu: [`GameDesignContract.md`](./GameDesignContract.md)  
 > Zasady pracy agentów: [`../AGENTS.md`](../AGENTS.md)
@@ -114,7 +114,7 @@ Nowy atlas, resolver tur i save system dotkną wielu plików. Bez poprawnego ign
 | M4 — Generation, Noise and Enemies | model-first generator jest walidowany, a hałas tworzy decyzje | 10 000 seedów bez softlocka; Listener jest przewidywalny |
 | M5 — Tools | dwa narzędzia tworzą odmienne decyzje i alternatywne trasy | brak losowego softlocka; koszty narzędzi są czytelne |
 | M6 — Landmark | systemowa zagadka łączy pchanie, płyty i bramy | każdy wariant jest rozwiązywalny; co najmniej dwa sensowne rezultaty |
-| M7 - Playtest Repairs and Opening Warm-up | a warm-up first day precedes route choice; transitions, HUD, footsteps and board-entry safety are reliable | reported regressions have focused evidence and the complete opening flow passes visual/audio smoke |
+| M7 - Playtest Repairs and Opening Warm-up | 3-5 opening boards precede route choice; keyboard-only play, geographical choices, attack feedback and familiar resources are supported | original repairs and follow-ups have focused evidence and an owner keyboard/visual/audio verdict |
 | M8 — Ten-day Vertical Slice | the two-biome journey has a finale, historical route-supply memory, fixed tool-source knowledge, and a summary | the player understands atlas evidence/intents/tools and wants another run |
 | M9 — Optional Post-slice Work | explicitly deferred capabilities remain isolated from the validated core | each item requires its own product decision and evidence |
 | M10 — Spatial Inventory and Resource Pressure | a 3×3 bag, two quick pockets, and satiety turn route knowledge into resource decisions | no duplication/loss; players choose routes from current need and learned supply |
@@ -5223,6 +5223,137 @@ human results; this card does not close a human gate or authorize M6.1. No commi
 
 M5 jest zaliczony, gdy oba narzędzia tworzą różne decyzje, każde ma koszt lub ryzyko, brak narzędzia nie tworzy losowego softlocka, a odkryte fakty przeżywają śmierć bez zdradzania niepoznanych mechanik.
 
+### Stone-lure extension - owner planning approval 2026-11-02
+
+The owner approved planning a small stone-throwing distraction prototype. M5.8-M5.11 extend
+systemic interaction without reopening M5.1-M5.7 or changing the original M5 gate. Execute this
+extension after the expanded M7 gate (including M7.17) and a Proceed verdict from M4.9,
+before continuing M8. The 2026-11-03 repair follow-ups take precedence over this prototype.
+Approval to write these cards does not start implementation or waive any outstanding human gate.
+M6.6 retains its existing landmark gate. Production distribution is not authorized by this
+prototype; M5.11 must provide an owner verdict before a separately scoped rollout is planned.
+The lowest-priority scent/wind idea remains isolated in M9.8. M10 remains deferred and last.
+
+---
+
+## `M5.8` - Stone-lure rules and prototype contract
+
+**Status:** `Planned` - planning approved 2026-11-02; rule details require owner acceptance before implementation.
+**Priority:** P1 after M7 repairs and the noise gate.
+**Related contract:** sections 9, 10, 11.3.2, 12 and 13; the stone-specific contract is the output of this card.
+
+**Rationale:** A remote noise source gives the player deliberate control over Listener positioning. Fixing the small rule set first prevents a simple lure from growing into combat, a physics simulation or an inventory redesign.
+
+**Current behavior:** Noise and Listener investigation are implemented. The Listener remembers the latest audible emission cell and executes its previously announced intent before a new signal can affect its next plan. No stone-specific supply, throw command or empty-cell targeting flow is specified.
+
+**Expected outcome:** An owner-accepted prototype contract and a concrete scenario table make M5.9-M5.11 executable without inventing player-facing rules in code.
+
+**Scope:** Preserve the approved baseline: choose a landing cell within a limited range; an accepted throw costs one turn, the current central action-resource cost and one stone; aiming/cancellation/rejection are free; landing emits noise at that cell; only hearing-based listeners are lured; no damage or stun. Decide the range metric/value, target legality and obstacle/line-of-throw policy, strength/lifetime, finite starting supply, refill/recovery policy, supply ownership and board/run/checkpoint reset semantics. Choose the smallest representation compatible with the two existing tool slots and no backpack prerequisite. Specify whether any throw-origin sound exists; the baseline is one impact emission, with no generic interaction sound silently replacing it as the latest signal.
+
+**Non-goals:** Implementation, ballistics, hit chance, bouncing, combat, a third equipment slot, general item stacking, M10 inventory, random production drops, scent or wind. A reusable landing stone or an automatic refill is not implied.
+
+**Dependencies:** The expanded M7 gate, including `M7.17`, a Proceed verdict from `M4.9`, and the accepted `M4.7`, `M4.8`, `M5.1` and `M5.3` contracts. Existing card-specific human-gate exceptions do not carry over.
+
+**Allowed file area:** `Docs/GameDesignContract.md` for the stone rules and `Docs/TechnicalRoadmap.md` for these four cards, exact follow-up write scopes and acceptance cases. No runtime or asset changes.
+
+**Acceptance criteria:** The owner accepts all listed rule choices, including supply/reset and targeting through obstacles. Examples distinguish the already locked enemy action from the next investigation, an audible versus inaudible impact, a later audible footstep superseding the lure, and unchanged Shambler pursuit. Every follow-up has a closed repo-relative source/test scope before Ready. No unresolved product choice is delegated to an implementation default.
+
+**Test plan:** Documentation consistency and a reviewed command/landing/hearing/stock/cost/locked-action/next-plan table. Check compatibility with existing noise lifetime, hearing-at-emission, initiative, action-cost and save-boundary rules; no Unity run is needed for this documentation card.
+
+**Save and compatibility impact:** Document the chosen supply owner, new-run and new-board behavior, current Continue rollback boundary, and whether persisted fields are needed. A format change requires versioned DTOs and migration in M5.9; no implicit reset, mid-board save or profile erasure is allowed.
+
+**Required evidence:** Owner-approved rule table, example sequences, supply/reset decision and refined M5.9-M5.11 scopes. This acceptance specifies a prototype, not production distribution.
+
+---
+
+## `M5.9` - Atomic stone throw, finite supply and Listener scenarios
+
+**Status:** `Planned`
+**Priority:** P1 after M5.8.
+**Related contract:** The stone rules accepted in M5.8 and sections 9, 10, 11.3.2 and 12.
+
+**Rationale:** A lure must use the existing resolver, noise footprint and enemy timing rather than a second attraction or resource-consumption system.
+
+**Current behavior:** The command pipeline provides atomic costs, tool effects and noise; Listener memory already supports remote emission cells. Stone rules and supply are pending M5.8.
+
+**Expected outcome:** One cell-targeted command atomically consumes one finite stone, applies one accepted action cost and emits the approved landing noise. Existing Listener planning reacts without changing its AI rule.
+
+**Scope:** Implement the accepted command/selection snapshot, finite supply owner/configuration, shared pure availability query, commit-time revalidation, ordered result events and explicit turn scenarios. Use existing runtime composition boundaries to enable controlled fixtures, not production drops. The impact position is authoritative grid data, not a collision or Transform result. Do not let a default player-cell interaction emission supersede the lure. Any separately approved origin noise has an explicit deterministic order in the same result.
+
+**Non-goals:** New enemy perception, Shambler attraction, execution-time replanning, projectile physics, damage, general inventory, production generation/content distribution, new save checkpoints, or portable replay unless M9.7 has independently been accepted.
+
+**Dependencies:** `M5.8`; reuse `M4.7`, `M4.8`, `M5.1` and `M5.3` rather than changing their accepted behavior.
+
+**Allowed file area:** The exact Core Turns/Board/Interaction and chosen State/Tools owners, configuration, runtime-composition entry points and existing EditMode scenario suites enumerated by M5.8. Persistence DTO/mapping and isolated persistence tests only if the accepted representation changes persisted data. Refine paths before Ready; scenes, prefabs, published generators, packages and settings remain excluded.
+
+**Acceptance criteria:** Preview does not allocate emissions or mutate stock/state. An accepted throw spends one stone and one turn, applies the shared cost policy once, and records the exact landing footprint heard by Listeners. Invalid/out-of-range/blocked/stale/depleted attempts cost nothing, emit or age nothing and run no enemy phase. The locked intent still executes or is explicitly blocked under its original rule; only the next plan uses the new signal. Inaudible impacts preserve memory; a later audible footstep supersedes the lure; expiration does not revive an older signal. Shamblers remain unchanged. Terminal ordering and one-resolution semantics are preserved.
+
+**Test plan:** Focused EditMode range/obstacle/target/supply/stale-state matrices and concrete command sequences for accepted/rejected costs, hearing-at-emission, multiple Listeners, locked-action timing, later movement noise, expiration, starvation and clone/reset isolation. Assert exact cells, stock, event order and plans, not only an event count. Add isolated save round-trip/migration/recovery tests when persisted supply changes.
+
+**Save and compatibility impact:** Implement precisely the M5.8 supply/checkpoint decision. If existing charge persistence suffices, retain its format and identities; otherwise version and migrate the added state, including older runs and backup recovery. Repeated Continue must reconstruct the same committed supply boundary without a new refill path; a new run must not erase profile knowledge. No exact-turn resume is added.
+
+**Required evidence:** Command/event order, accepted/rejected state matrix, exact focused compilation/test results and supply/reset/compatibility evidence. No human-readability or production-rollout acceptance is claimed here.
+
+---
+
+## `M5.10` - Shared stone aiming and landing-noise preview
+
+**Status:** `Planned`
+**Priority:** P1 after M5.9.
+**Related contract:** M5.8 stone rules and sections 10, 11.3.2, 12 and 18.
+
+**Rationale:** The player must distinguish where the stone lands, who can hear it and when the new signal can affect a Listener. A correct remote emission is insufficient if aiming suggests an immediate enemy redirection.
+
+**Current behavior:** The shared picker targets existing entities and shows action consequences. Throwing also needs explicit landing-cell selection without requiring a pre-existing entity on every legal cell.
+
+**Expected outcome:** The existing interaction/input flow supports free stone aiming, a legal landing-cell highlight, the exact impact hearing footprint, stock/cost feedback and one guarded confirmation in the controlled prototype.
+
+**Scope:** Extend the shared query/picker boundary to cell targets using M5.9 validation. Show the selected landing point, legal range, shared noise footprint, remaining supply and central action/stone costs before confirmation. Visually distinguish the existing locked intent from the lure source and subsequent investigation. Replay the accepted impact and supply change through existing ordered presentation; a flight animation, if present, is cosmetic. Connect only the controlled prototype enablement, preserving normal pause/modal/animation gates.
+
+**Non-goals:** A second input/resolver/AI path, fake target entities on empty cells, a physics projectile, recalculating enemy plans for preview, final VFX, a broad tutorial, production loot or backpack UI.
+
+**Dependencies:** `M5.9`; existing shared targeting, retained-intent and noise presentation contracts.
+
+**Allowed file area:** Existing Presentation/Interaction/Noise/Equipment components, minimal input/runtime wiring, stone-specific visual/audio content and focused PlayMode tests, enumerated in M5.8 before Ready. Any scene/prefab edit requires a named path and reference/smoke checks; none is implicitly authorized. No generator, package or settings change.
+
+**Acceptance criteria:** Aiming, selection changes and cancellation spend nothing and do not advance noise/enemies. Confirmation submits at most one command; stale stock/targets are revalidated, not optimistically consumed. The preview, emitted event, displayed footprint and Listener hearing use the same model. Locked intents remain visible and unchanged until their scheduled execution. Result and stock remain correct with animation on/off and interrupted presentation; recovery never repeats the throw. Cancel, pause, terminal outcomes, board replacement and disposal release only owned input blocks. Landing/range/intent cues are readable without audio or color alone and do not obscure inspectable board cells.
+
+**Test plan:** Focused graphics-enabled PlayMode selection/confirm/cancel/rapid input, invalid target/depleted supply, pause and lifecycle cases; compare displayed cells against the event/hearing footprint and assert one Resolve/stone/cost. Check desktop and narrow portrait layouts, nonblank markers, animation parity and no overlapping controls. Perform a controlled Editor smoke; unavailable/manual-only results remain explicitly Not run.
+
+**Save and compatibility impact:** Aim drafts, previews and cosmetic flight state are transient. Presentation never changes persisted supply or adds a checkpoint; M5.9 owns the committed resource result.
+
+**Required evidence:** Exact automated results, preview-versus-event footprint assertions, desktop/portrait visual checks and a smoke sequence showing the locked action followed by the next investigation. Human comprehension remains M5.11.
+
+---
+
+## `M5.11` - Small stone-lure puzzle and prototype verdict
+
+**Status:** `Planned`
+**Priority:** P1 after M5.10.
+**Related contract:** The accepted M5.8 rules, section 11.3.2 and the knowledge-first manipulation goal.
+
+**Rationale:** The prototype is worthwhile only if players can deliberately create a passage window with a limited lure, rather than merely observe a zombie moving toward a marker.
+
+**Current behavior:** M5.9-M5.10 will provide mechanical and presentation evidence, not proof that players understand or value the tactic.
+
+**Expected outcome:** A small controlled board with a Listener guarding a passage, finite stones and a legal lure route supports an owner Accept/Revise/Defer decision based on actual play.
+
+**Scope:** Author one reproducible test fixture and a few parameter variants, including an inaudible landing and a later footstep that replaces the lure. Demonstrate a complete intentional diversion-and-passage sequence and record exact starting state, commands, costs and retained plans. Before human sessions, agree participant count and success criteria for predicting reaction timing, choosing an audible landing, passing deliberately and explaining failure. Collect anonymized observations and separate UI misunderstandings from rule or balance issues.
+
+**Non-goals:** Production generator changes, randomly mandatory stones, campaign rebalance, expansion into combat, a replacement for M4.9/M6.6/M8.8 human gates, or scent/wind implementation.
+
+**Dependencies:** `M5.8`-`M5.10` with focused mechanical validation complete. Human sessions and the owner verdict are required to close this card; automated play does not substitute for them.
+
+**Allowed file area:** Controlled fixtures and existing EditMode/PlayMode suites under `Assets/Tests/`, plus `Docs/Testing.md` and this roadmap for protocol/evidence/verdict. Enumerate exact paths before Ready. Captures stay outside the repository; no separate successful validation report or production scene is required.
+
+**Acceptance criteria:** The authored solution uses the real command/resolver path and finite stock, without hidden replanning or special fixture AI. Tests cover the full successful sequence and explicit rejected/inaudible/overwritten-lure cases. Real sessions use predeclared criteria; report actual counts, predictions, passage outcomes and explanations without converting missing data into Pass. The owner records Accept, Revise or Defer. Accept validates the prototype only and produces a separately scoped production-supply/integration proposal; it does not silently activate random drops or make stones necessary for a mandatory exit.
+
+**Test plan:** Focused deterministic EditMode command-sequence regression, graphics PlayMode end-to-end fixture and a moderated small playtest. Verify zero-stock behavior and an ordinary tool-free exit on production-regression fixtures. Keep required automation and human evidence distinct; revise and rerun affected checks after any rule change.
+
+**Save and compatibility impact:** Test supply and profiles use isolated fixtures/temp storage, never the player's profile. No new persisted fields, published layout versions or reset semantics beyond M5.9 are introduced.
+
+**Required evidence:** Reproducible puzzle/solution, exact automated results, anonymized observed outcomes, remaining defects and dated owner verdict with a concrete next action. No human outcome is recorded by the act of planning this card.
+
 ---
 
 # M6 — Landmark z głazami, płytami i bramami
@@ -5562,6 +5693,95 @@ its narrow exception in AGENTS.md. No independent review, commit or push is clai
 
 M6 jest zaliczony, gdy każdy wspierany wariant przechodzi solver, brak losowego narzędzia nie blokuje celu, istnieją co najmniej dwa sensowne rezultaty, a testerzy rozumieją konsekwencje własnej trasy.
 
+### Visual board authoring proposal - 2026-11-03
+
+The owner asked whether creating many handcrafted boards warrants a visual map editor.
+Existing JSON templates, catalogs, validators and the bounded landmark solver are suitable
+foundations; the Radio Tower rebuild menu is not a general visual editor. The proposal below
+starts with a small Unity Editor tool, not a StarCraft-sized scripting or publishing suite.
+The owner approved the small-editor direction and requested assignments to existing routes on
+2026-11-03. M6.7 finalizes its bounded data/workflow contract and exact code scopes before Ready;
+this documentation task does not start implementation. Plan the tool after the M7 repairs and
+before bulk handcrafted M8 content. It does not reopen M6 or block unrelated M8 work.
+The owner asked to leave the current Radio Tower board unchanged for now; no layout, reward,
+mechanic or readability redesign of that board is included here. M6.6's human gate remains open.
+
+---
+
+## `M6.7` - Visual board editor workflow and safe document contract
+
+**Status:** `Planned` - small-editor and route-assignment direction approved 2026-11-03; detailed scopes remain to be finalized.
+**Priority:** P2 after the M7 repairs; consider before bulk handcrafted content.
+**Related contract:** Sections 9, 11, 14, 21 and 27.2 board/route assignments; existing M6.1 template schema and M6.5 solver contracts.
+**Rationale:** Grid painting can reduce repeated map-design work without maintaining scenes or editing coordinates by hand, provided it saves the same data the game loads.
+**Current behavior:** Handcrafted JSON templates, catalogs, validators and a bounded solver exist. The Radio Tower reference-rebuild menu is specialized asset plumbing, not general painting/inspection.
+**Expected outcome:** A finalized create -> paint -> inspect -> validate -> save -> assign to route segment -> test workflow and closed scopes for M6.8-M6.10.
+**Scope:** Specify supported dimensions/elements, blank/new/open/save-as, a side palette with click placement, property editing, validation and isolated test-play; drag-and-drop is optional. Separate a reusable board-template document from its placement assignment. Reuse current world/edge/segment, template/version/variant IDs and existing assignment schema; derive edge membership rather than duplicating topology. Define deterministic serialization, undo/redo, dirty/unsupported-field handling and separate explicit assignment/publication. Identify final-segment-only loader restrictions and scope any minimal compatibility extension before M6.10 Ready. Record exact paths and remaining design choices, not another open question about whether the owner wants a small editor.
+**Non-goals:** Implementation in this card, a full world-graph editor, arbitrary scripts/triggers, automatic campaign publication, new mechanics, generator redesign, asset generation or edits to the current Radio Tower board.
+**Dependencies:** The expanded M7 gate before tool implementation and accepted M6.1/M6.5/travel-assignment foundations. The owner approved the direction; finalize the concrete contract before code. Authoring tools do not supply M6.6 human acceptance.
+**Allowed file area:** This roadmap and `Docs/BoardGeneration.md` for the workflow, supported-format matrix and exact follow-up scopes. No runtime or asset changes in this design card.
+**Acceptance criteria:** Existing templates and assignments open without destructive conversion or silent field loss. The same board can be assigned to two existing route segments with distinct assignment identities, no duplicated grid and independent runtime state. The route/ordered-segment chooser uses stable IDs and displays endpoints. Every runtime placement limitation has an explicit supported policy or scoped prerequisite; assignments are part of the initial tool, not a deferred world editor. Code cards have closed scopes and defined publication/save compatibility.
+**Test plan:** Documentation/schema/owner consistency review of a template and its existing assignment without modifying originals. Define template/assignment round-trip, edge membership, conflicts, unsupported placements, dirty-state and publication-safety cases; no Unity test for this documentation card.
+**Save and compatibility impact:** Drafts are not player saves. Published template/version/variant and entity/content IDs remain migration-sensitive; editing must not silently change pinned Continue layouts. Publication requires explicit version and assignment review.
+**Required evidence:** Workflow sketch, template-versus-assignment model, supported placement matrix, version/publication policy and closed M6.8-M6.10 scopes.
+
+---
+
+## `M6.8` - Grid painting, object properties and validated template saves
+
+**Status:** `Planned` - implementation waits for the finalized M6.7 contract and repair gates.
+**Priority:** P2 after M6.7.
+**Related contract:** M6.7's accepted document contract and existing board/template/catalog validators.
+**Rationale:** Replace repetitive coordinate editing without creating a second format, rule system or validator.
+**Current behavior:** Authoring uses template files and specialized reference rebuilding, without a general visual editing window.
+**Expected outcome:** A Unity Editor window creates/opens supported drafts, paints/erases existing content, edits properties, supports undo/redo and saves valid JSON without scene editing.
+**Scope:** Start from a blank supported grid, with existing sprite previews, x.y coordinates and a side layer/content palette. Select a palette item then click to place/erase; drag-and-drop is optional and uses the same validation. Add start/exit/entity placement and a property inspector for supported items, tools, enemies, plates, gates and links. Use stable IDs, a draft document, shared cell/field diagnostics, structured deterministic saves, dirty indicators and explicit save/save-as. Confirm authored-file replacement; preserve supported fields and refuse destructive conversions. Exposed controls support keyboard and pointer under section 18.1.
+**Non-goals:** New rules, arbitrary scripts/triggers, automatic publishing/repair, a parallel validator, art production, world-topology editing or current Radio Tower edits. Route assignments belong to M6.10, not to painting grid data.
+**Dependencies:** Finalized `M6.7` contract, supported schema and exact paths. Split draft/codec and window implementation before Ready if they exceed one bounded iteration.
+**Allowed file area:** Exact Editor-only authoring components, necessary existing reusable codec boundaries, focused EditMode tests/disposable fixtures and authoring instructions enumerated in M6.7. No production-template, scene/prefab, package, settings or runtime-assembly changes are implicit. New metadata is Unity-generated.
+**Acceptance criteria:** Open/save/open preserves all supported fields/IDs. Painting, erase and undo/redo produce the expected document. Invalid start/exit, duplicate IDs, occupancy and broken links yield actionable diagnostics, not partial publication. Cancel/failed save preserves the old file; dirty close/reopen is explicit. Keyboard and pointer selection match the saved grid; Editor code is excluded from Player builds.
+**Test plan:** Focused document/codec/identity/validation/undo/save-failure EditMode tests; real Editor painting/reopening and keyboard/narrow-window smoke on a disposable map. Round-trip existing supported templates without changing originals and verify Player-build exclusion.
+**Save and compatibility impact:** No player schema or automatic republishing. Save-as creates an authored draft, not an activated campaign board; existing published identities stay untouched.
+**Required evidence:** Draft round-trip, exact tests, supported-field preservation, invalid-map/save-failure checks, Editor-only boundary and owner authoring smoke.
+
+---
+
+## `M6.9` - Isolated board test-play and authoring acceptance
+
+**Status:** `Planned` - implementation waits for the finalized M6.7 contract and repair gates.
+**Priority:** P2 after M6.8, before bulk map authoring if adopted.
+**Related contract:** M6.7 publishing/isolation boundary, normal command/intent rules and existing solver contracts.
+**Rationale:** Authors need to try real commands, costs and enemies without replacing a campaign or risking real profile data.
+**Current behavior:** Developer template validation/solver tooling exists, but not an integrated draft -> isolated play -> return-to-edit workflow.
+**Expected outcome:** The owner can build, validate, test, revise and reopen a map and decide whether this tool is worth adopting.
+**Scope:** Validate a draft snapshot, launch it through existing runtime composition with isolated run/profile storage, then return to the unchanged draft. Use the existing bounded solver only for supported rules, with explicit unsupported/limit results. Require deliberate action before replacing play mode; never launch a second Editor on this project. Conduct one representative local-board authoring exercise; M6.10 owns route assignment, its explicit publication action and end-to-end travel validation.
+**Non-goals:** A second resolver/AI, general solvability claims, automatic campaign publication, real player-data writes, remote sharing/telemetry, pinned-content rewrites or changes to current Radio Tower content.
+**Dependencies:** `M6.7` and `M6.8`; accepted isolation/composition APIs. A missing launch boundary requires a separately scoped minimal prerequisite, not a hidden runtime refactor.
+**Allowed file area:** Exact Editor test-launch/validation adapters, focused EditMode/PlayMode tests, isolated fixtures/temp storage and authoring instructions before Ready. Production templates/references and player storage are excluded.
+**Acceptance criteria:** Test-play matches the draft snapshot and uses real turns/effects/intents. Failure/stop/restart preserves the draft and real player data. Solver limits/unsupported rules cannot be reported as solved. The owner completes create -> test -> revise -> reopen without hand-editing JSON and gives Accept/Revise/Defer. Tool acceptance neither publishes a board nor accepts its balance.
+**Test plan:** Snapshot/runtime parity, invalid-launch refusal, storage isolation, return-to-edit and solver-result tests; focused Editor/PlayMode smoke plus actual owner authoring. Check for unintended scene/campaign/profile writes.
+**Save and compatibility impact:** Test saves are isolated and reset independently. No player schema/Continue change; later publication pins new content versions explicitly.
+**Required evidence:** Exact tests, isolation/draft-preservation proof, supported solver limits, reproducible authoring workflow and owner verdict.
+
+---
+
+## `M6.10` - Board-template assignments to existing route segments
+
+**Status:** `Planned` - initial small-editor scope approved 2026-11-03; finalize M6.7 details before code.
+**Priority:** P2 with the initial editor, before bulk handcrafted route content.
+**Related contract:** Section 27.2 board/route assignment direction and existing route, template and pinned-selection contracts.
+**Rationale:** A local board and its place in a journey are different data. Explicit placements let an author reuse a template and control which board appears along a route without copying grids or editing campaign JSON by hand.
+**Current behavior:** Existing assignments bind world/version and stable segment ID to template/version/variant; the Radio Tower example is a final-segment placement. General editor route selection and its supported-placement limits are not yet implemented.
+**Expected outcome:** The initial editor can assign a validated board template to a chosen segment of an existing directed route and test that placement through real travel using isolated data.
+**Scope:** Use an existing-route chooser displaying endpoint nodes and direction, its ordered stable segments, and separate template/version/variant selection. Reuse the current placement codec/catalog abstraction; do not add redundant edge fields where membership is already derivable. Support create/edit/remove assignment drafts, undo/redo, conflict diagnostics and explicit reviewed publication, separate from template save. Validate world/version/edge membership, missing templates/variants, duplicate/conflicting placements and supported intermediate/final-segment rules. Identify and separately scope any minimal loader extension required by M6.7; the editor cannot promise intermediate placements while routing every board through a final-only landmark API. Keep unassigned segments on their existing generator path. Test one template on two segment addresses with independent state.
+**Non-goals:** A graph-drawing tool, creating/reordering world edges or segments, random board pools, day/arrival-rule changes, automatic publication on grid save, edits to current Radio Tower content/assignment or a second runtime resolver.
+**Dependencies:** Finalized `M6.7` contract, `M6.8` draft UI/codec and `M6.9` isolated launch; any explicitly scoped placement-loader prerequisite. This card does not block M7 repairs or unrelated M8 work.
+**Allowed file area:** Exact Editor assignment UI/document/validation adapters, existing placement loader/catalog/publication boundaries only where enumerated, isolated sample world/assignment/template fixtures and focused tests, plus authoring documentation. Enumerate before Ready. No blanket production world/template, scene, package or settings writes; existing published fixtures remain read-only.
+**Acceptance criteria:** Select existing route -> segment -> template/version/variant, save/reopen the assignment and validate that isolated travel loads that exact board at that segment. Intermediate exits still only advance segments; final exits retain ordinary arrival/day semantics. Invalid/conflicting/unsupported assignments cannot partially publish. One template used twice produces independent board state. Save-as of a board never changes assignments; cancel/failure/undo preserves prior files. A deliberate publication action has a bounded affected-reference diff and an explicit version/compatibility policy; existing committed saves keep their pinned selection.
+**Test plan:** Assignment round-trip, membership/version/variant/conflict and save-failure EditMode tests; keyboard/pointer editor smoke and graphics PlayMode assigned/unassigned travel at representative intermediate/final positions allowed by the accepted policy. Verify fresh-versus-pinned Continue, independent reused-board state and isolated storage. Owner exercise: create -> paint -> save -> assign -> travel-test -> revise, followed by an explicit editor Accept/Revise verdict.
+**Save and compatibility impact:** Reuse existing stable content/placement IDs where possible. No automatic run migration, profile change, reroll or segment reorder. New publication versions/loader support must preserve saved addresses and selected templates; any required schema change is explicit and tested, not inferred from Editor UI state.
+**Required evidence:** Template/assignment model, exact supported placement policy and diffs, round-trip/travel/isolation results, pinned-save evidence and dated integrated authoring verdict.
+
 ---
 
 # M7 - Playtest Repairs and Opening Warm-up
@@ -5589,6 +5809,38 @@ blinking icon, long footstep, missing resource gains and alignment issues were a
 | Suspected unavoidable corner spawn with two zombies around day four | M7.6 |
 | Board and Food/Health group not centered; resource text clipped | M7.7 |
 | Complete multi-board/day regression and owner smoke acceptance | M7.8 |
+
+### Follow-up session scope - 2026-11-03
+
+The owner requested further planning: first route choice after 3-5 boards rather than one;
+west/east choices matching physical left/right; keyboard-complete menus/gameplay; F to toggle
+interaction, Q/E object cycling and Space confirmation there, with free 90-degree Q/E visual
+turns in idle walking mode; zombie attack animation/audio;
+an illustrated Controls view; and familiar berry-bush/carrot/first-aid content before a backpack.
+These are requirements and observations, not proof of a specific defect or deliberate removal.
+The picker already has some arrow/Enter support; verify complete reachability and feedback.
+The owner subsequently understood the Radio Tower screenshot and asked to leave it as-is;
+there is no landmark-redesign or hammer-acquisition task in this follow-up.
+
+M7.9-M7.18 expand the release gate without rewriting M7.1-M7.7 history or M7.8's technical
+results. The old issue table describes 2026-10-28; M7.9 owns the new first-choice target.
+Repairs do not wait for an M7.8 owner Accept that they may help enable. M7.8 retains its original
+scope; M7.17 supplies the integrated follow-up evidence. One combined owner smoke may cover both
+with explicit criteria/verdicts. Planning does not start code or waive M4.9/M6.6. Complete the
+expanded M7 gate before stones and further slice content.
+
+| Follow-up requirement | Owning card |
+| --- | --- |
+| First choice after 3-5 completed boards in one opening day | M7.9 |
+| West left, east right | M7.10 |
+| All current menus/dialogs operable from the keyboard | M7.11 |
+| F toggles interaction; Q/E previous/next object; Space confirms | M7.12 |
+| Keyboard diagram/contextual bindings in main/pause Controls | M7.13 |
+| Investigate/restore zombie attack animation/audio | M7.14 |
+| Restore visible, usable berry-bush and carrot food | M7.15 |
+| Restore first-aid presence and domain healing | M7.16 |
+| Mouse-free opening/travel/action/resource regression and owner verdict | M7.17 |
+| Idle Q/E turns visual facing left/right by 90 degrees, free of gameplay effects | M7.18 |
 
 ---
 
@@ -6139,11 +6391,203 @@ owner gate. No production correction was needed in this card. Owner verdict,
 actual OS-window resize and listening remain Not run; the original screenshot seed/resources
 are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not advance to M8.
 
+---
+
+## `M7.9` - Three-to-five-board opening before the first route choice
+
+**Status:** `Planned` - owner request 2026-11-03; supersedes M7.1's fresh-run length target.
+**Priority:** P1 repair.
+**Related contract:** Section 27.2 opening-length amendment and sections 7, 9, 18.
+**Rationale:** Several small boards provide the requested warm-up before the first strategic choice, without becoming several travel days.
+**Current behavior:** M7.1 publishes a single-segment automatic Day 1 opening; its old tests do not prove the new 3-5-board requirement.
+**Expected outcome:** A fresh run completes 3-5 configured opening segments before first route choice; its first selected road still begins Day 2.
+**Scope:** Choose/record a fixed count in range; version opening content and author bounded supply/threat progression with existing mechanics. Intermediate exits advance only a segment; the last arrives at forest.start and commits Day 1. Retain stable addressing, deterministic generation and checkpoint/retry rules. Record the exact old-content policy and reconcile section 27.2's implementation table after validation.
+**Non-goals:** 3-5 opening days, early route modals, rerolled opening length, a tutorial engine, extra landmark/finale days or prepending the new opening to an existing run.
+**Dependencies:** Accepted opening amendment and M7.1 travel/checkpoint implementation. The pending M7.8 owner verdict is not a prerequisite for this repair.
+**Allowed file area:** Exact opening GameData/world/version selection, needed Session/Travel/World/persistence boundaries, focused lifecycle tests and owning documentation before Ready. No blanket scene/package/settings changes.
+**Acceptance criteria:** No choice after board 1 or 2; exactly one choice after the configured final board within 3-5. New Game/fresh post-death runs use it; Continue preserves every supported segment/supply/day/intro boundary. Old one-board saves finish their pinned version without extra boards or duplicated rewards. Profile knowledge, free rejection and terminal ordering stay intact.
+**Test plan:** EditMode intermediate/final exits, old/new content, death and save-failure/retry; real-scene PlayMode new run, every opening boundary, Continue and duplicate outcomes. Check new generation/supply safety and later mouse-free integrated opening smoke.
+**Save and compatibility impact:** Preserve committed segment lists/IDs/seeds/resources. Version/migrate persisted content when needed; no profile reset, implicit mid-board save or Continue reroll/refill.
+**Required evidence:** Exact count/day/address table, content/compatibility policy, focused results and real opening trace; human acceptance is M7.17.
+
+---
+
+## `M7.10` - Geographical left/right route choices
+
+**Status:** `Planned`
+**Priority:** P1 usability repair.
+**Related contract:** Sections 7, 18.1 and 27.2.
+**Rationale:** West on the left and east on the right should match geography, not incidental option enumeration.
+**Current behavior:** The owner reports unintuitive left/right choices; verify graph directions and presentation before assigning a cause.
+**Expected outcome:** A west/east pair renders west left and east right with matching keyboard focus/navigation order.
+**Scope:** Read authoritative edge/world direction; consistently order/label options with non-color direction cues. Keep destination, hint and stable edge identity together. Define single, non-east/west and additional-alternative behavior without relabeling geography or leaking unknown topology.
+**Non-goals:** Changing graph topology/IDs/travel costs, automatic route commitment, hidden-knowledge disclosure or a world editor.
+**Dependencies:** Section 18.1 and current route-choice APIs; coordinate with M7.11 without mutual implementation dependencies.
+**Allowed file area:** Exact RouteChoice/atlas presentation, read-only direction mapping and focused tests before Ready. Data mutation needs a separately scoped demonstrated defect.
+**Acceptance criteria:** Permuting input still yields the same geographical order and correct committed edge. Left/right keys match positions; focus alone never commits. Single/extra/unknown/unavailable alternatives remain explicit and keyboard-accessible. Continue/reopen does not swap identities.
+**Test plan:** Direction/permutation EditMode cases; graphics PlayMode positions, label/edge parity, keyboard/pointer confirmation and narrow single/multiple-choice layouts.
+**Save and compatibility impact:** No schema/content-ID/travel-history change; displayed order is not route identity.
+**Required evidence:** Direction-to-position matrix and actual rendered/input results.
+
+---
+
+## `M7.11` - Keyboard-complete menus and modal focus
+
+**Status:** `Planned`
+**Priority:** P1 accessibility/input repair.
+**Related contract:** Section 18.1 keyboard-complete PC interaction.
+**Rationale:** Mouse-only controls or lost focus can block an otherwise keyboard-playable run; coverage must include every current screen.
+**Current behavior:** The owner could not discover keyboard route choice; some picker bindings already exist. Inventory missing navigation versus missing focus/feedback.
+**Expected outcome:** Main, pause/settings, route choice, Notes/atlas, equipment decisions, terminal screens and every other current player-facing menu are fully keyboard-operable.
+**Scope:** Inventory screens/actions/focus owners; repair visible initial focus, Tab/Shift+Tab, arrows, activation, scrolling, sliders/toggles and return focus. Skip disabled/hidden controls, expose actions without hover and use existing UI/input ownership. M7.12 owns targeting, M7.13 help; apply the same policy to both through their cards.
+**Non-goals:** Deferred inventory activation, gamepad/rebinding, settings/save behavior changes or a UI-framework rewrite.
+**Dependencies:** Section 18.1 and existing modal APIs. M7.10 owns geography; independent focus work does not wait for targeting/help implementation.
+**Allowed file area:** Exact existing menu/pause/settings/atlas/Notes/equipment/focus components/tests before Ready. Name any required scene/prefab explicitly; no blanket asset/settings edits.
+**Acceptance criteria:** Every current control is reachable, visibly focused, operable and escapable without a pointer. Reopen/replacement restores valid focus; disabled/scroll areas never trap it. Closing/activating a view leaks no movement, Wait, second confirmation or destructive input. Pointer results stay equivalent.
+**Test plan:** Per-screen navigation/activation/cancel/scroll PlayMode tests; real mouse-free menu -> New Game/Continue -> pause/settings/Notes/atlas -> terminal smoke, including empty/disabled lists, focus recovery, resize and same-frame transitions.
+**Save and compatibility impact:** Focus/drafts are transient; existing settings/route/profile mutations still require explicit current commands.
+**Required evidence:** Complete screen/action/key/focus-owner matrix, exact tests and honest keyboard-only smoke results.
+
+---
+
+## `M7.12` - F interaction toggle, Q/E object selection and Space confirmation
+
+**Status:** `Planned`
+**Priority:** P1 gameplay input repair.
+**Related contract:** Sections 9, 10, 18.1 and existing M5 targeting/tool contracts.
+**Rationale:** Working on an obstacle should not require clicking the side panel; selection/confirmation must be keyboard-complete and context-safe.
+**Current behavior:** E opens the picker, some Tab/arrows cycle choices and Enter confirms; normal Space is Wait. The request concerns manual obstacle work, not attacks on zombies.
+**Expected outcome:** F freely enters/leaves interaction mode instead of E. Inside it Q/E selects previous/next objects and Space confirms one action; idle walking Q/E belongs exclusively to M7.18 visual rotation.
+**Scope:** Extend the shared picker/context with deterministic object ordering and visible selected-cell/action feedback. Multiple actions on one object remain explicitly keyboard-selectable, never silently chosen. F opens a draft from idle walking and toggles it closed without a command; Escape remains cancel. Migrate every active interaction-opening check from E to F, including normal-command suppression, so idle E rotates rather than opens a picker. Specify held/rapid F, zero/one/multiple objects and stale objects. Keep compatible arrow/Enter bindings and share the actual definitions with M7.13 and M7.18.
+**Non-goals:** Direct zombie combat, new effects, a new resolver, cycling-to-confirm, free repeated actions or separate mouse/keyboard command paths.
+**Dependencies:** Section 18.1 and current picker/controller gates; coordinate focus ownership with M7.11 without making either implementation wait on the other.
+**Allowed file area:** Exact PcCommandSource, interaction/equipment picker, input-gate/binding definitions and focused tests before Ready. No AI/physics/generator/save/asset changes are implicit.
+**Acceptance criteria:** Current movement, Wait, manual/tool interactions and equipment decisions are possible without a mouse. Browsing/cancel/F toggling are free; Space submits at most one validated command. E no longer opens interaction. Q/E selects objects without rotating in interaction; idle Q/E cannot select or submit. F cancels a nested draft without replacement/charge effects, confirm Space does not also Wait, and cancel Escape does not open pause. Stable selection survives valid refreshes, stale/unavailable options reject free, and paused/terminal/replaced boards accept nothing.
+**Test plan:** Injected-key and real PlayMode F enter/exit, zero/one/multiple-object, multi-action, wraparound, nested replacement, stale/depleted, rapid/held and simultaneous-key, pause/cancel/disposal cases. Assert exact Resolve/turn/Food/charge/noise/enemy counts, pointer parity and no Q/E selection/rotation leakage.
+**Save and compatibility impact:** Selection/bindings add no gameplay persistence; only accepted actions change existing save-boundary state.
+**Required evidence:** Context/key transition table, command-count/cost results and mouse-free manual/tool selection smoke.
+
+---
+
+## `M7.13` - Illustrated keyboard Controls view
+
+**Status:** `Planned`
+**Priority:** P1 discoverability.
+**Related contract:** Sections 3.1 and 18.1; controls are basic information, not discoveries.
+**Rationale:** Keyboard support needs discoverable bindings and visible mode differences, not experimentation to find a working key.
+**Current behavior:** The owner requests a keyboard picture with functions; partial key handling is not a complete Controls screen.
+**Expected outcome:** Main and pause menus offer a keyboard diagram with actual key/function labels, distinguishing movement, targeting and menu contexts.
+**Scope:** Read real M7.11-M7.12/M7.18 binding definitions for highlights and labels: absolute WASD/arrows, normal Space Wait, F interaction toggle, idle Q/E free 90-degree left/right turns, interaction Q/E previous/next object and Space confirm, plus actual menu/Notes/atlas keys. Provide keyboard entry/back, safe focus return, legible text and responsive context views. Pair colors with labels/shapes; state clearly that visual turns cost no gameplay action.
+**Non-goals:** Rebinding, puzzle-solution hints, knowledge-gated controls, a long forced tutorial or unimplemented-key documentation.
+**Dependencies:** Section 18.1 and accepted implemented binding/context definitions from M7.11-M7.12 and M7.18; no parallel hard-coded map.
+**Allowed file area:** Exact main/pause entries, bounded Controls view/presenter and shared binding metadata, necessary non-gameplay visuals and focused tests before Ready. Scene/prefab/asset paths must be named; no packages/settings edits.
+**Acceptance criteria:** Both menus open/close Controls without mouse use or gameplay cost. Diagram/labels match F toggle, walking Q/E rotation versus interaction Q/E selection, and Space Wait versus confirmation. No label still presents E as interaction entry. Focus returns safely; desktop/narrow/resize and animations-off layouts do not clip/overlap labels or disclose hidden world knowledge.
+**Test plan:** Binding/label coverage; graphics PlayMode entry/back/focus/input-leak and diagram/text readability on desktop/narrow layouts; real keyboard-only help smoke.
+**Save and compatibility impact:** No gameplay/save state; viewing controls resolves no command or resource cost.
+**Required evidence:** Binding/diagram parity, representative renders and actual keyboard entry/exit results.
+
+---
+
+## `M7.14` - Investigate and restore zombie attack feedback
+
+**Status:** `Planned` - reported missing animation/audio; reproduce before assigning a cause.
+**Priority:** P1 regression investigation/repair.
+**Related contract:** Sections 10, 11.3.1, 18 and ordered presentation.
+**Rationale:** Health loss without a recognizable attack animation/sound obscures cause and makes predictable enemies feel broken.
+**Current behavior:** The owner reports missing attack animation/audio; inspect real attack-result -> view/Animator/audio wiring and existing assets, not assumed domain damage defects.
+**Expected outcome:** Zombie attacks have correctly timed visual/audio cues without changing damage, locked targets, misses or cadence.
+**Scope:** Reproduce ordinary hit, fixed-cell miss and conditional-entry hit; repair only the proved missing event/view/Animator/clip/gate path. Reuse valid assets, distinguish swing/miss from hit-only cues and retain readable outcomes with animation/audio disabled. Fix named production references if necessary.
+**Non-goals:** New attacks/damage/range/cadence, replanning, combat systems, gameplay mutations in animation callbacks or audio-driven turns.
+**Dependencies:** Existing enemy/event/presentation APIs and a bounded reproduction/write scope before Ready; independent of new resource and keyboard effects.
+**Allowed file area:** Exact attack presentation/audio adapters, registered enemy views and only proved necessary named Animator/controller/clip/prefab references, plus focused tests. No AI/rules/package/settings changes or broad art rebuild.
+**Acceptance criteria:** One actual swing produces one cue; hit feedback matches damage, misses do not masquerade as hits, Wait/rest is silent of attacks and locked targets remain identifiable. Animation-off, replay recovery, disposal and board replacement neither repeat a cue nor damage. Respect audio settings/mute; domain outcomes remain unchanged.
+**Test plan:** Production-reference graphics PlayMode hit/miss/conditional-hit/rest and recovery/lifecycle tests plus relevant domain regressions. Inspect missing references/scripts if assets change; perform an actual audible smoke, not a claim of heard sound from automated playback.
+**Save and compatibility impact:** No schema/combat state change; presentation never owns saved damage or command effects.
+**Required evidence:** Reproduction/root cause, exact reference changes, event/cue-count results and explicit listening/owner outcome.
+
+---
+
+## `M7.15` - Restore berry-bush and carrot food presence
+
+**Status:** `Planned`
+**Priority:** P1 current-content repair.
+**Related contract:** Sections 9, 18 and transitional O-003 food collection; M10 stays deferred.
+**Rationale:** Familiar food varieties belong in the current survival experience rather than waiting for a bag or becoming only one generic icon.
+**Current behavior:** The owner misses berries/carrots. Legacy Food/BushFood mappings remain; audit placement/catalog/view omissions or substitutions before claiming deliberate removal.
+**Expected outcome:** Fresh ordinary gameplay can encounter recognizable berry-bush and carrot food and collect it correctly under current item rules.
+**Scope:** Audit stable definitions, art/prefabs, active generation budgets/catalogs, supply manifests and collection mappings. Restore distinctions and record exact supply/reward values before Ready; reuse transitional automatic food unless a separate approved rule says otherwise. Version changed placement/configuration, preserve old pinned layouts and retain M7.5 gain feedback/current Food policy.
+**Non-goals:** Bag/stacks/crafting/satiety, silent reward rebalance, regenerating saves, a mandatory food type or unique rules invented merely for different sprites.
+**Dependencies:** Current item/reward/generation contracts and explicit mapping/supply values; no M10 dependency. Coordinate the separate medical family with M7.16.
+**Allowed file area:** Exact item/catalog/config/blueprint/view adapters, named existing food assets, manifest validation and focused tests before Ready. No unrelated terrain/campaign/settings changes.
+**Acceptance criteria:** Both varieties occur in controlled fixtures and representative new-config seed coverage, use intended art and grant authored rewards once before cost. Removal/occupancy/+X match domain results; rejection/reload/Continue do not duplicate committed rewards. Old layouts retain content/IDs; concrete supply, not icon variety alone, is validated.
+**Test plan:** Catalog/manifest/reward EditMode tests, deterministic representative seeds and required validator/seed gates for changed configurations; real-view PlayMode collection/+Food for both, Continue and animations-off. No promise that every board contains both.
+**Save and compatibility impact:** Preserve published identities/old generation versions, explicitly migrate changed persisted mappings. Do not change Food caps/costs or implement deferred satiety.
+**Required evidence:** Content-to-art/effect/supply matrix, version policy, exact results and visible collected examples of both foods.
+
+---
+
+## `M7.16` - Restore first-aid content and supported healing
+
+**Status:** `Planned`
+**Priority:** P1 current-content repair.
+**Related contract:** Sections 6, 9, 10 and 18; clarify the pre-M10 medical effect before Ready.
+**Rationale:** A kit sprite without a working domain effect is not restoration; healing must use the same command/turn ownership as other resources.
+**Current behavior:** Legacy Aid is mapped but healing was outside the earlier cutover scope. Verify active supply and interaction support rather than assuming old triggers are authoritative.
+**Expected outcome:** First-aid appears on new ordinary boards and supports real keyboard-accessible healing in the current no-backpack game.
+**Scope:** Confirm the current health maximum and decide heal amount, use/collection command, cost/noise, full-health availability/waste and supply before Ready. Record the accepted small pre-M10 medical contract, then implement stable item identity, legal healing, feedback and versioned supply through existing resolver/interaction boundaries. Keep Health distinct from Food and forbid trigger-owned resource mutation.
+**Non-goals:** M10 bag/pockets/satiety/economy activation, implicit health-cap changes, revive/infinite aid, real-profile test writes or new combat rules.
+**Dependencies:** Explicit medical-use decision and current state/item/resolver APIs. M7.11-M7.12 own keyboard integration; medical effect tests need not wait for their completion, but final keyboard smoke does.
+**Allowed file area:** Exact item/health-effect/interaction/catalog/config/manifest/presentation adapters, named aid assets, isolated tests and owning medical-rule documentation before Ready. No broad state/scene rewrite.
+**Acceptance criteria:** A concrete kit heals under the agreed amount/cap/full-health policy and is consumed at most once. Preview/rejection/stale decisions are free; accepted use applies one central turn/resource cost and enemy opportunity unless terminal ordering ends resolution. Health, removal/view/+Health and supply agree. Keyboard-only use works; terminal/recovery/Continue cannot duplicate committed healing outside the current rollback boundary.
+**Test plan:** Partial/full/excess-health, invalid/stale, repeated-use, cost/terminal and isolated save/recovery cases; deterministic supply checks and relevant generation gates. Graphics PlayMode keyboard use, +Health, removal and audio/animation parity; owner smoke on a fresh board.
+**Save and compatibility impact:** Retain health ownership/checkpoints and pinned old content; version new distribution. New persistent fields require migration; no profile reset or exact-turn resume.
+**Required evidence:** Accepted healing/full-health/cost/noise policy, content/supply matrix, exact tests and actual mouse-free kit use.
+
+---
+
+## `M7.17` - Expanded keyboard, opening and resource acceptance gate
+
+**Status:** `Planned`
+**Priority:** P0 follow-up release gate.
+**Related contract:** Sections 18.1, 27.2 and accepted current food/medical rules; original M7.8 obligations remain.
+**Rationale:** Input contexts, route order, attack cues and resource content must work together in the real opening/travel loop, not just isolated fixtures.
+**Current behavior:** M7.8 has technical evidence but no owner verdict; its original one-board checks do not cover the new requirements.
+**Expected outcome:** Expanded M7 evidence and an explicit owner verdict precede stones and new slice content.
+**Scope:** Extend the issue matrix for M7.9-M7.16 and M7.18 and preserve old checks. Run keyboard-only main/help/new-run -> 3-5 opening boards -> route choice -> free visual turns -> F interaction/Q/E object selection/Space confirmation -> later movement/tool selection -> pause/settings/Notes/atlas. Include berry/carrot collection, medical healing, actual zombie attack and supported Continue. Controlled fixtures may supplement the run; don't claim one random run guarantees all content.
+**Non-goals:** Changing current Radio Tower content, new combat, editor/stones/M8/M10 activation, fabricated screenshot diagnoses or substituting this smoke for M4.9/M6.6 humans.
+**Dependencies:** `M7.9`-`M7.16` and `M7.18`, original M7.1-M7.7 evidence and M7.8 original checks/verdict. M7.18 is a prerequisite despite its later number; repairs do not wait for final acceptance. Closure accounts for M7.8 and M7.17 without circular implementation dependencies.
+**Allowed file area:** Exact focused integration/lifecycle/input tests, `Docs/Testing.md` and this roadmap before Ready. Production defects return to their bounded owning card, not an unrestricted gate refactor.
+**Acceptance criteria:** Every current menu/action is in the keyboard matrix; the smoke needs no mouse or leaked/duplicate commands. First choice follows 3-5 boards in one day, west/east match navigation, and Controls agree with F/Q/E/Space in each mode. Repeated idle turns leave authoritative gameplay unchanged and never alter action targets or locked intents. Verify real attack cues and recognizable food/aid, not configuration alone. Original transition/HUD/safety/footstep/+X checks stay green. Owner keyboard/visual/audio Accept/Revise is explicit; missing required checks stay Not run/blocked.
+**Test plan:** Focused tests per repair; final relevant EditMode/graphics PlayMode integration and required changed-content seed gates; desktop/narrow/resize and animations-off cases. Actual listening and mouse-free owner smoke, isolated save testing and disclosed limitations; no replay prerequisite.
+**Save and compatibility impact:** Old one-board and new multi-board openings, pinned later legs, consumables and failed checkpoint retry preserve profile, resource uniqueness and day/segment identity.
+**Required evidence:** Complete issue/menu/action-to-test matrix, exact tests/compatibility results, unresolved issues and dated owner verdict; no separate success report by default.
+
+---
+
+## `M7.18` - Free 90-degree visual turns in idle walking mode
+
+**Status:** `Planned` - owner request 2026-11-03; complete before M7.13 final bindings and M7.17 acceptance.
+**Priority:** P1 requested input behavior within the keyboard follow-up.
+**Related contract:** Section 18.1 contextual input and free cosmetic facing; existing grid/turn/intent invariants.
+**Rationale:** A harmless, responsive visual action lets players turn the character while thinking without spending a tactical opportunity or accidentally selecting an interaction.
+**Current behavior:** Movement is absolute on the grid; E currently enters the picker. The approved plan moves entry to F and reserves walking-mode Q/E for visual left/right quarter-turns.
+**Expected outcome:** Each admitted Q press turns visual facing left by 90 degrees; E turns it right by 90 degrees, only while the board is idle in walking mode. Four equal turns return to the original orientation, with no gameplay action.
+**Scope:** Add presentation-owned cardinal visual facing through the shared input context and existing player view. Specify initial pose and whether later movement updates or preserves this visual facing before Ready, retaining absolute WASD/arrows in either case. Reuse existing art/animation when suitable and name any required visual asset scope; do not rotate the grid, authoritative actor root or gameplay colliders. Use key-down edges rather than frame-dependent auto-spin; define simultaneous movement/turn, Q+E and held-key handling explicitly without an extra gameplay command. Respect the animation/modal gate and communicate bindings to M7.13.
+**Non-goals:** Gameplay-facing state, relative/tank movement, directional attacks, cones/stealth/detection changes, a TurnCommand, Wait substitution, noise, resource costs or new persistence.
+**Dependencies:** Section 18.1 and M7.12's accepted F/Q/E context definitions; no dependency on Controls or M7.17. Exact visual-pose/input decisions and write scope before Ready.
+**Allowed file area:** Exact presentation input-context/binding and player-visual components, narrowly named existing sprite/Animator references only if needed, plus focused input/PlayMode tests. No domain AI/resolver/state/save/generator changes or blanket scene/settings edits.
+**Acceptance criteria:** Q/E has the correct opposite quarter-turn directions and visible four-step wraparound. Repeated isolated turns make zero resolver calls and preserve position, turn number, resources/charges, noise/emission sequence/lifetimes, RNG and retained enemy plans. Interaction Q/E cycles objects without turning; menus, pause, replay, terminal/disposed/replaced boards do not rotate. Movement remains absolute and later replay cannot apply an input twice. Visual facing may reset on board reconstruction; it cannot change target availability or hints.
+**Test plan:** Focused injected-key context/direction/wraparound/repetition/chord/hold tests and graphics PlayMode visible orientation, F enter/leave, keyboard help parity and modal/animation/disposal cases. Compare authoritative state before/after repeated turns, assert zero Resolve/enemy-phase calls and verify normal Move/Wait costs still occur exactly once.
+**Save and compatibility impact:** Cosmetic orientation is not part of BoardState/RunState, saves, gameplay RNG or deterministic command results. No schema/checkpoint change or promise of restoring the same visual facing on Continue.
+**Required evidence:** Context/key and pose/movement policy, visible 90-degree/four-turn checks, exact no-gameplay-effect assertions and integrated owner smoke in M7.17.
+
 ### M7 gate
 
-M7 is complete only after M7.1-M7.7 and M7.8 are accepted. Planning these cards does not repair
-the game or accept either outstanding human gate. M8 starts only after the repair gate and the
-earlier required gates, unless the owner separately changes that order.
+M7 is complete only after the original M7.1-M7.8 obligations and follow-ups M7.9-M7.18 are
+accepted. Historical Done cards retain their evidence; M7.9 owns the new length target rather
+than rewriting M7.1. Planning does not repair gameplay or close earlier human gates. Stones
+and M8 wait for this expanded repair gate and their own prerequisites, unless the owner
+separately changes the order. Optional authoring-tool planning substitutes for no human gate.
 
 ---
 
@@ -6620,6 +7064,36 @@ Vertical slice is complete only after `Accept` of `M8.8`. Implementing the featu
 
 ---
 
+## `M9.8` - Scent-tracking zombie and wind feasibility idea
+
+**Status:** `Deferred` - idea recorded 2026-11-02; lowest-priority optional idea, not an implementation commitment.
+**Priority:** P3; revisit after the stone-lure verdict and other accepted work, including M10 if activated. Its position in M9 does not give it execution priority over M10.
+**Related contract:** Sections 11, 12, 15 and 22 are constraints, not an accepted scent or wind specification.
+
+**Rationale:** Scent and wind could create a different spatial puzzle, but add propagation, persistence and readability costs. First establish whether sound-based manipulation already supplies enough depth.
+
+**Current behavior:** Listener hears explicit noise; Shambler pursues under its accepted rule. Neither has scent perception, and there is no accepted wind-dependent scent model.
+
+**Expected outcome:** Only after explicit future activation, a bounded design/feasibility proposal and an owner Go/Revise/Defer verdict establish whether an isolated prototype is justified.
+
+**Scope:** Explore one scent-following archetype with visible, deterministic rules. Consider fixed wind direction per board as the first experiment, not a changing weather simulation. Before implementation, decide emission/trail ownership, propagation around obstacles, duration/decay, wind strength/direction, target selection, tie-breaks, interaction with sound, locked-intent timing, reset/save behavior and how the player can inspect or infer the actionable footprint. Split approved implementation into separately scoped cards only after the design verdict.
+
+**Non-goals:** Implementation now, continuous fluid simulation, hidden tracking or random perception, automatic Shambler/Listener rule changes, dynamic wind/weather, a new campaign gate, or dependencies for stones, M8 or M10.
+
+**Dependencies:** An owner-approved revisit after `M5.11` and `M8.8`, plus a separate scent/wind product-contract decision. Completing those cards does not automatically activate this idea. If M10 is activated, defer this revisit until its accepted gate unless the owner explicitly reprioritizes.
+
+**Allowed file area:** None while Deferred. A future documentation spike must define its own closed scope before Ready; this card grants no code, asset or settings writes.
+
+**Acceptance criteria:** For a future spike, compare a scent proposal against the sound-only baseline, resolve the listed rule choices, show examples that explain detection and next actions without hidden information, and obtain an owner verdict. Any positive verdict plans a prototype rather than claiming a tested mechanic or approving rollout.
+
+**Test plan:** No tests now. A future proposal must define deterministic propagation/obstacle/decay/wind/tie-break and accepted/rejected-command scenarios, plus a small human-readability comparison before content production. Fixed-wind and no-wind examples must demonstrate a meaningful decision difference.
+
+**Save and compatibility impact:** Undecided and explicitly blocking implementation. Scent trails and current wind would have declared owners and reset boundaries; any persisted additions require schema/migration and isolated round-trip/recovery tests. No format change is authorized now.
+
+**Required evidence:** Future feasibility proposal, alternatives/costs, readable scenario examples and explicit owner Go/Revise/Defer decision. Until then, keep this card Deferred at the bottom of the optional-ideas backlog.
+
+---
+
 # M10 — Spatial Inventory and Resource Pressure
 
 M10 is intentionally listed last and remains **Deferred** until the owner has played the complete no-backpack vertical slice. It may begin only after an explicit `proceed to M10` verdict from `M8.8` or a later explicit owner override. It does not require optional M9 work.
@@ -6959,8 +7433,10 @@ The next safe sequence is:
 
 1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. The owner then separately authorized solo M6.6: its technical preparation passed full EditMode 1237 tests plus the existing Explicit skip and graphics PlayMode 188/188, with self-review only. M6.6 remains Active until 5-8 real sessions and the landmark decision in `Docs/Validation/M6.6.md`; neither exception closes M4.9 or authorizes M8. Future cards use the current Lead implementation and Reviewer/self-review policy in `AGENTS.md`, without changing these historical review attributions;
 2. complete the `M7.8` integrated repair gate after M7.1-M7.7 were completed with independent review, compatible opening/checkpoint recovery, clean presentation boundaries, stable Notes controls, bounded footsteps, turn-scoped resource gains, versioned bounded entry safety and centered responsive board/resources (M7.6-M7.7 accepted 2026-10-30). The owner authorized proceeding before the outstanding M4.9/M6.6 human gates; those gates and the M7.8 owner visual/audio/live-resize verdict remain open and no human-test result is implied;
-3. complete the no-backpack vertical slice through `M8.8`, preserving its playtest requirements and the earlier M4.9/M6.6/M7 gates, then make the explicit M10 verdict;
-4. keep M10 deferred and last unless the owner explicitly changes that order; activate M9.7 only when actual tester/player bug-report needs and an owner-approved recording/reproduction workflow justify it, independently of M10.
+3. implement the planned 2026-11-03 follow-ups `M7.9`-`M7.16` and `M7.18` in bounded dependency order, then close `M7.17` alongside original M7.8 owner obligations. Finalize F entry and contextual Q/E rotation/selection before Controls. Do not require a pre-repair M7.8 Accept to begin follow-ups or treat planning as code authorization. The expanded M7 gate precedes stones and further slice content; leave the current Radio Tower board unchanged;
+4. after the expanded M7 gate and a Proceed verdict from `M4.9`, complete the bounded stone-lure extension `M5.8`-`M5.11`: accept detailed rules, validate atomic throw/supply behavior, add shared aiming, then obtain the human prototype verdict. No earlier human gate or production rollout is waived. Finalize `M6.7` before bulk handcrafted M8 content; the approved small-editor direction includes `M6.8`-`M6.10` grid editing, isolated test-play and explicit route-segment assignment. These wait for the detailed contract/repair gates and do not block unrelated slice work;
+5. complete the no-backpack vertical slice through `M8.8`, preserving its playtest requirements and earlier M4.9/M6.6/M7 gates, then make the explicit M10 verdict. The stone prototype does not automatically become a production or vertical-slice acceptance requirement;
+6. keep M10 deferred and last among planned milestones unless the owner explicitly changes that order; activate M9.7 only for an actual owner-approved bug-report workflow, independently of M10. Keep scent/wind `M9.8` last among optional ideas, not ahead of accepted work or an activated M10 because of its milestone number.
 
 `M0.9` remains deferred by owner decision. No implementation agent performs external history rewriting, exposes historical values, or runs BFG without a separate explicit request.
 
