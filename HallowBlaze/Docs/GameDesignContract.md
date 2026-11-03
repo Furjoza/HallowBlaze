@@ -3,8 +3,8 @@
 | Pole | Wartość |
 | --- | --- |
 | Status | Żywy kontrakt; obowiązuje do jawnej zmiany |
-| Wersja | 0.3 |
-| Ostatnia aktualizacja | 2026-09-27 |
+| Wersja | 0.5 |
+| Ostatnia aktualizacja | 2026-11-03 |
 | Zakres | First playable vertical slice, multi-board route foundation, and the accepted-but-deferred inventory contract |
 
 ## 1. Cel dokumentu
@@ -1056,6 +1056,53 @@ Gra logiczna jest uczciwa tylko wtedy, gdy gracz ma dostęp do informacji potrze
 - Sygnalizacja nie może polegać wyłącznie na kolorze lub krótkiej animacji.
 - Nieznana topologia mapy pozostaje ukryta, ale dostępne w danej chwili wybory są jednoznaczne.
 
+### 18.1. Keyboard-complete PC interaction - accepted 2026-11-03
+
+Every player-facing menu and every available gameplay action MUST be usable from the
+keyboard alone. Mouse input remains optional; it cannot be required to discover, select,
+confirm, cancel or leave an available action. This applies to current and future main/pause/
+settings menus, route choice, Notes/atlas/help, interaction targeting and equipment decisions,
+and later inventory screens if separately activated. It does not activate deferred features.
+
+- Menus provide a visible initial focus, predictable Tab/Shift+Tab and arrow navigation,
+	keyboard activation and Escape/back where cancellation is legal. Disabled or hidden controls
+	cannot trap focus; scrolling content and settings remain operable without a pointer. Reopening
+	or replacing a view restores valid focus without silently confirming a choice.
+- Normal board movement and Wait remain keyboard commands. F toggles interaction mode:
+	entering opens a free selection draft, and leaving cancels it without executing an action.
+	Escape also cancels. E no longer opens interaction. In interaction mode, Q selects the
+	previous object, E selects the next, and Space confirms the selected legal action. Multiple
+	actions on one object remain explicitly keyboard-selectable. Space means Wait only in
+	normal board input; no single keypress may reach both contexts.
+- In idle walking mode, outside all menus and interaction drafts, Q turns the player's visual
+	facing left by 90 degrees and E turns it right by 90 degrees. This is a free cosmetic action:
+	no resolver call, turn, resource/charge cost, noise emission/aging, RNG use or enemy phase.
+	It changes neither grid position nor gameplay facing, target availability, damage, detection
+	or locked intents. Movement remains absolute WASD/arrows, not relative to visual facing.
+	The input/animation gate owns when rotation is available; menus, pause and replay cannot leak
+	rotation into the board. Visual facing is not saved gameplay state and may reset when a board
+	is recreated. Its initial pose and interaction with movement animation are specified in M7.18
+	before implementation; neither may introduce a hidden gameplay rule.
+- Target/action lists use deterministic ordering and retain valid selection where possible.
+	Opening, browsing and cancellation submit no gameplay command and consume no turn, resource,
+	noise lifetime or enemy opportunity. Confirmation submits at most one command and uses the
+	same resolver and commit-time validation as mouse activation.
+- When route alternatives are west and east, the west option is physically on the left and
+	the east option on the right, with matching keyboard navigation. Geography comes from
+	authoritative world/edge data, not collection order or display-name sorting. Do not mislabel
+	other directions to force a two-button layout, and do not auto-commit a focused route.
+- Only the active input context owns navigation/confirmation. Modal menus, focus changes,
+	pause, animation and board replacement must not leak movement, Wait or duplicate actions
+	into gameplay. Keyboard and pointer paths produce equivalent commands and results.
+- A Controls view reachable from the main and pause menus shows a readable keyboard diagram
+	and associated action labels, distinguishing normal movement, targeting and menu contexts.
+	It reads the same binding definitions as input; it must not invent or duplicate a stale map.
+	Knowing controls is basic usability, never a discoverable fact or a progression reward.
+
+This is an accepted product policy, not a claim that current screens already satisfy it.
+M7.10-M7.13 and M7.17-M7.18 in `Docs/TechnicalRoadmap.md` own implementation and verification.
+Manual interaction means work on obstacles; it does not authorize direct combat with zombies.
+
 ## 19. Zwycięstwo, śmierć i regrywalność
 
 ### Decyzja
@@ -1383,6 +1430,55 @@ Several short tactical situations can make one strategic route choice meaningful
 - Board seeds never derive from node/day alone.
 - `Continue` restores the same route segment and never repeats a consumed day transition or accepts an outcome from another leg/segment.
 - Published segment IDs are migration-sensitive content IDs; reordering a list must not silently change identity.
+
+#### Board authoring and route assignments - accepted direction 2026-11-03
+
+The initial small visual editor includes both a local-board document and explicit assignment
+to a segment of an existing route between nodes. Keep these separate: a versioned board
+template owns its grid/content, while an assignment binds an existing world/version and stable
+segment to a template/version/variant. The editor selects the directed edge by its endpoint
+nodes, then a segment from that edge's ordered list; neither a display label nor list index is
+its identity. Reuse the existing assignment format and resolve edge membership from world data
+instead of inventing a second graph or duplicating topology in every template.
+
+One template may have several assignments without sharing mutable board state at runtime.
+The first workflow uses an explicit selected template/variant, not a new random pool or campaign
+generator. Saving a board draft never assigns or publishes it implicitly. Assignment edits are
+separate, validated, reversible drafts; deliberate publication verifies all affected references
+and preserves pinned saves through explicit content versioning/compatibility. Do not mutate an
+existing saved leg's segment list, template selection, seed, rewards or day count. The editor
+must not change the current Radio Tower content/assignment as an incidental test operation.
+
+M6.7-M6.10 define the bounded implementation, including route-assignment validation and isolated
+play of an assigned segment through normal travel. Existing loader restrictions, such as
+final-segment-only landmark placement, must be identified and any necessary minimal extension
+scoped before the assignment card is Ready. This direction does not authorize a full world-graph
+editor, new routes/rules, or runtime changes in the current documentation task.
+
+#### Opening-length amendment - accepted 2026-11-03, implementation pending
+
+The first route choice for a genuinely fresh run MUST follow **3-5 successfully completed
+local boards**, not one. This supersedes the single-board opening length above for new
+opening content; M7.1 remains historical implementation evidence, not the new acceptance target.
+The currently published IDs, one-board flow and compatibility table below describe the
+pre-amendment implementation until M7.9 is accepted.
+
+The opening remains one automatic Day 1 route leg with 3-5 ordered segments, not 3-5 days.
+Intermediate exits advance its segment only; they never offer an early route choice, visit
+`forest.start` or commit another day. The final exit alone completes Day 1 and presents the
+first choice. The first selected leg still starts Day 2; extending the opening must not shift
+the landmark or finale by additional days. The exact fixed count within this range, supply
+and threat progression are authored configuration recorded by M7.9, not a new random roll on
+Continue. This length amendment does not independently change initial resources or grant tools.
+
+Use versioned opening content and a declared compatibility policy. Already committed opening
+and other active legs retain their exact saved segment lists, seeds, resources and day counts;
+do not append new boards, replay rewards or prepend the new opening to those runs. Existing
+one-board saves may finish their pinned old opening; every genuinely fresh run after activation,
+including a restart after death, uses the new 3-5-board opening. Preserve profile knowledge and
+existing checkpoint/retry semantics; a schema change, if necessary, requires explicit migration.
+M7.9 must reconcile the current implementation/compatibility table with actual validated values
+when the new content is published, without rewriting historical M7.1 acceptance.
 
 #### Opening boundaries and compatibility
 
