@@ -684,6 +684,124 @@ namespace HallowBlaze.Tests.PlayMode
                 "Ending a board must not leave its unacknowledged discovery hidden by a disposed legend.");
         }
 
+        /// <summary>Combines the real opening, first route, safe later entry, overlays and pinned Continue in both presentation modes using isolated storage.</summary>
+        [UnityTest]
+        public IEnumerator IntegratedRepairOpeningOverlaysAndContinueStayCoherent()
+        {
+            foreach (bool animations in new[] { false, true })
+            {
+                DestroyGameManagerSingleton();
+                var fixtureSession = new GameSession(new ProfileState("m78-repair-profile", "world-1", 1));
+                var store = new FileSystemSaveStore(persistenceRoot);
+                var lifecycle = new RunLifecycleService(fixtureSession, store);
+                Assert.That(lifecycle.StartNewRun("m78-repair-" + animations, 904,
+                    new RunStateConfiguration(100, 100, 0, "shelter.warm-up")).IsSuccess, Is.True);
+                InvokeStatic(gameManagerType, "RequestContinue");
+                yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+                yield return null;
+                Component manager = (Component)GetStaticField(gameManagerType, "instance");
+                AssertOpeningWarmUp(manager);
+                Assert.That(Camera.main.cullingMask, Is.Zero);
+                FieldNotesPresenter notes = GetProperty<FieldNotesPresenter>(manager, "FieldNotes");
+                Assert.That(notes.Open(), Is.False);
+                Invoke(manager, "HideLevelImage");
+                yield return null;
+                GameSession session = GetProperty<GameSession>(manager, "Session");
+                BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
+                presenter.AnimationsEnabled = animations;
+                Component player = FindSceneComponent(playerType, "Main");
+                session.RestoreHealth(7);
+                Assert.That(GetField<Text>(player, "healthText").text, Does.EndWith(" +7"));
+                BoardRuntime opening = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+                GridPosition origin = opening.BoardState.GetEntities().Single(entity => entity.Id.Equals(opening.PlayerId)).Position;
+                Direction blocked = new[] { Direction.North, Direction.East, Direction.South, Direction.West }
+                    .First(direction => !opening.BoardState.GetEntities().Any(entity =>
+                        entity.Definition.Layer == BoardLayer.Terrain && entity.Definition.Traits.IsWalkable &&
+                        entity.Position.Equals(new GridPosition(origin.X + direction.DeltaX, origin.Y + direction.DeltaY))));
+                int food = session.ActiveRun.Food;
+                int sounds = GetProperty<int>(player, "PresentedSoundCount");
+                object[] rejectedArguments = { new MoveCommand(blocked), null };
+                Assert.That((bool)Invoke(manager, "TrySubmitCommand", rejectedArguments), Is.True);
+                var rejection = (Task<CommandSubmission>)rejectedArguments[1];
+                while (!rejection.IsCompleted) yield return null;
+                Assert.That(rejection.Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+                Assert.That(session.ActiveRun.Food, Is.EqualTo(food));
+                Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(sounds));
+                Assert.That(GetField<Text>(player, "healthText").text, Does.EndWith(" +7"));
+                yield return PresentSegmentExit(manager, animations);
+                Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+                Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(1));
+                Assert.That(Camera.main.cullingMask, Is.Zero);
+                Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
+                yield return null;
+                yield return null;
+                Assert.That(session.ActiveRun.CurrentDay, Is.EqualTo(2));
+                Assert.That(GetField<GameObject>(manager, "levelImage").activeSelf, Is.True);
+                Assert.That(Camera.main.cullingMask, Is.Zero);
+                Invoke(manager, "HideLevelImage");
+                yield return null;
+                BoardRuntime later = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+                presenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
+                presenter.AnimationsEnabled = animations;
+                player = FindSceneComponent(playerType, "Main");
+                Component adapter = GetField<Component>(manager, "boardScript");
+                BoardBlueprint blueprint = GetProperty<BoardBlueprint>(adapter, "ActiveBlueprint");
+                BoardEntrySafetyResult safety = BoardEntrySafety.Check(blueprint, OrdinaryBoardContent.CreateCatalog());
+                Assert.That(safety.HasEscape, Is.True);
+                RunState checkpoint = store.LoadRun().Data;
+                BoardAddress address = later.Request.Address;
+                int health = later.RunState.Health;
+                foreach (PlayerCommand command in safety.EscapeCommands)
+                {
+                    int before = GetProperty<int>(player, "PresentedSoundCount");
+                    object[] arguments = { command, null };
+                    Assert.That((bool)Invoke(manager, "TrySubmitCommand", arguments), Is.True);
+                    var operation = (Task<CommandSubmission>)arguments[1];
+                    while (!operation.IsCompleted) yield return null;
+                    Assert.That(operation.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                    Assert.That(later.RunState.Health, Is.EqualTo(health));
+                    FoodRestoredEvent[] rewards = operation.Result.Result.Events.OfType<FoodRestoredEvent>().ToArray();
+                    Assert.That(GetProperty<int>(player, "PresentedSoundCount") - before,
+                        Is.EqualTo(rewards.Length + (animations && command is MoveCommand ? 1 : 0)));
+                    if (rewards.Length > 0)
+                        Assert.That(GetField<Text>(player, "foodText").text,
+                            Does.EndWith(" +" + rewards.Sum(reward => reward.Amount)));
+                }
+                Invoke(manager, "ObservePresentedObservation", FactObservation.ShamblerTrappedPresented);
+                foreach (Vector2Int size in new[] { new Vector2Int(1280, 720), new Vector2Int(320, 480) })
+                {
+                    GetField<EnemyIntentLegend>(manager, "activeIntentLegend").Show();
+                    Assert.That(notes.Open(), Is.True);
+                    Texture2D capture = CaptureProductionCanvas(manager, size.x, size.y);
+                    try
+                    {
+                        Assert.That(capture.GetPixels32().Distinct().Count(), Is.GreaterThan(2));
+                        File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M78-notes-" + animations + "-" + size.x + "x" + size.y + ".png"), capture.EncodeToPNG());
+                    }
+                    finally { UnityEngine.Object.DestroyImmediate(capture); }
+                    notes.Close();
+                    yield return null;
+                    Assert.That(GetField<EnemyIntentLegend>(manager, "activeIntentLegend").IsVisible, Is.False);
+                    Assert.That(GetField<Text>(player, "healthText").gameObject.activeInHierarchy, Is.True);
+                    Assert.That(Camera.main.cullingMask, Is.Not.Zero);
+                }
+                DestroyGameManagerSingleton();
+                InvokeStatic(gameManagerType, "RequestContinue");
+                yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+                yield return null;
+                manager = (Component)GetStaticField(gameManagerType, "instance");
+                RunState continued = GetProperty<GameSession>(manager, "Session").ActiveRun;
+                Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address, Is.EqualTo(address));
+                Assert.That(continued.CurrentDay, Is.EqualTo(2));
+                Assert.That(continued.Health, Is.EqualTo(checkpoint.Health));
+                Assert.That(continued.Food, Is.EqualTo(checkpoint.Food));
+                Assert.That(GetProperty<GameSession>(manager, "Session").Profile.DiscoveredFactIds,
+                    Does.Contain("PIT_TRAPS_SHAMBLER"));
+                Assert.That(GetField<GameObject>(manager, "levelImage").activeSelf, Is.False);
+                Assert.That(Camera.main.cullingMask, Is.Not.Zero);
+            }
+        }
+
         private static Texture2D CaptureProductionCanvas(Component manager, int width, int height, Action inspectLayout = null)
         {
             Camera camera = Camera.main;
@@ -1765,11 +1883,11 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.Enemies, Is.Empty);
         }
 
-        private static IEnumerator PresentSegmentExit(Component manager)
+        private static IEnumerator PresentSegmentExit(Component manager, bool animations = false)
         {
             BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
             BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
-            presenter.AnimationsEnabled = false;
+            presenter.AnimationsEnabled = animations;
             Invoke(manager, "HideLevelImage");
             yield return null;
             int steps = 0;
