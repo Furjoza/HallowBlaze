@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
+using HallowBlaze.Presentation.Runtime;
 
 public class PauseMenuController : MonoBehaviour
 {
@@ -59,6 +60,7 @@ public class PauseMenuController : MonoBehaviour
         currentState = PauseViewState.PauseRoot;
         SetPanels(true, false);
         Select(resumeButton);
+        KeyboardMenuFocus.Attach(pauseRoot, resumeButton);
     }
 
     public void Resume()
@@ -79,6 +81,7 @@ public class PauseMenuController : MonoBehaviour
         currentState = PauseViewState.Settings;
         SetPanels(false, true);
         Select(settingsBackButton);
+        KeyboardMenuFocus.Attach(settingsRoot, settingsBackButton);
     }
 
     public void BackFromSettings()
@@ -88,7 +91,7 @@ public class PauseMenuController : MonoBehaviour
 
         currentState = PauseViewState.PauseRoot;
         SetPanels(true, false);
-        Select(resumeButton);
+        KeyboardMenuFocus.Attach(pauseRoot, resumeButton).RecoverFocus();
     }
 
     public void ExitToMenu()
@@ -143,11 +146,13 @@ public class PauseMenuController : MonoBehaviour
 
     private void OnDisable()
     {
+        currentState = PauseViewState.Closed;
+        SetPanels(false, false);
         RestoreRuntimeState();
     }
 
     private void OnDestroy()
     {
-        RestoreRuntimeState();
+        OnDisable();
     }
 }

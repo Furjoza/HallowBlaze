@@ -1,5 +1,43 @@
 # HallowBlaze Testing
 
+## M7.11 Keyboard Menu Ownership
+
+`KeyboardMenuFocus` owns navigation only for the top visible menu. Focus is a persistent
+white outline, not hover or color alone. Tab/Shift+Tab and arrows traverse active,
+interactable controls; Enter/keypad Enter/Space activate the existing UI submit handler.
+Left/right adjust a focused slider. Text editing retains its native keys; Tab leaves the
+field. Page Up/Page Down/Home/End scroll the focused region. Navigation reveals selected
+rows inside a scroll viewport. Disabled controls and invisible CanvasGroups are skipped.
+Opening and closing frames cannot submit the same keyboard edge to another menu.
+
+| Screen / actions | Keys and focus owner | Exit / return |
+| --- | --- | --- |
+| Main: New Game, Continue, Help, Settings, local results, Quit | `PanelScript` + `KeyboardMenuFocus`; disabled Continue skipped | Existing explicit actions; root has no implicit Quit |
+| Help, Authors, Donate, legacy Controls, local results, record form | Same owner; text field keeps editing keys | Back button or Escape invokes the existing Back action; retained valid focus on reopen |
+| Main settings: music/sound and Back | `SettingsPanelController` installs the same panel policy | Existing Back action or Escape; settings semantics unchanged |
+| Pause: Resume, Settings, Exit to Menu | `PauseMenuController` + menu focus | Escape/Resume; existing deferred gameplay-input release |
+| Pause settings | Separate menu focus; audio buttons use their existing actions | Escape/Back; parent focus retained |
+| Route choice / atlas | `AtlasScreenController` + menu focus; arrows/Tab browse, Enter/Space submit the focused edge | Choice commits only through the existing route action; zero-exit final atlas has no fabricated route or cancel |
+| Field Notes: known entries, list and detail regions, Close | `FieldNotesPresenter` + menu focus; N opens; both scroll regions are focusable | N/Escape/Close; returns to book and holds the gameplay gate through the frame |
+| Interaction / tool pickup / replacement | Board-owned `InteractionPresenter`; Tab/Shift+Tab/arrows browse, Enter confirms, Escape cancels; selected action scrolls into view | Existing free cancellation and delayed interaction-gate release; binding migration belongs to M7.12 |
+| Death: Restart, Menu; post-death Notes | Terminal canvas owns focus; Notes temporarily owns the top context | Explicit existing actions only; terminal focus ends when a run starts |
+
+Focused graphics PlayMode coverage: `PauseMenuTests`, `FieldNotesPresentationTests`,
+`AtlasScreenTests`, `ToolPickupPresentationTests`, and
+`GameSessionLifecycleTests.KeyboardMenuSceneFocusAndBackArePointerFree` /
+`KeyboardTerminalFocusBelongsToVisibleActions`. The scene tests navigate production Menu
+and inspect production terminal controls without a pointer; the component tests exercise
+disabled/empty controls, nested ownership, pause/resume, scrolling layouts, replacement,
+resource preservation and disposal. Saves use isolated temporary directories.
+`KeyboardContinueRouteChoiceCannotBeStolenByEmptyTerminalPanel` verifies real Main Continue
+at a route checkpoint. Pause disable cases close both views before unlocking gameplay.
+Picker scrolling measures actual rendered row/viewport bounds, including wrapped replacement
+rows. `PickerRevealsRetainedRowAfterViewportShrinks` renders Game View with an active camera
+and shrinks the panel without changing selection; geometry changes reveal the retained row
+again, while unchanged geometry does not override manual scrolling.
+These are automated keyboard-handler/scene checks, not a claim of human physical-key or
+OS-window testing. The complete owner keyboard/visual acceptance remains in M7.17.
+
 ## M7.8 Integrated Repair Gate
 
 **Status (2026-10-30):** Technical validation passed; owner visual/audio/live-window

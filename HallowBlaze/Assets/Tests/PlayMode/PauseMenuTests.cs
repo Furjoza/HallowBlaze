@@ -92,6 +92,92 @@ namespace HallowBlaze.Tests.PlayMode
             RestoreIntPreference("HighScore", highScorePreference);
         }
 
+        /// <summary>Disabled or disappearing controls do not trap focus, and activation invokes only the selected action.</summary>
+        [Test]
+        public void KeyboardFocusSkipsDisabledControlsRecoversAndActivatesOnce()
+        {
+            GameObject root = Track(new GameObject("Keyboard menu"));
+            Button first = new GameObject("First", typeof(RectTransform), typeof(Image), typeof(Button)).GetComponent<Button>();
+            Button disabled = new GameObject("Disabled", typeof(RectTransform), typeof(Image), typeof(Button)).GetComponent<Button>();
+            Button last = new GameObject("Last", typeof(RectTransform), typeof(Image), typeof(Button)).GetComponent<Button>();
+            first.transform.SetParent(root.transform);
+            disabled.transform.SetParent(root.transform);
+            last.transform.SetParent(root.transform);
+            disabled.interactable = false;
+            int activations = 0;
+            last.onClick.AddListener(() => activations++);
+            KeyboardMenuFocus focus = KeyboardMenuFocus.Attach(root, disabled.gameObject);
+            Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(first.gameObject));
+            focus.HandleKey(KeyCode.Tab);
+            Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(last.gameObject));
+            Assert.That(activations, Is.Zero);
+            focus.HandleKey(KeyCode.Return);
+            Assert.That(activations, Is.EqualTo(1));
+            focus.HandleKey(KeyCode.Tab, true);
+            Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(first.gameObject));
+            first.gameObject.SetActive(false);
+            focus.RecoverFocus();
+            Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(last.gameObject));
+            Assert.That(last.transform.Find("Keyboard focus").gameObject.activeSelf, Is.True);
+        }
+
+        /// <summary>A child menu exclusively owns keyboard activation and returns a valid parent focus.</summary>
+        [Test]
+        public void NestedMenuOwnsKeysAndReturnsFocusWithoutActivatingUnderlyingMenu()
+        {
+            GameObject root = Track(new GameObject("Parent menu"));
+            Button button = new GameObject("Open child", typeof(RectTransform), typeof(Image), typeof(Button)).GetComponent<Button>();
+            button.transform.SetParent(root.transform);
+            int activations = 0;
+            button.onClick.AddListener(() => activations++);
+            KeyboardMenuFocus parent = KeyboardMenuFocus.Attach(root);
+            GameObject childRoot = Track(new GameObject("Child menu"));
+            Button back = new GameObject("Back", typeof(RectTransform), typeof(Image), typeof(Button)).GetComponent<Button>();
+            back.transform.SetParent(childRoot.transform);
+            back.onClick.AddListener(() => childRoot.SetActive(false));
+            KeyboardMenuFocus child = KeyboardMenuFocus.Attach(childRoot);
+            parent.HandleKey(KeyCode.Return);
+            parent.RecoverFocus();
+            Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(back.gameObject));
+            Assert.That(activations, Is.Zero);
+            child.HandleKey(KeyCode.Return);
+            Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(button.gameObject));
+            Assert.That(activations, Is.Zero);
+        }
+
+        /// <summary>Keyboard focus supports numeric, binary and scrollable controls without a pointer.</summary>
+        [Test]
+        public void KeyboardMenuAdjustsSliderToggleAndFocusedScrollRegion()
+        {
+            GameObject root = Track(new GameObject("Settings keyboard controls"));
+            Slider slider = new GameObject("Volume", typeof(RectTransform), typeof(Slider)).GetComponent<Slider>();
+            slider.transform.SetParent(root.transform);
+            slider.value = 0.5f;
+            Toggle toggle = new GameObject("Enabled", typeof(RectTransform), typeof(Toggle)).GetComponent<Toggle>();
+            toggle.transform.SetParent(root.transform);
+            ScrollRect scroll = new GameObject("Details", typeof(RectTransform), typeof(ScrollRect), typeof(Selectable)).GetComponent<ScrollRect>();
+            scroll.transform.SetParent(root.transform);
+            scroll.viewport = (RectTransform)scroll.transform;
+            scroll.viewport.sizeDelta = new Vector2(200, 100);
+            scroll.content = new GameObject("Content", typeof(RectTransform)).GetComponent<RectTransform>();
+            scroll.content.SetParent(scroll.transform);
+            scroll.content.sizeDelta = new Vector2(200, 1000);
+            KeyboardMenuFocus focus = KeyboardMenuFocus.Attach(root);
+            focus.HandleKey(KeyCode.RightArrow);
+            Assert.That(slider.value, Is.GreaterThan(0.5f));
+            focus.HandleKey(KeyCode.Tab);
+            bool previous = toggle.isOn;
+            focus.HandleKey(KeyCode.Space);
+            Assert.That(toggle.isOn, Is.Not.EqualTo(previous));
+            focus.HandleKey(KeyCode.Tab);
+            focus.HandleKey(KeyCode.Home);
+            Assert.That(scroll.verticalNormalizedPosition, Is.EqualTo(1).Within(0.01f));
+            focus.HandleKey(KeyCode.PageDown);
+            Assert.That(scroll.verticalNormalizedPosition, Is.EqualTo(0.75f).Within(0.01f));
+            focus.HandleKey(KeyCode.End);
+            Assert.That(scroll.verticalNormalizedPosition, Is.EqualTo(0).Within(0.01f));
+        }
+
         [Test]
         public void EscapeTransitionsClosedPauseSettingsPauseClosed()
         {
@@ -204,16 +290,35 @@ namespace HallowBlaze.Tests.PlayMode
             AssertState("Closed");
         }
 
-        [Test]
-        public void DisablingPauseControllerRestoresRuntimeState()
+        [TestCase(false)]
+        [TestCase(true)]
+        public void DisablingPauseControllerRestoresRuntimeState(bool settings)
         {
             Invoke(pauseMenu, "OpenPause");
+            if (settings) Invoke(pauseMenu, "OpenSettings");
             Assert.That(Time.timeScale, Is.EqualTo(0f));
 
             ((Behaviour)pauseMenu).enabled = false;
 
             Assert.That(Time.timeScale, Is.EqualTo(1f));
             Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputBlocked"), Is.False);
+            AssertState("Closed");
+            Assert.That(pauseRoot.activeSelf, Is.False);
+            Assert.That(settingsRoot.activeSelf, Is.False);
+            Assert.That(pauseRoot.GetComponent<KeyboardMenuFocus>().isActiveAndEnabled, Is.False);
+            if (settings) Assert.That(settingsRoot.GetComponent<KeyboardMenuFocus>().isActiveAndEnabled, Is.False);
+        }
+
+        /// <summary>Mixed-height selected rows remain inside the scroll viewport instead of using an index-based estimate.</summary>
+        [Test]
+        public void PickerScrollUsesMeasuredRowBounds()
+        {
+            Assert.That(HallowBlaze.Presentation.Runtime.Interaction.InteractionPresenter.VisibleScrollOffset(0,
+                new Rect(0, 156, 280, 108), 120), Is.EqualTo(144));
+            Assert.That(HallowBlaze.Presentation.Runtime.Interaction.InteractionPresenter.VisibleScrollOffset(144,
+                new Rect(0, 36, 280, 32), 120), Is.EqualTo(36));
+            Assert.That(HallowBlaze.Presentation.Runtime.Interaction.InteractionPresenter.VisibleScrollOffset(36,
+                new Rect(0, 72, 280, 200), 120), Is.EqualTo(72));
         }
 
         [UnityTest]
@@ -390,8 +495,10 @@ namespace HallowBlaze.Tests.PlayMode
 
             pauseRoot = Track(new GameObject("PauseRoot"));
             settingsRoot = Track(new GameObject("SettingsRoot"));
-            resumeButton = Track(new GameObject("Resume"));
-            settingsBackButton = Track(new GameObject("Back"));
+            resumeButton = Track(new GameObject("Resume", typeof(RectTransform), typeof(Image), typeof(Button)));
+            resumeButton.transform.SetParent(pauseRoot.transform);
+            settingsBackButton = Track(new GameObject("Back", typeof(RectTransform), typeof(Image), typeof(Button)));
+            settingsBackButton.transform.SetParent(settingsRoot.transform);
             GameObject pauseObject = Track(new GameObject("M1.4 PauseMenu"));
             pauseMenu = pauseObject.AddComponent(pauseMenuType);
 
