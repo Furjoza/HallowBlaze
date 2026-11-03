@@ -30,6 +30,33 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(command, Is.TypeOf<WaitCommand>());
             Assert.That(new PcCommandSource(key => key == KeyCode.E).TryTakeCommand(out _), Is.False);
         }
+
+        /// <summary>Visual quarter-turns wrap both ways without rotating the actor or accepting chords, held frames or blocked input.</summary>
+        [Test]
+        public void VisualFacingTurnsOnlyAnIsolatedCosmeticPivot()
+        {
+            var owner = new GameObject("Visual facing test", typeof(SpriteRenderer), typeof(BoxCollider2D));
+            try
+            {
+                PlayerVisualFacing facing = owner.AddComponent<PlayerVisualFacing>();
+                Assert.That(facing.QuarterTurns, Is.Zero);
+                Assert.That(facing.SampleInput(key => key == KeyCode.Q, -30, true), Is.True);
+                Assert.That(facing.QuarterTurns, Is.EqualTo(3));
+                Assert.That(Vector3.Angle(facing.Pivot.up, Vector3.left), Is.LessThan(0.01f));
+                Assert.That(facing.SampleInput(key => key == KeyCode.E, -30, true), Is.False);
+                for (int frame = -29; frame < -25; frame++) facing.SampleInput(key => key == KeyCode.E, frame, true);
+                Assert.That(facing.QuarterTurns, Is.EqualTo(3));
+                Assert.That(facing.SampleInput(key => key == KeyCode.Q || key == KeyCode.E, -24, true), Is.False);
+                Assert.That(facing.SampleInput(key => key == KeyCode.E || key == KeyCode.W, -23, true), Is.False);
+                Assert.That(facing.SampleInput(key => key == KeyCode.E, -22, false), Is.False);
+                Assert.That(facing.SampleInput(key => false, -21, true), Is.False);
+                Assert.That(owner.transform.rotation, Is.EqualTo(Quaternion.identity));
+                Assert.That(owner.GetComponent<BoxCollider2D>().transform, Is.SameAs(owner.transform));
+                facing.enabled = false;
+                Assert.That(owner.GetComponent<SpriteRenderer>().forceRenderingOff, Is.False);
+            }
+            finally { UnityEngine.Object.DestroyImmediate(owner); }
+        }
         private const BindingFlags InstanceFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
         private readonly List<UnityEngine.Object> createdObjects = new List<UnityEngine.Object>();
