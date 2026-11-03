@@ -274,7 +274,87 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
         }
 
-        private Fixture CreateFixture(int occupied, bool animations, RunState restored = null)
+        /// <summary>F cancels a nested comparison, repeat samples do not retoggle, and Space never leaks a Wait.</summary>
+        [UnityTest]
+        public IEnumerator ContextualReplacementToggleAndFrameOwnershipStayFree()
+        {
+            Fixture fixture = CreateFixture(2, false);
+            var picker = fixture.Presenter.InteractionDisplay;
+            picker.SampleInputAsync(key => key == KeyCode.F, -100);
+            picker.SampleInputAsync(key => key == KeyCode.F, -100);
+            Assert.That(picker.IsOpen, Is.True);
+            picker.SampleInputAsync(key => key == KeyCode.E, -99);
+            picker.SampleInputAsync(key => key == KeyCode.Space, -98);
+            Assert.That(picker.IsReplacing, Is.True);
+            picker.SampleInputAsync(key => key == KeyCode.E, -97);
+            picker.SampleInputAsync(key => key == KeyCode.F || key == KeyCode.Space, -96);
+            Assert.That(picker.IsOpen, Is.False);
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Run.ToolSlots[0].Instance.DefinitionId, Is.EqualTo("axe.basic"));
+            Assert.That(fixture.Presenter.Coordinator.SubmitFromAsync(new PcCommandSource(key => key == KeyCode.Space)).Result.Status,
+                Is.EqualTo(CommandSubmissionStatus.Blocked));
+            yield return null;
+            picker.SampleInputAsync(key => key == KeyCode.F, -95);
+            Assert.That(picker.IsOpen, Is.True);
+            picker.SampleInputAsync(key => false, -94);
+            Assert.That(picker.IsOpen, Is.True, "A held key has no new key-down edge.");
+            picker.SampleInputAsync(key => key == KeyCode.Escape, -93);
+            Assert.That(picker.IsOpen, Is.False);
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+        }
+
+        /// <summary>Object selection is ordered by cell and identity, wraps both ways and retains valid refreshed selection.</summary>
+        [Test]
+        public void ContextualObjectSelectionWrapsAndRefreshesWithoutAnAction()
+        {
+            Fixture fixture = CreateFixture(0, false, secondTool: true);
+            var picker = fixture.Presenter.InteractionDisplay;
+            picker.SampleInputAsync(key => key == KeyCode.F, -90);
+            Assert.That(picker.PickupOptions.Count, Is.EqualTo(2));
+            picker.SampleInputAsync(key => key == KeyCode.E, -89);
+            Assert.That(picker.PickupOptions[picker.SelectedIndex].Position, Is.EqualTo(new GridPosition(0, 0)));
+            picker.SampleInputAsync(key => key == KeyCode.Q, -88);
+            Assert.That(picker.PickupOptions[picker.SelectedIndex].Position, Is.EqualTo(new GridPosition(1, 0)));
+            int retained = picker.SelectedIndex;
+            Assert.That(picker.RefreshOptions(), Is.True);
+            Assert.That(picker.SelectedIndex, Is.EqualTo(retained));
+            picker.SampleInputAsync(key => key == KeyCode.Q || key == KeyCode.E, -87);
+            Assert.That(picker.SelectedIndex, Is.EqualTo(retained));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+        }
+
+        /// <summary>Empty, stale, paused and disposed picker contexts never consume a turn or select a replacement target.</summary>
+        [Test]
+        public void ContextualEmptyStaleAndUnavailableBoardsRejectFree()
+        {
+            Fixture empty = CreateFixture(0, false);
+            empty.Runtime.BoardState.TryRemove(empty.ToolEntityId);
+            empty.Presenter.InteractionDisplay.SampleInputAsync(key => key == KeyCode.F, -85);
+            Assert.That(empty.Presenter.InteractionDisplay.IsOpen, Is.False);
+            Assert.That(empty.Presenter.Coordinator.ResolutionCount, Is.Zero);
+            empty.Dispose();
+            Fixture fixture = CreateFixture(0, false);
+            var picker = fixture.Presenter.InteractionDisplay;
+            fixture.Presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Modal, true);
+            picker.SampleInputAsync(key => key == KeyCode.F, -80);
+            Assert.That(picker.IsOpen, Is.False);
+            fixture.Presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Modal, false);
+            picker.SampleInputAsync(key => key == KeyCode.F, -79);
+            picker.SampleInputAsync(key => key == KeyCode.E, -78);
+            fixture.Runtime.BoardState.TryRemove(fixture.ToolEntityId);
+            Assert.That(picker.SampleInputAsync(key => key == KeyCode.Space, -77).Result.Status,
+                Is.EqualTo(CommandSubmissionStatus.Rejected));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
+            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Runtime.BoardState.GetActiveNoises(), Is.Empty);
+            picker.Dispose();
+            picker.SampleInputAsync(key => key == KeyCode.F, -76);
+            Assert.That(picker.IsOpen, Is.False);
+        }
+
+        private Fixture CreateFixture(int occupied, bool animations, RunState restored = null, bool secondTool = false)
         {
             var fixture = new Fixture();
             fixtures.Add(fixture);
@@ -294,8 +374,14 @@ namespace HallowBlaze.Tests.PlayMode
             LegacyBoardView generic = View(fixture, LegacyBoardContentKind.Tool, 1, "Assets/Prefabs/Tiles/Food.prefab");
             fixture.ToolView = generic.View;
             layout.Add(new LegacyBoardView(generic.View, LegacyBoardContentKind.Tool, generic.Position, tool: tool, sourceId: "source.shovel.camp"));
+            if (secondTool)
+            {
+                LegacyBoardView additional = View(fixture, LegacyBoardContentKind.Tool, 0, "Assets/Prefabs/Tiles/Food.prefab");
+                layout.Add(new LegacyBoardView(additional.View, LegacyBoardContentKind.Tool, additional.Position,
+                    tool: fixture.Run.CreateToolInstance(ToolContentCatalog.Load()["shovel.basic"]), sourceId: "source.shovel.second"));
+            }
             fixture.Runtime = LegacyBoardRuntimeComposer.Compose(request, fixture.Run, new GridBounds(0, 0, 2, 0), layout);
-            fixture.ToolEntityId = fixture.Runtime.BoardState.GetEntities().Single(entity => entity.Definition.ContentId == "shovel.basic").Id;
+            fixture.ToolEntityId = fixture.Runtime.BoardState.GetEntities().Single(entity => entity.Definition.ContentId == "shovel.basic" && entity.Position.X == 1).Id;
             fixture.Hud = new ToolHudPresenter(fixture.Run, null, new Vector2(960, 540));
             fixture.Presenter = new BoardEventPresenter(fixture.Runtime, fixture, fixture, fixture,
                 diagnostic => Assert.Fail(diagnostic.Code + ": " + diagnostic.Error), 0f) { AnimationsEnabled = animations };

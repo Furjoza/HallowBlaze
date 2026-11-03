@@ -6452,7 +6452,7 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 
 ## `M7.12` - F interaction toggle, Q/E object selection and Space confirmation
 
-**Status:** `Planned`
+**Status:** `Done` - 2026-11-03. F toggle, deterministic Q/E object selection, explicit per-object actions and single Space confirmation implemented. Full graphics PlayMode 221/221 passed; final picker/source checks after self-review corrections 40/40 passed. Independent review: Not run, invocation failed with `ProviderRequestError: Codex stream failed`; Lead self-review passed after repairing one-object action retention and stale-tool refresh. Policy is in `Docs/Testing.md`; idle rotation remains M7.18 and human acceptance remains M7.17.
 **Priority:** P1 gameplay input repair.
 **Related contract:** Sections 9, 10, 18.1 and existing M5 targeting/tool contracts.
 **Rationale:** Working on an obstacle should not require clicking the side panel; selection/confirmation must be keyboard-complete and context-safe.

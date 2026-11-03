@@ -19,6 +19,17 @@ namespace HallowBlaze.Tests.PlayMode
 {
     public sealed class PlayModeInfrastructureTests
     {
+        /// <summary>F owns interaction entry while idle E is not a picker-opening or command-suppression key.</summary>
+        [Test]
+        public void InteractionEntrySuppressesNormalCommandButIdleEDoesNot()
+        {
+            var toggle = new PcCommandSource(key => key == PcInputBindings.InteractionToggle || key == KeyCode.Space);
+            Assert.That(toggle.TryTakeCommand(out _), Is.False);
+            var idle = new PcCommandSource(key => key == KeyCode.E || key == KeyCode.Space);
+            Assert.That(idle.TryTakeCommand(out PlayerCommand command), Is.True);
+            Assert.That(command, Is.TypeOf<WaitCommand>());
+            Assert.That(new PcCommandSource(key => key == KeyCode.E).TryTakeCommand(out _), Is.False);
+        }
         private const BindingFlags InstanceFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
         private readonly List<UnityEngine.Object> createdObjects = new List<UnityEngine.Object>();
