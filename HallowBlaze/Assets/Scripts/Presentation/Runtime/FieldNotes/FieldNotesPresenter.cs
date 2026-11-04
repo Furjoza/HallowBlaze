@@ -117,7 +117,11 @@ namespace HallowBlaze.Presentation.Runtime
             IsOpen = true;
             HideHints();
             ownInput(true);
-            try { Refresh(); panel.SetActive(true); openButton.gameObject.SetActive(false); notice.SetActive(false); }
+            try
+            {
+                Refresh(); panel.SetActive(true); openButton.gameObject.SetActive(false); notice.SetActive(false);
+                KeyboardMenuFocus.Attach(panel, rows.Count > 0 ? rows[0] : null);
+            }
             catch { CloseImmediately(); throw; }
             return true;
         }
@@ -132,6 +136,7 @@ namespace HallowBlaze.Presentation.Runtime
             openButton.gameObject.SetActive(true);
             RefreshNotice();
             releaseAfterFrame = Time.frameCount;
+            if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(openButton.gameObject);
         }
 
         /// <summary>Rebuilds only already recorded entries; unknown rules never create rows, tooltips or completion statistics.</summary>
@@ -266,8 +271,8 @@ namespace HallowBlaze.Presentation.Runtime
             if (size != viewport) Resize(size);
             openButton.interactable = !IsOpen && releaseAfterFrame < 0 && mayOpen();
             if (IsOpen && !mayOpen()) { Close(); return; }
-            if (Input.GetKeyDown(KeyCode.N)) { if (IsOpen) Close(); else Open(); }
-            else if (IsOpen && Input.GetKeyDown(KeyCode.Escape)) Close();
+            if (Input.GetKeyDown(PcInputBindings.Notes)) { if (IsOpen) Close(); else Open(); }
+            else if (IsOpen && Input.GetKeyDown(PcInputBindings.Cancel)) Close();
         }
 
         private void LateUpdate()
@@ -338,7 +343,7 @@ namespace HallowBlaze.Presentation.Runtime
 
         private static RectTransform ScrollArea(string name, Transform parent, out RectTransform content)
         {
-            var owner = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
+            var owner = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect), typeof(Selectable));
             owner.transform.SetParent(parent, false);
             owner.GetComponent<Image>().color = new Color(0, 0, 0, 0);
             var child = new GameObject("Content", typeof(RectTransform));

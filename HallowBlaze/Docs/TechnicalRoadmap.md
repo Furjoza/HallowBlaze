@@ -6414,7 +6414,7 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 
 ## `M7.10` - Geographical left/right route choices
 
-**Status:** `Planned`
+**Status:** `Done` - 2026-11-04. Authoritative direction ordering, stable clue/edge identity and keyboard-revealed horizontal alternatives implemented. Full graphics PlayMode 232/232 and final atlas checks 4/4 passed; independent review PASS after inertia/focus correction. Direction-to-position matrix and rendered/input evidence are in `Docs/Testing.md`; human acceptance remains M7.17.
 **Priority:** P1 usability repair.
 **Related contract:** Sections 7, 18.1 and 27.2.
 **Rationale:** West on the left and east on the right should match geography, not incidental option enumeration.
@@ -6433,7 +6433,7 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 
 ## `M7.11` - Keyboard-complete menus and modal focus
 
-**Status:** `Planned`
+**Status:** `Done` - 2026-11-03. Shared visible modal focus, keyboard navigation/activation/back/scrolling and lifecycle repairs; focused graphics PlayMode 34/34 passed and independent review PASS after corrections. Screen/action/key/owner matrix is in `Docs/Testing.md`; human integrated acceptance remains M7.17.
 **Priority:** P1 accessibility/input repair.
 **Related contract:** Section 18.1 keyboard-complete PC interaction.
 **Rationale:** Mouse-only controls or lost focus can block an otherwise keyboard-playable run; coverage must include every current screen.
@@ -6452,7 +6452,7 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 
 ## `M7.12` - F interaction toggle, Q/E object selection and Space confirmation
 
-**Status:** `Planned`
+**Status:** `Done` - 2026-11-03. F toggle, deterministic Q/E object selection, explicit per-object actions and single Space confirmation implemented. Full graphics PlayMode 221/221 passed; final picker/source checks after self-review corrections 40/40 passed. Independent review: Not run, invocation failed with `ProviderRequestError: Codex stream failed`; Lead self-review passed after repairing one-object action retention and stale-tool refresh. Policy is in `Docs/Testing.md`; idle rotation remains M7.18 and human acceptance remains M7.17.
 **Priority:** P1 gameplay input repair.
 **Related contract:** Sections 9, 10, 18.1 and existing M5 targeting/tool contracts.
 **Rationale:** Working on an obstacle should not require clicking the side panel; selection/confirmation must be keyboard-complete and context-safe.
@@ -6471,7 +6471,7 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 
 ## `M7.13` - Illustrated keyboard Controls view
 
-**Status:** `Planned`
+**Status:** `Done` - 2026-11-03. Runtime-derived keyboard diagram, context labels and keyboard-safe main/pause entry implemented. Full graphics PlayMode 229/229 passed; final Controls/focus checks after self-review corrections 20/20 passed. Independent review: Not run, invocation failed with `429 ProviderRequestError`; Lead self-review passed after correcting focus contrast and giving keypad Enter its own keycap. Render/context policy is in `Docs/Testing.md`; human integrated acceptance remains M7.17.
 **Priority:** P1 discoverability.
 **Related contract:** Sections 3.1 and 18.1; controls are basic information, not discoveries.
 **Rationale:** Keyboard support needs discoverable bindings and visible mode differences, not experimentation to find a working key.
@@ -6566,7 +6566,7 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 
 ## `M7.18` - Free 90-degree visual turns in idle walking mode
 
-**Status:** `Planned` - owner request 2026-11-03; complete before M7.13 final bindings and M7.17 acceptance.
+**Status:** `Done` - 2026-11-03. Presentation-only quarter-turns and idle/context/lifecycle gates implemented; full graphics PlayMode 225/225 and focused state/render checks 3/3 passed. Independent review PASS, including actual Git scope evidence. Authored North pose, movement-preserved facing and chord policy are in `Docs/Testing.md`; human integrated acceptance remains M7.17.
 **Priority:** P1 requested input behavior within the keyboard follow-up.
 **Related contract:** Section 18.1 contextual input and free cosmetic facing; existing grid/turn/intent invariants.
 **Rationale:** A harmless, responsive visual action lets players turn the character while thinking without spending a tactical opportunity or accidentally selecting an interaction.

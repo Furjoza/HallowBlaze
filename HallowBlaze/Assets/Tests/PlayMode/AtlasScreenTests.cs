@@ -5,6 +5,8 @@ using System.Linq;
 using System.Reflection;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
+using HallowBlaze.Core.World;
+using HallowBlaze.Presentation.Runtime;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -145,6 +147,9 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(routeButtons, Has.Length.EqualTo(choices.Length));
             Assert.That(routeButtons.All(button => button.interactable), Is.True);
             Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(routeButtons[0].gameObject));
+            choices = routeButtons.Select(button => choices.Single(choice =>
+                button.GetComponentInChildren<Text>(true).text ==
+                FormatToken(choice.WorldDirection) + "\n" + FormatToken(choice.ClueKey))).ToArray();
             for (int index = 0; index < routeButtons.Length; index++)
             {
                 string label = routeButtons[index].GetComponentInChildren<Text>(true).text;
@@ -230,6 +235,185 @@ namespace HallowBlaze.Tests.PlayMode
             yield return null;
             Assert.That(GetProperty<bool>(atlas, "IsOpen"), Is.True, "Final arrival must show the atlas even without outgoing roads.");
             Assert.That(GetProperty<int>(atlas, "RouteButtonCount"), Is.Zero);
+        }
+
+        /// <summary>Route geography, focus and committed identity do not depend on incoming edge order.</summary>
+        [UnityTest]
+        public IEnumerator RouteChoicesKeepGeographyAndIdentityWhenInputIsReversed()
+        {
+            GameObject prefab = Resources.Load<GameObject>("Atlas/AtlasScreen");
+            TextAsset worldDefinition = GetField<TextAsset>(prefab.GetComponent(atlasControllerType), "worldDefinitionJson");
+            Component manager = CreateManager(worldDefinition);
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            GameObject atlasObject = UnityEngine.Object.Instantiate(prefab);
+            Component atlas = atlasObject.GetComponent(atlasControllerType);
+            Assert.That((bool)Invoke(manager, "BeginRouteChoice"), Is.True);
+            WorldMapExitOption[] choices = GetProperty<System.Collections.Generic.IReadOnlyList<WorldMapExitOption>>(
+                manager, "RouteChoices").ToArray();
+            WorldMapExitOption west = choices.Single(choice => choice.WorldDirection.EndsWith("west", StringComparison.Ordinal));
+            WorldMapExitOption east = choices.Single(choice => choice.WorldDirection.EndsWith("east", StringComparison.Ordinal));
+
+            foreach (WorldMapExitOption[] permutation in new[] { new[] { east, west }, new[] { west, east } })
+            {
+                Invoke(atlas, "HandleRouteChoicesChanged", (object)permutation);
+                yield return null;
+                Canvas.ForceUpdateCanvases();
+                Button[] buttons = atlasObject.GetComponentsInChildren<Button>()
+                    .Where(button => button.name.StartsWith("AtlasRouteButton-", StringComparison.Ordinal)).ToArray();
+                Assert.That(buttons, Has.Length.EqualTo(2));
+                string leftLabel = buttons[0].GetComponentInChildren<Text>().text;
+                string rightLabel = buttons[1].GetComponentInChildren<Text>().text;
+                StringAssert.Contains(FormatToken(west.WorldDirection), leftLabel);
+                StringAssert.Contains(FormatToken(west.ClueKey), leftLabel);
+                StringAssert.Contains(FormatToken(east.WorldDirection), rightLabel);
+                StringAssert.Contains(FormatToken(east.ClueKey), rightLabel);
+                Assert.That(buttons[0].transform.position.x, Is.LessThan(buttons[1].transform.position.x));
+                KeyboardMenuFocus focus = atlasObject.GetComponent<KeyboardMenuFocus>();
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[0].gameObject));
+                focus.HandleKey(KeyCode.RightArrow);
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[1].gameObject));
+                focus.HandleKey(KeyCode.LeftArrow);
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[0].gameObject));
+                Assert.That(session.ActiveRun.ActiveLeg, Is.Null);
+                Assert.That(session.ActiveRun.CurrentDay, Is.Zero);
+                Assert.That(GetProperty<string>(atlas, "SelectedRouteEdgeId"), Is.Null);
+            }
+
+            atlasObject.GetComponent<KeyboardMenuFocus>().HandleKey(KeyCode.RightArrow);
+            atlasObject.GetComponent<KeyboardMenuFocus>().HandleKey(KeyCode.Return);
+            yield return null;
+            Assert.That(session.ActiveRun.ActiveLeg.EdgeId, Is.EqualTo(east.EdgeId));
+            Assert.That(GetProperty<string>(atlas, "SelectedRouteEdgeId"), Is.EqualTo(east.EdgeId));
+        }
+
+        /// <summary>All cardinal/diagonal directions and unrecognized alternatives have an input-independent order.</summary>
+        [Test]
+        public void RouteDirectionMatrixIsStableAcrossPermutations()
+        {
+            string[] directions = { "west", "northwest", "southwest", "north", "south", "northeast", "east", "southeast", "riverward" };
+            WorldMapExitOption[] options = directions.Select((direction, index) => CreateOption(direction, "edge." + index)).ToArray();
+            MethodInfo order = atlasControllerType.GetMethod("OrderRouteChoices", BindingFlags.Static | BindingFlags.NonPublic);
+            for (int offset = 0; offset < options.Length; offset++)
+            {
+                WorldMapExitOption[] permutation = options.Skip(offset).Concat(options.Take(offset)).Reverse().ToArray();
+                var actual = (System.Collections.Generic.IReadOnlyList<WorldMapExitOption>)order.Invoke(null, new object[] { permutation });
+                Assert.That(actual, Is.EqualTo(options));
+                Assert.That(permutation, Is.EqualTo(options.Skip(offset).Concat(options.Take(offset)).Reverse()), "Input is read-only.");
+            }
+            WorldMapExitOption first = CreateOption("west", "a");
+            WorldMapExitOption second = CreateOption("west", "b");
+            Assert.That(order.Invoke(null, new object[] { new[] { second, first } }), Is.EqualTo(new[] { first, second }));
+        }
+
+        /// <summary>Single, paired and extra alternatives remain readable, focused and identity-safe in narrow layouts.</summary>
+        [UnityTest]
+        public IEnumerator RouteLayoutsRevealEveryAlternativeAndSkipUnavailableButtons()
+        {
+            GameObject prefab = Resources.Load<GameObject>("Atlas/AtlasScreen");
+            Component manager = CreateManager(GetField<TextAsset>(prefab.GetComponent(atlasControllerType), "worldDefinitionJson"));
+            GameObject atlasObject = UnityEngine.Object.Instantiate(prefab);
+            Component atlas = atlasObject.GetComponent(atlasControllerType);
+            Assert.That((bool)Invoke(manager, "BeginRouteChoice"), Is.True);
+            WorldMapExitOption[] legal = GetProperty<System.Collections.Generic.IReadOnlyList<WorldMapExitOption>>(
+                manager, "RouteChoices").ToArray();
+            WorldMapExitOption[] extra = legal.Concat(new[] { CreateOption("north", "north"),
+                CreateOption("south", "south"), CreateOption("riverward", "unmarked") }).ToArray();
+            Canvas canvas = atlasObject.GetComponent<Canvas>();
+            GameObject cameraObject = new GameObject("Atlas capture camera", typeof(Camera));
+            Camera camera = cameraObject.GetComponent<Camera>();
+            camera.enabled = false;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            canvas.renderMode = RenderMode.ScreenSpaceCamera;
+            canvas.worldCamera = camera;
+            canvas.planeDistance = 1f;
+            try
+            {
+                foreach (Vector2Int size in new[] { new Vector2Int(1280, 720), new Vector2Int(320, 480) })
+                foreach (WorldMapExitOption[] options in new[] { legal.Take(1).ToArray(), legal, extra })
+                {
+                    RenderTexture target = new RenderTexture(size.x, size.y, 24);
+                    RenderTexture previous = RenderTexture.active;
+                    target.Create();
+                    camera.targetTexture = target;
+                    Texture2D capture = new Texture2D(size.x, size.y, TextureFormat.RGB24, false);
+                    try
+                    {
+                        Invoke(atlas, "HandleRouteChoicesChanged", (object)options);
+                        yield return null;
+                        Canvas.ForceUpdateCanvases();
+                        KeyboardMenuFocus focus = atlasObject.GetComponent<KeyboardMenuFocus>();
+                        Button[] buttons = atlasObject.GetComponentsInChildren<Button>().Where(button =>
+                            button.name.StartsWith("AtlasRouteButton-", StringComparison.Ordinal)).ToArray();
+                        Assert.That(buttons, Has.Length.EqualTo(options.Length));
+                        ScrollRect scroll = atlasObject.GetComponentInChildren<ScrollRect>();
+                        foreach (Button button in buttons)
+                        {
+                            Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(button.gameObject));
+                            Invoke(atlas, "LateUpdate");
+                            Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(scroll.viewport, (RectTransform)button.transform);
+                            Assert.That(bounds.min.x, Is.GreaterThanOrEqualTo(scroll.viewport.rect.xMin - 1f));
+                            Assert.That(bounds.max.x, Is.LessThanOrEqualTo(scroll.viewport.rect.xMax + 1f));
+                            Text label = button.GetComponentInChildren<Text>();
+                            Assert.That(label.fontSize * canvas.scaleFactor, Is.InRange(14f, 16f));
+                            Assert.That(label.preferredHeight, Is.LessThanOrEqualTo(label.rectTransform.rect.height + 1f), label.text);
+                            Assert.That(label.cachedTextGenerator.vertexCount, Is.GreaterThan(0));
+                            focus.HandleKey(KeyCode.RightArrow);
+                        }
+                        Invoke(atlas, "LateUpdate");
+                        if (options.Length > 2)
+                        {
+                            scroll.horizontalNormalizedPosition = 1f;
+                            Invoke(atlas, "LateUpdate");
+                            Assert.That(scroll.horizontalNormalizedPosition, Is.EqualTo(1f).Within(0.01f), "Retained focus must not undo pointer scrolling.");
+                            focus.HandleKey(KeyCode.RightArrow);
+                            Invoke(atlas, "LateUpdate");
+                            scroll.velocity = new Vector2(-1000f, 0f);
+                            buttons[0].Select();
+                            Invoke(atlas, "LateUpdate");
+                            Assert.That(scroll.velocity, Is.EqualTo(Vector2.zero));
+                            for (int frame = 0; frame < 3; frame++) yield return null;
+                            Bounds retainedBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(
+                                scroll.viewport, (RectTransform)buttons[0].transform);
+                            Assert.That(retainedBounds.min.x, Is.GreaterThanOrEqualTo(scroll.viewport.rect.xMin - 1f));
+                            Assert.That(retainedBounds.max.x, Is.LessThanOrEqualTo(scroll.viewport.rect.xMax + 1f));
+                        }
+                        camera.Render();
+                        RenderTexture.active = target;
+                        capture.ReadPixels(new Rect(0, 0, size.x, size.y), 0, 0);
+                        capture.Apply();
+                        Assert.That(capture.GetPixels32().Distinct().Count(), Is.GreaterThan(12));
+                        File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M710-routes-" + options.Length + "-" + size.x + "x" + size.y + ".png"), capture.EncodeToPNG());
+                        if (buttons.Length > 1)
+                        {
+                            buttons[0].interactable = false;
+                            buttons[1].Select();
+                            focus.HandleKey(KeyCode.LeftArrow);
+                            Assert.That(EventSystem.current.currentSelectedGameObject, Is.Not.SameAs(buttons[0].gameObject));
+                        }
+                        Assert.That(GetProperty<GameSession>(manager, "Session").ActiveRun.ActiveLeg, Is.Null);
+                    }
+                    finally
+                    {
+                        camera.targetTexture = null;
+                        RenderTexture.active = previous;
+                        UnityEngine.Object.DestroyImmediate(capture);
+                        target.Release();
+                        UnityEngine.Object.DestroyImmediate(target);
+                    }
+                }
+            }
+            finally
+            {
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvas.worldCamera = null;
+                UnityEngine.Object.DestroyImmediate(cameraObject);
+            }
+        }
+
+        private static WorldMapExitOption CreateOption(string direction, string edgeId)
+        {
+            return (WorldMapExitOption)Activator.CreateInstance(typeof(WorldMapExitOption), InstanceFlags,
+                null, new object[] { new WorldEdgeDefinition(edgeId, "source", "destination", direction, "clue.fallen-trees") }, null);
         }
 
         private Component CreateManager(TextAsset worldDefinition)
