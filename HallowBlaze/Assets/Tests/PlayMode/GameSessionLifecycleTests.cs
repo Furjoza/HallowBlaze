@@ -92,6 +92,146 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(session.ActiveRun.Status, Is.EqualTo(RunStatus.Active));
         }
 
+        /// <summary>Production menu transitions retain valid focus using keyboard activation and cancellation only.</summary>
+        [UnityTest]
+        public IEnumerator KeyboardMenuSceneFocusAndBackArePointerFree()
+        {
+            yield return SceneManager.LoadSceneAsync("Menu", LoadSceneMode.Single);
+            yield return null;
+            yield return null;
+            GameObject main = GameObject.Find("MainMenuPanel");
+            KeyboardMenuFocus focus = main.GetComponent<KeyboardMenuFocus>();
+            Assert.That(focus, Is.Not.Null);
+            var events = UnityEngine.EventSystems.EventSystem.current;
+            Assert.That(events.currentSelectedGameObject, Is.Not.Null);
+            Assert.That(events.currentSelectedGameObject.GetComponent<Selectable>().IsInteractable(), Is.True);
+            Button help = main.GetComponentsInChildren<Button>().Single(button => button.name == "HelpBttn");
+            for (int index = 0; index < 20 && events.currentSelectedGameObject != help.gameObject; index++)
+                focus.HandleKey(KeyCode.Tab);
+            Assert.That(events.currentSelectedGameObject, Is.SameAs(help.gameObject));
+            focus.HandleKey(KeyCode.Return);
+            float deadline = Time.realtimeSinceStartup + 4;
+            while (GameObject.Find("HelpMenuPanel") == null && Time.realtimeSinceStartup < deadline) yield return null;
+            yield return null;
+            GameObject helpRoot = GameObject.Find("HelpMenuPanel");
+            Assert.That(helpRoot, Is.Not.Null);
+            KeyboardMenuFocus helpFocus = helpRoot.GetComponent<KeyboardMenuFocus>();
+            Assert.That(helpFocus, Is.Not.Null);
+            helpFocus.HandleKey(KeyCode.Escape);
+            deadline = Time.realtimeSinceStartup + 4;
+            while ((!main.activeInHierarchy || helpRoot.activeInHierarchy) && Time.realtimeSinceStartup < deadline) yield return null;
+            yield return null;
+            Assert.That(main.activeInHierarchy, Is.True);
+            Assert.That(helpRoot.activeInHierarchy, Is.False);
+            focus.RecoverFocus();
+            Assert.That(events.currentSelectedGameObject, Is.SameAs(help.gameObject));
+            Scene cleanup = SceneManager.CreateScene("Keyboard menu cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Menu");
+        }
+
+        /// <summary>Real player input rotates visible art freely, preserves absolute movement and respects modal/replay/disposal ownership.</summary>
+        [UnityTest]
+        public IEnumerator ProductionVisualTurnsAreVisibleFreeAndGated()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            Invoke(manager, "HideLevelImage");
+            yield return null;
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
+            presenter.AnimationsEnabled = false;
+            Component player = runtime.Views[runtime.PlayerId].GetComponent(playerType);
+            PlayerVisualFacing facing = player.GetComponent<PlayerVisualFacing>();
+            Assert.That(facing, Is.Not.Null);
+            string before = HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeTravelRun(runtime.RunState);
+            Vector3 position = player.transform.position;
+            Quaternion rotation = player.transform.rotation;
+            Color32[] previous = null;
+            for (int turn = 0; turn < 4; turn++)
+            {
+                Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.E), -200 + turn), Is.True);
+                yield return null;
+                Texture2D capture = CaptureProductionCanvas(manager, 960, 640);
+                Color32[] pixels = capture.GetPixels32();
+                if (previous != null)
+                    Assert.That(pixels.Where((pixel, index) => !pixel.Equals(previous[index])).Count(), Is.GreaterThan(10));
+                previous = pixels;
+                File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M718-facing-" + facing.QuarterTurns + ".png"), capture.EncodeToPNG());
+                UnityEngine.Object.DestroyImmediate(capture);
+                Assert.That(player.transform.position, Is.EqualTo(position));
+                Assert.That(player.transform.rotation, Is.EqualTo(rotation));
+            }
+            Assert.That(facing.QuarterTurns, Is.Zero);
+            Assert.That(HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeTravelRun(runtime.RunState), Is.EqualTo(before));
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.Zero);
+            Invoke(manager, "SetGameplayInputBlocked", true);
+            Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.Q), -190), Is.False);
+            Invoke(manager, "SetGameplayInputBlocked", false);
+            yield return null;
+            FieldNotesPresenter notes = GetProperty<FieldNotesPresenter>(manager, "FieldNotes");
+            Assert.That(notes.Open(), Is.True);
+            Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.E), -189), Is.False);
+            notes.Close();
+            yield return null;
+            Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.E), -187), Is.True);
+            Assert.That(facing.QuarterTurns, Is.EqualTo(1));
+            presenter.AnimationsEnabled = true;
+            SetField(player, "moveTime", 0.2f);
+            Direction direction = FindExitPath(runtime).First();
+            object[] arguments = { new MoveCommand(direction), null };
+            Assert.That((bool)Invoke(player, "TrySubmitCommand", arguments), Is.True);
+            var operation = (Task<CommandSubmission>)arguments[1];
+            Assert.That(operation.IsCompleted, Is.False);
+            while (!operation.IsCompleted)
+            {
+                Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.Q), Time.frameCount), Is.False);
+                yield return null;
+            }
+            Assert.That(operation.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(facing.QuarterTurns, Is.EqualTo(1));
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
+            yield return null;
+            int food = runtime.RunState.Food;
+            arguments = new object[] { new WaitCommand(), null };
+            Assert.That((bool)Invoke(player, "TrySubmitCommand", arguments), Is.True);
+            operation = (Task<CommandSubmission>)arguments[1];
+            while (!operation.IsCompleted) yield return null;
+            Assert.That(runtime.RunState.Food, Is.EqualTo(food - 1));
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(2));
+            Assert.That(facing.QuarterTurns, Is.EqualTo(1));
+            Invoke(manager, "GameOver", false);
+            Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.Q), -186), Is.False);
+            ((Behaviour)player).enabled = false;
+            Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.Q), -188), Is.False);
+            Scene cleanup = SceneManager.CreateScene("Visual facing cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
+        /// <summary>Production death actions are reachable instead of assigning focus to their noninteractive backdrop.</summary>
+        [UnityTest]
+        public IEnumerator KeyboardTerminalFocusBelongsToVisibleActions()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)gameManagerType.GetField("instance", BindingFlags.Public | BindingFlags.Static).GetValue(null);
+            Invoke(manager, "HideLevelImage");
+            Invoke(manager, "GameOver", false);
+            GameObject restart = GameObject.Find("RestartBttn");
+            GameObject menu = GameObject.Find("MenuBttn");
+            Assert.That(restart, Is.Not.Null);
+            KeyboardMenuFocus focus = restart.GetComponentInParent<KeyboardMenuFocus>();
+            Assert.That(focus, Is.Not.Null);
+            Assert.That(UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject, Is.SameAs(restart));
+            focus.HandleKey(KeyCode.Tab);
+            Assert.That(UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject, Is.SameAs(menu));
+            Scene cleanup = SceneManager.CreateScene("Keyboard terminal cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
         [UnityTest]
         public IEnumerator CorruptRunKeepsContinueLabelStable()
         {
@@ -922,6 +1062,37 @@ namespace HallowBlaze.Tests.PlayMode
         }
 
         /// <summary>Failed opening checkpoints never authorize a route choice, a board, or a second day on retry.</summary>
+        /// <summary>A continued route checkpoint retains atlas ownership despite the inactive terminal actions in Main.</summary>
+        [UnityTest]
+        public IEnumerator KeyboardContinueRouteChoiceCannotBeStolenByEmptyTerminalPanel()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            session.StartNewRun("keyboard-route-checkpoint", 48, new RunStateConfiguration(100, 100, 0, "forest.start"));
+            var store = new FileSystemSaveStore(persistenceRoot);
+            Assert.That(store.SaveRun(session.ActiveRun).IsSuccess, Is.True);
+            Assert.That(store.SaveProfile(session.Profile).IsSuccess, Is.True);
+            Assert.That((bool)Invoke(manager, "ExitToMenu"), Is.True);
+            InvokeStatic(gameManagerType, "RequestContinue");
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            yield return null;
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+            GameObject selected = UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject;
+            Assert.That(selected, Is.Not.Null);
+            Assert.That(selected.name, Does.StartWith("AtlasRouteButton-"));
+            KeyboardMenuFocus focus = selected.GetComponentInParent<KeyboardMenuFocus>();
+            focus.HandleKey(KeyCode.RightArrow);
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+            focus.HandleKey(KeyCode.Return);
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+            Scene cleanup = SceneManager.CreateScene("Keyboard route cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
         [UnityTest]
         public IEnumerator OpeningCheckpointFailuresRetryWithoutSkippingOrRepeatingDay()
         {

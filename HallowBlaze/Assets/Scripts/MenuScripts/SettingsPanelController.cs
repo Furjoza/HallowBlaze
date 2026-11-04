@@ -14,6 +14,8 @@ public class SettingsPanelController : MonoBehaviour
     private void OnEnable()
     {
         Refresh();
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Menu" && GetComponent<PanelScript>() == null)
+            gameObject.AddComponent<PanelScript>();
     }
 
     public void SetMusicOn()

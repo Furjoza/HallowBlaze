@@ -6,11 +6,12 @@ using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.Turns.Resolution;
 using HallowBlaze.Core.State;
 using UnityEngine;
+using EntityId = HallowBlaze.Core.Board.Primitives.EntityId;
 
 namespace HallowBlaze.Presentation.Runtime.Interaction
 {
     /// <summary>
-    /// Board-owned PC target picker. E opens a free draft, arrows/Tab select, Enter confirms,
+    /// Board-owned PC target picker. F toggles a free draft, Q/E select objects, arrows/Tab select actions, Space/Enter confirm,
     /// and Escape cancels. Numbered persistent geometry and a scrollable action list do not depend on animation or color.
     /// </summary>
     [DefaultExecutionOrder(-50)]
@@ -27,6 +28,12 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         private ToolPickupOption replacement;
         private PickupToolCommand replacementChoice;
         private string[] replacementLabels = Array.Empty<string>();
+        private Rect selectedRow;
+        private bool revealSelection;
+        private Rect revealedRow;
+        private float scrollViewportHeight;
+        private Func<Vector2> viewportSize = () => new Vector2(Screen.width, Screen.height);
+        private int? sampledFrame;
 
         /// <summary>Gets whether a free selection draft currently owns input.</summary>
         public bool IsOpen { get; private set; }
@@ -88,6 +95,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             if (!CanChoose() || IsReplacing || index < 0 || index >= OptionCount || !IsAvailable(index))
                 return false;
             SelectedIndex = index;
+            revealSelection = true;
             DrawMarkers();
             return true;
         }
@@ -134,7 +142,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         {
             if (!CanChoose() || replacement == null) return false;
             foreach (PickupToolCommand choice in replacement.Choices)
-                if (choice.SlotIndex == slotIndex) { replacementChoice = choice; return true; }
+                if (choice.SlotIndex == slotIndex) { replacementChoice = choice; revealSelection = true; return true; }
             return false;
         }
 
@@ -157,39 +165,109 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
 
         private async void Update()
         {
-            if (IsDisposed || runtime == null) return;
-            if (IsOpen && !CanChoose()) { Cancel(); return; }
-            try
-            {
-                if (!IsOpen)
-                {
-                    if (Input.GetKeyDown(KeyCode.E)) Open();
-                    return;
-                }
-                if (Input.GetKeyDown(KeyCode.Escape)) { Cancel(); return; }
-                if (IsReplacing)
-                {
-                    if (Input.GetKeyDown(KeyCode.Tab) || Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.UpArrow))
-                        SelectReplacement(replacementChoice == null ? 0 : 1 - replacementChoice.SlotIndex);
-                    else if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) await ConfirmAsync();
-                    return;
-                }
-                if (Input.GetKeyDown(KeyCode.Tab) || Input.GetKeyDown(KeyCode.DownArrow)) Cycle(1);
-                else if (Input.GetKeyDown(KeyCode.UpArrow)) Cycle(-1);
-                else if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) await ConfirmAsync();
-            }
+            try { await SampleInputAsync(Input.GetKeyDown, Time.frameCount, Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)); }
             catch (Exception error) { Debug.LogException(error, this); }
         }
 
-        private void Cycle(int step)
+        /// <summary>Samples key-down edges once per frame through the production picker path; F/Escape cancel before other keys and ambiguous navigation/confirm chords are free.</summary>
+        /// <param name="keyDown">Current-frame edges, not held key state.</param>
+        /// <param name="frame">Frame identity; repeated samples never repeat a command or toggle.</param>
+        /// <param name="shift">Whether Tab selects the previous action.</param>
+        /// <returns>The one confirmed submission, or a free NoCommand result for browsing, toggling or blocked input.</returns>
+        public Task<CommandSubmission> SampleInputAsync(Func<KeyCode, bool> keyDown, int frame, bool shift = false)
         {
-            int next = SelectedIndex < 0 ? (step > 0 ? -1 : 0) : SelectedIndex;
-            for (int count = 0; count < OptionCount; count++)
+            if (keyDown == null) throw new ArgumentNullException(nameof(keyDown));
+            Task<CommandSubmission> none = Task.FromResult(new CommandSubmission(CommandSubmissionStatus.NoCommand));
+            if (sampledFrame == frame || IsDisposed || runtime == null) return none;
+            sampledFrame = frame;
+            if (IsOpen && !CanChoose()) { Cancel(); return none; }
+            if (keyDown(PcInputBindings.InteractionToggle))
             {
-                next = (next + step + OptionCount) % OptionCount;
-                if (Select(next)) return;
+                if (IsOpen) Cancel(); else Open();
+                return none;
             }
+            if (!IsOpen) return none;
+            if (keyDown(PcInputBindings.Cancel)) { Cancel(); return none; }
+            bool previousObject = keyDown(PcInputBindings.PreviousObject) || keyDown(KeyCode.LeftArrow);
+            bool nextObject = keyDown(PcInputBindings.NextObject) || keyDown(KeyCode.RightArrow);
+            bool previousAction = keyDown(KeyCode.UpArrow) || keyDown(KeyCode.Tab) && shift;
+            bool nextAction = keyDown(KeyCode.DownArrow) || keyDown(KeyCode.Tab) && !shift;
+            bool confirm = keyDown(PcInputBindings.Space) || keyDown(KeyCode.Return) || keyDown(KeyCode.KeypadEnter);
+            int edges = (previousObject ? 1 : 0) + (nextObject ? 1 : 0) + (previousAction ? 1 : 0) + (nextAction ? 1 : 0) + (confirm ? 1 : 0);
+            if (edges != 1) return none;
+            if (confirm) return ConfirmAsync();
+            int step = previousObject || previousAction ? -1 : 1;
+            if (IsReplacing)
+            {
+                SelectReplacement(replacementChoice == null ? (step > 0 ? 0 : RunState.ToolSlotCount - 1) :
+                    (replacementChoice.SlotIndex + step + RunState.ToolSlotCount) % RunState.ToolSlotCount);
+            }
+            else if (previousObject || nextObject) CycleObject(step);
+            else CycleAction(step);
+            return none;
         }
+
+        private EntityId TargetId(int index) => index < Options.Count ? Options[index].TargetId :
+            index < Options.Count + ToolOptions.Count ? ToolOptions[index - Options.Count].TargetId :
+            PickupOptions[index - Options.Count - ToolOptions.Count].Tool.EntityId;
+
+        private List<int> OrderedChoices()
+        {
+            var indices = new List<int>();
+            for (int index = 0; index < OptionCount; index++) if (IsAvailable(index)) indices.Add(index);
+            indices.Sort((first, second) =>
+            {
+                int comparison = TargetPosition(first).Y.CompareTo(TargetPosition(second).Y);
+                if (comparison == 0) comparison = TargetPosition(first).X.CompareTo(TargetPosition(second).X);
+                if (comparison == 0) comparison = string.CompareOrdinal(TargetId(first).ToString(), TargetId(second).ToString());
+                return comparison != 0 ? comparison : first.CompareTo(second);
+            });
+            return indices;
+        }
+
+        private void CycleObject(int step)
+        {
+            var objects = new List<int>();
+            var seen = new HashSet<EntityId>();
+            foreach (int index in OrderedChoices()) if (seen.Add(TargetId(index))) objects.Add(index);
+            if (objects.Count == 0) return;
+            int current = SelectedIndex < 0 ? -1 : objects.FindIndex(index => TargetId(index).Equals(TargetId(SelectedIndex)));
+            int next = current < 0 ? (step > 0 ? 0 : objects.Count - 1) : (current + step + objects.Count) % objects.Count;
+            if (current == next) return;
+            Select(objects[next]);
+        }
+
+        private void CycleAction(int step)
+        {
+            List<int> actions = OrderedChoices();
+            if (SelectedIndex >= 0) actions.RemoveAll(index => !TargetId(index).Equals(TargetId(SelectedIndex)));
+            if (actions.Count == 0) return;
+            int current = actions.IndexOf(SelectedIndex);
+            int next = current < 0 ? (step > 0 ? 0 : actions.Count - 1) : (current + step + actions.Count) % actions.Count;
+            Select(actions[next]);
+        }
+
+        /// <summary>Refreshes an ordinary draft while retaining the exact valid object/action/slot; nested replacement is cancelled rather than silently replaced.</summary>
+        public bool RefreshOptions()
+        {
+            if (!CanChoose()) return false;
+            if (IsReplacing) { Cancel(); return false; }
+            string selected = SelectedIndex >= 0 ? SelectionKey(SelectedIndex) : null;
+            Options = runtime.Interactions.GetOptions(runtime.BoardState, runtime.RunState, runtime.PlayerId);
+            ToolOptions = runtime.Tools.GetOptions(runtime.BoardState, runtime.RunState, runtime.PlayerId);
+            PickupOptions = runtime.Pickups.GetOptions(runtime.BoardState, runtime.RunState, runtime.PlayerId);
+            SelectedIndex = -1;
+            for (int index = 0; index < OptionCount; index++)
+                if (IsAvailable(index) && SelectionKey(index) == selected) { Select(index); break; }
+            DrawMarkers();
+            return true;
+        }
+
+        private string SelectionKey(int index) => TargetId(index) + ":" + (index < Options.Count ? "manual:" + Options[index].ActionId :
+            index < Options.Count + ToolOptions.Count ? "tool:" + ToolOptions[index - Options.Count].SlotIndex + ":" +
+                ToolOptions[index - Options.Count].InstanceId + ":" + ToolOptions[index - Options.Count].ExpectedCharges + ":" + ToolOptions[index - Options.Count].ActionId :
+            "pickup:" + PickupOptions[index - Options.Count - ToolOptions.Count].Tool.InstanceId + ":" +
+                PickupOptions[index - Options.Count - ToolOptions.Count].Tool.Charges);
 
         private void LateUpdate()
         {
@@ -208,9 +286,10 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         private void OnGUI()
         {
             if (!CanChoose()) return;
-            float width = Mathf.Min(300f, Screen.width - 16f);
+            Vector2 size = viewportSize();
+            float width = Mathf.Min(300f, size.x - 16f);
             float top = ToolHudPresenter.ReservedHeight + 8f;
-            GUILayout.BeginArea(new Rect(Screen.width - width - 8f, top, width, Mathf.Max(100f, Screen.height - top - 16f)), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(size.x - width - 8f, top, width, Mathf.Max(100f, size.y - top - 16f)), GUI.skin.box);
             if (IsReplacing)
             {
                 GUILayout.Label("Replace tool");
@@ -218,9 +297,14 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 scroll = GUILayout.BeginScrollView(scroll);
                 var comparisonStyle = new GUIStyle(GUI.skin.button) { wordWrap = true, alignment = TextAnchor.MiddleLeft };
                 foreach (PickupToolCommand choice in replacement.Choices)
+                {
                     if (GUILayout.Button((replacementChoice == choice ? "> " : "") + replacementLabels[choice.SlotIndex],
                         comparisonStyle, GUILayout.MinHeight(90f))) SelectReplacement(choice.SlotIndex);
+                    if (Event.current.type == EventType.Repaint && replacementChoice == choice)
+                        selectedRow = GUILayoutUtility.GetLastRect();
+                }
                 GUILayout.EndScrollView();
+                RevealSelectedRow();
                 GUILayout.Label("1 turn; Food -" + runtime.Tools.ActionCosts.FoodCost + "; Noise " +
                     ActionNoiseProfile.Prototype.InteractionStrength + " / " + ActionNoiseProfile.Prototype.LifetimeTurns + " turns");
                 GUI.enabled = replacementChoice != null;
@@ -238,17 +322,38 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 GUI.enabled = IsAvailable(index);
                 string label = (index == SelectedIndex ? "> " : "") + (index + 1) + ". " + GetOptionLabel(index);
                 if (GUILayout.Button(label, optionStyle, GUILayout.MinHeight(index < Options.Count ? 32f : 72f))) Select(index);
+                if (Event.current.type == EventType.Repaint && index == SelectedIndex)
+                    selectedRow = GUILayoutUtility.GetLastRect();
                 GUI.enabled = true;
                 if (!IsAvailable(index)) GUILayout.Label(index < Options.Count ? Options[index].Availability.ToString() :
                     index < Options.Count + ToolOptions.Count ? ToolOptions[index - Options.Count].RejectionCode.ToString() :
                     CommandRejectionCode.InvalidState.ToString());
             }
             GUILayout.EndScrollView();
+            RevealSelectedRow();
             GUI.enabled = SelectedIndex >= 0;
             if (GUILayout.Button("Confirm", GUILayout.Height(32f))) ConfirmFromGui();
             GUI.enabled = true;
             if (GUILayout.Button("Cancel", GUILayout.Height(32f))) Cancel();
             GUILayout.EndArea();
+        }
+
+        private void RevealSelectedRow()
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            float height = GUILayoutUtility.GetLastRect().height;
+            if (!revealSelection && height == scrollViewportHeight && selectedRow == revealedRow) return;
+            scroll.y = VisibleScrollOffset(scroll.y, selectedRow, height);
+            scrollViewportHeight = height;
+            revealedRow = selectedRow;
+            revealSelection = false;
+        }
+
+        /// <summary>Reveals the actual selected row within a scroll viewport, independently of preceding row heights.</summary>
+        public static float VisibleScrollOffset(float current, Rect row, float viewportHeight)
+        {
+            if (row.yMin < current || row.height > viewportHeight) return Mathf.Max(0, row.yMin);
+            return Mathf.Max(0, row.yMax > current + viewportHeight ? row.yMax - viewportHeight : current);
         }
 
         private async void ConfirmFromGui()
