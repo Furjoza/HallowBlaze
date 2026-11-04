@@ -8,6 +8,18 @@ using EntityId = HallowBlaze.Core.Board.Primitives.EntityId;
 
 namespace HallowBlaze.Presentation.Runtime
 {
+    /// <summary>Replays an already-resolved source cue across the runtime-to-artwork assembly boundary.</summary>
+    public interface IEnemyAttackView
+    {
+        /// <summary>Starts one swing and hit-only audio without gameplay effects.</summary>
+        /// <param name="animate">Whether to animate the source; audio follows its own settings.</param>
+        /// <param name="hit">The immutable resolved outcome, not a view collision test.</param>
+        /// <returns>Unscaled authored swing duration, or zero when no animation plays.</returns>
+        float PresentAttack(bool animate, bool hit);
+        /// <summary>Stops owned cues on recovery or disposal without producing another event.</summary>
+        void StopAttack();
+    }
+
     /// <summary>Replays an already-resolved fixed-cell attack without movement, damage application, or target selection.</summary>
     public sealed class EnemyAttackPresenter : IDisposable
     {
@@ -15,9 +27,10 @@ namespace HallowBlaze.Presentation.Runtime
         private readonly IRunHud hud;
         private readonly ITurnFeedback feedback;
         private Material material;
+        private IEnemyAttackView activeSource;
         private bool disposed;
 
-        /// <summary>Gets or sets whether the outcome glyph pulses; both modes retain the same fixed-cell feedback.</summary>
+        /// <summary>Gets or sets whether the source swing and outcome glyph animate; fixed-cell feedback remains in both modes.</summary>
         public bool AnimationsEnabled { get; set; } = true;
         /// <summary>Gets finite nonnegative pulse duration in unscaled seconds.</summary>
         public float Duration { get; }
@@ -88,10 +101,13 @@ namespace HallowBlaze.Presentation.Runtime
                 }
                 Vector3 sourceOffset = new Vector3(source.Position.X, source.Position.Y, EnemyIntentView.MarkerDepth) - target;
                 DrawLine(TargetFeedback, false, sourceOffset, sourceOffset.normalized * 0.34f);
-                if (AnimationsEnabled && Duration > 0)
+                activeSource = runtime.Views[gameEvent.AttackerId].GetComponent<IEnemyAttackView>();
+                float swingDuration = activeSource != null ? activeSource.PresentAttack(AnimationsEnabled, gameEvent.IsHit) : 0f;
+                float replayDuration = Mathf.Max(Duration, swingDuration);
+                if (AnimationsEnabled && replayDuration > 0)
                 {
                     float elapsed = 0;
-                    while (elapsed < Duration)
+                    while (elapsed < replayDuration)
                     {
                         await Task.Yield();
                         token.ThrowIfCancellationRequested();
@@ -99,7 +115,7 @@ namespace HallowBlaze.Presentation.Runtime
                         if (glyph == null)
                             throw new InvalidOperationException("Attack feedback was removed during replay.");
                         elapsed += Time.unscaledDeltaTime;
-                        glyph.transform.localScale = Vector3.one * (1 + 0.1f * Mathf.Sin(Mathf.PI * Mathf.Clamp01(elapsed / Duration)));
+                        glyph.transform.localScale = Vector3.one * (1 + 0.1f * Mathf.Sin(Mathf.PI * Mathf.Clamp01(elapsed / replayDuration)));
                     }
                 }
                 token.ThrowIfCancellationRequested();
@@ -154,6 +170,9 @@ namespace HallowBlaze.Presentation.Runtime
 
         private void ClearFeedback()
         {
+            if (activeSource != null)
+                activeSource.StopAttack();
+            activeSource = null;
             if (TargetFeedback != null)
             {
                 TargetFeedback.SetActive(false);

@@ -6490,7 +6490,7 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 
 ## `M7.14` - Investigate and restore zombie attack feedback
 
-**Status:** `Planned` - reported missing animation/audio; reproduce before assigning a cause.
+**Status:** `Done` - accepted 2026-11-04 after focused and full validation plus independent review PASS. The owner explicitly moved listening and manual resource smoke to M7.17.
 **Priority:** P1 regression investigation/repair.
 **Related contract:** Sections 10, 11.3.1, 18 and ordered presentation.
 **Rationale:** Health loss without a recognizable attack animation/sound obscures cause and makes predictable enemies feel broken.
@@ -6504,6 +6504,10 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 **Test plan:** Production-reference graphics PlayMode hit/miss/conditional-hit/rest and recovery/lifecycle tests plus relevant domain regressions. Inspect missing references/scripts if assets change; perform an actual audible smoke, not a claim of heard sound from automated playback.
 **Save and compatibility impact:** No schema/combat state change; presentation never owns saved damage or command effects.
 **Required evidence:** Reproduction/root cause, exact reference changes, event/cue-count results and explicit listening/owner outcome.
+
+**Implementation evidence (2026-11-04):** The production-prefab regression failed before repair: the resolved attack drew its outcome glyph but never entered `Enemy1Attack`. `Enemy` retained valid Animator/controller and three hit clips but no replay adapter. The ordered attack presenter now calls the view-only `IEnemyAttackView`; both existing enemy prefabs use their unchanged authored swing/override and play one owned hit cue for a hit only. Misses animate the same fixed-cell swing and retain the empty ring, without hit-only audio. Animations-off retains the recorded outcome and independently configured hit audio. Recovery, cancellation, disposal and board replacement stop owned cues without resolving another turn. No asset/reference, damage, target, cadence, save or package changes were needed.
+
+**Validation:** Focused ordered presentation 30/30, full graphics PlayMode 236/236, and relevant Shambler/EnemyBatch EditMode 236/236 passed. Production-prefab tests cover both variants, both animation modes, hit/miss, actual non-silent clip samples, live mute, cancellation/recovery/disposal; real command tests cover hit, fixed-cell miss, conditional-entry hit and silent rest with rendered output. Automated playback is not a listening verdict. Owner listening and fresh-board manual smoke remain explicitly assigned to M7.17, not claimed here.
 
 ---
 
