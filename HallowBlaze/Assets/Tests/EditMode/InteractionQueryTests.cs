@@ -24,6 +24,128 @@ namespace HallowBlaze.Tests.EditMode
             Add(1, BoardLayer.Actor, EntityKind.Player, "player", new GridPosition(1, 1));
         }
 
+        /// <summary>Medical healing is capped locally and commits removal, applied amount and one shared cost exactly once.</summary>
+        [TestCase(1, 11)]
+        [TestCase(89, 99)]
+        [TestCase(95, 100)]
+        [TestCase(99, 100)]
+        [TestCase(100, 100)]
+        [TestCase(120, 120)]
+        public void FirstAidUsesFixedHealingAndRejectsFullHealthWithoutWaste(int initialHealth, int expectedHealth)
+        {
+            run = new RunState("medical", 16, new RunStateConfiguration(initialHealth, 5, 0, "forest.start"));
+            BoardEntityState item = Add(7, BoardLayer.Item, EntityKind.Item, FirstAidInteractionAction.ContentId, new GridPosition(1, 2));
+            var query = new InteractionQuery();
+            InteractionOption option = query.GetOptions(board, run, PlayerId).Single();
+            Assert.That(run.Health, Is.EqualTo(initialHealth), "Preview must be free.");
+            Assert.That(option.IsAvailable, Is.EqualTo(initialHealth < 100));
+            var resolver = new TurnResolver(ActionNoiseProfile.Prototype, query);
+            TurnResult result = resolver.Resolve(board, run, PlayerId, option.CreateCommand());
+            Assert.That(result.Accepted, Is.EqualTo(initialHealth < 100));
+            Assert.That(run.Health, Is.EqualTo(expectedHealth));
+            Assert.That(run.Food, Is.EqualTo(initialHealth < 100 ? 4 : 5));
+            Assert.That(board.TryGetEntity(item.Id, out _), Is.EqualTo(initialHealth >= 100));
+            if (result.Accepted)
+            {
+                Assert.That(result.Events.OfType<HealthRestoredEvent>().Single().Amount, Is.EqualTo(expectedHealth - initialHealth));
+                Assert.That(result.Events.Select(gameEvent => gameEvent.EventType), Is.EqualTo(new[]
+                    { "InteractionPerformed", "ItemCollected", "HealthRestored", "ActionCostApplied", "Noise" }));
+                Assert.That(board.GetActiveNoises().Single().Strength, Is.EqualTo(4));
+                Assert.That(resolver.Resolve(board, run, PlayerId, option.CreateCommand()).Accepted, Is.False);
+                Assert.That(run.Health, Is.EqualTo(expectedHealth));
+                Assert.That(run.Food, Is.EqualTo(4));
+            }
+            else
+            {
+                Assert.That(result.Events, Is.Empty);
+                Assert.That(board.GetActiveNoises(), Is.Empty);
+            }
+        }
+
+        /// <summary>Rejected medical decisions preserve the exact item, resources, noise lifetime and later phases.</summary>
+        [TestCase("moved")]
+        [TestCase("removed")]
+        [TestCase("replaced")]
+        [TestCase("distant")]
+        [TestCase("full-after-preview")]
+        [TestCase("dead")]
+        [TestCase("starved")]
+        [TestCase("wrong-action")]
+        public void FirstAidRevalidatesDecisionsWithoutPartialEffects(string scenario)
+        {
+            BoardEntityState item = Add(7, BoardLayer.Item, EntityKind.Item, FirstAidInteractionAction.ContentId, new GridPosition(1, 2));
+            var query = new InteractionQuery();
+            InteractCommand command = query.GetOptions(board, run, PlayerId).Single().CreateCommand();
+            BoardNoise noise = board.EmitNoise(PlayerId, new GridPosition(1, 1), 1, 3);
+            if (scenario == "moved") board.TryMove(item.Id, new GridPosition(2, 1));
+            if (scenario == "distant") board.TryMove(PlayerId, new GridPosition(7, 7));
+            if (scenario == "removed" || scenario == "replaced") board.TryRemove(item.Id);
+            if (scenario == "replaced") Add(8, BoardLayer.Item, EntityKind.Item, FirstAidInteractionAction.ContentId, item.Position);
+            if (scenario == "full-after-preview") run.RestoreHealth(90);
+            if (scenario == "dead") run.TakeDamage(run.Health);
+            if (scenario == "starved") run.ConsumeFood(run.Food);
+            if (scenario == "wrong-action") command = new InteractCommand(item.Id, item.Position, "interact");
+            int health = run.Health;
+            int food = run.Food;
+            var before = board.GetEntities();
+            int phases = 0;
+            var controller = new TurnController(board, run, PlayerId, new TurnResolver(ActionNoiseProfile.Prototype, query),
+                new TurnPhaseHandlers((state, active, actor, events) => phases++,
+                    (state, active, actor, events) => phases++, (state, active, actor, events) => phases++));
+            TurnResult result = controller.Resolve(command);
+            Assert.That(result.Accepted, Is.False);
+            Assert.That(result.Events, Is.Empty);
+            Assert.That(phases, Is.Zero);
+            Assert.That(run.Health, Is.EqualTo(health));
+            Assert.That(run.Food, Is.EqualTo(food));
+            CollectionAssert.AreEqual(before, board.GetEntities());
+            Assert.That(board.GetActiveNoises().Single().Id, Is.EqualTo(noise.Id));
+            Assert.That(board.GetActiveNoises().Single().RemainingTurns, Is.EqualTo(3));
+        }
+
+        /// <summary>Healing precedes one cost; starvation ends resolution before enemy opportunities, otherwise each later phase runs once.</summary>
+        [TestCase(1, 0)]
+        [TestCase(5, 3)]
+        public void FirstAidCostAndTerminalOrderingUseTheExistingController(int food, int expectedPhases)
+        {
+            run = new RunState("medical-order", 16, new RunStateConfiguration(50, food, 0, "forest.start"));
+            Add(7, BoardLayer.Item, EntityKind.Item, FirstAidInteractionAction.ContentId, new GridPosition(1, 2));
+            var query = new InteractionQuery();
+            int phases = 0;
+            var controller = new TurnController(board, run, PlayerId, new TurnResolver(ActionNoiseProfile.Prototype, query),
+                new TurnPhaseHandlers((state, active, actor, events) => phases++,
+                    (state, active, actor, events) => phases++, (state, active, actor, events) => phases++));
+            InteractCommand command = query.GetOptions(board, run, PlayerId).Single().CreateCommand();
+            TurnResult result = controller.Resolve(command);
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(run.Health, Is.EqualTo(60));
+            Assert.That(run.Food, Is.EqualTo(food - 1));
+            Assert.That(phases, Is.EqualTo(expectedPhases));
+            Assert.That(result.Events.OfType<ActionCostAppliedEvent>().Count(), Is.EqualTo(1));
+            Assert.That(result.Events.OfType<HealthRestoredEvent>().Single().Amount, Is.EqualTo(10));
+            Assert.That(controller.IsTerminal, Is.EqualTo(food == 1));
+            if (food == 1) Assert.That(result.Events.Last(), Is.TypeOf<PlayerStarvedEvent>());
+            Assert.That(controller.Resolve(command).Accepted, Is.False);
+            Assert.That(run.Health, Is.EqualTo(60));
+            Assert.That(run.Food, Is.EqualTo(food - 1));
+            Assert.That(phases, Is.EqualTo(expectedPhases));
+        }
+
+        /// <summary>Walking over a medical item does not consume or apply it; only conscious use heals.</summary>
+        [Test]
+        public void FirstAidIsNotAutomaticFoodOrTriggerHealing()
+        {
+            BoardEntityState kit = Add(7, BoardLayer.Item, EntityKind.Item, FirstAidInteractionAction.ContentId, new GridPosition(1, 2));
+            Add(100, BoardLayer.Terrain, new EntityKind("terrain"), "floor", kit.Position);
+            TurnResult result = new TurnResolver(ActionNoiseProfile.Prototype).Resolve(board, run, PlayerId, new MoveCommand(Direction.North));
+            Assert.That(result.Accepted, Is.True);
+            Assert.That(run.Health, Is.EqualTo(10));
+            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(board.TryGetEntity(kit.Id, out _), Is.True);
+            Assert.That(result.Events.OfType<HealthRestoredEvent>(), Is.Empty);
+            Assert.That(result.Events.OfType<FoodRestoredEvent>(), Is.Empty);
+        }
+
         [Test]
         public void EmptyQueryDoesNotMutateState()
         {

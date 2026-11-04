@@ -6536,7 +6536,7 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 
 ## `M7.16` - Restore first-aid content and supported healing
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-11-04; focused and full regression/generation gates plus independent review PASS. Owner fresh-board manual smoke remains assigned to M7.17.
 **Priority:** P1 current-content repair.
 **Related contract:** Sections 6, 9, 10 and 18; clarify the pre-M10 medical effect before Ready.
 **Rationale:** A kit sprite without a working domain effect is not restoration; healing must use the same command/turn ownership as other resources.
@@ -6550,6 +6550,10 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 **Test plan:** Partial/full/excess-health, invalid/stale, repeated-use, cost/terminal and isolated save/recovery cases; deterministic supply checks and relevant generation gates. Graphics PlayMode keyboard use, +Health, removal and audio/animation parity; owner smoke on a fresh board.
 **Save and compatibility impact:** Retain health ownership/checkpoints and pinned old content; version new distribution. New persistent fields require migration; no profile reset or exact-turn resume.
 **Required evidence:** Accepted healing/full-health/cost/noise policy, content/supply matrix, exact tests and actual mouse-free kit use.
+
+**Accepted medical rule (2026-11-04):** The owner approved kit healing of up to 10, capped locally at 100 Health, conscious same-cell/adjacent use, no full-health waste, one Food cost, prototype interaction noise 4/2 and supply 0-1. The global legacy Health API stays unchanged. Exact stable `legacy.aid` / existing AidKit artwork maps to `use-first-aid`; HealthRestored reports actual applied healing after consumption, not a requested amount. Generic paid `interact` is excluded for kits. Movement/preview/rejection never heal. Ordinary/5 publishes a separate medical family without changing Food supply, and versions 1-4 keep their content/layouts. No bag, save schema, profile reset, new combat rule or authored medical audio clip is introduced; visible +Health feedback is identical in both animation modes.
+
+**Focused evidence:** Partial/full/excess HP, stale/missing/replaced/distant targets, repeat use, free preview, one cost/noise and terminal ordering are tested through the resolver/controller. Production AidKit tests sample F/E/Space through the real picker at 95/100/120 HP, assert actual +5 HUD/removal versus free unavailable use, and verify synchronization and checkpoint rollback/serialized totals. Continue reconstructs ordinary versions 1-5. A deterministic 100-seed fixture observes both zero and one medical kit and checks manifest/identity separately from Food. Final EditMode 1290 passed plus one expected explicit milestone skip; graphics PlayMode 244/244; separate 10,000-seed gate twice passed with zero invalid boards/fallbacks, 38.89/37.66 seconds and identical fingerprint `3cde6d6f11a662369ab73d33a469d8f1ab23cb054dc21ac8aa756cbfb9e5efaa`. Existing noise tests now use neutral test interaction targets instead of relying on inert first aid, retaining their original cost/noise/enemy expectations. Independent review PASS. Owner fresh-board manual smoke remains in M7.17 by explicit approval.
 
 ---
 

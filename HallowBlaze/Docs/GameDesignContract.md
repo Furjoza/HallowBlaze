@@ -1392,6 +1392,33 @@ Automatic collection on entry still precedes the one central Food cost. There is
 cap or satiety change. Pinned ordinary versions 1-3 keep their original content and rewards;
 legacy `legacy.bush-food` still grants 10, and buried caches keep their existing interaction.
 
+### 26.2. Current first-aid use
+
+The owner accepted this bounded pre-M9 medical rule on 2026-11-04. A concrete
+`legacy.aid` kit supports the conscious `use-first-aid` interaction on its current cell
+or a cardinally adjacent cell. Movement, triggers, preview and inventory do not heal.
+
+- Each accepted use consumes that exact kit once and restores up to 10 Health, limited
+	by the kit's own ceiling of 100. Excess healing is discarded, not stored.
+- At 100 or more Health, use is unavailable. It does not consume the kit, Food or a turn,
+	emit noise, advance enemies or reduce existing excess Health. Zero Health cannot use it.
+- Healing and item removal precede the existing central cost of 1 Food. Standard
+	interaction noise is strength 4, lifetime 2. Later enemy/environment/planning phases
+	execute once unless existing terminal ordering, including starvation, ends resolution.
+- The ordered event reports the actual applied increase; HUD feedback displays this
+	amount rather than the nominal 10, without applying it again.
+- Fresh ordinary configuration version 5 has a separate `medical` count budget of 0-1
+	kits per board, including opening boards. The Food family and its fixed rewards are
+	unchanged. No board or route guarantees a kit.
+- Versions 1-4 keep their saved layouts and supply. Existing legacy kits acquire this
+	supported interaction; their identity is not rewritten. Global `RestoreHealth` remains
+	uncapped compatibility behavior; this rule does not silently activate the M9 Health cap.
+- Continue retains the current board-boundary checkpoint/rollback policy, not exact-turn
+	persistence. Uncommitted use rolls back both its effects and the reconstructed item.
+	Committed resource totals are not healed again on loading or presentation recovery.
+
+This does not enable the deferred bag, pockets, satiety, revival or a save-format reset.
+
 ## 27. Accepted future contract: route legs, atlas observations, and inventory
 
 ### 27.1. Status and migration boundary

@@ -157,6 +157,13 @@ namespace HallowBlaze.Tests.PlayMode
             try
             {
                 runtime = LegacyBoardRuntimeComposer.Compose(request, run, new GridBounds(0, 0, 5, 5), layout);
+                BoardEntityState lever = runtime.BoardState.GetEntities().SingleOrDefault(entity => entity.Definition.ContentId == "legacy.aid");
+                if (lever != null)
+                {
+                    runtime.BoardState.TryRemove(lever.Id);
+                    runtime.BoardState.TryAdd(new BoardEntityState(lever.Id, new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item,
+                        "test.noise-lever", new BoardEntityTraits(false, false, true)), lever.Position));
+                }
                 var owner = new GameObject("Production intent display");
                 owner.transform.SetParent(root.transform, false);
                 EnemyIntentPresenter display = owner.AddComponent<EnemyIntentPresenter>();
@@ -270,7 +277,7 @@ namespace HallowBlaze.Tests.PlayMode
         private static PlayerCommand Command(int caseNumber, bool mirrored, bool noisyChoice, Fixture fixture)
         {
             if (caseNumber == 7 || caseNumber == 9 && noisyChoice)
-                return new InteractCommand(fixture.Runtime.BoardState.GetEntities().Single(entity => entity.Definition.ContentId == "legacy.aid").Id);
+                return new InteractCommand(fixture.Runtime.BoardState.GetEntities().Single(entity => entity.Definition.ContentId == "test.noise-lever").Id);
             if (caseNumber == 1) return new MoveCommand(mirrored ? Direction.West : Direction.East);
             if (caseNumber >= 2 && caseNumber <= 4) return new MoveCommand(mirrored ? Direction.South : Direction.North);
             return new WaitCommand();

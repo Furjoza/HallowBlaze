@@ -242,6 +242,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 2)), Is.EqualTo(before));
             Assert.That(BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 3)), Is.EqualTo(before));
             Assert.That(BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 4)), Is.EqualTo(before));
+            Assert.That(BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 5)), Is.EqualTo(before));
             Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", int.MaxValue)));
             Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("unknown", 1)));
             restored.TryConsumeIntro(restored.ActiveLeg.LegId);
@@ -258,6 +259,8 @@ namespace HallowBlaze.Tests.EditMode
         [TestCase(true, 3)]
         [TestCase(false, 4)]
         [TestCase(true, 4)]
+        [TestCase(false, 5)]
+        [TestCase(true, 5)]
         public void OrdinaryRouteStartPersistsTheCorrectGenerationFamily(bool legacyRandom, int generationVersion)
         {
             var session = new GameSession(new ProfileState("profile.test", "world.test", 1));
@@ -285,6 +288,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(restored.ActiveLeg.CurrentSegment.GenerationVersion, Is.EqualTo(1));
             Assert.That(BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 3)), Is.EqualTo(original));
             Assert.That(BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 4)), Is.EqualTo(original));
+            Assert.That(BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 5)), Is.EqualTo(original));
             Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", int.MaxValue)));
             var session = new GameSession(new ProfileState("profile.test", "world.test", 1));
             session.ContinueRun(NewRun());
