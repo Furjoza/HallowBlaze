@@ -6395,7 +6395,7 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 
 ## `M7.9` - Three-to-five-board opening before the first route choice
 
-**Status:** `Planned` - owner request 2026-11-03; supersedes M7.1's fresh-run length target.
+**Status:** `Done` - 2026-11-04. Fixed three-board v2 opening implemented with staged supplies/threats and narrow one-board-save/history compatibility. Final EditMode 1258 passed plus the existing Explicit skip, graphics PlayMode 234/234 and 300-board repeated opening series passed with zero invalid/fallbacks; independent review PASS. Exact IDs, budgets and compatibility policy are in `Docs/Testing.md`; human acceptance remains M7.17.
 **Priority:** P1 repair.
 **Related contract:** Section 27.2 opening-length amendment and sections 7, 9, 18.
 **Rationale:** Several small boards provide the requested warm-up before the first strategic choice, without becoming several travel days.

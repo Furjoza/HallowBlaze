@@ -1398,12 +1398,14 @@ The game must remain playable while the no-backpack vertical slice is tested. At
 
 - Committing an outgoing edge starts one route leg and one player-facing day.
 - The first leg is `Day 1`; no player-facing `Day 0` exists.
-- A fresh run begins at `shelter.warm-up` and automatically starts the single-board
-  `road.shelter-warm-up` leg to `forest.start`. Its stable segment is
-	`segment.shelter-warm-up.day1`, using the current `ordinary.board.v1` generation version 3.
-  The ordinary Day 1 generation target has zero enemies and 2–5 food items; the run starts
-  with 100 health and 100 food, with no tool grant. This mandatory opening is not a route
-  recommendation or a player route choice.
+- A fresh run begins at `shelter.warm-up` and automatically starts the three-board
+	`road.shelter-warm-up` leg to `forest.start`. The v2 opening publishes ordered segments
+	`segment.shelter-warm-up.v2.entry`, `segment.shelter-warm-up.v2.stretch` and
+	`segment.shelter-warm-up.v2.arrival`, all using `ordinary.board.v1` generation version 3.
+	Their food-item budgets are 3-4, 2-3 and 1-2, and enemy counts are 0, 0 and 1.
+	The run still starts with 100 health and 100 food, with no tool grant. This mandatory
+	opening is not a route recommendation or a player route choice. Historical one-board
+	`segment.shelter-warm-up.day1` saves retain their original content and resource budgets.
 - Completing that opening leg commits Day 1 and only then opens the first route choice at
   `forest.start`. The chosen route therefore begins on Day 2, and the existing five-edge
   shortest path to the Radio Tower now reaches it on Day 6. This is an intentional campaign
@@ -1455,13 +1457,13 @@ final-segment-only landmark placement, must be identified and any necessary mini
 scoped before the assignment card is Ready. This direction does not authorize a full world-graph
 editor, new routes/rules, or runtime changes in the current documentation task.
 
-#### Opening-length amendment - accepted 2026-11-03, implementation pending
+#### Opening-length amendment - accepted 2026-11-03
 
 The first route choice for a genuinely fresh run MUST follow **3-5 successfully completed
 local boards**, not one. This supersedes the single-board opening length above for new
 opening content; M7.1 remains historical implementation evidence, not the new acceptance target.
-The currently published IDs, one-board flow and compatibility table below describe the
-pre-amendment implementation until M7.9 is accepted.
+The one-board M7.1 implementation remains historical evidence; the fixed three-board
+publication and compatibility table below describe M7.9's implementation.
 
 The opening remains one automatic Day 1 route leg with 3-5 ordered segments, not 3-5 days.
 Intermediate exits advance its segment only; they never offer an early route choice, visit
@@ -1482,19 +1484,22 @@ when the new content is published, without rewriting historical M7.1 acceptance.
 
 #### Opening boundaries and compatibility
 
-| Flow | Before the opening repair | Fresh runs after the opening repair |
-| --- | --- | --- |
-| Initial reached node | `forest.start`, before Day 1 | `shelter.warm-up`, before Day 1 |
-| Day 1 | First selected five-segment road | Automatic one-segment `road.shelter-warm-up` |
-| First route choice | Before the first board | After reaching `forest.start` and completing Day 1 |
-| First selected road | Day 1 | Day 2 |
-| Shortest Radio Tower arrival | Day 5 | Day 6; the inbound landmark still owns the final segment |
+| Flow | Before M7.1 | Historical M7.1 publication | Fresh runs after M7.9 |
+| --- | --- | --- | --- |
+| Initial reached node | `forest.start`, before Day 1 | `shelter.warm-up`, before Day 1 | Unchanged from M7.1 |
+| Day 1 | First selected five-segment road | Automatic one-segment `road.shelter-warm-up` | Automatic three-segment v2 opening on the same road |
+| First route choice | Before the first board | After one board and arrival at `forest.start` | After three boards and arrival at `forest.start` |
+| First selected road | Day 1 | Day 2 | Day 2 |
+| Shortest Radio Tower arrival | Day 5 | Day 6 | Day 6; the inbound landmark still owns the final segment |
 
 | Committed save boundary | Continue or retry policy |
 | --- | --- |
 | Fresh run at `shelter.warm-up`, no active leg | Start and save the opening before publishing a board or route choice. |
 | Opening leg with `Pending` intro | Keep its exact run/leg/segment/day/configuration/seed address; save `Consumed` before publishing. |
 | Opening leg with `Consumed` intro | Recreate the same board without replaying the intro or allocating a second leg. |
+| New v2 intermediate opening exit | Persist the next exact segment and supplies; remain in Day 1 with no arrival discovery, completed history or route choice. |
+| Saved one-board `segment.shelter-warm-up.day1` leg | Retain its single segment, seed and `ordinary.board.v1` versions 1/2/3 or `legacy.board.v1` version 1. Its final exit completes Day 1 once; never append v2 segments. |
+| Saved one-board opening history | Reconcile its historical count of one against the exact named v2 publication; do not rewrite the count, duplicate observations or rewards. |
 | Opening completed at `forest.start` | Reconcile discovery idempotently and offer the first route choice; never repeat Day 1 or its observation sample. |
 | Older run at `forest.start`, including completed-day count zero | Keep the existing checkpoint and its original day numbering; offer its routes without prepending an opening. |
 | Any older active leg, including legacy generation or a selected landmark | Preserve the saved address, seed, generation/template selection, resources and day numbering. |

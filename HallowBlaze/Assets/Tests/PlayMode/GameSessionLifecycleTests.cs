@@ -785,6 +785,7 @@ namespace HallowBlaze.Tests.PlayMode
                 }
                 if (!animations)
                 {
+                    yield return AdvanceOpeningToFinalSegment(manager);
                     Assert.That((bool)Invoke(manager, "HandleBoardOutcome",
                         BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"))), Is.True);
                     Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
@@ -922,6 +923,7 @@ namespace HallowBlaze.Tests.PlayMode
             }
             if (boardIndex == 0)
             {
+                yield return AdvanceOpeningToFinalSegment(manager);
                 Assert.That((bool)Invoke(manager, "HandleBoardOutcome",
                     BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"))), Is.True);
                 Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
@@ -985,7 +987,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(session.ActiveRun.Food, Is.EqualTo(food));
                 Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(sounds));
                 Assert.That(GetField<Text>(player, "healthText").text, Does.EndWith(" +7"));
-                yield return PresentSegmentExit(manager, animations);
+                yield return PresentExit(manager, false, animations);
                 Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
                 Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(1));
                 Assert.That(Camera.main.cullingMask, Is.Zero);
@@ -1178,6 +1180,99 @@ namespace HallowBlaze.Tests.PlayMode
             yield return SceneManager.UnloadSceneAsync("Main");
         }
 
+        /// <summary>Every opening entry restores its pinned board and supplies without replaying Day or offering an early choice.</summary>
+        [UnityTest]
+        public IEnumerator EveryOpeningBoundaryContinuesWithoutRerollRefillOrEarlyChoice()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            var store = new FileSystemSaveStore(persistenceRoot);
+            int choicesPublished = 0;
+            Action<IReadOnlyList<WorldMapExitOption>> countChoices = choices => { if (choices.Count > 0) choicesPublished++; };
+            gameManagerType.GetEvent("OnRouteChoicesChanged").AddEventHandler(manager, countChoices);
+            try
+            {
+                for (int index = 0; index < 3; index++)
+                {
+                    GameSession session = GetProperty<GameSession>(manager, "Session");
+                    RunState checkpoint = store.LoadRun().Data;
+                    BoardRequest request = GetProperty<BoardRequest>(manager, "ActiveBoardRequest");
+                    Component adapter = GetField<Component>(manager, "boardScript");
+                    string hash = GetProperty<BoardBlueprint>(adapter, "ActiveBlueprint").ContentHash;
+                    Assert.That(session.ActiveRun.ActiveLeg.SegmentIndex, Is.EqualTo(index));
+                    Assert.That(session.ActiveRun.ActiveLeg.IntroState, Is.EqualTo(DayIntroState.Consumed));
+                    Assert.That(session.ActiveRun.CompletedDayCount, Is.Zero);
+                    Assert.That(choicesPublished, Is.Zero);
+                    session.ConsumeFood(3);
+                    session.TakeDamage(2);
+                    Assert.That((bool)Invoke(manager, "ExitToMenu"), Is.True);
+                    InvokeStatic(gameManagerType, "RequestContinue");
+                    yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+                    yield return null;
+                    session = GetProperty<GameSession>(manager, "Session");
+                    Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address, Is.EqualTo(request.Address));
+                    Assert.That(GetProperty<BoardBlueprint>(GetField<Component>(manager, "boardScript"), "ActiveBlueprint").ContentHash, Is.EqualTo(hash));
+                    Assert.That(session.ActiveRun.Food, Is.EqualTo(checkpoint.Food));
+                    Assert.That(session.ActiveRun.Health, Is.EqualTo(checkpoint.Health));
+                    Assert.That(session.ActiveRun.TraversalSequence, Is.EqualTo(1));
+                    Assert.That(GetField<GameObject>(manager, "levelImage").activeSelf, Is.False, "Consumed Day must not replay.");
+                    session.ConsumeFood(index + 1);
+                    session.RestoreHealth(1);
+                    int food = session.ActiveRun.Food;
+                    int health = session.ActiveRun.Health;
+                    BoardOutcome outcome = BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"));
+                    Assert.That((bool)Invoke(manager, "HandleBoardOutcome", outcome), Is.True);
+                    yield return null;
+                    yield return null;
+                    Assert.That((bool)Invoke(manager, "HandleBoardOutcome", outcome), Is.False);
+                    Assert.That(session.ActiveRun.Food, Is.EqualTo(food));
+                    Assert.That(session.ActiveRun.Health, Is.EqualTo(health));
+                    Assert.That(store.LoadRun().Data.Food, Is.EqualTo(food));
+                    Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(index == 2 ? 1 : 0));
+                    Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.EqualTo(index == 2));
+                }
+                Assert.That(choicesPublished, Is.EqualTo(1));
+                Assert.That(GetProperty<GameSession>(manager, "Session").ActiveRun.TravelHistory, Has.Count.EqualTo(1));
+            }
+            finally { gameManagerType.GetEvent("OnRouteChoicesChanged").RemoveEventHandler(manager, countChoices); }
+        }
+
+        /// <summary>The old one-board opening finishes once through the real scene and is never extended by new content.</summary>
+        [UnityTest]
+        public IEnumerator OldOneBoardOpeningContinuesAndFinishesWithoutExtraBoards()
+        {
+            var session = new GameSession(new ProfileState("old-opening-profile", "world-1", 1));
+            session.Profile.DiscoverFact("old-opening-knowledge");
+            RunState run = session.StartNewRun("old-one-board-opening", 133,
+                new RunStateConfiguration(73, 61, 0, "shelter.warm-up"));
+            run.StartLeg("road.shelter-warm-up", "shelter.warm-up", "forest.start",
+                new[] { new RouteSegmentState("segment.shelter-warm-up.day1", "ordinary.board.v1", 3) });
+            Assert.That(run.TryConsumeIntro(run.ActiveLeg.LegId), Is.True);
+            BoardAddress address = BoardAddressFactory.CreateFromState(run);
+            var store = new FileSystemSaveStore(persistenceRoot);
+            Assert.That(store.SaveProfile(session.Profile).IsSuccess, Is.True);
+            Assert.That(store.SaveRun(run).IsSuccess, Is.True);
+            InvokeStatic(gameManagerType, "RequestContinue");
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            session = GetProperty<GameSession>(manager, "Session");
+            Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address, Is.EqualTo(address));
+            Assert.That(session.ActiveRun.ActiveLeg.Segments, Has.Count.EqualTo(1));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(61));
+            Assert.That(session.ActiveRun.Health, Is.EqualTo(73));
+            yield return PresentExit(manager);
+            Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(1));
+            Assert.That(session.ActiveRun.TravelHistory, Has.Count.EqualTo(1));
+            Assert.That(session.ActiveRun.TravelHistory[0].CompletedSegmentCount, Is.EqualTo(1));
+            Assert.That(session.Profile.DiscoveredFactIds, Does.Contain("old-opening-knowledge"));
+            Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
+            yield return null;
+            yield return null;
+            Assert.That(session.ActiveRun.CurrentDay, Is.EqualTo(2));
+        }
+
         /// <summary>Failed opening checkpoints never authorize a route choice, a board, or a second day on retry.</summary>
         /// <summary>A continued route checkpoint retains atlas ownership despite the inactive terminal actions in Main.</summary>
         [UnityTest]
@@ -1260,6 +1355,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address, Is.EqualTo(pendingAddress));
             Assert.That(run.TraversalSequence, Is.EqualTo(1));
 
+            yield return AdvanceOpeningToFinalSegment(manager);
             BoardOutcome completion = BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"));
             File.Delete(runPath);
             Directory.CreateDirectory(runPath);
@@ -1290,6 +1386,7 @@ namespace HallowBlaze.Tests.PlayMode
             yield return null;
             Component manager = (Component)GetStaticField(gameManagerType, "instance");
             AssertOpeningWarmUp(manager);
+            yield return AdvanceOpeningToFinalSegment(manager);
             RunState run = GetProperty<GameSession>(manager, "Session").ActiveRun;
             WorldMapService map = GetField<WorldMapService>(manager, "worldMap");
             string profilePath = Path.Combine(persistenceRoot, "profile.json");
@@ -1339,6 +1436,7 @@ namespace HallowBlaze.Tests.PlayMode
             yield return null;
             Component manager = (Component)GetStaticField(gameManagerType, "instance");
             AssertOpeningWarmUp(manager);
+            yield return AdvanceOpeningToFinalSegment(manager);
             RunState run = GetProperty<GameSession>(manager, "Session").ActiveRun;
             Assert.That((bool)Invoke(manager, "HandleBoardOutcome",
                 BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"))), Is.True);
@@ -1366,6 +1464,7 @@ namespace HallowBlaze.Tests.PlayMode
             yield return null;
             Component manager = (Component)GetStaticField(gameManagerType, "instance");
             AssertOpeningWarmUp(manager);
+            yield return AdvanceOpeningToFinalSegment(manager);
             RunState run = GetProperty<GameSession>(manager, "Session").ActiveRun;
             Assert.That((bool)Invoke(manager, "HandleBoardOutcome",
                 BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"))), Is.True);
@@ -1638,7 +1737,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Is.EqualTo(NodeDiscoveryState.Unknown));
 
             Component player = FindSceneComponent(playerType, "Main");
-            yield return PresentExit(manager);
+            yield return PresentExit(manager, useTraversalFixture: true);
             Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
             yield return null;
             yield return null;
@@ -1679,7 +1778,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Is.EqualTo(EdgeDiscoveryState.Unknown));
 
             Component newGamePlayer = FindSceneComponent(playerType, "Main");
-            yield return PresentExit(manager);
+            yield return PresentExit(manager, useTraversalFixture: true);
 
             Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.start"),
                 Is.EqualTo(NodeDiscoveryState.Visited));
@@ -2059,7 +2158,7 @@ namespace HallowBlaze.Tests.PlayMode
             {
                 AssertOpeningWarmUp(manager);
                 SetField(manager, "levelStartDelay", 100f);
-                yield return PresentExit(manager);
+                yield return PresentExit(manager, useTraversalFixture: true);
             }
 
             Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
@@ -2070,6 +2169,25 @@ namespace HallowBlaze.Tests.PlayMode
                 yield return null;
             yield return null;
             Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Not.Null);
+        }
+
+        private static IEnumerator AdvanceOpeningToFinalSegment(Component manager)
+        {
+            RunState run = GetProperty<GameSession>(manager, "Session").ActiveRun;
+            while (run.ActiveLeg.SegmentIndex < 2)
+            {
+                int index = run.ActiveLeg.SegmentIndex;
+                BoardOutcome completion = BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"));
+                Assert.That((bool)Invoke(manager, "HandleBoardOutcome", completion), Is.True);
+                yield return null;
+                yield return null;
+                Assert.That(run.ActiveLeg.SegmentIndex, Is.EqualTo(index + 1));
+                Assert.That(run.CompletedDayCount, Is.Zero);
+                Assert.That(run.CurrentDay, Is.EqualTo(1));
+                Assert.That(run.WorldNodeId, Is.EqualTo("shelter.warm-up"));
+                Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+                Assert.That((bool)Invoke(manager, "HandleBoardOutcome", completion), Is.False);
+            }
         }
 
         private static void AssertOpeningWarmUp(Component manager)
@@ -2084,10 +2202,10 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(run.Food, Is.EqualTo(100));
             Assert.That(run.ActiveLeg.EdgeId, Is.EqualTo("road.shelter-warm-up"));
             Assert.That(run.ActiveLeg.DayNumber, Is.EqualTo(1));
-            Assert.That(run.ActiveLeg.Segments, Has.Count.EqualTo(1));
+            Assert.That(run.ActiveLeg.Segments, Has.Count.EqualTo(3));
             Assert.That(opening, Is.Not.Null);
             Assert.That(opening.Address.EdgeId, Is.EqualTo("road.shelter-warm-up"));
-            Assert.That(opening.Address.SegmentId, Is.EqualTo("segment.shelter-warm-up.day1"));
+            Assert.That(opening.Address.SegmentId, Is.EqualTo("segment.shelter-warm-up.v2.entry"));
             Assert.That(opening.Address.GenerationConfigurationId, Is.EqualTo("ordinary.board.v1"));
             Assert.That(opening.Address.GenerationVersion, Is.EqualTo(3));
             Assert.That(opening.CurrentDay, Is.EqualTo(1));
@@ -2102,7 +2220,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(generation.Blueprint.Config.EnemyCount.Maximum, Is.Zero);
             InitialResourceManifestEntry food = generation.Blueprint.InitialResources
                 .Single(resource => resource.ResourceFamilyId == "food");
-            Assert.That(food.ItemCount, Is.InRange(2, 5));
+            Assert.That(food.ItemCount, Is.InRange(3, 4));
             Assert.That(generation.Blueprint.Items.Any(item => item.ResourceFamilyId == "tools"), Is.False);
         }
 
@@ -2116,7 +2234,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(failure.Message, Does.Contain("Traversal requires an active run"));
         }
 
-        private static IEnumerator PresentExit(Component manager, bool useTraversalFixture = false)
+        private static IEnumerator PresentExit(Component manager, bool useTraversalFixture = false, bool animations = false)
         {
             if (GetProperty<bool>(manager, "IsRouteChoiceActive"))
                 yield break;
@@ -2128,7 +2246,7 @@ namespace HallowBlaze.Tests.PlayMode
                 if (useTraversalFixture)
                     PublishTraversalFixture(manager);
                 BoardRuntime previous = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
-                yield return PresentSegmentExit(manager);
+                yield return PresentSegmentExit(manager, animations);
                 Assert.That(session.ActiveRun, Is.SameAs(run), "Traversal ended the run instead of reaching the segment exit.");
                 float deadline = Time.realtimeSinceStartup + 10;
                 while (!GetProperty<bool>(manager, "IsRouteChoiceActive") &&
