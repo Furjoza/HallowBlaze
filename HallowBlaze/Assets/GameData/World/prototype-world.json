@@ -85,7 +85,9 @@
       "direction": "north",
       "clueKey": "clue.shelter-trail",
       "segments": [
-        { "segmentId": "segment.shelter-warm-up.day1", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 3 }
+        { "segmentId": "segment.shelter-warm-up.v2.entry", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 3 },
+        { "segmentId": "segment.shelter-warm-up.v2.stretch", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 3 },
+        { "segmentId": "segment.shelter-warm-up.v2.arrival", "generationConfigurationId": "ordinary.board.v1", "generationVersion": 3 }
       ]
     },
     {

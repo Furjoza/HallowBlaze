@@ -85,6 +85,103 @@ namespace HallowBlaze.Tests.PlayMode
             }
         }
 
+        /// <summary>Production key edges open, choose objects and actions, confirm exactly once and cancel without a turn.</summary>
+        [UnityTest]
+        public IEnumerator ContextualKeysChooseManualOrToolWithoutLeakingWait()
+        {
+            Fixture fixture = CreateFixture(true, false);
+            var picker = fixture.Presenter.InteractionDisplay;
+            Assert.That(picker.SampleInputAsync(key => key == KeyCode.E, -20).Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+            Assert.That(picker.IsOpen, Is.False);
+            picker.SampleInputAsync(key => key == KeyCode.F || key == KeyCode.Space, -19);
+            Assert.That(picker.IsOpen, Is.True);
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+            picker.SampleInputAsync(key => key == KeyCode.E, -18);
+            Assert.That(picker.SelectedIndex, Is.EqualTo(0));
+            picker.SampleInputAsync(key => key == KeyCode.DownArrow, -17);
+            Assert.That(picker.SelectedIndex, Is.EqualTo(picker.Options.Count));
+            Assert.That(picker.RefreshOptions(), Is.True);
+            Assert.That(picker.SelectedIndex, Is.EqualTo(picker.Options.Count));
+            picker.SampleInputAsync(key => key == KeyCode.E, -160);
+            Assert.That(picker.SelectedIndex, Is.EqualTo(picker.Options.Count), "Wrapping one object must not replace its selected action.");
+            picker.SampleInputAsync(key => key == KeyCode.Q || key == KeyCode.E, -16);
+            Assert.That(picker.SelectedIndex, Is.EqualTo(picker.Options.Count));
+            Assert.That(picker.SampleInputAsync(key => key == KeyCode.Space, -15).Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            picker.SampleInputAsync(key => key == KeyCode.Space, -15);
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
+            Assert.That(fixture.Run.Food, Is.EqualTo(19));
+            Assert.That(fixture.Run.ToolSlots[1].Instance.Charges, Is.EqualTo(2));
+            Assert.That(fixture.Runtime.BoardState.GetActiveNoises().Count, Is.EqualTo(1));
+            yield return null;
+            picker.SampleInputAsync(key => key == KeyCode.F, -14);
+            picker.SampleInputAsync(key => key == KeyCode.F, -13);
+            Assert.That(picker.IsOpen, Is.False);
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
+        }
+
+        /// <summary>Manual obstacle work uses one confirmed turn and one noise emission, independently of any tool choice.</summary>
+        [Test]
+        public void ContextualManualSpaceResolvesOneWorkAction()
+        {
+            Fixture fixture = CreateFixture(false, false);
+            var picker = fixture.Presenter.InteractionDisplay;
+            picker.SampleInputAsync(key => key == KeyCode.F, -10);
+            picker.SampleInputAsync(key => key == KeyCode.Q, -9);
+            CommandSubmission result = picker.SampleInputAsync(key => key == KeyCode.Space, -8).Result;
+            Assert.That(result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
+            Assert.That(fixture.Runtime.BoardState.GetObstacleWork(fixture.WallId), Is.EqualTo(1));
+            Assert.That(fixture.Run.Food, Is.EqualTo(19));
+            Assert.That(result.Result.Events.OfType<NoiseEvent>().Count(), Is.EqualTo(1));
+            Assert.That(fixture.Run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
+        }
+
+        /// <summary>A changed equipment snapshot clears selection instead of silently substituting a different charge precondition.</summary>
+        [Test]
+        public void ContextualRefreshDoesNotReplaceStaleToolSelection()
+        {
+            Fixture fixture = CreateFixture(true, false);
+            var picker = fixture.Presenter.InteractionDisplay;
+            picker.Open();
+            picker.Select(picker.Options.Count);
+            ToolUseOption selected = picker.ToolOptions.Single();
+            fixture.Run.TrySpendToolCharge(selected.SlotIndex, selected.InstanceId);
+            picker.RefreshOptions();
+            Assert.That(picker.SelectedIndex, Is.EqualTo(-1));
+            Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+        }
+
+        /// <summary>Repeated cosmetic rotations preserve run/board snapshots, emitted-noise identity/lifetime and retained enemy plans.</summary>
+        [Test]
+        public void VisualTurnsDoNotResolveAgeNoiseOrReplanEnemies()
+        {
+            Fixture fixture = CreateFixture(true, false);
+            GameObject player = fixture.Runtime.Views[fixture.Runtime.PlayerId];
+            PlayerVisualFacing facing = player.AddComponent<PlayerVisualFacing>();
+            BoardNoise noise = fixture.Runtime.BoardState.EmitNoise(fixture.Runtime.PlayerId, new GridPosition(0, 1), 2, 3);
+            string before = PersistenceJsonSerializer.SerializeRun(fixture.Run);
+            string[] entities = fixture.Runtime.BoardState.GetEntities().Select(entity => entity.Id + "@" + entity.Position).ToArray();
+            var retained = fixture.Runtime.Listeners.Single().LockedIntent;
+            for (int frame = 10000; frame < 10040; frame++)
+                Assert.That(facing.SampleInput(key => key == KeyCode.E, frame, fixture.Presenter.Coordinator.CanSubmit), Is.True);
+            Assert.That(facing.QuarterTurns, Is.Zero);
+            Assert.That(PersistenceJsonSerializer.SerializeRun(fixture.Run), Is.EqualTo(before));
+            Assert.That(fixture.Runtime.BoardState.GetEntities().Select(entity => entity.Id + "@" + entity.Position), Is.EqualTo(entities));
+            Assert.That(fixture.Runtime.Listeners.Single().LockedIntent, Is.SameAs(retained));
+            Assert.That(fixture.Runtime.BoardState.GetActiveNoises().Single(), Is.SameAs(noise));
+            Assert.That(noise.RemainingTurns, Is.EqualTo(3));
+            Assert.That(fixture.Runtime.BoardState.EmitNoise(fixture.Runtime.PlayerId, new GridPosition(0, 1), 1, 2).Id, Is.EqualTo(noise.Id + 1));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+            var picker = fixture.Presenter.InteractionDisplay;
+            picker.SampleInputAsync(key => key == KeyCode.F, -50);
+            Assert.That(facing.SampleInput(key => key == KeyCode.E, 10041, fixture.Presenter.Coordinator.CanSubmit), Is.False);
+            picker.SampleInputAsync(key => key == KeyCode.E, -49);
+            Assert.That(picker.SelectedIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(facing.QuarterTurns, Is.Zero);
+        }
+
         /// <summary>The visible emitted snapshot is the Listener's hearing memory and only then documents the durable fact.</summary>
         [UnityTest]
         public IEnumerator AxeNoisePresentationDocumentsFactAndNextListenerStepUsesThatSignal()

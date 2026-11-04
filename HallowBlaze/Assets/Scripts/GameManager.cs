@@ -53,6 +53,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     private GameObject levelImage;
     private GameObject restartButton;
     private GameObject menuButton;
+    private KeyboardMenuFocus terminalFocus;
     private bool doingSetup;
     private bool gameplayInputBlocked;
     private bool boardStartupInProgress;
@@ -1090,6 +1091,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             restartButton.SetActive(true);
         if (menuButton != null)
             menuButton.SetActive(true);
+        if (restartButton != null)
+            terminalFocus = KeyboardMenuFocus.Attach(restartButton.transform.parent.gameObject, restartButton);
     }
 
     private int ManageScore(int score)
@@ -1102,6 +1105,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void OnRunStarted(RunState runState)
     {
+        if (terminalFocus != null) terminalFocus.enabled = false;
         fieldNotesAfterDeath = false;
         fieldNotes?.Close();
         DisposeActiveBoardRuntime();

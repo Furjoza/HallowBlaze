@@ -8,7 +8,7 @@ namespace HallowBlaze.Presentation.Runtime
 {
     /// <summary>
     /// Samples PC key-down edges at most once per frame, producing one complete cardinal move or explicit Wait.
-    /// Ambiguous chords are free no-command samples. No input is buffered; E belongs to the board target picker.
+    /// Ambiguous chords are free no-command samples. No input is buffered; F belongs to the board target picker.
     /// </summary>
     public sealed class PcCommandSource : ICommandSource
     {
@@ -24,15 +24,12 @@ namespace HallowBlaze.Presentation.Runtime
         {
             this.keyDown = keyDown ?? Input.GetKeyDown;
             this.frameNumber = frameNumber ?? (() => Time.frameCount);
-            Bind(KeyCode.UpArrow, () => new MoveCommand(Direction.North));
-            Bind(KeyCode.W, () => new MoveCommand(Direction.North));
-            Bind(KeyCode.RightArrow, () => new MoveCommand(Direction.East));
-            Bind(KeyCode.D, () => new MoveCommand(Direction.East));
-            Bind(KeyCode.DownArrow, () => new MoveCommand(Direction.South));
-            Bind(KeyCode.S, () => new MoveCommand(Direction.South));
-            Bind(KeyCode.LeftArrow, () => new MoveCommand(Direction.West));
-            Bind(KeyCode.A, () => new MoveCommand(Direction.West));
-            Bind(KeyCode.Space, () => new WaitCommand());
+            foreach (var binding in PcInputBindings.Movement)
+            {
+                Direction direction = binding.Value;
+                Bind(binding.Key, () => new MoveCommand(direction));
+            }
+            Bind(PcInputBindings.Space, () => new WaitCommand());
         }
 
         /// <summary>Adds or replaces a key's complete-command factory without enumerating future command types.</summary>
@@ -53,7 +50,7 @@ namespace HallowBlaze.Presentation.Runtime
             if (sampledFrame == frame)
                 return false;
             sampledFrame = frame;
-            if (keyDown(KeyCode.E))
+            if (keyDown(PcInputBindings.InteractionToggle))
                 return false;
             Func<PlayerCommand> selected = null;
             foreach (var binding in bindings)

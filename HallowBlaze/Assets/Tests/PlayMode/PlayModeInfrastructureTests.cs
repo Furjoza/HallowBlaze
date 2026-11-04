@@ -19,6 +19,60 @@ namespace HallowBlaze.Tests.PlayMode
 {
     public sealed class PlayModeInfrastructureTests
     {
+        /// <summary>F owns interaction entry while idle E is not a picker-opening or command-suppression key.</summary>
+        [Test]
+        public void InteractionEntrySuppressesNormalCommandButIdleEDoesNot()
+        {
+            var toggle = new PcCommandSource(key => key == PcInputBindings.InteractionToggle || key == KeyCode.Space);
+            Assert.That(toggle.TryTakeCommand(out _), Is.False);
+            var idle = new PcCommandSource(key => key == KeyCode.E || key == KeyCode.Space);
+            Assert.That(idle.TryTakeCommand(out PlayerCommand command), Is.True);
+            Assert.That(command, Is.TypeOf<WaitCommand>());
+            Assert.That(new PcCommandSource(key => key == KeyCode.E).TryTakeCommand(out _), Is.False);
+        }
+
+        /// <summary>Controls derives contextual F/Q/E/Space and menu descriptions from actual input definitions.</summary>
+        [Test]
+        public void ControlsHintsMatchTheImplementedContextualKeys()
+        {
+            var walking = PcInputBindings.GetHints(PcInputContext.Walking);
+            Assert.That(walking.Single(hint => hint.Label.StartsWith("Interaction")).Keys, Is.EqualTo(new[] { PcInputBindings.InteractionToggle }));
+            Assert.That(walking.Single(hint => hint.Label.StartsWith("Wait")).Keys, Does.Contain(PcInputBindings.Space));
+            Assert.That(walking.Single(hint => hint.Label.StartsWith("Visual left")).Keys, Does.Contain(PcInputBindings.TurnLeft));
+            var interaction = PcInputBindings.GetHints(PcInputContext.Interaction);
+            Assert.That(interaction.Single(hint => hint.Label.StartsWith("Next object")).Keys, Does.Contain(PcInputBindings.NextObject));
+            Assert.That(interaction.Single(hint => hint.Label.StartsWith("Confirm")).Keys, Does.Contain(PcInputBindings.Space));
+            foreach (var hint in PcInputBindings.GetHints(PcInputContext.Menus))
+                foreach (KeyCode key in hint.Keys)
+                    Assert.That(PcInputBindings.MenuKeys.Contains(key) || key == PcInputBindings.Notes || key == KeyCode.LeftShift, Is.True);
+        }
+
+        /// <summary>Visual quarter-turns wrap both ways without rotating the actor or accepting chords, held frames or blocked input.</summary>
+        [Test]
+        public void VisualFacingTurnsOnlyAnIsolatedCosmeticPivot()
+        {
+            var owner = new GameObject("Visual facing test", typeof(SpriteRenderer), typeof(BoxCollider2D));
+            try
+            {
+                PlayerVisualFacing facing = owner.AddComponent<PlayerVisualFacing>();
+                Assert.That(facing.QuarterTurns, Is.Zero);
+                Assert.That(facing.SampleInput(key => key == KeyCode.Q, -30, true), Is.True);
+                Assert.That(facing.QuarterTurns, Is.EqualTo(3));
+                Assert.That(Vector3.Angle(facing.Pivot.up, Vector3.left), Is.LessThan(0.01f));
+                Assert.That(facing.SampleInput(key => key == KeyCode.E, -30, true), Is.False);
+                for (int frame = -29; frame < -25; frame++) facing.SampleInput(key => key == KeyCode.E, frame, true);
+                Assert.That(facing.QuarterTurns, Is.EqualTo(3));
+                Assert.That(facing.SampleInput(key => key == KeyCode.Q || key == KeyCode.E, -24, true), Is.False);
+                Assert.That(facing.SampleInput(key => key == KeyCode.E || key == KeyCode.W, -23, true), Is.False);
+                Assert.That(facing.SampleInput(key => key == KeyCode.E, -22, false), Is.False);
+                Assert.That(facing.SampleInput(key => false, -21, true), Is.False);
+                Assert.That(owner.transform.rotation, Is.EqualTo(Quaternion.identity));
+                Assert.That(owner.GetComponent<BoxCollider2D>().transform, Is.SameAs(owner.transform));
+                facing.enabled = false;
+                Assert.That(owner.GetComponent<SpriteRenderer>().forceRenderingOff, Is.False);
+            }
+            finally { UnityEngine.Object.DestroyImmediate(owner); }
+        }
         private const BindingFlags InstanceFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
         private readonly List<UnityEngine.Object> createdObjects = new List<UnityEngine.Object>();

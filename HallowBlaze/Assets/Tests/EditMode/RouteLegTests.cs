@@ -302,6 +302,7 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [TestCase(2)]
+        [TestCase(3)]
         [TestCase(5)]
         public void TravelBoundaries_ConsumeBeforeRenderAdvanceOnceAndRollbackFailures(int count)
         {

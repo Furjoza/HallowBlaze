@@ -15,7 +15,8 @@ namespace HallowBlaze.Core.Session
         /// Validates published road/segment/configuration associations and derives the persisted address.
         /// Named publication upgrades from legacy v1 or ordinary versions 1/2 to ordinary version 3 retain
         /// saved identity, seed and algorithm. The named radio-tower arrival upgrade also retains previously saved
-        /// legacy/ordinary layouts rather than replacing a board already in progress. Other drift is rejected.
+        /// legacy/ordinary layouts rather than replacing a board already in progress. The one-board Day 1
+        /// shelter opening remains pinned when the named three-board v2 opening is published. Other drift is rejected.
         /// </summary>
         /// <exception cref="ArgumentException">The saved leg references foreign or changed published content.</exception>
         public static BoardAddress Create(RunState run, WorldDefinition world)
@@ -26,14 +27,38 @@ namespace HallowBlaze.Core.Session
             ActiveRouteLegState leg = run.ActiveLeg;
             if (!world.TryGetEdge(leg.EdgeId, out WorldEdgeDefinition edge) ||
                 edge.FromNodeId != leg.FromNodeId || edge.ToNodeId != leg.ToNodeId ||
-                !world.TryGetNode(leg.FromNodeId, out _) || !world.TryGetNode(leg.ToNodeId, out _) ||
-                edge.SegmentCount != leg.Segments.Count)
+                !world.TryGetNode(leg.FromNodeId, out _) || !world.TryGetNode(leg.ToNodeId, out _))
+                throw new ArgumentException("Active leg does not match the published road.", nameof(run));
+            if (IsPinnedSingleBoardOpening(leg, edge)) return address;
+            if (edge.SegmentCount != leg.Segments.Count)
                 throw new ArgumentException("Active leg does not match the published road.", nameof(run));
             foreach (RouteSegmentState saved in leg.Segments)
                 if (!world.TryGetSegment(saved.SegmentId, out RouteSegmentDefinition segment, out WorldEdgeDefinition owner) ||
                     owner.EdgeId != edge.EdgeId || !MatchesPublishedGeneration(saved, segment))
                     throw new ArgumentException("Foreign segment generation identity: " + saved.SegmentId, nameof(run));
             return address;
+        }
+
+        private static bool IsPinnedSingleBoardOpening(ActiveRouteLegState leg, WorldEdgeDefinition edge)
+        {
+            if (!IsPublishedThreeBoardOpening(edge) || leg.DayNumber != 1 || leg.Segments.Count != 1 ||
+                leg.Segments[0].SegmentId != "segment.shelter-warm-up.day1") return false;
+            RouteSegmentState saved = leg.Segments[0];
+            return saved.GenerationConfigurationId == "ordinary.board.v1" &&
+                saved.GenerationVersion >= 1 && saved.GenerationVersion <= 3 ||
+                saved.GenerationConfigurationId == "legacy.board.v1" && saved.GenerationVersion == 1;
+        }
+
+        internal static bool IsPublishedThreeBoardOpening(WorldEdgeDefinition edge)
+        {
+            if (edge.EdgeId != "road.shelter-warm-up" || edge.FromNodeId != "shelter.warm-up" ||
+                edge.ToNodeId != "forest.start" || edge.SegmentCount != 3 ||
+                edge.Segments[0].SegmentId != "segment.shelter-warm-up.v2.entry" ||
+                edge.Segments[1].SegmentId != "segment.shelter-warm-up.v2.stretch" ||
+                edge.Segments[2].SegmentId != "segment.shelter-warm-up.v2.arrival") return false;
+            foreach (RouteSegmentDefinition segment in edge.Segments)
+                if (segment.GenerationConfigurationId != "ordinary.board.v1" || segment.GenerationVersion != 3) return false;
+            return true;
         }
 
         private static bool MatchesPublishedGeneration(RouteSegmentState saved, RouteSegmentDefinition published)

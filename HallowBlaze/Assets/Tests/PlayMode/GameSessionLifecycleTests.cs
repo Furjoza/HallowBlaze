@@ -92,6 +92,263 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(session.ActiveRun.Status, Is.EqualTo(RunStatus.Active));
         }
 
+        /// <summary>Production menu transitions retain valid focus using keyboard activation and cancellation only.</summary>
+        [UnityTest]
+        public IEnumerator KeyboardMenuSceneFocusAndBackArePointerFree()
+        {
+            yield return SceneManager.LoadSceneAsync("Menu", LoadSceneMode.Single);
+            yield return null;
+            yield return null;
+            GameObject main = GameObject.Find("MainMenuPanel");
+            KeyboardMenuFocus focus = main.GetComponent<KeyboardMenuFocus>();
+            Assert.That(focus, Is.Not.Null);
+            var events = UnityEngine.EventSystems.EventSystem.current;
+            Assert.That(events.currentSelectedGameObject, Is.Not.Null);
+            Assert.That(events.currentSelectedGameObject.GetComponent<Selectable>().IsInteractable(), Is.True);
+            Button help = main.GetComponentsInChildren<Button>().Single(button => button.name == "HelpBttn");
+            for (int index = 0; index < 20 && events.currentSelectedGameObject != help.gameObject; index++)
+                focus.HandleKey(KeyCode.Tab);
+            Assert.That(events.currentSelectedGameObject, Is.SameAs(help.gameObject));
+            focus.HandleKey(KeyCode.Return);
+            float deadline = Time.realtimeSinceStartup + 4;
+            while (GameObject.Find("HelpMenuPanel") == null && Time.realtimeSinceStartup < deadline) yield return null;
+            yield return null;
+            GameObject helpRoot = GameObject.Find("HelpMenuPanel");
+            Assert.That(helpRoot, Is.Not.Null);
+            KeyboardMenuFocus helpFocus = helpRoot.GetComponent<KeyboardMenuFocus>();
+            Assert.That(helpFocus, Is.Not.Null);
+            helpFocus.HandleKey(KeyCode.Escape);
+            deadline = Time.realtimeSinceStartup + 4;
+            while ((!main.activeInHierarchy || helpRoot.activeInHierarchy) && Time.realtimeSinceStartup < deadline) yield return null;
+            yield return null;
+            Assert.That(main.activeInHierarchy, Is.True);
+            Assert.That(helpRoot.activeInHierarchy, Is.False);
+            focus.RecoverFocus();
+            Assert.That(events.currentSelectedGameObject, Is.SameAs(help.gameObject));
+            Scene cleanup = SceneManager.CreateScene("Keyboard menu cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Menu");
+        }
+
+        /// <summary>Real player input rotates visible art freely, preserves absolute movement and respects modal/replay/disposal ownership.</summary>
+        [UnityTest]
+        public IEnumerator ProductionVisualTurnsAreVisibleFreeAndGated()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            Invoke(manager, "HideLevelImage");
+            yield return null;
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
+            presenter.AnimationsEnabled = false;
+            Component player = runtime.Views[runtime.PlayerId].GetComponent(playerType);
+            PlayerVisualFacing facing = player.GetComponent<PlayerVisualFacing>();
+            Assert.That(facing, Is.Not.Null);
+            string before = HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeTravelRun(runtime.RunState);
+            Vector3 position = player.transform.position;
+            Quaternion rotation = player.transform.rotation;
+            Color32[] previous = null;
+            for (int turn = 0; turn < 4; turn++)
+            {
+                Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.E), -200 + turn), Is.True);
+                yield return null;
+                Texture2D capture = CaptureProductionCanvas(manager, 960, 640);
+                Color32[] pixels = capture.GetPixels32();
+                if (previous != null)
+                    Assert.That(pixels.Where((pixel, index) => !pixel.Equals(previous[index])).Count(), Is.GreaterThan(10));
+                previous = pixels;
+                File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M718-facing-" + facing.QuarterTurns + ".png"), capture.EncodeToPNG());
+                UnityEngine.Object.DestroyImmediate(capture);
+                Assert.That(player.transform.position, Is.EqualTo(position));
+                Assert.That(player.transform.rotation, Is.EqualTo(rotation));
+            }
+            Assert.That(facing.QuarterTurns, Is.Zero);
+            Assert.That(HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeTravelRun(runtime.RunState), Is.EqualTo(before));
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.Zero);
+            Invoke(manager, "SetGameplayInputBlocked", true);
+            Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.Q), -190), Is.False);
+            Invoke(manager, "SetGameplayInputBlocked", false);
+            yield return null;
+            FieldNotesPresenter notes = GetProperty<FieldNotesPresenter>(manager, "FieldNotes");
+            Assert.That(notes.Open(), Is.True);
+            Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.E), -189), Is.False);
+            notes.Close();
+            yield return null;
+            Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.E), -187), Is.True);
+            Assert.That(facing.QuarterTurns, Is.EqualTo(1));
+            presenter.AnimationsEnabled = true;
+            SetField(player, "moveTime", 0.2f);
+            Direction direction = FindExitPath(runtime).First();
+            object[] arguments = { new MoveCommand(direction), null };
+            Assert.That((bool)Invoke(player, "TrySubmitCommand", arguments), Is.True);
+            var operation = (Task<CommandSubmission>)arguments[1];
+            Assert.That(operation.IsCompleted, Is.False);
+            while (!operation.IsCompleted)
+            {
+                Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.Q), Time.frameCount), Is.False);
+                yield return null;
+            }
+            Assert.That(operation.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(facing.QuarterTurns, Is.EqualTo(1));
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
+            yield return null;
+            int food = runtime.RunState.Food;
+            arguments = new object[] { new WaitCommand(), null };
+            Assert.That((bool)Invoke(player, "TrySubmitCommand", arguments), Is.True);
+            operation = (Task<CommandSubmission>)arguments[1];
+            while (!operation.IsCompleted) yield return null;
+            Assert.That(runtime.RunState.Food, Is.EqualTo(food - 1));
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(2));
+            Assert.That(facing.QuarterTurns, Is.EqualTo(1));
+            Invoke(manager, "GameOver", false);
+            Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.Q), -186), Is.False);
+            ((Behaviour)player).enabled = false;
+            Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.Q), -188), Is.False);
+            Scene cleanup = SceneManager.CreateScene("Visual facing cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
+        /// <summary>Main menu Controls is keyboard-reachable, accurately illustrated and readable across desktop/narrow context layouts.</summary>
+        [UnityTest]
+        public IEnumerator MainControlsDiagramAndContextsStayReadable()
+        {
+            yield return SceneManager.LoadSceneAsync("Menu", LoadSceneMode.Single);
+            yield return null;
+            yield return null;
+            GameObject main = GameObject.Find("MainMenuPanel");
+            KeyboardMenuFocus focus = main.GetComponent<KeyboardMenuFocus>();
+            var events = UnityEngine.EventSystems.EventSystem.current;
+            for (int index = 0; index < 20 && events.currentSelectedGameObject.name != "Controls"; index++) focus.HandleKey(KeyCode.Tab);
+            Assert.That(events.currentSelectedGameObject.name, Is.EqualTo("Controls"));
+            focus.HandleKey(KeyCode.Return);
+            KeyboardControlsView view = KeyboardControlsView.Current;
+            Assert.That(view, Is.Not.Null);
+            var cameraOwner = new GameObject("Controls evidence camera", typeof(Camera));
+            Camera camera = cameraOwner.GetComponent<Camera>();
+            camera.enabled = false;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
+            Canvas canvas = view.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceCamera;
+            canvas.worldCamera = camera;
+            canvas.planeDistance = 1;
+            try
+            {
+                foreach (Vector2Int size in new[] { new Vector2Int(1280, 720), new Vector2Int(320, 480), new Vector2Int(480, 640) })
+                foreach (PcInputContext context in Enum.GetValues(typeof(PcInputContext)))
+                {
+                    var target = new RenderTexture(size.x, size.y, 24);
+                    var pixels = new Texture2D(size.x, size.y, TextureFormat.RGB24, false);
+                    RenderTexture previous = RenderTexture.active;
+                    try
+                    {
+                        camera.targetTexture = target;
+                        view.Resize(size);
+                        view.SelectContext(context);
+                        Canvas.ForceUpdateCanvases();
+                        foreach (var hint in PcInputBindings.GetHints(context))
+                        {
+                            Assert.That(view.Hints.Any(displayed => displayed.Label == hint.Label), Is.True);
+                            foreach (KeyCode key in hint.Keys) Assert.That(view.DiagramKeys, Does.Contain(key));
+                        }
+                        foreach (Text text in view.GetComponentsInChildren<Text>())
+                        {
+                            Assert.That(text.preferredHeight, Is.LessThanOrEqualTo(text.rectTransform.rect.height + 1), text.text);
+                            Assert.That(text.cachedTextGenerator.GetVerticesArray().All(vertex => float.IsFinite(vertex.position.x)), Is.True);
+                        }
+                        Assert.That(view.GetComponent<KeyboardMenuFocus>().FrameColor.grayscale, Is.LessThan(0.3f));
+                        camera.Render();
+                        RenderTexture.active = target;
+                        pixels.ReadPixels(new Rect(0, 0, size.x, size.y), 0, 0);
+                        pixels.Apply();
+                        Assert.That(pixels.GetPixels32().Count(pixel => pixel.g < 150 && pixel.r < 150), Is.GreaterThan(1000));
+                        File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M713-" + context + "-" + size.x + "x" + size.y + ".png"), pixels.EncodeToPNG());
+                    }
+                    finally
+                    {
+                        camera.targetTexture = null;
+                        RenderTexture.active = previous;
+                        target.Release();
+                        UnityEngine.Object.DestroyImmediate(target);
+                        UnityEngine.Object.DestroyImmediate(pixels);
+                    }
+                }
+                view.GetComponent<KeyboardMenuFocus>().HandleKey(KeyCode.Escape);
+                Assert.That(events.currentSelectedGameObject.name, Is.EqualTo("Controls"));
+                Assert.That(main.activeInHierarchy, Is.True);
+            }
+            finally
+            {
+                if (view != null && view.IsOpen) view.Close();
+                UnityEngine.Object.DestroyImmediate(cameraOwner);
+            }
+            Scene cleanup = SceneManager.CreateScene("Controls cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Menu");
+        }
+
+        /// <summary>Actual production pause Controls preserves the full saved run, resolver count and input ownership.</summary>
+        [UnityTest]
+        public IEnumerator ProductionPauseControlsPreservesRunAndFocus()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            Invoke(manager, "HideLevelImage");
+            yield return null;
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
+            Type pauseType = gameManagerType.Assembly.GetType("PauseMenuController", true);
+            Component pause = UnityEngine.Object.FindFirstObjectByType(pauseType) as Component;
+            Assert.That(pause, Is.Not.Null);
+            string before = HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeTravelRun(runtime.RunState);
+            Invoke(pause, "OpenPause");
+            GameObject pauseRoot = GetField<GameObject>(pause, "pauseRoot");
+            KeyboardMenuFocus focus = pauseRoot.GetComponent<KeyboardMenuFocus>();
+            var events = UnityEngine.EventSystems.EventSystem.current;
+            for (int index = 0; index < 10 && events.currentSelectedGameObject.name != "Controls"; index++) focus.HandleKey(KeyCode.Tab);
+            Assert.That(events.currentSelectedGameObject.name, Is.EqualTo("Controls"));
+            focus.HandleKey(KeyCode.Return);
+            Assert.That(KeyboardControlsView.Current.IsOpen, Is.True);
+            KeyboardControlsView.Current.GetComponent<KeyboardMenuFocus>().HandleKey(KeyCode.Escape);
+            Invoke(pause, "HandleEscape");
+            Assert.That(GetProperty<object>(pause, "CurrentState").ToString(), Is.EqualTo("PauseRoot"));
+            Assert.That(events.currentSelectedGameObject.name, Is.EqualTo("Controls"));
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.Zero);
+            Assert.That(HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeTravelRun(runtime.RunState), Is.EqualTo(before));
+            Invoke(pause, "Resume");
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
+            yield return null;
+            Scene cleanup = SceneManager.CreateScene("Pause Controls cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
+        /// <summary>Production death actions are reachable instead of assigning focus to their noninteractive backdrop.</summary>
+        [UnityTest]
+        public IEnumerator KeyboardTerminalFocusBelongsToVisibleActions()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)gameManagerType.GetField("instance", BindingFlags.Public | BindingFlags.Static).GetValue(null);
+            Invoke(manager, "HideLevelImage");
+            Invoke(manager, "GameOver", false);
+            GameObject restart = GameObject.Find("RestartBttn");
+            GameObject menu = GameObject.Find("MenuBttn");
+            Assert.That(restart, Is.Not.Null);
+            KeyboardMenuFocus focus = restart.GetComponentInParent<KeyboardMenuFocus>();
+            Assert.That(focus, Is.Not.Null);
+            Assert.That(UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject, Is.SameAs(restart));
+            focus.HandleKey(KeyCode.Tab);
+            Assert.That(UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject, Is.SameAs(menu));
+            Scene cleanup = SceneManager.CreateScene("Keyboard terminal cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
         [UnityTest]
         public IEnumerator CorruptRunKeepsContinueLabelStable()
         {
@@ -528,6 +785,7 @@ namespace HallowBlaze.Tests.PlayMode
                 }
                 if (!animations)
                 {
+                    yield return AdvanceOpeningToFinalSegment(manager);
                     Assert.That((bool)Invoke(manager, "HandleBoardOutcome",
                         BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"))), Is.True);
                     Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
@@ -665,6 +923,7 @@ namespace HallowBlaze.Tests.PlayMode
             }
             if (boardIndex == 0)
             {
+                yield return AdvanceOpeningToFinalSegment(manager);
                 Assert.That((bool)Invoke(manager, "HandleBoardOutcome",
                     BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"))), Is.True);
                 Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
@@ -728,7 +987,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(session.ActiveRun.Food, Is.EqualTo(food));
                 Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(sounds));
                 Assert.That(GetField<Text>(player, "healthText").text, Does.EndWith(" +7"));
-                yield return PresentSegmentExit(manager, animations);
+                yield return PresentExit(manager, false, animations);
                 Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
                 Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(1));
                 Assert.That(Camera.main.cullingMask, Is.Zero);
@@ -921,7 +1180,131 @@ namespace HallowBlaze.Tests.PlayMode
             yield return SceneManager.UnloadSceneAsync("Main");
         }
 
+        /// <summary>Every opening entry restores its pinned board and supplies without replaying Day or offering an early choice.</summary>
+        [UnityTest]
+        public IEnumerator EveryOpeningBoundaryContinuesWithoutRerollRefillOrEarlyChoice()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            var store = new FileSystemSaveStore(persistenceRoot);
+            int choicesPublished = 0;
+            Action<IReadOnlyList<WorldMapExitOption>> countChoices = choices => { if (choices.Count > 0) choicesPublished++; };
+            gameManagerType.GetEvent("OnRouteChoicesChanged").AddEventHandler(manager, countChoices);
+            try
+            {
+                for (int index = 0; index < 3; index++)
+                {
+                    GameSession session = GetProperty<GameSession>(manager, "Session");
+                    RunState checkpoint = store.LoadRun().Data;
+                    BoardRequest request = GetProperty<BoardRequest>(manager, "ActiveBoardRequest");
+                    Component adapter = GetField<Component>(manager, "boardScript");
+                    string hash = GetProperty<BoardBlueprint>(adapter, "ActiveBlueprint").ContentHash;
+                    Assert.That(session.ActiveRun.ActiveLeg.SegmentIndex, Is.EqualTo(index));
+                    Assert.That(session.ActiveRun.ActiveLeg.IntroState, Is.EqualTo(DayIntroState.Consumed));
+                    Assert.That(session.ActiveRun.CompletedDayCount, Is.Zero);
+                    Assert.That(choicesPublished, Is.Zero);
+                    session.ConsumeFood(3);
+                    session.TakeDamage(2);
+                    Assert.That((bool)Invoke(manager, "ExitToMenu"), Is.True);
+                    InvokeStatic(gameManagerType, "RequestContinue");
+                    yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+                    yield return null;
+                    session = GetProperty<GameSession>(manager, "Session");
+                    Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address, Is.EqualTo(request.Address));
+                    Assert.That(GetProperty<BoardBlueprint>(GetField<Component>(manager, "boardScript"), "ActiveBlueprint").ContentHash, Is.EqualTo(hash));
+                    Assert.That(session.ActiveRun.Food, Is.EqualTo(checkpoint.Food));
+                    Assert.That(session.ActiveRun.Health, Is.EqualTo(checkpoint.Health));
+                    Assert.That(session.ActiveRun.TraversalSequence, Is.EqualTo(1));
+                    Assert.That(GetField<GameObject>(manager, "levelImage").activeSelf, Is.False, "Consumed Day must not replay.");
+                    session.ConsumeFood(index + 1);
+                    session.RestoreHealth(1);
+                    int food = session.ActiveRun.Food;
+                    int health = session.ActiveRun.Health;
+                    BoardOutcome outcome = BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"));
+                    Assert.That((bool)Invoke(manager, "HandleBoardOutcome", outcome), Is.True);
+                    yield return null;
+                    yield return null;
+                    Assert.That((bool)Invoke(manager, "HandleBoardOutcome", outcome), Is.False);
+                    Assert.That(session.ActiveRun.Food, Is.EqualTo(food));
+                    Assert.That(session.ActiveRun.Health, Is.EqualTo(health));
+                    Assert.That(store.LoadRun().Data.Food, Is.EqualTo(food));
+                    Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(index == 2 ? 1 : 0));
+                    Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.EqualTo(index == 2));
+                }
+                Assert.That(choicesPublished, Is.EqualTo(1));
+                Assert.That(GetProperty<GameSession>(manager, "Session").ActiveRun.TravelHistory, Has.Count.EqualTo(1));
+            }
+            finally { gameManagerType.GetEvent("OnRouteChoicesChanged").RemoveEventHandler(manager, countChoices); }
+        }
+
+        /// <summary>The old one-board opening finishes once through the real scene and is never extended by new content.</summary>
+        [UnityTest]
+        public IEnumerator OldOneBoardOpeningContinuesAndFinishesWithoutExtraBoards()
+        {
+            var session = new GameSession(new ProfileState("old-opening-profile", "world-1", 1));
+            session.Profile.DiscoverFact("old-opening-knowledge");
+            RunState run = session.StartNewRun("old-one-board-opening", 133,
+                new RunStateConfiguration(73, 61, 0, "shelter.warm-up"));
+            run.StartLeg("road.shelter-warm-up", "shelter.warm-up", "forest.start",
+                new[] { new RouteSegmentState("segment.shelter-warm-up.day1", "ordinary.board.v1", 3) });
+            Assert.That(run.TryConsumeIntro(run.ActiveLeg.LegId), Is.True);
+            BoardAddress address = BoardAddressFactory.CreateFromState(run);
+            var store = new FileSystemSaveStore(persistenceRoot);
+            Assert.That(store.SaveProfile(session.Profile).IsSuccess, Is.True);
+            Assert.That(store.SaveRun(run).IsSuccess, Is.True);
+            InvokeStatic(gameManagerType, "RequestContinue");
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            session = GetProperty<GameSession>(manager, "Session");
+            Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address, Is.EqualTo(address));
+            Assert.That(session.ActiveRun.ActiveLeg.Segments, Has.Count.EqualTo(1));
+            Assert.That(session.ActiveRun.Food, Is.EqualTo(61));
+            Assert.That(session.ActiveRun.Health, Is.EqualTo(73));
+            yield return PresentExit(manager);
+            Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(1));
+            Assert.That(session.ActiveRun.TravelHistory, Has.Count.EqualTo(1));
+            Assert.That(session.ActiveRun.TravelHistory[0].CompletedSegmentCount, Is.EqualTo(1));
+            Assert.That(session.Profile.DiscoveredFactIds, Does.Contain("old-opening-knowledge"));
+            Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
+            yield return null;
+            yield return null;
+            Assert.That(session.ActiveRun.CurrentDay, Is.EqualTo(2));
+        }
+
         /// <summary>Failed opening checkpoints never authorize a route choice, a board, or a second day on retry.</summary>
+        /// <summary>A continued route checkpoint retains atlas ownership despite the inactive terminal actions in Main.</summary>
+        [UnityTest]
+        public IEnumerator KeyboardContinueRouteChoiceCannotBeStolenByEmptyTerminalPanel()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            session.StartNewRun("keyboard-route-checkpoint", 48, new RunStateConfiguration(100, 100, 0, "forest.start"));
+            var store = new FileSystemSaveStore(persistenceRoot);
+            Assert.That(store.SaveRun(session.ActiveRun).IsSuccess, Is.True);
+            Assert.That(store.SaveProfile(session.Profile).IsSuccess, Is.True);
+            Assert.That((bool)Invoke(manager, "ExitToMenu"), Is.True);
+            InvokeStatic(gameManagerType, "RequestContinue");
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            yield return null;
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+            GameObject selected = UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject;
+            Assert.That(selected, Is.Not.Null);
+            Assert.That(selected.name, Does.StartWith("AtlasRouteButton-"));
+            KeyboardMenuFocus focus = selected.GetComponentInParent<KeyboardMenuFocus>();
+            focus.HandleKey(KeyCode.RightArrow);
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+            focus.HandleKey(KeyCode.Return);
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+            Scene cleanup = SceneManager.CreateScene("Keyboard route cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
         [UnityTest]
         public IEnumerator OpeningCheckpointFailuresRetryWithoutSkippingOrRepeatingDay()
         {
@@ -972,6 +1355,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address, Is.EqualTo(pendingAddress));
             Assert.That(run.TraversalSequence, Is.EqualTo(1));
 
+            yield return AdvanceOpeningToFinalSegment(manager);
             BoardOutcome completion = BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"));
             File.Delete(runPath);
             Directory.CreateDirectory(runPath);
@@ -1002,6 +1386,7 @@ namespace HallowBlaze.Tests.PlayMode
             yield return null;
             Component manager = (Component)GetStaticField(gameManagerType, "instance");
             AssertOpeningWarmUp(manager);
+            yield return AdvanceOpeningToFinalSegment(manager);
             RunState run = GetProperty<GameSession>(manager, "Session").ActiveRun;
             WorldMapService map = GetField<WorldMapService>(manager, "worldMap");
             string profilePath = Path.Combine(persistenceRoot, "profile.json");
@@ -1051,6 +1436,7 @@ namespace HallowBlaze.Tests.PlayMode
             yield return null;
             Component manager = (Component)GetStaticField(gameManagerType, "instance");
             AssertOpeningWarmUp(manager);
+            yield return AdvanceOpeningToFinalSegment(manager);
             RunState run = GetProperty<GameSession>(manager, "Session").ActiveRun;
             Assert.That((bool)Invoke(manager, "HandleBoardOutcome",
                 BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"))), Is.True);
@@ -1078,6 +1464,7 @@ namespace HallowBlaze.Tests.PlayMode
             yield return null;
             Component manager = (Component)GetStaticField(gameManagerType, "instance");
             AssertOpeningWarmUp(manager);
+            yield return AdvanceOpeningToFinalSegment(manager);
             RunState run = GetProperty<GameSession>(manager, "Session").ActiveRun;
             Assert.That((bool)Invoke(manager, "HandleBoardOutcome",
                 BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"))), Is.True);
@@ -1350,7 +1737,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Is.EqualTo(NodeDiscoveryState.Unknown));
 
             Component player = FindSceneComponent(playerType, "Main");
-            yield return PresentExit(manager);
+            yield return PresentExit(manager, useTraversalFixture: true);
             Assert.That((bool)Invoke(manager, "ChooseRoute", "road.start-west-trail"), Is.True);
             yield return null;
             yield return null;
@@ -1391,7 +1778,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Is.EqualTo(EdgeDiscoveryState.Unknown));
 
             Component newGamePlayer = FindSceneComponent(playerType, "Main");
-            yield return PresentExit(manager);
+            yield return PresentExit(manager, useTraversalFixture: true);
 
             Assert.That(newGameSession.Profile.GetNodeDiscoveryState("forest.start"),
                 Is.EqualTo(NodeDiscoveryState.Visited));
@@ -1771,7 +2158,7 @@ namespace HallowBlaze.Tests.PlayMode
             {
                 AssertOpeningWarmUp(manager);
                 SetField(manager, "levelStartDelay", 100f);
-                yield return PresentExit(manager);
+                yield return PresentExit(manager, useTraversalFixture: true);
             }
 
             Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
@@ -1782,6 +2169,25 @@ namespace HallowBlaze.Tests.PlayMode
                 yield return null;
             yield return null;
             Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime"), Is.Not.Null);
+        }
+
+        private static IEnumerator AdvanceOpeningToFinalSegment(Component manager)
+        {
+            RunState run = GetProperty<GameSession>(manager, "Session").ActiveRun;
+            while (run.ActiveLeg.SegmentIndex < 2)
+            {
+                int index = run.ActiveLeg.SegmentIndex;
+                BoardOutcome completion = BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"));
+                Assert.That((bool)Invoke(manager, "HandleBoardOutcome", completion), Is.True);
+                yield return null;
+                yield return null;
+                Assert.That(run.ActiveLeg.SegmentIndex, Is.EqualTo(index + 1));
+                Assert.That(run.CompletedDayCount, Is.Zero);
+                Assert.That(run.CurrentDay, Is.EqualTo(1));
+                Assert.That(run.WorldNodeId, Is.EqualTo("shelter.warm-up"));
+                Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+                Assert.That((bool)Invoke(manager, "HandleBoardOutcome", completion), Is.False);
+            }
         }
 
         private static void AssertOpeningWarmUp(Component manager)
@@ -1796,10 +2202,10 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(run.Food, Is.EqualTo(100));
             Assert.That(run.ActiveLeg.EdgeId, Is.EqualTo("road.shelter-warm-up"));
             Assert.That(run.ActiveLeg.DayNumber, Is.EqualTo(1));
-            Assert.That(run.ActiveLeg.Segments, Has.Count.EqualTo(1));
+            Assert.That(run.ActiveLeg.Segments, Has.Count.EqualTo(3));
             Assert.That(opening, Is.Not.Null);
             Assert.That(opening.Address.EdgeId, Is.EqualTo("road.shelter-warm-up"));
-            Assert.That(opening.Address.SegmentId, Is.EqualTo("segment.shelter-warm-up.day1"));
+            Assert.That(opening.Address.SegmentId, Is.EqualTo("segment.shelter-warm-up.v2.entry"));
             Assert.That(opening.Address.GenerationConfigurationId, Is.EqualTo("ordinary.board.v1"));
             Assert.That(opening.Address.GenerationVersion, Is.EqualTo(3));
             Assert.That(opening.CurrentDay, Is.EqualTo(1));
@@ -1814,7 +2220,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(generation.Blueprint.Config.EnemyCount.Maximum, Is.Zero);
             InitialResourceManifestEntry food = generation.Blueprint.InitialResources
                 .Single(resource => resource.ResourceFamilyId == "food");
-            Assert.That(food.ItemCount, Is.InRange(2, 5));
+            Assert.That(food.ItemCount, Is.InRange(3, 4));
             Assert.That(generation.Blueprint.Items.Any(item => item.ResourceFamilyId == "tools"), Is.False);
         }
 
@@ -1828,7 +2234,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(failure.Message, Does.Contain("Traversal requires an active run"));
         }
 
-        private static IEnumerator PresentExit(Component manager, bool useTraversalFixture = false)
+        private static IEnumerator PresentExit(Component manager, bool useTraversalFixture = false, bool animations = false)
         {
             if (GetProperty<bool>(manager, "IsRouteChoiceActive"))
                 yield break;
@@ -1840,7 +2246,7 @@ namespace HallowBlaze.Tests.PlayMode
                 if (useTraversalFixture)
                     PublishTraversalFixture(manager);
                 BoardRuntime previous = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
-                yield return PresentSegmentExit(manager);
+                yield return PresentSegmentExit(manager, animations);
                 Assert.That(session.ActiveRun, Is.SameAs(run), "Traversal ended the run instead of reaching the segment exit.");
                 float deadline = Time.realtimeSinceStartup + 10;
                 while (!GetProperty<bool>(manager, "IsRouteChoiceActive") &&
