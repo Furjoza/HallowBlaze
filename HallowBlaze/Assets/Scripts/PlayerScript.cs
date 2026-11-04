@@ -34,15 +34,24 @@ public class PlayerScript : MovingObject, IRunHud, ITurnFeedback, IPlayerStepAud
     private int displayedFood;
     private long healthGain;
     private long foodGain;
+    private PlayerVisualFacing visualFacing;
 
     /// <summary>Gets the number of actual ordered audio cues played by this view during its lifetime.</summary>
     public int PresentedSoundCount { get; private set; }
+
+    private void OnEnable()
+    {
+        visualFacing = GetComponent<PlayerVisualFacing>();
+        if (visualFacing == null) visualFacing = gameObject.AddComponent<PlayerVisualFacing>();
+        visualFacing.enabled = true;
+    }
 
     private async void Update()
     {
         if (stepSource != null && SoundManager.instance != null && SoundManager.instance.efxSource != null)
             stepSource.mute = !SoundManager.instance.SoundEnabled || SoundManager.instance.efxSource.mute;
 #if UNITY_EDITOR || UNITY_STANDALONE
+    TryTurnVisual(Input.GetKeyDown, Time.frameCount);
         if (!TrySubmitInput(commandSource, out Task<CommandSubmission> submission))
             return;
         try { await submission; }
@@ -52,8 +61,19 @@ public class PlayerScript : MovingObject, IRunHud, ITurnFeedback, IPlayerStepAud
 
     private void OnDisable()
     {
+        if (visualFacing != null) visualFacing.enabled = false;
         commandSource.CancelDraft();
         StopStep();
+    }
+
+    /// <summary>Samples cosmetic facing only through the current player's idle board gate; blocked edges are discarded.</summary>
+    /// <param name="keyDown">Current-frame down edges shared with normal command input.</param>
+    /// <param name="frame">Frame identity consumed even when a modal, replay or replaced board blocks rotation.</param>
+    /// <returns>Whether the visual-only pivot changed without a gameplay submission.</returns>
+    public bool TryTurnVisual(Func<KeyCode, bool> keyDown, int frame)
+    {
+        return visualFacing != null && visualFacing.SampleInput(keyDown, frame,
+            OwnsActivePlayerView() && GameManager.instance.IsGameplayInputEnabled);
     }
 
     /// <inheritdoc />

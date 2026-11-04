@@ -1,5 +1,134 @@
 # HallowBlaze Testing
 
+## M7.13 Illustrated Controls
+
+The main menu offers Controls directly; the legacy Help -> Controls action opens the same
+read-only view. Pause offers its own Controls entry. The modal retains the parent menu and
+focus, and never resumes gameplay when it closes. Its Escape closing frame is consumed before
+pause can handle another Escape. Entries retain visual/navigation order; settings and save
+semantics are unchanged. No scene, prefab or package modification is required.
+
+Walking, Interaction and Menus context tabs show a keyboard diagram and associated functions.
+`PcInputBindings.GetHints` reads actual movement bindings, F/Q/E/Space constants, picker
+aliases and menu keys; it does not read profile discoveries or world topology. Active keys
+have both color and heavier borders, the selected context has an underline, and functions
+are always listed as text. The light Controls surface uses a contrasting dark focus frame;
+the keypad Enter alias has its own labeled keycap. Free visual quarter-turns are explicitly distinct from Wait;
+interaction Q/E selects objects and Space confirms. Per-object actions and replacement slots,
+Notes, pause, route activation, sliders and scrolling have their actual compatible aliases.
+
+The diagram uses fixed-size type and structured keycaps, not a screenshot with stale labels.
+At widths below 960 pixels it stacks above a single keyboard-scrollable binding list. Context
+changes and resize rebuild labels at measured heights. Keyboard focus reaches Back, context
+tabs and the scroll region; Page Up/Down/Home/End scroll without a pointer. No animation is
+required. Viewing/changing context does not submit, mutate or persist gameplay.
+
+`ControlsHintsMatchTheImplementedContextualKeys` verifies binding parity.
+`PauseControlsCanOpenAndCloseWithKeyboardOnly` verifies tabs, narrow scroll, focus return,
+same-frame Escape suppression and zero costs. Production scene checks
+`MainControlsDiagramAndContextsStayReadable` and `ProductionPauseControlsPreservesRunAndFocus`
+cover both menu entries, all contexts, text bounds, diagram key coverage, actual nonblank
+pixels, return focus and unchanged full run serialization/resolver counts. Representative
+renders use 1280x720, 320x480 and 480x640 at `%TEMP%/HB-M713-<context>-<size>.png`.
+The tests resize render targets/layouts and inject keyboard edges; they do not claim physical
+keyboard or OS-window owner acceptance, which remains open in M7.17.
+
+## M7.18 Cosmetic Cardinal Facing
+
+The authored sprite pose is North (zero quarter-turns). An isolated Q edge rotates its
+visual pivot counterclockwise by 90 degrees, E clockwise; four equal turns wrap to zero.
+Only a transient child SpriteRenderer rotates. It mirrors the root Animator's current
+sprite, color and sorting; the authoritative root, Rigidbody2D and colliders never rotate.
+The authored renderer is retained for animation and restored when this component disables.
+Movement animation preserves cosmetic facing; WASD/arrows still produce absolute grid moves.
+Facing resets on board reconstruction and is absent from all run/profile/board persistence.
+
+The current player's full idle walking gate admits rotation. Interaction, pause, Notes,
+setup/Day, replay, terminal, disposal and replaced views block and discard the edge.
+Q+E does nothing. Movement/Wait/F/N/Escape takes priority over rotation in the same sample.
+Held keys without another key-down edge do not spin; repeated sampling of one frame cannot
+rotate twice or defer a blocked rotation. No TurnCommand, resolver, RNG or domain-state
+reference exists in `PlayerVisualFacing`.
+
+`VisualFacingTurnsOnlyAnIsolatedCosmeticPivot` verifies direction, wraparound, frame/hold,
+chords and unchanged actor/collider transform. `VisualTurnsDoNotResolveAgeNoiseOrReplanEnemies`
+compares forty turns with serialized run state, entity positions, retained Listener intent,
+noise identity/lifetime and the next emission ID; resolution count stays zero. Interaction
+E selects without rotating. `ProductionVisualTurnsAreVisibleFreeAndGated` captures four real
+Main orientations, checks changed pixels and fixed actor transforms, modal/replay/terminal
+gates, preserved nonzero facing through an absolute move and a normally costed Wait.
+Representative production renders are in `%TEMP%/HB-M718-facing-{0|1|2|3}.png`.
+These are graphics/injected-edge checks; integrated physical-key owner acceptance is M7.17.
+
+## M7.12 Contextual Interaction Keys
+
+`PcInputBindings` is the shared source for command keys, modal selection and subsequent
+visual-facing/Controls work. Interaction entry and normal-command suppression both use F;
+E no longer opens a draft. Opening retains an unselected draft: browsing and confirmation
+are separate. Objects are ordered by Y, X and stable entity ID; actions on one object retain
+their explicit query/action/slot order. A refresh retains the same valid object/action/slot,
+never substitutes an unavailable action, and cancels a nested comparison rather than replacing it.
+
+| Context / edge | Effect | Command / cost |
+| --- | --- | --- |
+| Idle F, including F + a normal command key | Open draft, or stay idle when empty/blocked | None; normal command sampling suppresses F |
+| Draft or replacement F / Escape | Cancel the complete draft | None; block remains through closing frame |
+| Draft Q / E, left / right | Previous / next object, deterministic wraparound | None; never rotates |
+| Draft Tab / Shift+Tab, down / up | Next / previous explicit action on that object | None |
+| Replacement Q/E, arrows, Tab/Shift+Tab | Select a specific occupied slot | None |
+| Draft Space / Enter / keypad Enter | Confirm the selected complete action, or enter explicit replacement | At most one existing resolver invocation; accepted effects use normal costs |
+| Ambiguous navigation + confirmation or opposite navigation | No selection/action | None |
+| Repeated sample in the same frame / held key with no new down edge | No second toggle/action | None |
+| Stale target/tool, pause, terminal, disposed/replaced board | Reject free or refuse input through the existing gates | No accepted turn/resource/noise effect |
+
+`AxePresentationTests.ContextualKeysChooseManualOrToolWithoutLeakingWait` and
+`ContextualManualSpaceResolvesOneWorkAction` execute production picker inputs and verify
+single resolution, actual obstacle progress, Food/charge and emitted-noise counts.
+`ToolPickupPresentationTests` covers multiple objects, stable refresh, wraparound, nested
+F cancellation, same-frame ownership, empty/stale/modal/disposed cases and pointer parity.
+`PlayModeInfrastructureTests.InteractionEntrySuppressesNormalCommandButIdleEDoesNot`
+guards every source-level opening/suppression migration. Full PlayMode is the integration gate.
+Idle Q/E visual behavior is implemented separately in M7.18; human physical-key acceptance
+remains M7.17, not a claimed outcome of injected-key tests.
+
+## M7.11 Keyboard Menu Ownership
+
+`KeyboardMenuFocus` owns navigation only for the top visible menu. Focus is a persistent
+white outline, not hover or color alone. Tab/Shift+Tab and arrows traverse active,
+interactable controls; Enter/keypad Enter/Space activate the existing UI submit handler.
+Left/right adjust a focused slider. Text editing retains its native keys; Tab leaves the
+field. Page Up/Page Down/Home/End scroll the focused region. Navigation reveals selected
+rows inside a scroll viewport. Disabled controls and invisible CanvasGroups are skipped.
+Opening and closing frames cannot submit the same keyboard edge to another menu.
+
+| Screen / actions | Keys and focus owner | Exit / return |
+| --- | --- | --- |
+| Main: New Game, Continue, Help, Settings, local results, Quit | `PanelScript` + `KeyboardMenuFocus`; disabled Continue skipped | Existing explicit actions; root has no implicit Quit |
+| Help, Authors, Donate, legacy Controls, local results, record form | Same owner; text field keeps editing keys | Back button or Escape invokes the existing Back action; retained valid focus on reopen |
+| Main settings: music/sound and Back | `SettingsPanelController` installs the same panel policy | Existing Back action or Escape; settings semantics unchanged |
+| Pause: Resume, Settings, Exit to Menu | `PauseMenuController` + menu focus | Escape/Resume; existing deferred gameplay-input release |
+| Pause settings | Separate menu focus; audio buttons use their existing actions | Escape/Back; parent focus retained |
+| Route choice / atlas | `AtlasScreenController` + menu focus; arrows/Tab browse, Enter/Space submit the focused edge | Choice commits only through the existing route action; zero-exit final atlas has no fabricated route or cancel |
+| Field Notes: known entries, list and detail regions, Close | `FieldNotesPresenter` + menu focus; N opens; both scroll regions are focusable | N/Escape/Close; returns to book and holds the gameplay gate through the frame |
+| Interaction / tool pickup / replacement | Board-owned `InteractionPresenter`; current F/Q/E/Space and per-object action policy is defined above under M7.12; selected action scrolls into view | Free cancellation and delayed interaction-gate release |
+| Death: Restart, Menu; post-death Notes | Terminal canvas owns focus; Notes temporarily owns the top context | Explicit existing actions only; terminal focus ends when a run starts |
+
+Focused graphics PlayMode coverage: `PauseMenuTests`, `FieldNotesPresentationTests`,
+`AtlasScreenTests`, `ToolPickupPresentationTests`, and
+`GameSessionLifecycleTests.KeyboardMenuSceneFocusAndBackArePointerFree` /
+`KeyboardTerminalFocusBelongsToVisibleActions`. The scene tests navigate production Menu
+and inspect production terminal controls without a pointer; the component tests exercise
+disabled/empty controls, nested ownership, pause/resume, scrolling layouts, replacement,
+resource preservation and disposal. Saves use isolated temporary directories.
+`KeyboardContinueRouteChoiceCannotBeStolenByEmptyTerminalPanel` verifies real Main Continue
+at a route checkpoint. Pause disable cases close both views before unlocking gameplay.
+Picker scrolling measures actual rendered row/viewport bounds, including wrapped replacement
+rows. `PickerRevealsRetainedRowAfterViewportShrinks` renders Game View with an active camera
+and shrinks the panel without changing selection; geometry changes reveal the retained row
+again, while unchanged geometry does not override manual scrolling.
+These are automated keyboard-handler/scene checks, not a claim of human physical-key or
+OS-window testing. The complete owner keyboard/visual acceptance remains in M7.17.
+
 ## M7.8 Integrated Repair Gate
 
 **Status (2026-10-30):** Technical validation passed; owner visual/audio/live-window
