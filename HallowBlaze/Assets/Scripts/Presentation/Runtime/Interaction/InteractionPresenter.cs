@@ -188,11 +188,11 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             }
             if (!IsOpen) return none;
             if (keyDown(PcInputBindings.Cancel)) { Cancel(); return none; }
-            bool previousObject = keyDown(PcInputBindings.PreviousObject) || keyDown(KeyCode.LeftArrow);
-            bool nextObject = keyDown(PcInputBindings.NextObject) || keyDown(KeyCode.RightArrow);
-            bool previousAction = keyDown(KeyCode.UpArrow) || keyDown(KeyCode.Tab) && shift;
-            bool nextAction = keyDown(KeyCode.DownArrow) || keyDown(KeyCode.Tab) && !shift;
-            bool confirm = keyDown(PcInputBindings.Space) || keyDown(KeyCode.Return) || keyDown(KeyCode.KeypadEnter);
+            bool previousObject = keyDown(PcInputBindings.PreviousObject) || keyDown(PcInputBindings.PreviousObjectAlias);
+            bool nextObject = keyDown(PcInputBindings.NextObject) || keyDown(PcInputBindings.NextObjectAlias);
+            bool previousAction = keyDown(PcInputBindings.PreviousAction) || keyDown(PcInputBindings.CycleAction) && shift;
+            bool nextAction = keyDown(PcInputBindings.NextAction) || keyDown(PcInputBindings.CycleAction) && !shift;
+            bool confirm = keyDown(PcInputBindings.Space) || keyDown(PcInputBindings.Enter) || keyDown(PcInputBindings.KeypadEnter);
             int edges = (previousObject ? 1 : 0) + (nextObject ? 1 : 0) + (previousAction ? 1 : 0) + (nextAction ? 1 : 0) + (confirm ? 1 : 0);
             if (edges != 1) return none;
             if (confirm) return ConfirmAsync();

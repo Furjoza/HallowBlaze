@@ -9,11 +9,24 @@ public class PanelScript : MonoBehaviour {
     public GameObject selectedObject;
 
     private KeyboardMenuFocus keyboardFocus;
+    private bool controlsInstalled;
 
     void Update()
     {
         if (gameObject.scene.name != "Menu")
             return;
+        if (!controlsInstalled)
+        {
+            controlsInstalled = true;
+            if (name == "MainMenuPanel") KeyboardControlsView.InstallEntry(gameObject, OpenControls);
+            else if (name == "HelpMenuPanel")
+                foreach (Button button in GetComponentsInChildren<Button>())
+                    if (button.name == "ControlsBttn")
+                    {
+                        button.onClick = new Button.ButtonClickedEvent();
+                        button.onClick.AddListener(OpenControls);
+                    }
+        }
         if (keyboardFocus == null)
             keyboardFocus = KeyboardMenuFocus.Attach(gameObject, selectedObject, Back);
         else if (!keyboardFocus.enabled)
@@ -34,4 +47,6 @@ public class PanelScript : MonoBehaviour {
                 return;
             }
     }
+
+        private void OpenControls() => KeyboardControlsView.Open(transform);
 }

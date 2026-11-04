@@ -1,5 +1,38 @@
 # HallowBlaze Testing
 
+## M7.13 Illustrated Controls
+
+The main menu offers Controls directly; the legacy Help -> Controls action opens the same
+read-only view. Pause offers its own Controls entry. The modal retains the parent menu and
+focus, and never resumes gameplay when it closes. Its Escape closing frame is consumed before
+pause can handle another Escape. Entries retain visual/navigation order; settings and save
+semantics are unchanged. No scene, prefab or package modification is required.
+
+Walking, Interaction and Menus context tabs show a keyboard diagram and associated functions.
+`PcInputBindings.GetHints` reads actual movement bindings, F/Q/E/Space constants, picker
+aliases and menu keys; it does not read profile discoveries or world topology. Active keys
+have both color and heavier borders, the selected context has an underline, and functions
+are always listed as text. The light Controls surface uses a contrasting dark focus frame;
+the keypad Enter alias has its own labeled keycap. Free visual quarter-turns are explicitly distinct from Wait;
+interaction Q/E selects objects and Space confirms. Per-object actions and replacement slots,
+Notes, pause, route activation, sliders and scrolling have their actual compatible aliases.
+
+The diagram uses fixed-size type and structured keycaps, not a screenshot with stale labels.
+At widths below 960 pixels it stacks above a single keyboard-scrollable binding list. Context
+changes and resize rebuild labels at measured heights. Keyboard focus reaches Back, context
+tabs and the scroll region; Page Up/Down/Home/End scroll without a pointer. No animation is
+required. Viewing/changing context does not submit, mutate or persist gameplay.
+
+`ControlsHintsMatchTheImplementedContextualKeys` verifies binding parity.
+`PauseControlsCanOpenAndCloseWithKeyboardOnly` verifies tabs, narrow scroll, focus return,
+same-frame Escape suppression and zero costs. Production scene checks
+`MainControlsDiagramAndContextsStayReadable` and `ProductionPauseControlsPreservesRunAndFocus`
+cover both menu entries, all contexts, text bounds, diagram key coverage, actual nonblank
+pixels, return focus and unchanged full run serialization/resolver counts. Representative
+renders use 1280x720, 320x480 and 480x640 at `%TEMP%/HB-M713-<context>-<size>.png`.
+The tests resize render targets/layouts and inject keyboard edges; they do not claim physical
+keyboard or OS-window owner acceptance, which remains open in M7.17.
+
 ## M7.18 Cosmetic Cardinal Facing
 
 The authored sprite pose is North (zero quarter-turns). An isolated Q edge rotates its

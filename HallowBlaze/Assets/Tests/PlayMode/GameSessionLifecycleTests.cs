@@ -210,6 +210,123 @@ namespace HallowBlaze.Tests.PlayMode
             yield return SceneManager.UnloadSceneAsync("Main");
         }
 
+        /// <summary>Main menu Controls is keyboard-reachable, accurately illustrated and readable across desktop/narrow context layouts.</summary>
+        [UnityTest]
+        public IEnumerator MainControlsDiagramAndContextsStayReadable()
+        {
+            yield return SceneManager.LoadSceneAsync("Menu", LoadSceneMode.Single);
+            yield return null;
+            yield return null;
+            GameObject main = GameObject.Find("MainMenuPanel");
+            KeyboardMenuFocus focus = main.GetComponent<KeyboardMenuFocus>();
+            var events = UnityEngine.EventSystems.EventSystem.current;
+            for (int index = 0; index < 20 && events.currentSelectedGameObject.name != "Controls"; index++) focus.HandleKey(KeyCode.Tab);
+            Assert.That(events.currentSelectedGameObject.name, Is.EqualTo("Controls"));
+            focus.HandleKey(KeyCode.Return);
+            KeyboardControlsView view = KeyboardControlsView.Current;
+            Assert.That(view, Is.Not.Null);
+            var cameraOwner = new GameObject("Controls evidence camera", typeof(Camera));
+            Camera camera = cameraOwner.GetComponent<Camera>();
+            camera.enabled = false;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
+            Canvas canvas = view.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceCamera;
+            canvas.worldCamera = camera;
+            canvas.planeDistance = 1;
+            try
+            {
+                foreach (Vector2Int size in new[] { new Vector2Int(1280, 720), new Vector2Int(320, 480), new Vector2Int(480, 640) })
+                foreach (PcInputContext context in Enum.GetValues(typeof(PcInputContext)))
+                {
+                    var target = new RenderTexture(size.x, size.y, 24);
+                    var pixels = new Texture2D(size.x, size.y, TextureFormat.RGB24, false);
+                    RenderTexture previous = RenderTexture.active;
+                    try
+                    {
+                        camera.targetTexture = target;
+                        view.Resize(size);
+                        view.SelectContext(context);
+                        Canvas.ForceUpdateCanvases();
+                        foreach (var hint in PcInputBindings.GetHints(context))
+                        {
+                            Assert.That(view.Hints.Any(displayed => displayed.Label == hint.Label), Is.True);
+                            foreach (KeyCode key in hint.Keys) Assert.That(view.DiagramKeys, Does.Contain(key));
+                        }
+                        foreach (Text text in view.GetComponentsInChildren<Text>())
+                        {
+                            Assert.That(text.preferredHeight, Is.LessThanOrEqualTo(text.rectTransform.rect.height + 1), text.text);
+                            Assert.That(text.cachedTextGenerator.GetVerticesArray().All(vertex => float.IsFinite(vertex.position.x)), Is.True);
+                        }
+                        Assert.That(view.GetComponent<KeyboardMenuFocus>().FrameColor.grayscale, Is.LessThan(0.3f));
+                        camera.Render();
+                        RenderTexture.active = target;
+                        pixels.ReadPixels(new Rect(0, 0, size.x, size.y), 0, 0);
+                        pixels.Apply();
+                        Assert.That(pixels.GetPixels32().Count(pixel => pixel.g < 150 && pixel.r < 150), Is.GreaterThan(1000));
+                        File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M713-" + context + "-" + size.x + "x" + size.y + ".png"), pixels.EncodeToPNG());
+                    }
+                    finally
+                    {
+                        camera.targetTexture = null;
+                        RenderTexture.active = previous;
+                        target.Release();
+                        UnityEngine.Object.DestroyImmediate(target);
+                        UnityEngine.Object.DestroyImmediate(pixels);
+                    }
+                }
+                view.GetComponent<KeyboardMenuFocus>().HandleKey(KeyCode.Escape);
+                Assert.That(events.currentSelectedGameObject.name, Is.EqualTo("Controls"));
+                Assert.That(main.activeInHierarchy, Is.True);
+            }
+            finally
+            {
+                if (view != null && view.IsOpen) view.Close();
+                UnityEngine.Object.DestroyImmediate(cameraOwner);
+            }
+            Scene cleanup = SceneManager.CreateScene("Controls cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Menu");
+        }
+
+        /// <summary>Actual production pause Controls preserves the full saved run, resolver count and input ownership.</summary>
+        [UnityTest]
+        public IEnumerator ProductionPauseControlsPreservesRunAndFocus()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            Invoke(manager, "HideLevelImage");
+            yield return null;
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
+            Type pauseType = gameManagerType.Assembly.GetType("PauseMenuController", true);
+            Component pause = UnityEngine.Object.FindFirstObjectByType(pauseType) as Component;
+            Assert.That(pause, Is.Not.Null);
+            string before = HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeTravelRun(runtime.RunState);
+            Invoke(pause, "OpenPause");
+            GameObject pauseRoot = GetField<GameObject>(pause, "pauseRoot");
+            KeyboardMenuFocus focus = pauseRoot.GetComponent<KeyboardMenuFocus>();
+            var events = UnityEngine.EventSystems.EventSystem.current;
+            for (int index = 0; index < 10 && events.currentSelectedGameObject.name != "Controls"; index++) focus.HandleKey(KeyCode.Tab);
+            Assert.That(events.currentSelectedGameObject.name, Is.EqualTo("Controls"));
+            focus.HandleKey(KeyCode.Return);
+            Assert.That(KeyboardControlsView.Current.IsOpen, Is.True);
+            KeyboardControlsView.Current.GetComponent<KeyboardMenuFocus>().HandleKey(KeyCode.Escape);
+            Invoke(pause, "HandleEscape");
+            Assert.That(GetProperty<object>(pause, "CurrentState").ToString(), Is.EqualTo("PauseRoot"));
+            Assert.That(events.currentSelectedGameObject.name, Is.EqualTo("Controls"));
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.Zero);
+            Assert.That(HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeTravelRun(runtime.RunState), Is.EqualTo(before));
+            Invoke(pause, "Resume");
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
+            yield return null;
+            Scene cleanup = SceneManager.CreateScene("Pause Controls cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
         /// <summary>Production death actions are reachable instead of assigning focus to their noninteractive backdrop.</summary>
         [UnityTest]
         public IEnumerator KeyboardTerminalFocusBelongsToVisibleActions()
