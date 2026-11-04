@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
 using HallowBlaze.Core.Generation;
+using HallowBlaze.Core.Generation.Pipeline;
 using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.State;
 using HallowBlaze.Core.Turns.Resolution;
@@ -15,6 +17,30 @@ namespace HallowBlaze.Tests.EditMode
     /// <summary>Verifies single-candidate generation independently of Unity and presentation.</summary>
     public class OrdinaryBoardGeneratorTests
     {
+        /// <summary>Food types have authored fixed rewards; old bush identities retain their original effect.</summary>
+        [TestCase("legacy.food", 10)]
+        [TestCase("legacy.soda", 20)]
+        [TestCase("legacy.bush-food", 10)]
+        [TestCase(OrdinaryBoardContent.BerryFoodId, 5)]
+        [TestCase(OrdinaryBoardContent.CarrotFoodId, 15)]
+        public void ProductionCatalogRetainsFixedFoodRewards(string contentId, int reward)
+        {
+            BoardValidationCatalog catalog = OrdinaryBoardContent.CreateCatalog();
+            var address = new BoardAddress("berries", "leg", "road", "segment", 1,
+                OrdinaryBoardGenerator.ConfigurationId, 1, 42);
+            var config = new BoardGenerationConfig(address.GenerationConfigurationId, address.GenerationVersion,
+                new GenerationRange(8, 14), new GenerationRange(20, 58), new GenerationRange(5, 7),
+                new GenerationRange(0, 0), 0, 2,
+                new[] { "legacy.player", "legacy.floor", "legacy.wall", contentId, OrdinaryBoardContent.ExitTerrainId },
+                new[] { new ResourceGenerationBudget("food", new GenerationRange(2, 2)) });
+            BoardBlueprint blueprint = OrdinaryBoardGenerator.Generate(address, config, catalog, 77);
+            BoardEntityState[] food = blueprint.Entities.Where(entity => entity.Definition.Layer == BoardLayer.Item).ToArray();
+            Assert.That(food.Length, Is.EqualTo(2));
+            Assert.That(food.All(entity => entity.Definition.ContentId == contentId &&
+                entity.Definition.AutomaticFoodReward == reward), Is.True);
+            Assert.That(blueprint.InitialResources[0].ItemCount, Is.EqualTo(2));
+        }
+
         /// <summary>Known seeds produce validated, reproducible topology, safe openings and reachable supply.</summary>
         [TestCase(0)]
         [TestCase(1)]
@@ -136,6 +162,76 @@ namespace HallowBlaze.Tests.EditMode
                 if (seed == 42) TestContext.WriteLine("day=" + day + ", hash=" + blueprint.ContentHash + "\n" + Draw(blueprint));
             }
             Assert.Throws<ArgumentException>(() => OrdinaryBoardContent.CreateConfiguration(Address(42)));
+        }
+
+        /// <summary>New configuration seeds expose every fixed-value food and retain exact family-count manifests.</summary>
+        [Test]
+        public void PublishedFoodVarietiesHaveDeterministicSupplyAndFixedEffects()
+        {
+            var counts = new Dictionary<string, int>();
+            var rewards = new Dictionary<string, int> { { "legacy.food", 10 }, { "legacy.soda", 20 },
+                { OrdinaryBoardContent.BerryFoodId, 5 }, { OrdinaryBoardContent.CarrotFoodId, 15 } };
+            for (int seed = 0; seed < 100; seed++)
+            {
+                var address = new BoardAddress("food-supply", "leg", "road", "segment", 4,
+                    OrdinaryBoardGenerator.ConfigurationId, 4, seed);
+                var request = new BoardGenerationRequest(address, OrdinaryBoardContent.CreateConfiguration(address),
+                    OrdinaryBoardContent.CreateCatalog(), seed);
+                BoardGenerationResult first = BoardGenerationPipeline.GenerateOrdinary(request);
+                Assert.That(first.IsSuccess, Is.True, "seed=" + seed + "; " + first);
+                Assert.That(BoardGenerationPipeline.GenerateOrdinary(request).Blueprint, Is.EqualTo(first.Blueprint));
+                BoardItemSpawn[] food = first.Blueprint.Items.Where(item => item.ResourceFamilyId == "food").ToArray();
+                Assert.That(food.Length, Is.InRange(2, 5));
+                Assert.That(first.Blueprint.InitialResources.Single(entry => entry.ResourceFamilyId == "food").ItemCount,
+                    Is.EqualTo(food.Length));
+                foreach (BoardItemSpawn item in food)
+                {
+                    BoardEntityState entity = first.Blueprint.Entities.Single(candidate => candidate.Id.Equals(item.EntityId));
+                    Assert.That(entity.Definition.AutomaticFoodReward, Is.EqualTo(rewards[item.ItemDefinitionId]));
+                    counts[item.ItemDefinitionId] = counts.TryGetValue(item.ItemDefinitionId, out int count) ? count + 1 : 1;
+                }
+            }
+            CollectionAssert.AreEquivalent(rewards.Keys, counts.Keys);
+            foreach (KeyValuePair<string, int> count in counts)
+                TestContext.WriteLine(count.Key + ": " + count.Value + " items; fixed reward=" + rewards[count.Key]);
+        }
+
+        /// <summary>Extra catalog definitions cannot alter pinned content, IDs, positions, supply or effects in versions 1-3.</summary>
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public void PinnedFoodVersionsMatchTheOriginalCatalog(int version)
+        {
+            var definitions = new List<BoardEntityDefinition>
+            {
+                new BoardEntityDefinition(BoardLayer.Actor, EntityKind.Player, "legacy.player"),
+                new BoardEntityDefinition(BoardLayer.Terrain, new EntityKind("terrain"), "legacy.floor", new BoardEntityTraits(true, false, false)),
+                new BoardEntityDefinition(BoardLayer.Obstacle, EntityKind.Obstacle, "legacy.wall"),
+                new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, "legacy.food", BoardEntityTraits.Default, 10),
+                new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, "legacy.soda", BoardEntityTraits.Default, 20)
+            };
+            definitions.Add(new BoardEntityDefinition(BoardLayer.Terrain, new EntityKind("terrain"), OrdinaryBoardContent.ExitTerrainId,
+                new BoardEntityTraits(true, true, false)));
+            definitions.Add(new BoardEntityDefinition(BoardLayer.Actor, EntityKind.Enemy, OrdinaryBoardContent.Enemy10Id));
+            definitions.Add(new BoardEntityDefinition(BoardLayer.Actor, EntityKind.Enemy, OrdinaryBoardContent.Enemy20Id));
+            var original = new BoardValidationCatalog(definitions,
+                new Dictionary<string, string> { { "legacy.food", "food" }, { "legacy.soda", "food" } },
+                new Dictionary<string, string>(), new Dictionary<string, ShamblerDefinition>
+                {
+                    { OrdinaryBoardContent.Enemy10Id, new ShamblerDefinition(10) },
+                    { OrdinaryBoardContent.Enemy20Id, new ShamblerDefinition(20) }
+                });
+            foreach (int seed in new[] { 0, 42, -1, 123456 })
+            {
+                var address = new BoardAddress("pinned-food", "leg", "road", "segment", 4,
+                    OrdinaryBoardGenerator.ConfigurationId, version, seed);
+                BoardGenerationConfig config = OrdinaryBoardContent.CreateConfiguration(address);
+                BoardBlueprint expected = version == 1 ? OrdinaryBoardGenerator.Generate(address, config, original, 77) :
+                    BoardGenerationPipeline.GenerateOrdinary(new BoardGenerationRequest(address, config, original, 77)).Blueprint;
+                BoardBlueprint actual = version == 1 ? OrdinaryBoardGenerator.Generate(address, config, OrdinaryBoardContent.CreateCatalog(), 77) :
+                    BoardGenerationPipeline.GenerateOrdinary(new BoardGenerationRequest(address, config, OrdinaryBoardContent.CreateCatalog(), 77)).Blueprint;
+                Assert.That(actual, Is.EqualTo(expected), "version=" + version + "; seed=" + seed);
+            }
         }
 
         private static string Draw(BoardBlueprint blueprint)

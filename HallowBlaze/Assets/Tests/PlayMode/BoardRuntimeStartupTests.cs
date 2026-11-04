@@ -202,7 +202,7 @@ namespace HallowBlaze.Tests.PlayMode
 
         /// <summary>Ordinary setup retains blueprint identity, initial state, enemy rules and view parity across Continue and cosmetic changes.</summary>
         [UnityTest]
-        public IEnumerator OrdinarySetupBuildsViewsFromValidatedBlueprintAndContinuesIdentically()
+        public IEnumerator OrdinarySetupBuildsViewsFromValidatedBlueprintAndContinuesIdentically([Values(1, 2, 3, 4)] int version)
         {
             UnityEngine.Random.State previousRandom = UnityEngine.Random.state;
             try
@@ -211,7 +211,7 @@ namespace HallowBlaze.Tests.PlayMode
                 RunState run = CreateRun();
                 run.StartLeg("edge", run.WorldNodeId, "destination", new[]
                 {
-                    new RouteSegmentState("ordinary.segment", OrdinaryBoardGenerator.ConfigurationId, 1)
+                    new RouteSegmentState("ordinary.segment", OrdinaryBoardGenerator.ConfigurationId, version)
                 });
                 var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed,
                     run.WorldNodeId, "forest", "temperate", 1);
@@ -283,6 +283,8 @@ namespace HallowBlaze.Tests.PlayMode
             GameObject soda = CreateObject("Ordinary soda prefab", 0, 0);
             soda.tag = "Soda";
             SetField(manager, "groundFoodTiles", new[] { food, soda });
+            SetField(manager, "bushFoodTiles", AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Food2.prefab"));
+            SetField(manager, "buriedFoodTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Carrot.prefab") });
             var enemies = new List<GameObject>();
             foreach (int damage in new[] { 10, 20 })
             {
@@ -292,6 +294,95 @@ namespace HallowBlaze.Tests.PlayMode
             }
             SetField(manager, "enemyTiles", enemies.ToArray());
             return manager;
+        }
+
+        /// <summary>Real food artwork, applied gains and removal agree with fixed rewards in both replay modes and after recovery.</summary>
+        [UnityTest]
+        public IEnumerator ProductionFoodVarietiesCollectOnceWithExactHudGains()
+        {
+            foreach (bool animations in new[] { true, false })
+                foreach (string foodId in new[] { OrdinaryBoardContent.BerryFoodId, OrdinaryBoardContent.CarrotFoodId })
+                {
+                    Component manager = CreateOrdinaryBoardManager();
+                    Component authored = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/GameManager.prefab").GetComponent(boardManagerType);
+                    foreach (string field in new[] { "floorTiles", "outerWallTiles", "wallTiles", "groundFoodTiles", "enemyTiles" })
+                        SetField(manager, field, GetManagerField<GameObject[]>(authored, field));
+                    SetField(manager, "exit", GetManagerField<GameObject>(authored, "exit"));
+                    GameObject player = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Player.prefab"));
+                    createdObjects.Add(player);
+                    Component hud = player.GetComponent(boardManagerType.Assembly.GetType("PlayerScript", true));
+                    var foodText = CreateObject("Food gain", 0, 0).AddComponent<UnityEngine.UI.Text>();
+                    SetField(hud, "foodText", foodText);
+                    BoardRuntime runtime = null;
+                    BoardEntityState item = null;
+                    for (int seed = 0; seed < 32 && item == null; seed++)
+                    {
+                        var run = new RunState("resource-view-" + seed, seed, new RunStateConfiguration(100, 100, 0, "forest.start"));
+                        run.StartLeg("edge", run.WorldNodeId, "destination", new[]
+                        {
+                            new RouteSegmentState("ordinary.segment", OrdinaryBoardGenerator.ConfigurationId, 4)
+                        });
+                        var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed,
+                            run.WorldNodeId, "forest", "temperate", 1);
+                        runtime = InvokeSetup(manager, request, run, player);
+                        item = runtime.BoardState.GetEntities().FirstOrDefault(entity => entity.Definition.ContentId == foodId);
+                    }
+                    Assert.That(item, Is.Not.Null, foodId);
+                    GameObject itemView = runtime.Views[item.Id];
+                    string prefab = foodId == OrdinaryBoardContent.BerryFoodId ? "Food2" : "Carrot";
+                    Assert.That(itemView.GetComponent<SpriteRenderer>().sprite,
+                        Is.SameAs(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/" + prefab + ".prefab").GetComponent<SpriteRenderer>().sprite));
+                    Direction step = Direction.East;
+                    bool positioned = false;
+                    foreach (Direction direction in new[] { Direction.East, Direction.West, Direction.North, Direction.South })
+                    {
+                        GridPosition cell = item.Position.Move(direction);
+                        if (!runtime.BoardState.TryGetEntity(BoardLayer.Terrain, cell, out _) ||
+                            runtime.BoardState.TryGetEntity(BoardLayer.Obstacle, cell, out _) ||
+                            runtime.BoardState.TryGetEntity(BoardLayer.Item, cell, out _)) continue;
+                        positioned = runtime.BoardState.TryMove(runtime.PlayerId, cell);
+                        if (!positioned) continue;
+                        step = direction.Equals(Direction.East) ? Direction.West : direction.Equals(Direction.West) ? Direction.East :
+                            direction.Equals(Direction.North) ? Direction.South : Direction.North;
+                        break;
+                    }
+                    Assert.That(positioned, Is.True);
+                    var sinks = new ResourceFeedback();
+                    using (var presenter = new BoardEventPresenter(runtime, (IRunHud)hud, sinks, sinks,
+                        diagnostic => Assert.Fail(diagnostic.ToString())))
+                    {
+                        presenter.AnimationsEnabled = animations;
+                        presenter.SynchronizeFromState();
+                        presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Setup, false);
+                        player.GetComponent<Animator>().Update(0f);
+                        CaptureLandmark(runtime, new Vector2Int(1280, 720), prefab + "-before-" + animations, "HB-M715");
+                        Task<CommandSubmission> pending = presenter.Coordinator.SubmitAsync(new MoveCommand(step));
+                        while (!pending.IsCompleted) yield return null;
+                        Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                        int reward = foodId == OrdinaryBoardContent.BerryFoodId ? 5 : 15;
+                        Assert.That(runtime.RunState.Food, Is.EqualTo(100 + reward - 1));
+                        Assert.That(foodText.text, Is.EqualTo("Food: " + (100 + reward - 1) + " +" + reward));
+                        Assert.That(itemView.activeSelf, Is.False);
+                        Assert.That(runtime.BoardState.TryGetEntity(item.Id, out _), Is.False);
+                        Assert.That(sinks.Events.OfType<FoodRestoredEvent>().Single().Amount, Is.EqualTo(reward));
+                        int before = runtime.RunState.Food;
+                        Assert.That(presenter.Coordinator.SubmitAsync(new InteractCommand(item.Id)).Result.Status,
+                            Is.EqualTo(CommandSubmissionStatus.Rejected));
+                        presenter.SynchronizeFromState();
+                        Assert.That(runtime.RunState.Food, Is.EqualTo(before));
+                        Assert.That(itemView.activeSelf, Is.False);
+                        Assert.That(foodText.text, Is.EqualTo("Food: " + before));
+                        CaptureLandmark(runtime, new Vector2Int(1280, 720), prefab + "-after-" + animations, "HB-M715");
+                    }
+                }
+        }
+
+        private sealed class ResourceFeedback : ITurnFeedback, IBoardOutcomeSink
+        {
+            public readonly List<GameEvent> Events = new List<GameEvent>();
+            public void ShowRejection(CommandRejectionCode reason) { }
+            public void ShowEvent(GameEvent gameEvent) => Events.Add(gameEvent);
+            public bool TryNotify(BoardRequest request, GameEvent outcome) => true;
         }
 
         /// <summary>Version-2 runtime retains blueprint and recovery diagnostics across a serialized Continue boundary.</summary>

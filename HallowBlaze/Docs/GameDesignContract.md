@@ -1372,6 +1372,26 @@ Poniższe pytania mają status **Open**. Agent nie może rozstrzygnąć ich sam,
 
 Wskazówki tras w MVP nie są decyzją otwartą: MUSZĄ być prawdziwe w odniesieniu do obserwowalnych, stabilnych cech. Mogą być niepełne, a dynamiczne warunki mogą zmienić wartość drogi, lecz gra nie wprowadza celowo fałszywego opisu.
 
+### 26.1. Current fixed Food rewards
+
+For the pre-M9 game, different visible food types grant different authored, fixed amounts.
+The generator may choose an item type and position, but never rolls its reward or adjusts it
+to meet an average. M7.15 publishes `ordinary.board.v1/4` with this table:
+
+| Definition ID | Existing artwork | Food gained once, before the action cost |
+| --- | --- | --- |
+| `ordinary.berries` | Berry bush (`Food2`) | 5 |
+| `legacy.food` | Food ration (`Food`) | 10 |
+| `ordinary.carrot` | Carrot | 15 |
+| `legacy.soda` | Soda | 20 |
+
+All four share the existing Food item-count budget: 2-5 on a normal board, or 3-4,
+2-3 and 1-2 on the three opening boards. The count budget does not guarantee each type
+on each board or a particular reward total. No reward is averaged or randomized.
+Automatic collection on entry still precedes the one central Food cost. There is no Food
+cap or satiety change. Pinned ordinary versions 1-3 keep their original content and rewards;
+legacy `legacy.bush-food` still grants 10, and buried caches keep their existing interaction.
+
 ## 27. Accepted future contract: route legs, atlas observations, and inventory
 
 ### 27.1. Status and migration boundary

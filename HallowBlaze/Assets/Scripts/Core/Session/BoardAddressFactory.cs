@@ -13,7 +13,7 @@ namespace HallowBlaze.Core.Session
 
         /// <summary>
         /// Validates published road/segment/configuration associations and derives the persisted address.
-        /// Named publication upgrades from legacy v1 or ordinary versions 1/2 to ordinary version 3 retain
+        /// Named publication upgrades from legacy v1 or ordinary versions 1-3 to ordinary version 4 retain
         /// saved identity, seed and algorithm. The named radio-tower arrival upgrade also retains previously saved
         /// legacy/ordinary layouts rather than replacing a board already in progress. The one-board Day 1
         /// shelter opening remains pinned when the named three-board v2 opening is published. Other drift is rejected.
@@ -57,7 +57,8 @@ namespace HallowBlaze.Core.Session
                 edge.Segments[1].SegmentId != "segment.shelter-warm-up.v2.stretch" ||
                 edge.Segments[2].SegmentId != "segment.shelter-warm-up.v2.arrival") return false;
             foreach (RouteSegmentDefinition segment in edge.Segments)
-                if (segment.GenerationConfigurationId != "ordinary.board.v1" || segment.GenerationVersion != 3) return false;
+                if (segment.GenerationConfigurationId != "ordinary.board.v1" ||
+                    segment.GenerationVersion < 3 || segment.GenerationVersion > 4) return false;
             return true;
         }
 
@@ -67,11 +68,10 @@ namespace HallowBlaze.Core.Session
                 published.GenerationConfigurationId == saved.GenerationConfigurationId) ||
                 (saved.GenerationConfigurationId == "legacy.board.v1" && saved.GenerationVersion == 1 &&
                 published.GenerationConfigurationId == "ordinary.board.v1" &&
-                (published.GenerationVersion == 1 || published.GenerationVersion == 2 || published.GenerationVersion == 3)) ||
-                (saved.GenerationConfigurationId == "ordinary.board.v1" && saved.GenerationVersion == 1 &&
-                published.GenerationConfigurationId == "ordinary.board.v1" && (published.GenerationVersion == 2 || published.GenerationVersion == 3)) ||
-                (saved.GenerationConfigurationId == "ordinary.board.v1" && saved.GenerationVersion == 2 &&
-                published.GenerationConfigurationId == "ordinary.board.v1" && published.GenerationVersion == 3) ||
+                published.GenerationVersion >= 1 && published.GenerationVersion <= 4) ||
+                (saved.GenerationConfigurationId == "ordinary.board.v1" && saved.GenerationVersion >= 1 &&
+                saved.GenerationVersion <= 3 && published.GenerationConfigurationId == "ordinary.board.v1" &&
+                published.GenerationVersion > saved.GenerationVersion && published.GenerationVersion <= 4) ||
                 (published.SegmentId == "segment.ridge-radio-tower.arrival" &&
                 published.GenerationConfigurationId == "landmark.radio-tower.board" && published.GenerationVersion == 1 &&
                 ((saved.GenerationConfigurationId == "ordinary.board.v1" && (saved.GenerationVersion == 1 || saved.GenerationVersion == 2)) ||

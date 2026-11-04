@@ -8,6 +8,19 @@ bounded retries, authored fallbacks and recovery diagnostics under generation ve
 M4.6 adds test-only daily/milestone seed sweeps and detached aggregate diagnostics.
 This remains the first ordinary family, not final balance.
 
+## M7.15 Fixed-Value Food
+
+Fresh ordinary segments publish `ordinary.board.v1/4`. The existing item-count budgets
+remain unchanged: normal 2-5, opening 3-4/2-3/1-2. The catalog selects food identity, never
+a random reward: berries +5, food +10, carrot +15, soda +20, as documented in
+[GameDesignContract.md](GameDesignContract.md#261-current-fixed-food-rewards).
+The original prefabs supply artwork, not gameplay rewards. Automatic collection resolves
+once before the central action cost and uses the existing gain feedback.
+
+Saved versions 1-3 retain their original allowed IDs, seeded layouts and rewards. Imported
+legacy-RNG runs remain legacy/1. All versions 3-4 retain the bounded entry-safety witness.
+No save schema or world topology changes are involved.
+
 ## M7.6 Bounded Entry Safety
 
 The original day-four screenshot has no recovered run address, initial resources or command
@@ -37,7 +50,7 @@ and cannot alter the input blueprint, saved address or run. EditMode accepts the
 narrow surviving fixture. PlayMode executes a separate production Day-4 witness with
 view/model and retained-intent parity.
 
-Fresh ordinary legs publish version 3. Saved ordinary versions 1/2 retain their own address,
+M7.6 published ordinary version 3. Saved ordinary versions 1/2 retain their own address,
 seed, selection algorithm and initial plans against the newer publication; imported legacy
 RNG also retains legacy version 1 on future ordinary legs. Landmark generation is unchanged.
 No save/profile format changes, resets or silent repairs of old pinned boards are performed.

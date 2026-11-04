@@ -1510,7 +1510,7 @@ namespace HallowBlaze.Tests.PlayMode
             BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
             Component adapter = manager.GetComponent(RequireType(gameManagerType.Assembly, "BoardManager"));
             BoardBlueprint blueprint = GetProperty<BoardBlueprint>(adapter, "ActiveBlueprint");
-            Assert.That(runtime.Request.Address.GenerationVersion, Is.EqualTo(3));
+            Assert.That(runtime.Request.Address.GenerationVersion, Is.EqualTo(BoardGenerationPipeline.OrdinaryConfigurationVersion));
             Assert.That(runtime.Enemies, Has.Count.EqualTo(2));
             BoardEntrySafetyResult audit = BoardEntrySafety.Check(blueprint, OrdinaryBoardContent.CreateCatalog());
             Assert.That(audit.HasEscape, Is.True, runtime.Request.Address.ToString());
@@ -2207,7 +2207,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(opening.Address.EdgeId, Is.EqualTo("road.shelter-warm-up"));
             Assert.That(opening.Address.SegmentId, Is.EqualTo("segment.shelter-warm-up.v2.entry"));
             Assert.That(opening.Address.GenerationConfigurationId, Is.EqualTo("ordinary.board.v1"));
-            Assert.That(opening.Address.GenerationVersion, Is.EqualTo(3));
+            Assert.That(opening.Address.GenerationVersion, Is.EqualTo(BoardGenerationPipeline.OrdinaryConfigurationVersion));
             Assert.That(opening.CurrentDay, Is.EqualTo(1));
             Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
             Assert.That(GetProperty<IReadOnlyList<WorldMapExitOption>>(manager, "RouteChoices"), Is.Empty);
