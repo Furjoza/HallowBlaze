@@ -1,5 +1,35 @@
 # HallowBlaze Testing
 
+## M7.10 Geographical Route Choices
+
+The atlas orders complete exit-option objects by authoritative `WorldDirection`, never by
+destination name, atlas discovery or incoming enumeration. Its left-to-right matrix is
+`west`, `northwest`, `southwest`, `north`, `south`, `northeast`, `east`, `southeast`, then
+unrecognized directions. Equal ranks use ordinal stable edge ID. Direction and clue stay
+attached to the exact ID submitted to the existing route command; neither destination
+identity nor undiscovered topology is added to labels. In particular the published
+`northwest`/`northeast` choice now puts west on the left.
+
+A single option is centered; two occupy the same horizontal row. Additional alternatives
+extend that row in a clipped, pointer-scrollable viewport rather than becoming a misleading
+second west/east row. Arrows/Tab visit the visual order and reveal newly focused options;
+resize reveals retained focus, but unchanged focus does not undo manual scrolling. Text
+keeps a readable pixel size and names the actual direction without color-only cues.
+Revealing changed focus synchronizes its outline and stops pointer-scroll inertia, so the
+selected option remains visible in subsequent frames after keyboard takeover.
+Disabled controls are skipped; empty legal-choice lists remain empty. Focus never commits.
+Reopening rebuilds the same deterministic order without changing saved route identity.
+
+`AtlasScreenTests` covers reversed inputs, every cardinal/diagonal rank and unrecognized
+directions, ordinal ties, unchanged input, matching clue/edge submission, free keyboard
+browsing, single/two/five alternatives, disabled controls and manual-scroll retention.
+Graphics checks measure focused bounds and full label height at 1280x720 and 320x480,
+require nonblank pixels and save `%TEMP%/HB-M710-routes-<count>-<size>.png`.
+On 2026-11-04 full graphics PlayMode passed 232/232; the final atlas checks after the
+manual-scroll and inertia corrections passed 4/4. These injected-edge/render-target checks do not claim
+physical-key or live-window human acceptance, which remains M7.17. No graph, save schema,
+route ID, travel cost, scene or prefab changes are involved.
+
 ## M7.13 Illustrated Controls
 
 The main menu offers Controls directly; the legacy Help -> Controls action opens the same

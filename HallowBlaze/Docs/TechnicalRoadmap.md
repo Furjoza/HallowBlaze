@@ -6414,7 +6414,7 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 
 ## `M7.10` - Geographical left/right route choices
 
-**Status:** `Planned`
+**Status:** `Done` - 2026-11-04. Authoritative direction ordering, stable clue/edge identity and keyboard-revealed horizontal alternatives implemented. Full graphics PlayMode 232/232 and final atlas checks 4/4 passed; independent review PASS after inertia/focus correction. Direction-to-position matrix and rendered/input evidence are in `Docs/Testing.md`; human acceptance remains M7.17.
 **Priority:** P1 usability repair.
 **Related contract:** Sections 7, 18.1 and 27.2.
 **Rationale:** West on the left and east on the right should match geography, not incidental option enumeration.

@@ -46,8 +46,11 @@ namespace HallowBlaze.Presentation.Atlas
         private RectTransform nodeLayer;
         private RectTransform rumorStrip;
         private RectTransform routeButtonArea;
+        private ScrollRect routeScroll;
         private Text currentNodeText;
         private Text discoveryText;
+        private GameObject revealedRoute;
+        private Vector2 revealedViewportSize;
         private GameManager gameManager;
         private GameSession boundSession;
         private WorldMapService worldMapService;
@@ -211,13 +214,17 @@ namespace HallowBlaze.Presentation.Atlas
             }
 
             selectedRouteEdgeId = null;
+            revealedRoute = null;
             SetDiscoveryMessage("DISCOVERY: ROUTES OBSERVED");
             RefreshAtlas();
-            for (int index = 0; index < choices.Count; index++)
-                CreateRouteButton(choices[index], index);
+            List<WorldMapExitOption> ordered = OrderRouteChoices(choices);
+            for (int index = 0; index < ordered.Count; index++)
+                CreateRouteButton(ordered[index], index);
 
             SetOpen(true);
             Canvas.ForceUpdateCanvases();
+            LayoutRouteButtons();
+            routeScroll.horizontalNormalizedPosition = 0f;
             EnsureEventSystem();
             if (routeButtons.Count > 0)
             {
@@ -354,11 +361,20 @@ namespace HallowBlaze.Presentation.Atlas
                 20,
                 TextAnchor.MiddleLeft,
                 PaperColor);
-            routeButtonArea = CreateRect(
-                "AtlasRouteButtons",
+            RectTransform routeViewport = CreateRect(
+                "AtlasRouteViewport",
                 routeBand,
                 new Vector2(0.21f, 0.15f),
                 new Vector2(0.975f, 0.85f));
+            routeViewport.gameObject.AddComponent<RectMask2D>();
+            routeButtonArea = CreateRect("AtlasRouteButtons", routeViewport, Vector2.zero, new Vector2(0f, 1f));
+            routeButtonArea.pivot = new Vector2(0f, 0.5f);
+            routeScroll = routeViewport.gameObject.AddComponent<ScrollRect>();
+            routeScroll.viewport = routeViewport;
+            routeScroll.content = routeButtonArea;
+            routeScroll.horizontal = true;
+            routeScroll.vertical = false;
+            routeScroll.movementType = ScrollRect.MovementType.Clamped;
             HorizontalLayoutGroup routeLayout = routeButtonArea.gameObject.AddComponent<HorizontalLayoutGroup>();
             routeLayout.spacing = 16f;
             routeLayout.childAlignment = TextAnchor.MiddleCenter;
@@ -366,6 +382,48 @@ namespace HallowBlaze.Presentation.Atlas
             routeLayout.childControlHeight = true;
             routeLayout.childForceExpandWidth = true;
             routeLayout.childForceExpandHeight = true;
+        }
+
+        private void LateUpdate()
+        {
+            if (!IsOpen || routeButtons.Count == 0) return;
+            LayoutRouteButtons();
+            GameObject selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+            if (selected == null || !routeButtons.Exists(button => button.gameObject == selected)) return;
+            Vector2 size = routeScroll.viewport.rect.size;
+            if (revealedRoute == selected && revealedViewportSize == size) return;
+            revealedRoute = selected;
+            revealedViewportSize = size;
+            routeScroll.StopMovement();
+            keyboardFocus?.RecoverFocus();
+            Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(
+                routeScroll.viewport, (RectTransform)selected.transform);
+            Rect viewport = routeScroll.viewport.rect;
+            float delta = bounds.min.x < viewport.xMin ? viewport.xMin - bounds.min.x :
+                bounds.max.x > viewport.xMax ? viewport.xMax - bounds.max.x : 0f;
+            routeButtonArea.anchoredPosition += new Vector2(delta, 0f);
+        }
+
+        private void LayoutRouteButtons()
+        {
+            if (routeButtons.Count == 0) return;
+            float scale = GetComponent<Canvas>().scaleFactor;
+            HorizontalLayoutGroup layout = routeButtonArea.GetComponent<HorizontalLayoutGroup>();
+            layout.spacing = 8f / scale;
+            int padding = Mathf.CeilToInt(6f / scale);
+            int verticalPadding = Mathf.CeilToInt(2f / scale);
+            layout.padding = new RectOffset(padding, padding, verticalPadding, verticalPadding);
+            float width = Mathf.Max(112f / scale,
+                (routeScroll.viewport.rect.width - layout.padding.horizontal - layout.spacing * (Math.Min(2, routeButtons.Count) - 1)) /
+                Math.Min(2, routeButtons.Count));
+            routeButtonArea.sizeDelta = new Vector2(
+                width * routeButtons.Count + layout.spacing * (routeButtons.Count - 1) + layout.padding.horizontal, 0f);
+            foreach (Button button in routeButtons)
+            {
+                Text label = button.GetComponentInChildren<Text>();
+                label.fontSize = Mathf.CeilToInt(14f / scale);
+            }
+            LayoutRebuilder.ForceRebuildLayoutImmediate(routeButtonArea);
         }
 
         private void BuildPositionLookup(IReadOnlyList<WorldMapNodeView> nodes)
@@ -593,8 +651,8 @@ namespace HallowBlaze.Presentation.Atlas
             CreateText(
                 "RouteLabel",
                 buttonTransform,
-                new Vector2(0.05f, 0.08f),
-                new Vector2(0.95f, 0.92f),
+                new Vector2(0.05f, 0.02f),
+                new Vector2(0.95f, 0.98f),
                 FormatRouteLabel(option),
                 12,
                 TextAnchor.MiddleCenter,
@@ -704,6 +762,33 @@ namespace HallowBlaze.Presentation.Atlas
             string place = string.IsNullOrEmpty(node.PlaceKind) ? "VISITED PLACE" : node.PlaceKind.ToUpperInvariant();
             string biome = string.IsNullOrEmpty(node.BiomeFamily) ? string.Empty : "\n" + node.BiomeFamily.ToUpperInvariant();
             return place + biome + "\nVISITED / SOLID";
+        }
+
+        private static List<WorldMapExitOption> OrderRouteChoices(IReadOnlyList<WorldMapExitOption> choices)
+        {
+            List<WorldMapExitOption> ordered = new List<WorldMapExitOption>(choices);
+            ordered.Sort((left, right) =>
+            {
+                int direction = RouteDirectionRank(left.WorldDirection).CompareTo(RouteDirectionRank(right.WorldDirection));
+                return direction != 0 ? direction : string.CompareOrdinal(left.EdgeId, right.EdgeId);
+            });
+            return ordered;
+        }
+
+        private static int RouteDirectionRank(string direction)
+        {
+            switch (direction)
+            {
+                case "west": return 0;
+                case "northwest": return 1;
+                case "southwest": return 2;
+                case "north": return 3;
+                case "south": return 4;
+                case "northeast": return 5;
+                case "east": return 6;
+                case "southeast": return 7;
+                default: return 8;
+            }
         }
 
         private static string FormatRouteLabel(WorldMapExitOption option)
