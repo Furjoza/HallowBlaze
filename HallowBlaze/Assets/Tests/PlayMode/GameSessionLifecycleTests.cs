@@ -151,7 +151,8 @@ namespace HallowBlaze.Tests.PlayMode
             Color32[] previous = null;
             for (int turn = 0; turn < 4; turn++)
             {
-                Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.E), -200 + turn), Is.True);
+                KeyCode facingKey = turn % 2 == 0 ? KeyCode.E : KeyCode.Q;
+                Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == facingKey), -200 + turn), Is.True);
                 yield return null;
                 Texture2D capture = CaptureProductionCanvas(manager, 960, 640);
                 Color32[] pixels = capture.GetPixels32();
@@ -163,7 +164,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(player.transform.position, Is.EqualTo(position));
                 Assert.That(player.transform.rotation, Is.EqualTo(rotation));
             }
-            Assert.That(facing.QuarterTurns, Is.Zero);
+            Assert.That(facing.QuarterTurns, Is.EqualTo(3));
             Assert.That(HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeTravelRun(runtime.RunState), Is.EqualTo(before));
             Assert.That(presenter.Coordinator.ResolutionCount, Is.Zero);
             Invoke(manager, "SetGameplayInputBlocked", true);
@@ -222,6 +223,9 @@ namespace HallowBlaze.Tests.PlayMode
             var events = UnityEngine.EventSystems.EventSystem.current;
             for (int index = 0; index < 20 && events.currentSelectedGameObject.name != "Controls"; index++) focus.HandleKey(KeyCode.Tab);
             Assert.That(events.currentSelectedGameObject.name, Is.EqualTo("Controls"));
+            Button controlsButton = events.currentSelectedGameObject.GetComponent<Button>();
+            Assert.That(controlsButton.targetGraphic, Is.TypeOf<Text>());
+            Assert.That(controlsButton.colors.highlightedColor, Is.Not.EqualTo(controlsButton.colors.normalColor));
             focus.HandleKey(KeyCode.Return);
             KeyboardControlsView view = KeyboardControlsView.Current;
             Assert.That(view, Is.Not.Null);
@@ -231,6 +235,12 @@ namespace HallowBlaze.Tests.PlayMode
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.backgroundColor = Color.black;
             Canvas canvas = view.GetComponent<Canvas>();
+            Canvas.ForceUpdateCanvases();
+            Assert.That(canvas.isRootCanvas, Is.True, "Controls must not inherit the menu panel's position or scale.");
+            RectTransform controlsRect = (RectTransform)view.transform;
+            Vector2 controlsCenter = RectTransformUtility.WorldToScreenPoint(null, controlsRect.TransformPoint(controlsRect.rect.center));
+            Assert.That(controlsCenter.x, Is.EqualTo(Screen.width / 2f).Within(1));
+            Assert.That(controlsCenter.y, Is.EqualTo(Screen.height / 2f).Within(1));
             canvas.renderMode = RenderMode.ScreenSpaceCamera;
             canvas.worldCamera = camera;
             canvas.planeDistance = 1;
@@ -258,7 +268,19 @@ namespace HallowBlaze.Tests.PlayMode
                             Assert.That(text.preferredHeight, Is.LessThanOrEqualTo(text.rectTransform.rect.height + 1), text.text);
                             Assert.That(text.cachedTextGenerator.GetVerticesArray().All(vertex => float.IsFinite(vertex.position.x)), Is.True);
                         }
-                        Assert.That(view.GetComponent<KeyboardMenuFocus>().FrameColor.grayscale, Is.LessThan(0.3f));
+                        Assert.That(view.GetComponentsInChildren<Transform>().Any(child => child.name == "Keyboard focus"), Is.False);
+                        ScrollRect scroll = view.GetComponentInChildren<ScrollRect>();
+                        Selectable scrollFocus = scroll.GetComponent<Selectable>();
+                        events.SetSelectedGameObject(scroll.gameObject);
+                        Assert.That(scrollFocus.targetGraphic.color.a, Is.EqualTo(1));
+                        Assert.That(scrollFocus.targetGraphic.canvasRenderer.GetColor(), Is.Not.EqualTo(scrollFocus.colors.normalColor));
+                        Assert.That(scrollFocus.targetGraphic.canvasRenderer.GetColor(), Is.EqualTo(scrollFocus.colors.selectedColor));
+                        scroll.verticalNormalizedPosition = 0;
+                        Canvas.ForceUpdateCanvases();
+                        Text lastAction = view.GetComponentsInChildren<Text>().Last(text => text.name == "Binding action");
+                        Bounds lastBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(scroll.viewport, lastAction.rectTransform);
+                        Assert.That(lastBounds.min.y, Is.GreaterThanOrEqualTo(scroll.viewport.rect.yMin - 1));
+                        Assert.That(lastBounds.max.y, Is.LessThanOrEqualTo(scroll.viewport.rect.yMax + 1));
                         camera.Render();
                         RenderTexture.active = target;
                         pixels.ReadPixels(new Rect(0, 0, size.x, size.y), 0, 0);
@@ -578,7 +600,77 @@ namespace HallowBlaze.Tests.PlayMode
             yield return SceneManager.UnloadSceneAsync("Menu");
             }
 
-            [UnityTest]
+        /// <summary>The explicit world goal closes the run once and offers keyboard menu/new-run actions without erasing atlas knowledge.</summary>
+        [UnityTest]
+        public IEnumerator VictoryActionsPreserveProfileAndAllowMenuOrNewRun([Values(false, true)] bool restart)
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            Invoke(manager, "HideLevelImage");
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            ProfileState profile = session.Profile;
+            int knownNodes = profile.NodeDiscoveries.Count;
+            HallowBlaze.Core.World.WorldDefinition world = GetField<HallowBlaze.Core.World.WorldDefinition>(manager, "worldDefinition");
+            RunState won = session.StartNewRun("victory-smoke", 4321, new RunStateConfiguration(100, 100, 5, world.GoalNodeId));
+            Assert.That((bool)Invoke(manager, "BeginRouteChoice"), Is.True);
+            Assert.That(won.Status, Is.EqualTo(RunStatus.Won));
+            Assert.That(session.ActiveRun, Is.Null);
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
+            Assert.That(profile.WonRunCount, Is.EqualTo(1));
+            Assert.That(profile.NodeDiscoveries.Count, Is.GreaterThanOrEqualTo(knownNodes));
+            Assert.That(GetField<Text>(manager, "levelText").text, Does.Contain("destination").And.Contain("5"));
+            Assert.That(File.Exists(Path.Combine(persistenceRoot, "run.json")), Is.False);
+            Assert.That(new FileSystemSaveStore(persistenceRoot).LoadProfile().Data.WonRunCount, Is.EqualTo(1));
+            GameObject action = GetField<GameObject>(manager, restart ? "restartButton" : "menuButton");
+            Assert.That(action.activeInHierarchy, Is.True);
+            foreach (Vector2Int size in new[] { new Vector2Int(1280, 720), new Vector2Int(320, 480) })
+            {
+                Texture2D capture = CaptureProductionCanvas(manager, size.x, size.y, () =>
+                {
+                    RectTransform bar = (RectTransform)action.transform.parent;
+                    foreach (RectTransform element in new[] { (RectTransform)action.transform, GetField<Text>(manager, "levelText").rectTransform })
+                    {
+                        Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(bar, element);
+                        Assert.That(bounds.min.x, Is.GreaterThanOrEqualTo(bar.rect.xMin - 1));
+                        Assert.That(bounds.max.x, Is.LessThanOrEqualTo(bar.rect.xMax + 1));
+                        Assert.That(bounds.min.y, Is.GreaterThanOrEqualTo(bar.rect.yMin - 1));
+                        Assert.That(bounds.max.y, Is.LessThanOrEqualTo(bar.rect.yMax + 1));
+                    }
+                });
+                File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M719-victory-" + restart + "-" + size.x + "x" + size.y + ".png"), capture.EncodeToPNG());
+                UnityEngine.Object.DestroyImmediate(capture);
+            }
+            KeyboardMenuFocus focus = action.GetComponentInParent<KeyboardMenuFocus>();
+            for (int index = 0; index < 10 && UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject != action; index++)
+                focus.HandleKey(KeyCode.S);
+            Assert.That(UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject, Is.SameAs(action));
+            focus.HandleKey(KeyCode.Return);
+            float deadline = Time.realtimeSinceStartup + 5f;
+            while ((restart ? session.ActiveRun == null : SceneManager.GetActiveScene().name != "Menu") && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            yield return null;
+            Assert.That(session.Profile, Is.SameAs(profile));
+            Assert.That(profile.NodeDiscoveries.Count, Is.GreaterThanOrEqualTo(knownNodes));
+            Assert.That(profile.WonRunCount, Is.EqualTo(1));
+            if (restart)
+            {
+                Assert.That(session.ActiveRun, Is.Not.Null);
+                Assert.That(session.ActiveRun.Status, Is.EqualTo(RunStatus.Active));
+                Assert.That(session.ActiveRun.WorldNodeId, Is.EqualTo("shelter.warm-up"));
+            }
+            else
+            {
+                Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo("Menu"));
+                Assert.That(session.ActiveRun, Is.Null);
+                Assert.That(GameObject.Find("ContinueBttn").GetComponent<Button>().interactable, Is.False);
+            }
+            Assert.That(GameObject.Find("Victory actions"), Is.Null, "Terminal UI must not survive menu or new-run transition.");
+            if (!restart)
+                Assert.That(UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject.transform.IsChildOf(GameObject.Find("MainMenuPanel").transform), Is.True);
+        }
+
+        [UnityTest]
         public IEnumerator RealMainSceneHidesResourceHudDuringRouteIntro()
         {
             AsyncOperation load = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);

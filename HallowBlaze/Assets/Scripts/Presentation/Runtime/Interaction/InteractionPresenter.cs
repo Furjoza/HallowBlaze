@@ -325,9 +325,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 if (Event.current.type == EventType.Repaint && index == SelectedIndex)
                     selectedRow = GUILayoutUtility.GetLastRect();
                 GUI.enabled = true;
-                if (!IsAvailable(index)) GUILayout.Label(index < Options.Count ? Options[index].Availability.ToString() :
-                    index < Options.Count + ToolOptions.Count ? ToolOptions[index - Options.Count].RejectionCode.ToString() :
-                    CommandRejectionCode.InvalidState.ToString());
+                if (!IsAvailable(index)) GUILayout.Label(GetUnavailableReason(index));
             }
             GUILayout.EndScrollView();
             RevealSelectedRow();
@@ -364,6 +362,22 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
 
         private static string ActionLabel(string actionId) => actionId == "collect" ? "Collect" :
             actionId == "push" ? "Push" : actionId == "interact" ? "Interact" : actionId;
+
+        /// <summary>Gets the displayed rejection reason without submitting a command; available options have no reason.</summary>
+        public string GetUnavailableReason(int index)
+        {
+            if (index < 0 || index >= OptionCount) throw new ArgumentOutOfRangeException(nameof(index));
+            if (IsAvailable(index)) return string.Empty;
+            if (index < Options.Count)
+            {
+                InteractionOption option = Options[index];
+                if (option.ActionId == FirstAidInteractionAction.ActionId && runtime.RunState.Health >= FirstAidInteractionAction.HealthCeiling)
+                    return "Health is full - first aid is not needed.";
+                return option.Availability.ToString();
+            }
+            return index < Options.Count + ToolOptions.Count ? ToolOptions[index - Options.Count].RejectionCode.ToString() :
+                "No tool slot is available.";
+        }
 
         /// <summary>Reads the exact displayed consequence, including slot, charge, current food cost and noise before confirmation.</summary>
         public string GetOptionLabel(int index)

@@ -19,11 +19,7 @@ namespace HallowBlaze.Presentation.Runtime
         private GameObject returnFocus;
         private EventSystem events;
         private int openedFrame;
-        private RectTransform focusFrame;
         private Action cancel;
-
-        /// <summary>Gets or sets the focus outline color so a menu can maintain contrast with its own surface.</summary>
-        public Color FrameColor { get; set; } = Color.white;
 
         /// <summary>Installs transient navigation on an existing menu without changing its authored actions.</summary>
         public static KeyboardMenuFocus Attach(GameObject root, GameObject initial = null, Action cancel = null)
@@ -57,12 +53,11 @@ namespace HallowBlaze.Presentation.Runtime
             if (events == null || owners.Count == 0 || owners[owners.Count - 1] != this) return;
             Collect();
             GameObject current = events.currentSelectedGameObject;
-            if (Contains(current)) { retained = current; ShowFocus(current); return; }
+            if (Contains(current)) { retained = current; return; }
             GameObject next = Contains(retained) ? retained : Contains(preferred) ? preferred :
                 controls.Count > 0 ? controls[0].gameObject : null;
             events.SetSelectedGameObject(next);
             retained = next;
-            ShowFocus(next);
         }
 
         /// <summary>Applies one keyboard edge to this menu only; navigation and scrolling do not activate controls.</summary>
@@ -81,22 +76,21 @@ namespace HallowBlaze.Presentation.Runtime
             }
             int index = controls.FindIndex(control => control.gameObject == selected);
             Slider slider = selected != null ? selected.GetComponent<Slider>() : null;
-            if (slider != null && (key == KeyCode.LeftArrow || key == KeyCode.RightArrow))
+            if (slider != null && (key == KeyCode.LeftArrow || key == KeyCode.RightArrow || key == KeyCode.A || key == KeyCode.D))
             {
                 ExecuteEvents.Execute(selected, new AxisEventData(events)
                 {
-                    moveDir = key == KeyCode.LeftArrow ? MoveDirection.Left : MoveDirection.Right
+                    moveDir = key == KeyCode.LeftArrow || key == KeyCode.A ? MoveDirection.Left : MoveDirection.Right
                 }, ExecuteEvents.moveHandler);
                 return;
             }
             int step = key == KeyCode.Tab ? (shift ? -1 : 1) :
-                key == KeyCode.DownArrow || key == KeyCode.RightArrow ? 1 :
-                key == KeyCode.UpArrow || key == KeyCode.LeftArrow ? -1 : 0;
+                key == KeyCode.DownArrow || key == KeyCode.RightArrow || key == KeyCode.S || key == KeyCode.D ? 1 :
+                key == KeyCode.UpArrow || key == KeyCode.LeftArrow || key == KeyCode.W || key == KeyCode.A ? -1 : 0;
             if (step != 0)
             {
                 retained = controls[(index + step + controls.Count) % controls.Count].gameObject;
                 events.SetSelectedGameObject(retained);
-                ShowFocus(retained);
                 Reveal(retained);
             }
             else if (key == KeyCode.Return || key == KeyCode.KeypadEnter || key == KeyCode.Space)
@@ -138,36 +132,6 @@ namespace HallowBlaze.Presentation.Runtime
 
         private bool Contains(GameObject target) => target != null && controls.Exists(control => control.gameObject == target);
 
-        private void ShowFocus(GameObject target)
-        {
-            if (target == null) { if (focusFrame != null) focusFrame.gameObject.SetActive(false); return; }
-            if (!(target.transform is RectTransform)) return;
-            if (focusFrame == null)
-            {
-                focusFrame = new GameObject("Keyboard focus", typeof(RectTransform)).GetComponent<RectTransform>();
-                for (int index = 0; index < 4; index++)
-                {
-                    Image edge = new GameObject("Focus edge", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
-                    edge.transform.SetParent(focusFrame, false);
-                    edge.color = FrameColor;
-                    edge.raycastTarget = false;
-                    RectTransform rect = edge.rectTransform;
-                    bool horizontal = index < 2;
-                    rect.anchorMin = horizontal ? new Vector2(0, index) : new Vector2(index - 2, 0);
-                    rect.anchorMax = horizontal ? new Vector2(1, index) : new Vector2(index - 2, 1);
-                    rect.sizeDelta = horizontal ? new Vector2(0, 3) : new Vector2(3, 0);
-                    rect.anchoredPosition = Vector2.zero;
-                }
-            }
-            focusFrame.SetParent(target.transform, false);
-            focusFrame.anchorMin = Vector2.zero;
-            focusFrame.anchorMax = Vector2.one;
-            focusFrame.offsetMin = new Vector2(-3, -3);
-            focusFrame.offsetMax = new Vector2(3, 3);
-            foreach (Image edge in focusFrame.GetComponentsInChildren<Image>()) edge.color = FrameColor;
-            focusFrame.gameObject.SetActive(true);
-        }
-
         private static void Reveal(GameObject target)
         {
             ScrollRect scroll = target.GetComponentInParent<ScrollRect>();
@@ -181,17 +145,11 @@ namespace HallowBlaze.Presentation.Runtime
 
         private void OnDisable()
         {
-            if (focusFrame != null) focusFrame.gameObject.SetActive(false);
             owners.Remove(this);
             if (events == null) return;
             events.sendNavigationEvents = owners.Count == 0 && restoreNavigation;
             if (events.currentSelectedGameObject != null && events.currentSelectedGameObject.transform.IsChildOf(transform))
                 events.SetSelectedGameObject(returnFocus != null && returnFocus.activeInHierarchy ? returnFocus : null);
-        }
-
-        private void OnDestroy()
-        {
-            if (focusFrame != null) Destroy(focusFrame.gameObject);
         }
     }
 }

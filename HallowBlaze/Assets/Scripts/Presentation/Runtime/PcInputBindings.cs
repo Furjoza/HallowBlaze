@@ -54,6 +54,7 @@ namespace HallowBlaze.Presentation.Runtime
         public static IReadOnlyList<KeyCode> MenuKeys { get; } = Array.AsReadOnly(new[]
         {
             KeyCode.Tab, KeyCode.DownArrow, KeyCode.UpArrow, KeyCode.LeftArrow, KeyCode.RightArrow,
+            KeyCode.W, KeyCode.A, KeyCode.S, KeyCode.D,
             KeyCode.Return, KeyCode.KeypadEnter, Space, KeyCode.PageDown, KeyCode.PageUp,
             KeyCode.Home, KeyCode.End, Cancel
         });
@@ -75,8 +76,8 @@ namespace HallowBlaze.Presentation.Runtime
                 }
                 hints.Add(new ControlHint("Wait - one turn", Space));
                 hints.Add(new ControlHint("Interaction - open / close", InteractionToggle));
-                hints.Add(new ControlHint("Visual left 90 degrees - free", TurnLeft));
-                hints.Add(new ControlHint("Visual right 90 degrees - free", TurnRight));
+                hints.Add(new ControlHint("Visual left - free", TurnLeft));
+                hints.Add(new ControlHint("Visual right - free", TurnRight));
                 hints.Add(new ControlHint("Field Notes", Notes));
                 hints.Add(new ControlHint("Pause", Cancel));
             }
@@ -91,13 +92,13 @@ namespace HallowBlaze.Presentation.Runtime
             }
             else
             {
-                hints.Add(new ControlHint("Next control", KeyCode.Tab, KeyCode.DownArrow, KeyCode.RightArrow));
-                hints.Add(new ControlHint("Previous control: Up / Left or Shift + Tab", KeyCode.Tab, KeyCode.LeftShift, KeyCode.UpArrow, KeyCode.LeftArrow));
+                hints.Add(new ControlHint("Next control", KeyCode.Tab, KeyCode.DownArrow, KeyCode.RightArrow, KeyCode.S, KeyCode.D));
+                hints.Add(new ControlHint("Previous control: W / A / Up / Left or Shift + Tab", KeyCode.Tab, KeyCode.LeftShift, KeyCode.UpArrow, KeyCode.LeftArrow, KeyCode.W, KeyCode.A));
                 hints.Add(new ControlHint("Activate / choose route", Space, KeyCode.Return, KeyCode.KeypadEnter));
                 hints.Add(new ControlHint("Back / cancel when available", Cancel));
                 hints.Add(new ControlHint("Scroll focused region", KeyCode.PageUp, KeyCode.PageDown, KeyCode.Home, KeyCode.End));
                 hints.Add(new ControlHint("Close Field Notes", Notes, Cancel));
-                hints.Add(new ControlHint("Adjust focused slider", KeyCode.LeftArrow, KeyCode.RightArrow));
+                hints.Add(new ControlHint("Adjust focused slider", KeyCode.LeftArrow, KeyCode.RightArrow, KeyCode.A, KeyCode.D));
             }
             return hints.AsReadOnly();
         }
