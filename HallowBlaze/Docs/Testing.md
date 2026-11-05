@@ -1,5 +1,36 @@
 # HallowBlaze Testing
 
+## M7.12 Contextual Interaction Keys
+
+`PcInputBindings` is the shared source for command keys, modal selection and subsequent
+visual-facing/Controls work. Interaction entry and normal-command suppression both use F;
+E no longer opens a draft. Opening retains an unselected draft: browsing and confirmation
+are separate. Objects are ordered by Y, X and stable entity ID; actions on one object retain
+their explicit query/action/slot order. A refresh retains the same valid object/action/slot,
+never substitutes an unavailable action, and cancels a nested comparison rather than replacing it.
+
+| Context / edge | Effect | Command / cost |
+| --- | --- | --- |
+| Idle F, including F + a normal command key | Open draft, or stay idle when empty/blocked | None; normal command sampling suppresses F |
+| Draft or replacement F / Escape | Cancel the complete draft | None; block remains through closing frame |
+| Draft Q / E, left / right | Previous / next object, deterministic wraparound | None; never rotates |
+| Draft Tab / Shift+Tab, down / up | Next / previous explicit action on that object | None |
+| Replacement Q/E, arrows, Tab/Shift+Tab | Select a specific occupied slot | None |
+| Draft Space / Enter / keypad Enter | Confirm the selected complete action, or enter explicit replacement | At most one existing resolver invocation; accepted effects use normal costs |
+| Ambiguous navigation + confirmation or opposite navigation | No selection/action | None |
+| Repeated sample in the same frame / held key with no new down edge | No second toggle/action | None |
+| Stale target/tool, pause, terminal, disposed/replaced board | Reject free or refuse input through the existing gates | No accepted turn/resource/noise effect |
+
+`AxePresentationTests.ContextualKeysChooseManualOrToolWithoutLeakingWait` and
+`ContextualManualSpaceResolvesOneWorkAction` execute production picker inputs and verify
+single resolution, actual obstacle progress, Food/charge and emitted-noise counts.
+`ToolPickupPresentationTests` covers multiple objects, stable refresh, wraparound, nested
+F cancellation, same-frame ownership, empty/stale/modal/disposed cases and pointer parity.
+`PlayModeInfrastructureTests.InteractionEntrySuppressesNormalCommandButIdleEDoesNot`
+guards every source-level opening/suppression migration. Full PlayMode is the integration gate.
+Idle Q/E visual behavior is implemented separately in M7.18; human physical-key acceptance
+remains M7.17, not a claimed outcome of injected-key tests.
+
 ## M7.11 Keyboard Menu Ownership
 
 `KeyboardMenuFocus` owns navigation only for the top visible menu. Focus is a persistent
@@ -19,7 +50,7 @@ Opening and closing frames cannot submit the same keyboard edge to another menu.
 | Pause settings | Separate menu focus; audio buttons use their existing actions | Escape/Back; parent focus retained |
 | Route choice / atlas | `AtlasScreenController` + menu focus; arrows/Tab browse, Enter/Space submit the focused edge | Choice commits only through the existing route action; zero-exit final atlas has no fabricated route or cancel |
 | Field Notes: known entries, list and detail regions, Close | `FieldNotesPresenter` + menu focus; N opens; both scroll regions are focusable | N/Escape/Close; returns to book and holds the gameplay gate through the frame |
-| Interaction / tool pickup / replacement | Board-owned `InteractionPresenter`; Tab/Shift+Tab/arrows browse, Enter confirms, Escape cancels; selected action scrolls into view | Existing free cancellation and delayed interaction-gate release; binding migration belongs to M7.12 |
+| Interaction / tool pickup / replacement | Board-owned `InteractionPresenter`; current F/Q/E/Space and per-object action policy is defined above under M7.12; selected action scrolls into view | Free cancellation and delayed interaction-gate release |
 | Death: Restart, Menu; post-death Notes | Terminal canvas owns focus; Notes temporarily owns the top context | Explicit existing actions only; terminal focus ends when a run starts |
 
 Focused graphics PlayMode coverage: `PauseMenuTests`, `FieldNotesPresentationTests`,

@@ -112,9 +112,7 @@ namespace HallowBlaze.Presentation.Runtime
             if (owners.Count == 0 || owners[owners.Count - 1] != this) return;
             RecoverFocus();
             if (Time.frameCount <= openedFrame || handledFrame == Time.frameCount) return;
-            foreach (KeyCode key in new[] { KeyCode.Tab, KeyCode.DownArrow, KeyCode.UpArrow,
-                KeyCode.LeftArrow, KeyCode.RightArrow, KeyCode.Return, KeyCode.KeypadEnter,
-                KeyCode.Space, KeyCode.PageDown, KeyCode.PageUp, KeyCode.Home, KeyCode.End, KeyCode.Escape })
+            foreach (KeyCode key in PcInputBindings.MenuKeys)
                 if (Input.GetKeyDown(key))
                 {
                     handledFrame = Time.frameCount;
