@@ -4,6 +4,7 @@ using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
 using HallowBlaze.Core.World;
+using HallowBlaze.Presentation.Runtime;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
@@ -52,6 +53,7 @@ namespace HallowBlaze.Presentation.Atlas
         private WorldMapService worldMapService;
         private string selectedRouteEdgeId;
         private string lastDiscoveryMessage = string.Empty;
+        private KeyboardMenuFocus keyboardFocus;
 
         /// <summary>Gets whether the modal atlas is currently visible.</summary>
         public bool IsOpen => canvasGroup != null && canvasGroup.alpha > 0.5f;
@@ -622,6 +624,13 @@ namespace HallowBlaze.Presentation.Atlas
             canvasGroup.alpha = open ? 1f : 0f;
             canvasGroup.interactable = open;
             canvasGroup.blocksRaycasts = open;
+            if (open)
+            {
+                if (keyboardFocus == null) keyboardFocus = KeyboardMenuFocus.Attach(gameObject);
+                keyboardFocus.enabled = true;
+                keyboardFocus.RecoverFocus();
+            }
+            else if (keyboardFocus != null) keyboardFocus.enabled = false;
         }
 
         private void SetDiscoveryMessage(string message)

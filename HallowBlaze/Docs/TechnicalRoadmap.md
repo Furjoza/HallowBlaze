@@ -6433,7 +6433,7 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 
 ## `M7.11` - Keyboard-complete menus and modal focus
 
-**Status:** `Planned`
+**Status:** `Done` - 2026-11-03. Shared visible modal focus, keyboard navigation/activation/back/scrolling and lifecycle repairs; focused graphics PlayMode 34/34 passed and independent review PASS after corrections. Screen/action/key/owner matrix is in `Docs/Testing.md`; human integrated acceptance remains M7.17.
 **Priority:** P1 accessibility/input repair.
 **Related contract:** Section 18.1 keyboard-complete PC interaction.
 **Rationale:** Mouse-only controls or lost focus can block an otherwise keyboard-playable run; coverage must include every current screen.

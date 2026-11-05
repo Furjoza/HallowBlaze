@@ -241,6 +241,39 @@ namespace HallowBlaze.Tests.PlayMode
             }
         }
 
+        /// <summary>Rendered replacement focus remains visible when its viewport shrinks without another selection edge.</summary>
+        [UnityTest]
+        public IEnumerator PickerRevealsRetainedRowAfterViewportShrinks()
+        {
+            Fixture fixture = CreateFixture(2, false);
+            var picker = fixture.Presenter.InteractionDisplay;
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            GameObject cameraOwner = new GameObject("Picker render camera", typeof(Camera));
+            fixture.Objects.Add(cameraOwner);
+            cameraOwner.transform.position = new Vector3(1, 0, -10);
+            EditorWindow gameView = EditorWindow.GetWindow(typeof(Editor).Assembly.GetType("UnityEditor.GameView"));
+            Vector2 size = new Vector2(960, 720);
+            picker.GetType().GetField("viewportSize", flags).SetValue(picker, (Func<Vector2>)(() => size));
+            Assert.That(picker.Open(), Is.True);
+            picker.Select(0);
+            picker.ConfirmAsync();
+            picker.SelectReplacement(1);
+            for (int frame = 0; frame < 10; frame++) { gameView.Repaint(); yield return null; }
+            float originalHeight = (float)picker.GetType().GetField("scrollViewportHeight", flags).GetValue(picker);
+            Assert.That(originalHeight, Is.GreaterThan(0), "The production picker must actually repaint.");
+            size = new Vector2(320, 360);
+            for (int frame = 0; frame < 10; frame++) { gameView.Repaint(); yield return null; }
+            float height = (float)picker.GetType().GetField("scrollViewportHeight", flags).GetValue(picker);
+            Rect row = (Rect)picker.GetType().GetField("selectedRow", flags).GetValue(picker);
+            Vector2 offset = (Vector2)picker.GetType().GetField("scroll", flags).GetValue(picker);
+            Assert.That(height, Is.LessThan(originalHeight));
+            Assert.That(offset.y, Is.GreaterThan(0));
+            Assert.That(row.yMin, Is.GreaterThanOrEqualTo(offset.y - 1));
+            if (row.height <= height) Assert.That(row.yMax, Is.LessThanOrEqualTo(offset.y + height + 1));
+            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+        }
+
         private Fixture CreateFixture(int occupied, bool animations, RunState restored = null)
         {
             var fixture = new Fixture();

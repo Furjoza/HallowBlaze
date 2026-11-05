@@ -27,6 +27,11 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         private ToolPickupOption replacement;
         private PickupToolCommand replacementChoice;
         private string[] replacementLabels = Array.Empty<string>();
+        private Rect selectedRow;
+        private bool revealSelection;
+        private Rect revealedRow;
+        private float scrollViewportHeight;
+        private Func<Vector2> viewportSize = () => new Vector2(Screen.width, Screen.height);
 
         /// <summary>Gets whether a free selection draft currently owns input.</summary>
         public bool IsOpen { get; private set; }
@@ -88,6 +93,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             if (!CanChoose() || IsReplacing || index < 0 || index >= OptionCount || !IsAvailable(index))
                 return false;
             SelectedIndex = index;
+            revealSelection = true;
             DrawMarkers();
             return true;
         }
@@ -134,7 +140,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         {
             if (!CanChoose() || replacement == null) return false;
             foreach (PickupToolCommand choice in replacement.Choices)
-                if (choice.SlotIndex == slotIndex) { replacementChoice = choice; return true; }
+                if (choice.SlotIndex == slotIndex) { replacementChoice = choice; revealSelection = true; return true; }
             return false;
         }
 
@@ -169,13 +175,15 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 if (Input.GetKeyDown(KeyCode.Escape)) { Cancel(); return; }
                 if (IsReplacing)
                 {
-                    if (Input.GetKeyDown(KeyCode.Tab) || Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.UpArrow))
+                    if (Input.GetKeyDown(KeyCode.Tab) || Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.UpArrow) ||
+                        Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.RightArrow))
                         SelectReplacement(replacementChoice == null ? 0 : 1 - replacementChoice.SlotIndex);
                     else if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) await ConfirmAsync();
                     return;
                 }
-                if (Input.GetKeyDown(KeyCode.Tab) || Input.GetKeyDown(KeyCode.DownArrow)) Cycle(1);
-                else if (Input.GetKeyDown(KeyCode.UpArrow)) Cycle(-1);
+                if (Input.GetKeyDown(KeyCode.Tab)) Cycle(Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift) ? -1 : 1);
+                else if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.RightArrow)) Cycle(1);
+                else if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.LeftArrow)) Cycle(-1);
                 else if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) await ConfirmAsync();
             }
             catch (Exception error) { Debug.LogException(error, this); }
@@ -208,9 +216,10 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         private void OnGUI()
         {
             if (!CanChoose()) return;
-            float width = Mathf.Min(300f, Screen.width - 16f);
+            Vector2 size = viewportSize();
+            float width = Mathf.Min(300f, size.x - 16f);
             float top = ToolHudPresenter.ReservedHeight + 8f;
-            GUILayout.BeginArea(new Rect(Screen.width - width - 8f, top, width, Mathf.Max(100f, Screen.height - top - 16f)), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(size.x - width - 8f, top, width, Mathf.Max(100f, size.y - top - 16f)), GUI.skin.box);
             if (IsReplacing)
             {
                 GUILayout.Label("Replace tool");
@@ -218,9 +227,14 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 scroll = GUILayout.BeginScrollView(scroll);
                 var comparisonStyle = new GUIStyle(GUI.skin.button) { wordWrap = true, alignment = TextAnchor.MiddleLeft };
                 foreach (PickupToolCommand choice in replacement.Choices)
+                {
                     if (GUILayout.Button((replacementChoice == choice ? "> " : "") + replacementLabels[choice.SlotIndex],
                         comparisonStyle, GUILayout.MinHeight(90f))) SelectReplacement(choice.SlotIndex);
+                    if (Event.current.type == EventType.Repaint && replacementChoice == choice)
+                        selectedRow = GUILayoutUtility.GetLastRect();
+                }
                 GUILayout.EndScrollView();
+                RevealSelectedRow();
                 GUILayout.Label("1 turn; Food -" + runtime.Tools.ActionCosts.FoodCost + "; Noise " +
                     ActionNoiseProfile.Prototype.InteractionStrength + " / " + ActionNoiseProfile.Prototype.LifetimeTurns + " turns");
                 GUI.enabled = replacementChoice != null;
@@ -238,17 +252,38 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 GUI.enabled = IsAvailable(index);
                 string label = (index == SelectedIndex ? "> " : "") + (index + 1) + ". " + GetOptionLabel(index);
                 if (GUILayout.Button(label, optionStyle, GUILayout.MinHeight(index < Options.Count ? 32f : 72f))) Select(index);
+                if (Event.current.type == EventType.Repaint && index == SelectedIndex)
+                    selectedRow = GUILayoutUtility.GetLastRect();
                 GUI.enabled = true;
                 if (!IsAvailable(index)) GUILayout.Label(index < Options.Count ? Options[index].Availability.ToString() :
                     index < Options.Count + ToolOptions.Count ? ToolOptions[index - Options.Count].RejectionCode.ToString() :
                     CommandRejectionCode.InvalidState.ToString());
             }
             GUILayout.EndScrollView();
+            RevealSelectedRow();
             GUI.enabled = SelectedIndex >= 0;
             if (GUILayout.Button("Confirm", GUILayout.Height(32f))) ConfirmFromGui();
             GUI.enabled = true;
             if (GUILayout.Button("Cancel", GUILayout.Height(32f))) Cancel();
             GUILayout.EndArea();
+        }
+
+        private void RevealSelectedRow()
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            float height = GUILayoutUtility.GetLastRect().height;
+            if (!revealSelection && height == scrollViewportHeight && selectedRow == revealedRow) return;
+            scroll.y = VisibleScrollOffset(scroll.y, selectedRow, height);
+            scrollViewportHeight = height;
+            revealedRow = selectedRow;
+            revealSelection = false;
+        }
+
+        /// <summary>Reveals the actual selected row within a scroll viewport, independently of preceding row heights.</summary>
+        public static float VisibleScrollOffset(float current, Rect row, float viewportHeight)
+        {
+            if (row.yMin < current || row.height > viewportHeight) return Mathf.Max(0, row.yMin);
+            return Mathf.Max(0, row.yMax > current + viewportHeight ? row.yMax - viewportHeight : current);
         }
 
         private async void ConfirmFromGui()
