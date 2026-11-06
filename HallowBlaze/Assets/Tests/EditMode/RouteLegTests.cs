@@ -243,6 +243,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 3)), Is.EqualTo(before));
             Assert.That(BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 4)), Is.EqualTo(before));
             Assert.That(BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 5)), Is.EqualTo(before));
+            Assert.That(BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", 6)), Is.EqualTo(before));
             Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("ordinary.board.v1", int.MaxValue)));
             Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(restored, WorldWithGeneration("unknown", 1)));
             restored.TryConsumeIntro(restored.ActiveLeg.LegId);
@@ -261,6 +262,8 @@ namespace HallowBlaze.Tests.EditMode
         [TestCase(true, 4)]
         [TestCase(false, 5)]
         [TestCase(true, 5)]
+        [TestCase(false, 6)]
+        [TestCase(true, 6)]
         public void OrdinaryRouteStartPersistsTheCorrectGenerationFamily(bool legacyRandom, int generationVersion)
         {
             var session = new GameSession(new ProfileState("profile.test", "world.test", 1));
@@ -274,6 +277,22 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(store.SavedLeg.Segments.Select(segment => segment.GenerationConfigurationId), Is.All.EqualTo(expected));
             Assert.That(BoardAddressFactory.Create(run, published).GenerationConfigurationId, Is.EqualTo(expected));
             Assert.That(BoardAddressFactory.Create(run, published).GenerationVersion, Is.EqualTo(legacyRandom ? 1 : generationVersion));
+        }
+
+        /// <summary>Publication of guarded berries preserves each saved ordinary version, its address and seed.</summary>
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        [TestCase(4)]
+        [TestCase(5)]
+        public void GuardedBerryPublicationPreservesExistingOrdinaryLeg(int savedVersion)
+        {
+            RunState run = NewRun();
+            run.StartLeg("edge", "a", "b", Segments().Select(segment => new RouteSegmentState(segment.SegmentId, "ordinary.board.v1", savedVersion)));
+            BoardAddress original = BoardAddressFactory.Create(run, WorldWithGeneration("ordinary.board.v1", savedVersion));
+            RunState restored = PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(run));
+            Assert.That(BoardRequest.CreateFromRun(restored, WorldWithGeneration("ordinary.board.v1", 6)).Address, Is.EqualTo(original));
+            Assert.That(restored.ActiveLeg.CurrentSegment.GenerationVersion, Is.EqualTo(savedVersion));
         }
 
         /// <summary>Saved ordinary v1 legs keep their exact seed and algorithm against a v2 publication without accepting downgrades.</summary>

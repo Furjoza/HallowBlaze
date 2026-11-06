@@ -6670,6 +6670,42 @@ Q/E never rotates the image in the screen plane or mutates domain state, noise, 
 
 ---
 
+## `M7.22` - Guarded berries, corrected route keys and one-turn step noise
+
+**Status:** `Done` - 2026-11-06. Blocking berry bushes, corrected A/D navigation and one-turn
+movement noise implemented. Full EditMode 1301 passed plus one expected Explicit skip,
+graphics PlayMode 250/250 and the repeated 10,000-seed gate passed; independent review PASS.
+Owner acceptance remains the M7.17 retest; M8.5 retains its existing order.
+**Priority:** P0 before repeating M7.17.
+**Related contract:** Sections 12, 18.1 and 26.1.
+**Scope:** Fresh ordinary/6 berries occupy an existing blocking clearable bush; collection is
+impossible before clearing and still grants +5 Food once on entry afterwards. Manual/axe rules,
+obstacle counts and required exit reachability remain unchanged. Navigation uses A/D and arrows,
+not W/S; ordinary board movement stays WASD. Movement noise is active only in its emitting turn
+and expires before the next accepted enemy phase; interaction/tool lifetimes and audio stay unchanged.
+**Closed write scope:** BoardManager; OrdinaryBoardGenerator, BoardGenerationPipeline,
+BoardValidator and OrdinaryBoardContent; BoardAddressFactory and RouteTravelService;
+ActionNoiseProfile and TurnResolver; KeyboardMenuFocus and PcInputBindings; prototype-world.json;
+existing OrdinaryBoardGeneratorTests, NoiseTurnTests, RouteLegTests, WorldDefinitionTests,
+AtlasScreenTests, BoardRuntimeStartupTests, GameSessionLifecycleTests and NoisePresentationTests; GameDesignContract,
+BoardGeneration, Testing and this roadmap. No new asset, prefab, scene, settings, package or agent files.
+**Acceptance criteria:** Berries require a domain obstacle, reachable approach and real clearing;
+blocked entry/preview is free and cannot award food. The independent validator rejects unguarded
+ordinary/6 berries, including fallback outputs. A/D selects predictably while W/S does nothing
+in menus/routes. A step cannot persist into the next accepted enemy phase, but rejected input
+does not age it; interaction/tool noise remains unchanged. Saved ordinary/1-5 and legacy legs
+retain addresses, seeds and layouts against the new publication. No real-profile reset.
+**Validation:** Focused domain, publication, keyboard and graphics tests; final EditMode and
+PlayMode regression; representative repeated seeds and the existing explicit 10,000-seed gate;
+independent review after the mechanical checks.
+**Owner ordering decision (2026-11-06):** M8.5 remains in its current order with its dependencies.
+Missing tool-source markers are deferred by that explicit decision, not an authorization to
+implement them now or a new prerequisite for this repair. M7.17 still needs the owner retest.
+**Save impact:** Publish ordinary/6 for new segments; reconstruct saved versions 1-5 unchanged.
+No DTO/schema change, profile erasure or inventory activation.
+
+---
+
 ### M7 gate
 
 M7 is complete only after the original M7.1-M7.8 obligations and follow-ups M7.9-M7.18 are
@@ -6679,6 +6715,7 @@ and M8 wait for this expanded repair gate and their own prerequisites, unless th
 separately changes the order. Optional authoring-tool planning substitutes for no human gate.
 M7.19 repairs the owner smoke before its repeat; future visual redesigns M7.20-M7.21 do not
 block testing the agreed interim presentation and do not waive the M7.17 owner verdict.
+M7.22 applies the owner's explicit berry, route-key and step-noise corrections before that retest.
 
 ---
 
@@ -6829,6 +6866,8 @@ block testing the agreed interim presentation and do not waive the M7.17 owner v
 marker at the axe source. Radio Tower already authors `source.radio-tower.axe`, but profile
 source discovery and atlas icons are not implemented. This blocks evaluating that particular
 atlas reward; moving M8.5 ahead of its gate/dependencies requires an explicit priority decision.
+**Owner ordering decision (2026-11-06):** Keep M8.5 in its existing order and retain its
+dependencies; do not advance it before the M7 owner retest.
 **Priority:** P1
 **Related contract:** sections 7.4–7.6, 13, 18, 21.3, and 27.3.
 

@@ -23,7 +23,7 @@ No save schema or world topology changes are involved.
 
 ## M7.16 Medical Supply
 
-Fresh ordinary segments now publish `ordinary.board.v1/5`, adding the separate `medical`
+M7.16 published `ordinary.board.v1/5`, adding the separate `medical`
 family with 0-1 `legacy.aid` kits per board. The existing AidKit prefab is used only for
 presentation. A kit is not Food and movement cannot apply it; conscious use follows
 [the current medical contract](GameDesignContract.md#262-current-first-aid-use).
@@ -32,6 +32,16 @@ Food item counts/rewards, obstacle pressure and enemy rules are unchanged.
 Versions 1-4 retain their original allowed content and deterministic layouts. Version 5
 keeps the entry-safety validator and retry/fallback gates. Zero supply remains legal;
 the new family is not a mandatory route resource or an inventory unlock.
+
+## M7.22 Guarded Berries
+
+Fresh ordinary segments publish `ordinary.board.v1/6`. Each `ordinary.berries` item is placed
+on a distinct existing blocking `legacy.wall` bush with an approach from reachable ground.
+The obstacle count, reserved path and Food count/reward bands are unchanged. The current
+manual/axe clearing rules remove the bush; only subsequent entry collects the fixed +5 Food.
+The independent validator rejects unguarded or inaccessible berries in candidates and fallbacks.
+Saved versions 1-5 retain their exact layout algorithms, addresses and seeds; version 6 uses
+its own addressed stream. The graph, landmark version and save schema are unchanged.
 
 ## M7.6 Bounded Entry Safety
 

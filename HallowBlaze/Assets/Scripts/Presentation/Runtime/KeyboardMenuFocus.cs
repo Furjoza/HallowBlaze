@@ -85,8 +85,8 @@ namespace HallowBlaze.Presentation.Runtime
                 return;
             }
             int step = key == KeyCode.Tab ? (shift ? -1 : 1) :
-                key == KeyCode.DownArrow || key == KeyCode.RightArrow || key == KeyCode.S || key == KeyCode.D ? 1 :
-                key == KeyCode.UpArrow || key == KeyCode.LeftArrow || key == KeyCode.W || key == KeyCode.A ? -1 : 0;
+                key == KeyCode.DownArrow || key == KeyCode.RightArrow || key == KeyCode.D ? 1 :
+                key == KeyCode.UpArrow || key == KeyCode.LeftArrow || key == KeyCode.A ? -1 : 0;
             if (step != 0)
             {
                 retained = controls[(index + step + controls.Count) % controls.Count].gameObject;

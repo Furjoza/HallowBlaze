@@ -92,6 +92,13 @@ route ID, travel cost, scene or prefab changes are involved.
 
 ## M7.19 Owner Smoke Follow-Up
 
+**Superseded details (2026-11-06):** M7.22 corrects three M7.19 interpretations. Current
+menu/route aliases are A/D and arrows, not W/S. Fresh ordinary/6 berries are on a real blocking
+bush and require existing manual/axe clearing before +5 Food collection on entry. Movement
+noise lasts only its own turn; interaction/tool noise and full authored audio are unchanged.
+The owner explicitly kept tool-source discovery/atlas icons in the existing M8.5 order.
+The dated 2026-11-05 evidence below remains historical, not the current rule for these details.
+
 On 2026-11-05 the owner completed the entire game using only the keyboard. The verdict is
 **Revise**, not acceptance: the report also identified menu focus/hover, Controls placement
 and clipping, floating berries, planar sprite rotation, full-Health medical wording, missing
@@ -118,6 +125,34 @@ was the original concern. Its requested lifetime remains unresolved and the doma
 unchanged. The axe's stable source ID exists, but profile source discovery and atlas markers
 are still M8.5; the absent marker is recorded rather than represented by a cosmetic fake.
 These remain explicit follow-ups and M7.17 remains Revise pending owner decisions and retest.
+
+## M7.22 Clarified Berry, Input and Noise Rules
+
+`VersionSixBerriesRequireAccessibleBlockingBushes` checks deterministic supply, real blocking
+`legacy.wall` bushes, existing clearing support, approachable positions and validator acceptance
+over 100 seeds. `GuardedBerryValidationAlsoAppliesToFallbacks` corrupts a berry placement and
+requires rejection, then forces each authored fallback through the same independent validator.
+Historical catalogs/layouts 1-5 and serialized route addresses/seeds remain covered separately.
+
+`ProductionFoodVarietiesCollectOnceWithExactHudGains` covers old version 4 and guarded version 6
+with both animation modes. Blocked berry entry spends nothing, cannot move or grant Food,
+and the picker cannot collect through the bush. Existing manual work removes the actual
+obstacle while retaining the berry; synchronization cannot restore the bush. Entry then grants
+the original fixed +5 once. Carrot behavior is unchanged. Continue rebuilds versions 1-6.
+
+Atlas tests exercise A/D and arrows, assert that W/S are absent/ignored, and retain the free
+browse-versus-confirm boundary. `NoiseTurnTests` checks movement lifetime 1 through actual
+controller phases: the signal exists in the emitting turn, rejected input does not age it,
+and the next accepted enemy phase sees it expired. Prototype interaction remains strength 4,
+lifetime 2. Immutable noise snapshots and custom shared-lifetime profiles remain supported.
+These tests use isolated saves. Owner visual acceptance remains the M7.17 retest; M8.5 is
+explicitly deferred in its existing order rather than silently included in this repair.
+
+Final validation on 2026-11-06: EditMode 1301 passed with one expected Explicit skip;
+graphics PlayMode 250/250; the explicit 10,000-seed series repeated twice with zero invalid
+boards/fallbacks and identical fingerprint `175600ac1f6a5091858ae2090f93866d3a501bb62d7b9cf602437e9aa7248a0f`.
+Independent review passed. The world comparison against the baseline confirms that only
+the 47 ordinary segment versions changed; landmark and topology are identical.
 
 ## M7.13 Illustrated Controls
 
@@ -263,7 +298,7 @@ authorization or original screenshot-seed reconstruction follows from these auto
 | First choice follows the first playable day | M7.1 automatic warm-up leg; old checkpoints unchanged | Lifecycle opening/death/retry/Continue cases and integrated real-command opening | Confirm first playable flow and Day readability |
 | Flash, white areas, residual board/legend | M7.2 world visibility and full-viewport clear ownership | `BoardViewportClearsOutsideTheGameplayCamera`, `ProductionLayerPixelsStayCleanAcrossResizeAndBoards`; tinted consecutive boards and overlay pixels | Observe real-window transitions without flashes/residue |
 | Notes duplicate label / blinking book | M7.3 parented hover hints and stable control visual state | `FieldNotesPresentationTests`, including real busy/hover/control lifetime and portrait bounds | Hover and move repeatedly; inspect book and close hints |
-| Step audio and mechanical noise | M7.19 restores full authored audio, superseding M7.4's 100 ms/movement-end cut; instant steps silent, cancel/recovery/dispose stop only the owned source | Infrastructure full-clip natural-end/mute/cancel/rapid-step tests; integrated step versus food-cue counts | Listen to restored clips; clarify the separately reported domain-noise lifetime |
+| Step audio and mechanical noise | M7.19 restores full authored audio; M7.22 limits the domain step signal to its emitting turn without changing interaction/tool noise | Infrastructure audio ownership and NoiseTurnTests phase/lifetime/rejection checks | Listen to restored clips and inspect the one-turn footprint |
 | Lost Food/Health `+X` | M7.5 applied gains survive accepted-turn replay and free rejection, clear at next accepted replay/boundaries | Infrastructure food/health/rejection tests; integrated actual restore, rejection and food reward feedback | Inspect gain readability through a complete turn |
 | Suspected corner entry trap | M7.6 explicit synthetic trap plus retained v2 diagnostic; new v3 bounded real-rule witness | Validator trap/narrow/fallback tests, published 1000-board audit, explicit 10k x2, production Day-4 witness | Smoke clearly labeled synthetic case; original seed/resources/history still missing |
 | Board/resource alignment and clipping | M7.7 symmetric viewport, fixed resource frames, shared legend/discovery slot | `ProductionBoardAndResourceHudStayCenteredAndFit`: four aspect ratios, two boards, long gains, glyph/raster/control bounds and durable discovery | Actual OS-window resize and visual inspection at desktop/portrait |

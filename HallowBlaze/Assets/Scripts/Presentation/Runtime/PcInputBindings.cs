@@ -54,7 +54,7 @@ namespace HallowBlaze.Presentation.Runtime
         public static IReadOnlyList<KeyCode> MenuKeys { get; } = Array.AsReadOnly(new[]
         {
             KeyCode.Tab, KeyCode.DownArrow, KeyCode.UpArrow, KeyCode.LeftArrow, KeyCode.RightArrow,
-            KeyCode.W, KeyCode.A, KeyCode.S, KeyCode.D,
+            KeyCode.A, KeyCode.D,
             KeyCode.Return, KeyCode.KeypadEnter, Space, KeyCode.PageDown, KeyCode.PageUp,
             KeyCode.Home, KeyCode.End, Cancel
         });
@@ -92,8 +92,8 @@ namespace HallowBlaze.Presentation.Runtime
             }
             else
             {
-                hints.Add(new ControlHint("Next control", KeyCode.Tab, KeyCode.DownArrow, KeyCode.RightArrow, KeyCode.S, KeyCode.D));
-                hints.Add(new ControlHint("Previous control: W / A / Up / Left or Shift + Tab", KeyCode.Tab, KeyCode.LeftShift, KeyCode.UpArrow, KeyCode.LeftArrow, KeyCode.W, KeyCode.A));
+                hints.Add(new ControlHint("Next control", KeyCode.Tab, KeyCode.DownArrow, KeyCode.RightArrow, KeyCode.D));
+                hints.Add(new ControlHint("Previous control: A / Up / Left or Shift + Tab", KeyCode.Tab, KeyCode.LeftShift, KeyCode.UpArrow, KeyCode.LeftArrow, KeyCode.A));
                 hints.Add(new ControlHint("Activate / choose route", Space, KeyCode.Return, KeyCode.KeypadEnter));
                 hints.Add(new ControlHint("Back / cancel when available", Cancel));
                 hints.Add(new ControlHint("Scroll focused region", KeyCode.PageUp, KeyCode.PageDown, KeyCode.Home, KeyCode.End));
