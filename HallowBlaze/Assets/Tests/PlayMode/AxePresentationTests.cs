@@ -153,6 +153,35 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.Run.Food, Is.EqualTo(20));
         }
 
+        /// <summary>Repeated cosmetic rotations preserve run/board snapshots, emitted-noise identity/lifetime and retained enemy plans.</summary>
+        [Test]
+        public void VisualTurnsDoNotResolveAgeNoiseOrReplanEnemies()
+        {
+            Fixture fixture = CreateFixture(true, false);
+            GameObject player = fixture.Runtime.Views[fixture.Runtime.PlayerId];
+            PlayerVisualFacing facing = player.AddComponent<PlayerVisualFacing>();
+            BoardNoise noise = fixture.Runtime.BoardState.EmitNoise(fixture.Runtime.PlayerId, new GridPosition(0, 1), 2, 3);
+            string before = PersistenceJsonSerializer.SerializeRun(fixture.Run);
+            string[] entities = fixture.Runtime.BoardState.GetEntities().Select(entity => entity.Id + "@" + entity.Position).ToArray();
+            var retained = fixture.Runtime.Listeners.Single().LockedIntent;
+            for (int frame = 10000; frame < 10040; frame++)
+                Assert.That(facing.SampleInput(key => key == KeyCode.E, frame, fixture.Presenter.Coordinator.CanSubmit), Is.True);
+            Assert.That(facing.QuarterTurns, Is.Zero);
+            Assert.That(PersistenceJsonSerializer.SerializeRun(fixture.Run), Is.EqualTo(before));
+            Assert.That(fixture.Runtime.BoardState.GetEntities().Select(entity => entity.Id + "@" + entity.Position), Is.EqualTo(entities));
+            Assert.That(fixture.Runtime.Listeners.Single().LockedIntent, Is.SameAs(retained));
+            Assert.That(fixture.Runtime.BoardState.GetActiveNoises().Single(), Is.SameAs(noise));
+            Assert.That(noise.RemainingTurns, Is.EqualTo(3));
+            Assert.That(fixture.Runtime.BoardState.EmitNoise(fixture.Runtime.PlayerId, new GridPosition(0, 1), 1, 2).Id, Is.EqualTo(noise.Id + 1));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+            var picker = fixture.Presenter.InteractionDisplay;
+            picker.SampleInputAsync(key => key == KeyCode.F, -50);
+            Assert.That(facing.SampleInput(key => key == KeyCode.E, 10041, fixture.Presenter.Coordinator.CanSubmit), Is.False);
+            picker.SampleInputAsync(key => key == KeyCode.E, -49);
+            Assert.That(picker.SelectedIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(facing.QuarterTurns, Is.Zero);
+        }
+
         /// <summary>The visible emitted snapshot is the Listener's hearing memory and only then documents the durable fact.</summary>
         [UnityTest]
         public IEnumerator AxeNoisePresentationDocumentsFactAndNextListenerStepUsesThatSignal()

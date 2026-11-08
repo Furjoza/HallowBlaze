@@ -130,6 +130,86 @@ namespace HallowBlaze.Tests.PlayMode
             yield return SceneManager.UnloadSceneAsync("Menu");
         }
 
+        /// <summary>Real player input rotates visible art freely, preserves absolute movement and respects modal/replay/disposal ownership.</summary>
+        [UnityTest]
+        public IEnumerator ProductionVisualTurnsAreVisibleFreeAndGated()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            Invoke(manager, "HideLevelImage");
+            yield return null;
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
+            presenter.AnimationsEnabled = false;
+            Component player = runtime.Views[runtime.PlayerId].GetComponent(playerType);
+            PlayerVisualFacing facing = player.GetComponent<PlayerVisualFacing>();
+            Assert.That(facing, Is.Not.Null);
+            string before = HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeTravelRun(runtime.RunState);
+            Vector3 position = player.transform.position;
+            Quaternion rotation = player.transform.rotation;
+            Color32[] previous = null;
+            for (int turn = 0; turn < 4; turn++)
+            {
+                Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.E), -200 + turn), Is.True);
+                yield return null;
+                Texture2D capture = CaptureProductionCanvas(manager, 960, 640);
+                Color32[] pixels = capture.GetPixels32();
+                if (previous != null)
+                    Assert.That(pixels.Where((pixel, index) => !pixel.Equals(previous[index])).Count(), Is.GreaterThan(10));
+                previous = pixels;
+                File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M718-facing-" + facing.QuarterTurns + ".png"), capture.EncodeToPNG());
+                UnityEngine.Object.DestroyImmediate(capture);
+                Assert.That(player.transform.position, Is.EqualTo(position));
+                Assert.That(player.transform.rotation, Is.EqualTo(rotation));
+            }
+            Assert.That(facing.QuarterTurns, Is.Zero);
+            Assert.That(HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeTravelRun(runtime.RunState), Is.EqualTo(before));
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.Zero);
+            Invoke(manager, "SetGameplayInputBlocked", true);
+            Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.Q), -190), Is.False);
+            Invoke(manager, "SetGameplayInputBlocked", false);
+            yield return null;
+            FieldNotesPresenter notes = GetProperty<FieldNotesPresenter>(manager, "FieldNotes");
+            Assert.That(notes.Open(), Is.True);
+            Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.E), -189), Is.False);
+            notes.Close();
+            yield return null;
+            Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.E), -187), Is.True);
+            Assert.That(facing.QuarterTurns, Is.EqualTo(1));
+            presenter.AnimationsEnabled = true;
+            SetField(player, "moveTime", 0.2f);
+            Direction direction = FindExitPath(runtime).First();
+            object[] arguments = { new MoveCommand(direction), null };
+            Assert.That((bool)Invoke(player, "TrySubmitCommand", arguments), Is.True);
+            var operation = (Task<CommandSubmission>)arguments[1];
+            Assert.That(operation.IsCompleted, Is.False);
+            while (!operation.IsCompleted)
+            {
+                Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.Q), Time.frameCount), Is.False);
+                yield return null;
+            }
+            Assert.That(operation.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(facing.QuarterTurns, Is.EqualTo(1));
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
+            yield return null;
+            int food = runtime.RunState.Food;
+            arguments = new object[] { new WaitCommand(), null };
+            Assert.That((bool)Invoke(player, "TrySubmitCommand", arguments), Is.True);
+            operation = (Task<CommandSubmission>)arguments[1];
+            while (!operation.IsCompleted) yield return null;
+            Assert.That(runtime.RunState.Food, Is.EqualTo(food - 1));
+            Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(2));
+            Assert.That(facing.QuarterTurns, Is.EqualTo(1));
+            Invoke(manager, "GameOver", false);
+            Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.Q), -186), Is.False);
+            ((Behaviour)player).enabled = false;
+            Assert.That((bool)Invoke(player, "TryTurnVisual", (Func<KeyCode, bool>)(key => key == KeyCode.Q), -188), Is.False);
+            Scene cleanup = SceneManager.CreateScene("Visual facing cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
         /// <summary>Production death actions are reachable instead of assigning focus to their noninteractive backdrop.</summary>
         [UnityTest]
         public IEnumerator KeyboardTerminalFocusBelongsToVisibleActions()

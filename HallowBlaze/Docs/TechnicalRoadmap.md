@@ -6566,7 +6566,7 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 
 ## `M7.18` - Free 90-degree visual turns in idle walking mode
 
-**Status:** `Planned` - owner request 2026-11-03; complete before M7.13 final bindings and M7.17 acceptance.
+**Status:** `Done` - 2026-11-03. Presentation-only quarter-turns and idle/context/lifecycle gates implemented; full graphics PlayMode 225/225 and focused state/render checks 3/3 passed. Independent review PASS, including actual Git scope evidence. Authored North pose, movement-preserved facing and chord policy are in `Docs/Testing.md`; human integrated acceptance remains M7.17.
 **Priority:** P1 requested input behavior within the keyboard follow-up.
 **Related contract:** Section 18.1 contextual input and free cosmetic facing; existing grid/turn/intent invariants.
 **Rationale:** A harmless, responsive visual action lets players turn the character while thinking without spending a tactical opportunity or accidentally selecting an interaction.

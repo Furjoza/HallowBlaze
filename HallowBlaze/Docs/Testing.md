@@ -1,5 +1,32 @@
 # HallowBlaze Testing
 
+## M7.18 Cosmetic Cardinal Facing
+
+The authored sprite pose is North (zero quarter-turns). An isolated Q edge rotates its
+visual pivot counterclockwise by 90 degrees, E clockwise; four equal turns wrap to zero.
+Only a transient child SpriteRenderer rotates. It mirrors the root Animator's current
+sprite, color and sorting; the authoritative root, Rigidbody2D and colliders never rotate.
+The authored renderer is retained for animation and restored when this component disables.
+Movement animation preserves cosmetic facing; WASD/arrows still produce absolute grid moves.
+Facing resets on board reconstruction and is absent from all run/profile/board persistence.
+
+The current player's full idle walking gate admits rotation. Interaction, pause, Notes,
+setup/Day, replay, terminal, disposal and replaced views block and discard the edge.
+Q+E does nothing. Movement/Wait/F/N/Escape takes priority over rotation in the same sample.
+Held keys without another key-down edge do not spin; repeated sampling of one frame cannot
+rotate twice or defer a blocked rotation. No TurnCommand, resolver, RNG or domain-state
+reference exists in `PlayerVisualFacing`.
+
+`VisualFacingTurnsOnlyAnIsolatedCosmeticPivot` verifies direction, wraparound, frame/hold,
+chords and unchanged actor/collider transform. `VisualTurnsDoNotResolveAgeNoiseOrReplanEnemies`
+compares forty turns with serialized run state, entity positions, retained Listener intent,
+noise identity/lifetime and the next emission ID; resolution count stays zero. Interaction
+E selects without rotating. `ProductionVisualTurnsAreVisibleFreeAndGated` captures four real
+Main orientations, checks changed pixels and fixed actor transforms, modal/replay/terminal
+gates, preserved nonzero facing through an absolute move and a normally costed Wait.
+Representative production renders are in `%TEMP%/HB-M718-facing-{0|1|2|3}.png`.
+These are graphics/injected-edge checks; integrated physical-key owner acceptance is M7.17.
+
 ## M7.12 Contextual Interaction Keys
 
 `PcInputBindings` is the shared source for command keys, modal selection and subsequent
