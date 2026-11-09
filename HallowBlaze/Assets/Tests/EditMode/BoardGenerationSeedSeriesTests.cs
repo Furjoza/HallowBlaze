@@ -262,6 +262,56 @@ namespace HallowBlaze.Tests.EditMode
         [Timeout(150000)]
         public void Daily1000SeedsHaveNoInvalidBoardsAndRepeatExactly() => RunGate(1000, TimeSpan.FromSeconds(60));
 
+        /// <summary>Three authored Day 1 stages retain bounded supplies, entry safety and deterministic layouts over 100 complete openings.</summary>
+        [Test]
+        [Timeout(150000)]
+        public void ThreeBoardOpeningSupplyAndSafetyRepeatForOneHundredRuns()
+        {
+            WorldDefinition world = WorldDefinitionJson.Deserialize(File.ReadAllText(Path.Combine(
+                UnityEngine.Application.dataPath, "GameData", "World", "prototype-world.json")));
+            WorldEdgeDefinition opening = world.GetOutgoingEdges(world.StartNodeId).Single();
+            var cases = new List<SeedSeriesCase>();
+            BoardValidationCatalog catalog = OrdinaryBoardContent.CreateCatalog();
+            for (int seed = 0; seed < 100; seed++)
+            {
+                var run = new RunState("opening-series-" + seed, seed, new RunStateConfiguration(100, 100, 0, world.StartNodeId));
+                run.StartLeg(opening.EdgeId, opening.FromNodeId, opening.ToNodeId, opening.Segments.Select(segment =>
+                    new RouteSegmentState(segment.SegmentId, segment.GenerationConfigurationId, segment.GenerationVersion)));
+                Assert.That(run.TryConsumeIntro(run.ActiveLeg.LegId), Is.True);
+                for (int index = 0; index < 3; index++)
+                {
+                    BoardAddress address = BoardAddressFactory.Create(run, world);
+                    BoardGenerationConfig config = OrdinaryBoardContent.CreateConfiguration(address);
+                    Assert.That(config.EnemyCount.Minimum, Is.EqualTo(index == 2 ? 1 : 0));
+                    Assert.That(config.EnemyCount.Maximum, Is.EqualTo(index == 2 ? 1 : 0));
+                    Assert.That(config.ObstacleCount.Minimum, Is.EqualTo(5 + index));
+                    Assert.That(config.ResourceBudgets.Single().ItemCount.Minimum, Is.EqualTo(3 - index));
+                    Assert.That(config.ResourceBudgets.Single().ItemCount.Maximum, Is.EqualTo(4 - index));
+                    cases.Add(new SeedSeriesCase(new BoardGenerationRequest(address, config, catalog, seed), "opening-v2", index, 3));
+                    if (index < 2) Assert.That(run.TryAdvanceSegment(run.ActiveLeg.LegId, address.SegmentId), Is.True);
+                }
+            }
+            BoardGenerationResult GenerateAndCheckEntry(BoardGenerationRequest request)
+            {
+                BoardGenerationResult result = BoardGenerationPipeline.GenerateOrdinary(request);
+                Assert.That(result.IsSuccess, Is.True, request.Address.ToString());
+                Assert.That(BoardEntrySafety.Check(result.Blueprint, catalog).HasEscape, Is.True, request.Address.ToString());
+                return result;
+            }
+            SeedSeriesResult first = SeedSeriesHarness.Run(cases, GenerateAndCheckEntry, MaximumFallbackRate, TimeSpan.FromSeconds(60));
+            SeedSeriesResult repeat = SeedSeriesHarness.Run(cases, GenerateAndCheckEntry, MaximumFallbackRate, TimeSpan.FromSeconds(60));
+            string firstDirectory = first.WriteArtifacts("opening-v2-first");
+            string repeatDirectory = repeat.WriteArtifacts("opening-v2-repeat");
+            TestContext.WriteLine("Opening reports: " + firstDirectory + " / " + repeatDirectory);
+            TestContext.WriteLine("Opening boards=" + first.Summary["executed"] + "; invalid=" + first.Summary["invalid"] +
+                "; fallbacks=" + first.Summary["fallbacks"] + "; hash=" + first.Fingerprint);
+            Assert.That(first.Passed, Is.True, first.Summary.ToString());
+            Assert.That(repeat.Passed, Is.True, repeat.Summary.ToString());
+            Assert.That((int)first.Summary["executed"], Is.EqualTo(300));
+            Assert.That(repeat.Fingerprint, Is.EqualTo(first.Fingerprint));
+            Assert.That(JToken.DeepEquals(repeat.Summary, first.Summary), Is.True);
+        }
+
         /// <summary>The explicitly selected milestone gate covers 10,000 boards twice without extending the ordinary daily suite.</summary>
         [Test]
         [Category("GenerationMilestone")]
@@ -330,6 +380,14 @@ namespace HallowBlaze.Tests.EditMode
             WorldDefinition world = WorldDefinitionJson.Deserialize(File.ReadAllText(Path.Combine(project, "Assets", "GameData", "World", "prototype-world.json")));
             var catalog = OrdinaryBoardContent.CreateCatalog();
             var cases = new List<SeedSeriesCase>();
+            int[] repeatableLengths = world.Edges.Where(edge => edge.Segments.All(segment =>
+                segment.GenerationConfigurationId == OrdinaryBoardGenerator.ConfigurationId))
+                .Select(edge => edge.SegmentCount).Distinct().ToArray();
+            var fillable = new bool[count + 1];
+            fillable[0] = true;
+            for (int remaining = 1; remaining <= count; remaining++)
+                fillable[remaining] = repeatableLengths.Any(length => length <= remaining && fillable[remaining - length]);
+            Assert.That(fillable[count], Is.True, "The requested series must contain complete published traversals.");
             int inboundPrefixSweeps = 0;
             for (int traversal = 0; cases.Count < count; traversal++)
             {
@@ -337,7 +395,7 @@ namespace HallowBlaze.Tests.EditMode
                 int ordinaryCount = edge.Segments.Count(segment => segment.GenerationConfigurationId == OrdinaryBoardGenerator.ConfigurationId);
                 bool inboundPrefix = ordinaryCount != edge.SegmentCount;
                 if (inboundPrefix && inboundPrefixSweeps >= 5) continue;
-                if (cases.Count + ordinaryCount > count) continue;
+                if (cases.Count + ordinaryCount > count || !fillable[count - cases.Count - ordinaryCount]) continue;
                 if (inboundPrefix) inboundPrefixSweeps++;
                 int day = edge.FromNodeId == world.StartNodeId ? 1 : 1 + traversal / world.Edges.Count % 10;
                 int rootSeed = traversal % 2 == 0 ? traversal / 2 : -(traversal / 2) - 1;
@@ -359,7 +417,10 @@ namespace HallowBlaze.Tests.EditMode
                         Assert.That(run.TryAdvanceSegment(run.ActiveLeg.LegId, address.SegmentId), Is.True);
                 }
             }
-            Assert.That(cases.Select(sample => sample.Request.Address.SegmentId).Distinct().Count(), Is.EqualTo(45));
+            Assert.That(cases.Select(sample => sample.Request.Address.SegmentId).Distinct().Count(), Is.EqualTo(47));
+            Assert.That(cases.Select(sample => sample.Request.Address.SegmentId).Distinct(), Is.EquivalentTo(
+                world.Edges.SelectMany(edge => edge.Segments).Where(segment =>
+                    segment.GenerationConfigurationId == OrdinaryBoardGenerator.ConfigurationId).Select(segment => segment.SegmentId)));
             Assert.That(cases.Select(sample => sample.Request.Address.DayNumber).Distinct().Count(), Is.EqualTo(10));
             return cases;
         }

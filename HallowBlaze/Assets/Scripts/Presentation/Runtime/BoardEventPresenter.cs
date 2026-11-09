@@ -242,6 +242,7 @@ namespace HallowBlaze.Presentation.Runtime
             (hud as ITurnResourceGains)?.ClearResourceGains();
             if (disposed || runtime.IsDisposed)
             {
+                attacks.Dispose();
                 CloseIntents();
                 NoiseDisplay.Dispose();
                 ObstacleDisplay.Dispose();
@@ -249,6 +250,9 @@ namespace HallowBlaze.Presentation.Runtime
                 GroundToolsDisplay.Dispose();
                 return;
             }
+            foreach (GameObject view in runtime.Views.Values)
+                if (view != null)
+                    view.GetComponent<IEnemyAttackView>()?.StopAttack();
             var errors = new List<Exception>();
             foreach (var binding in runtime.Views)
             {

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using HallowBlaze.Core.Persistence;
 using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
@@ -156,8 +157,8 @@ namespace HallowBlaze.Tests.EditMode
                 Is.EqualTo(new[] { "road.shelter-warm-up" }));
             WorldEdgeDefinition opening = world.GetOutgoingEdges(world.StartNodeId).Single();
             Assert.That(opening.ToNodeId, Is.EqualTo("forest.start"));
-            Assert.That(opening.Segments, Has.Count.EqualTo(1));
-            Assert.That(opening.Segments[0].SegmentId, Is.EqualTo("segment.shelter-warm-up.day1"));
+            Assert.That(opening.Segments, Has.Count.EqualTo(3));
+            Assert.That(opening.Segments[0].SegmentId, Is.EqualTo("segment.shelter-warm-up.v2.entry"));
             Assert.That(opening.Segments[0].GenerationConfigurationId, Is.EqualTo("ordinary.board.v1"));
             Assert.That(opening.Segments[0].GenerationVersion, Is.EqualTo(3));
             Assert.That(world.GetOutgoingEdges(world.GoalNodeId), Is.Empty);
@@ -242,6 +243,61 @@ namespace HallowBlaze.Tests.EditMode
                 Is.False);
         }
 
+        /// <summary>Fresh content has three boards while an already committed one-board opening keeps its exact address.</summary>
+        [TestCase("ordinary.board.v1", 1)]
+        [TestCase("ordinary.board.v1", 2)]
+        [TestCase("ordinary.board.v1", 3)]
+        [TestCase("legacy.board.v1", 1)]
+        public void OpeningPublicationHasThreeBoardsAndPreservesTheOldPinnedAddress(string configuration, int version)
+        {
+            WorldDefinition world = LoadPrototypeWorld();
+            WorldEdgeDefinition opening = world.GetOutgoingEdges(world.StartNodeId).Single();
+            Assert.That(opening.SegmentCount, Is.EqualTo(3));
+            Assert.That(opening.Segments.Select(segment => segment.SegmentId), Is.EqualTo(new[]
+            {
+                "segment.shelter-warm-up.v2.entry", "segment.shelter-warm-up.v2.stretch", "segment.shelter-warm-up.v2.arrival"
+            }));
+            var run = new RunState("old-opening", 12346, new RunStateConfiguration(67, 83, 0, world.StartNodeId));
+            run.StartLeg(opening.EdgeId, opening.FromNodeId, opening.ToNodeId,
+                new[] { new RouteSegmentState("segment.shelter-warm-up.day1", configuration, version) });
+            BoardAddress pinned = BoardAddressFactory.CreateFromState(run);
+            Assert.That(BoardAddressFactory.Create(run, world), Is.EqualTo(pinned));
+            Assert.That(run.ActiveLeg.Segments, Has.Count.EqualTo(1));
+            Assert.That(run.Food, Is.EqualTo(83));
+            Assert.That(run.Health, Is.EqualTo(67));
+            foreach (bool consumed in new[] { false, true })
+            {
+                string root = Path.Combine(Path.GetTempPath(), "HB-M79-old-opening-" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    RunState restored = PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(run));
+                    if (consumed) Assert.That(restored.TryConsumeIntro(restored.ActiveLeg.LegId), Is.True);
+                    var store = new FileSystemSaveStore(root);
+                    Assert.That(store.SaveRun(restored).IsSuccess, Is.True);
+                    var session = new GameSession(new ProfileState("old-opening-profile", world.WorldDefinitionId, world.Version));
+                    session.Profile.DiscoverFact("retained-old-knowledge");
+                    session.ContinueRun(store.LoadRun().Data);
+                    var map = new WorldMapService(world, session, store);
+                    Assert.That(BoardRequest.CreateFromRun(session.ActiveRun, world).Address, Is.EqualTo(pinned));
+                    Assert.That(map.Travel.ConsumeIntro(out bool showIntro).IsSuccess, Is.True);
+                    Assert.That(showIntro, Is.EqualTo(!consumed));
+                    BoardRequest request = BoardRequest.CreateFromRun(session.ActiveRun, world);
+                    Assert.That(map.Travel.TryCompleteSegment(request, out SaveStoreResult saved, out bool arrived), Is.True);
+                    Assert.That(saved.IsSuccess && arrived, Is.True);
+                    Assert.That(map.ReconcileCompletedTravel().IsSuccess, Is.True);
+                    Assert.That(map.ReconcileCompletedTravel().IsSuccess, Is.True);
+                    Assert.That(map.BeginRouteChoice().IsSuccess, Is.True);
+                    Assert.That(map.Travel.TryCompleteSegment(request, out _, out _), Is.False);
+                    Assert.That(session.ActiveRun.TravelHistory.Single().CompletedSegmentCount, Is.EqualTo(1));
+                    Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(1));
+                    Assert.That(session.ActiveRun.Food, Is.EqualTo(83));
+                    Assert.That(session.ActiveRun.Health, Is.EqualTo(67));
+                    Assert.That(session.Profile.DiscoveredFactIds, Does.Contain("retained-old-knowledge"));
+                }
+                finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+            }
+        }
+
         /// <summary>Checks that the opening is a durable single day and never repeats its arrival on retry or Continue.</summary>
         [Test]
         public void OpeningTravelRoundTripCompletesOnceBeforeSelectedDayTwo()
@@ -272,10 +328,31 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(map.Travel.ConsumeIntro(out showIntro).IsSuccess, Is.True);
                 Assert.That(showIntro, Is.False);
 
-                Assert.That(map.Travel.TryCompleteSegment(pending, out SaveStoreResult checkpoint, out bool arrived), Is.True);
-                Assert.That(checkpoint.IsSuccess, Is.True);
-                Assert.That(arrived, Is.True);
-                Assert.That(map.Travel.TryCompleteSegment(pending, out _, out _), Is.False);
+                for (int index = 0; index < 3; index++)
+                {
+                    RunState run = session.ActiveRun;
+                    BoardRequest request = BoardRequest.CreateFromRun(run, world);
+                    Assert.That(request.Address.DayNumber, Is.EqualTo(1));
+                    Assert.That(run.ActiveLeg.SegmentIndex, Is.EqualTo(index));
+                    run.ConsumeFood(index + 1);
+                    int food = run.Food;
+                    Assert.That(map.Travel.TryCompleteSegment(request, out SaveStoreResult checkpoint, out bool arrived), Is.True);
+                    Assert.That(checkpoint.IsSuccess, Is.True);
+                    Assert.That(arrived, Is.EqualTo(index == 2));
+                    Assert.That(map.Travel.TryCompleteSegment(request, out _, out _), Is.False);
+                    session.ContinueRun(store.LoadRun().Data);
+                    map = new WorldMapService(world, session, store);
+                    Assert.That(session.ActiveRun.Food, Is.EqualTo(food));
+                    Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(index == 2 ? 1 : 0));
+                    if (index < 2)
+                    {
+                        Assert.That(map.BeginRouteChoice().IsSuccess, Is.False);
+                        Assert.That(session.ActiveRun.WorldNodeId, Is.EqualTo(world.StartNodeId));
+                        Assert.That(session.ActiveRun.ActiveLeg.IntroState, Is.EqualTo(DayIntroState.Consumed));
+                        Assert.That(session.ActiveRun.TravelHistory, Is.Empty);
+                        Assert.That(session.Profile.GetNodeDiscoveryState("forest.start"), Is.EqualTo(NodeDiscoveryState.Unknown));
+                    }
+                }
                 Assert.That(map.ReconcileCompletedTravel().IsSuccess, Is.True);
                 Assert.That(map.BeginRouteChoice().IsSuccess, Is.True);
                 Assert.That(session.ActiveRun.CurrentDay, Is.EqualTo(1));
@@ -298,6 +375,21 @@ namespace HallowBlaze.Tests.EditMode
             {
                 if (Directory.Exists(root)) Directory.Delete(root, true);
             }
+        }
+
+        /// <summary>The named compatibility path rejects foreign IDs, unknown generation and nonhistorical segment counts.</summary>
+        [TestCase("foreign.segment", "ordinary.board.v1", 3, 1)]
+        [TestCase("segment.shelter-warm-up.day1", "unknown", 1, 1)]
+        [TestCase("segment.shelter-warm-up.day1", "ordinary.board.v1", 4, 1)]
+        [TestCase("segment.shelter-warm-up.day1", "legacy.board.v1", 2, 1)]
+        [TestCase("segment.shelter-warm-up.day1", "ordinary.board.v1", 3, 2)]
+        public void OpeningCompatibilityRejectsForeignContent(string segmentId, string configuration, int version, int count)
+        {
+            WorldDefinition world = LoadPrototypeWorld();
+            var run = new RunState("foreign-opening", 12, new RunStateConfiguration(100, 100, 0, world.StartNodeId));
+            run.StartLeg("road.shelter-warm-up", world.StartNodeId, "forest.start", Enumerable.Range(0, count).Select(index =>
+                new RouteSegmentState(index == 0 ? segmentId : "foreign.extra", configuration, version)));
+            Assert.Throws<ArgumentException>(() => BoardAddressFactory.Create(run, world));
         }
 
         private static WorldDefinition LoadPrototypeWorld()
@@ -395,7 +487,7 @@ namespace HallowBlaze.Tests.EditMode
             {
                 Assert.That(world.TryGetEdge("road." + road, out WorldEdgeDefinition edge), Is.True);
                 Assert.That(edge.Segments.Select(segment => segment.SegmentId),
-                    Is.EqualTo((road == "shelter-warm-up" ? new[] { "day1" } : names)
+                    Is.EqualTo((road == "shelter-warm-up" ? new[] { "v2.entry", "v2.stretch", "v2.arrival" } : names)
                         .Select(name => "segment." + road + "." + name)));
                 foreach (RouteSegmentDefinition segment in edge.Segments)
                     if (segment.SegmentId == "segment.ridge-radio-tower.arrival")

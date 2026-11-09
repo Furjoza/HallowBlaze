@@ -13,6 +13,7 @@ using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.Turns.Resolution;
 using HallowBlaze.Presentation.Runtime;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.TestTools;
 using EntityId = HallowBlaze.Core.Board.Primitives.EntityId;
@@ -248,6 +249,161 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.FoodView.activeSelf, Is.True);
             Assert.That(fixture.Sink.Trace, Is.Empty);
             Assert.That(fixture.Presenter.Coordinator.CanSubmit, Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator ProductionEnemyAttackReplaysAuthoredAnimation()
+        {
+            Type soundType = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/SoundManager.prefab")
+                .GetComponents<Component>().Single(component => component != null && component.GetType().Name == "SoundManager").GetType();
+            var singleton = soundType.GetField("instance");
+            object previousSingleton = singleton.GetValue(null);
+            bool hadSound = PlayerPrefs.HasKey("Sound");
+            string previousSound = PlayerPrefs.GetString("Sound", "On");
+            singleton.SetValue(null, null);
+            var audioOwner = new GameObject("Attack test audio");
+            objects.Add(audioOwner);
+            AudioSource effects = audioOwner.AddComponent<AudioSource>();
+            effects.playOnAwake = false;
+            var sounds = (Behaviour)audioOwner.AddComponent(soundType);
+            sounds.enabled = false;
+            soundType.GetField("efxSource").SetValue(sounds, effects);
+            try
+            {
+                foreach (string prefab in new[] { "Enemy1", "Enemy2" })
+                    foreach (bool animations in new[] { true, false })
+                        foreach (bool hit in new[] { true, false })
+                        {
+                            PlayerPrefs.SetString("Sound", "On");
+                            Fixture fixture = CreateFixture(animations, attackPrefab: "Assets/Prefabs/" + prefab + ".prefab");
+                            GameObject view = fixture.Runtime.Views[fixture.AidId];
+                            var cue = view.GetComponent<IEnemyAttackView>();
+                            Assert.That(cue, Is.Not.Null);
+                            Animator animator = view.GetComponent<Animator>();
+                            animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                            animator.Rebind();
+                            animator.Update(0f);
+                            var attack = new EnemyAttackPresenter(fixture.Runtime, fixture.Sink, fixture.Sink, 0.3f)
+                                { AnimationsEnabled = animations };
+                            attackPresenters.Add(attack);
+                            var gameEvent = new EnemyAttackResolvedEvent(fixture.AidId, new GridPosition(0, 0),
+                                hit, hit ? (EntityId?)fixture.Runtime.PlayerId : null, hit ? -10 : 0);
+                            Task pending = attack.ReplayAsync(gameEvent, CancellationToken.None);
+                            animator.Update(0f);
+                            Assert.That(animator.GetCurrentAnimatorStateInfo(0).IsName("Enemy1Attack"), Is.EqualTo(animations),
+                                prefab + "; animations=" + animations + "; hit=" + hit);
+                            AudioSource source = view.GetComponent<AudioSource>();
+                            int cueCount = (int)cue.GetType().GetProperty("PresentedAttackSoundCount").GetValue(cue);
+                            Assert.That(cueCount, Is.EqualTo(hit ? 1 : 0));
+                            if (hit)
+                            {
+                                Assert.That(source.clip, Is.Not.Null);
+                                Assert.That(source.loop, Is.False);
+                                Assert.That(source.mute, Is.False);
+                                var samples = new float[source.clip.samples * source.clip.channels];
+                                Assert.That(source.clip.GetData(samples, 0), Is.True);
+                                Assert.That(samples.Any(sample => Mathf.Abs(sample) > 0.001f), Is.True);
+                                PlayerPrefs.SetString("Sound", "Off");
+                                yield return null;
+                                Assert.That(source.mute, Is.True, "Mute changes must reach an in-flight hit cue.");
+                            }
+                            while (!pending.IsCompleted)
+                                yield return null;
+                            Assert.That(pending.IsFaulted, Is.False);
+                            Assert.That(attack.TargetFeedback.name, Is.EqualTo(hit ? "Enemy attack hit" : "Enemy attack miss"));
+                            fixture.Presenter.SynchronizeFromState();
+                            Assert.That(animator.GetCurrentAnimatorStateInfo(0).IsName("Enemy1Attack"), Is.False);
+                            if (source != null) Assert.That(source.isPlaying, Is.False);
+                            Assert.That((int)cue.GetType().GetProperty("PresentedAttackSoundCount").GetValue(cue), Is.EqualTo(cueCount));
+                            Assert.That(fixture.Runtime.RunState.Health, Is.EqualTo(100));
+                            using (var cancellation = new CancellationTokenSource())
+                            {
+                                attack.AnimationsEnabled = true;
+                                Task canceled = attack.ReplayAsync(gameEvent, cancellation.Token);
+                                cancellation.Cancel();
+                                while (!canceled.IsCompleted) yield return null;
+                                Assert.That(canceled.IsCanceled, Is.True);
+                                Assert.That(attack.TargetFeedback, Is.Null);
+                                if (source != null) Assert.That(source.isPlaying, Is.False);
+                            }
+                            int beforeDisposal = (int)cue.GetType().GetProperty("PresentedAttackSoundCount").GetValue(cue);
+                            attack.Dispose();
+                            fixture.Presenter.Dispose();
+                            Assert.That((int)cue.GetType().GetProperty("PresentedAttackSoundCount").GetValue(cue), Is.EqualTo(beforeDisposal));
+                            Assert.That(fixture.Runtime.RunState.Health, Is.EqualTo(100));
+                        }
+            }
+            finally
+            {
+                singleton.SetValue(null, previousSingleton);
+                if (hadSound) PlayerPrefs.SetString("Sound", previousSound);
+                else PlayerPrefs.DeleteKey("Sound");
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator ProductionEnemyCommandsPresentHitMissConditionalAndRest()
+        {
+            foreach (bool animations in new[] { true, false })
+                foreach (string scenario in new[] { "hit", "miss", "conditional", "rest" })
+                {
+                    var run = new RunState("attack-command-" + runtimes.Count, 12345,
+                        new RunStateConfiguration(100, 25, 0, "forest.start"));
+                    var request = new BoardRequest(run.RunId, run.RunSeed, run.WorldNodeId, run.CurrentDay,
+                        run.GetBoardSeed(), "forest", "temperate", 1);
+                    var layout = new List<LegacyBoardView>();
+                    for (int horizontal = 0; horizontal < 3; horizontal++)
+                        for (int vertical = 0; vertical < 3; vertical++)
+                            layout.Add(View(LegacyBoardContentKind.Floor, horizontal, vertical));
+                    layout.Add(View(LegacyBoardContentKind.Player, scenario == "conditional" ? 0 : 1, 1));
+                    layout.Add(View(LegacyBoardContentKind.Exit, 0, 2));
+                    layout.Add(View(LegacyBoardContentKind.Enemy, 2, 1, "Assets/Prefabs/Enemy1.prefab"));
+                    BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(request, run, new GridBounds(0, 0, 2, 2), layout);
+                    runtimes.Add(runtime);
+                    var sink = new TestSinks { ActiveRequest = request };
+                    var presenter = new BoardEventPresenter(runtime, sink, sink, sink, value => sink.Diagnostic = value, 0.2f);
+                    presenters.Add(presenter);
+                    presenter.SynchronizeFromState();
+                    presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Setup, false);
+                    if (scenario == "rest")
+                    {
+                        presenter.AnimationsEnabled = false;
+                        Assert.That(presenter.Coordinator.SubmitAsync(new WaitCommand()).Result.Status,
+                            Is.EqualTo(CommandSubmissionStatus.Presented));
+                        sink.LastAttack = null;
+                        sink.Trace.Clear();
+                    }
+                    presenter.AnimationsEnabled = animations;
+                    Animator animator = runtime.Views[runtime.Enemies.Single().ActorId].GetComponent<Animator>();
+                    animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                    int previousHealth = run.Health;
+                    int previousFood = run.Food;
+                    PlayerCommand command = scenario == "miss" ? (PlayerCommand)new MoveCommand(Direction.North) :
+                        scenario == "conditional" ? new MoveCommand(Direction.East) : new WaitCommand();
+                    Task<CommandSubmission> pending = presenter.Coordinator.SubmitAsync(command);
+                    bool sawSwing = animator.GetCurrentAnimatorStateInfo(0).IsName("Enemy1Attack");
+                    while (!pending.IsCompleted)
+                    {
+                        yield return null;
+                        sawSwing |= animator.GetCurrentAnimatorStateInfo(0).IsName("Enemy1Attack");
+                    }
+                    Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented), scenario);
+                    Assert.That(sink.Diagnostic, Is.Null);
+                    bool hit = scenario == "hit" || scenario == "conditional";
+                    Assert.That(run.Health, Is.EqualTo(previousHealth - (hit ? 10 : 0)), scenario);
+                    Assert.That(run.Food, Is.EqualTo(previousFood - 1), scenario);
+                    Assert.That(sawSwing, Is.EqualTo(animations && scenario != "rest"), scenario);
+                    Assert.That(pending.Result.Result.Events.OfType<EnemyAttackResolvedEvent>().Count(),
+                        Is.EqualTo(scenario == "rest" ? 0 : 1), scenario);
+                    if (scenario != "rest")
+                    {
+                        Assert.That(sink.LastAttack.IsHit, Is.EqualTo(hit));
+                        Assert.That(sink.LastAttack.TargetPosition, Is.EqualTo(new GridPosition(1, 1)));
+                        CaptureAttackFrame(scenario + "-" + animations);
+                    }
+                    presenter.SynchronizeFromState();
+                    Assert.That(run.Health, Is.EqualTo(previousHealth - (hit ? 10 : 0)));
+                }
         }
 
         [UnityTest]
@@ -759,7 +915,8 @@ namespace HallowBlaze.Tests.PlayMode
             };
         }
 
-        private Fixture CreateFixture(bool animations, int initialFood = 100, ToolUseQuery tools = null)
+        private Fixture CreateFixture(bool animations, int initialFood = 100, ToolUseQuery tools = null,
+            string attackPrefab = null)
         {
             var run = new RunState("presentation-" + runtimes.Count, 12345,
                 new RunStateConfiguration(100, initialFood, 0, "forest.start"));
@@ -772,7 +929,7 @@ namespace HallowBlaze.Tests.PlayMode
             layout.Add(View(LegacyBoardContentKind.Player, 0, 0));
             layout.Add(View(LegacyBoardContentKind.Exit, 2, 1));
             layout.Add(View(LegacyBoardContentKind.Food, 1, 0));
-            layout.Add(View(LegacyBoardContentKind.Aid, 0, 1));
+            layout.Add(View(LegacyBoardContentKind.Aid, 0, 1, attackPrefab));
             BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(request, run, new GridBounds(0, 0, 2, 1), layout, tools);
             runtimes.Add(runtime);
             var sink = new TestSinks { ActiveRequest = request };
@@ -787,12 +944,46 @@ namespace HallowBlaze.Tests.PlayMode
                 FoodView = runtime.Views[food], AidId = Find(runtime, "legacy.aid"), ExitId = Find(runtime, "legacy.exit") };
         }
 
-        private LegacyBoardView View(LegacyBoardContentKind kind, int horizontal, int vertical)
+        private static void CaptureAttackFrame(string suffix)
         {
-            var instance = new GameObject(kind.ToString());
+            var owner = new GameObject("Attack capture camera");
+            var target = new RenderTexture(640, 480, 24);
+            var image = new Texture2D(640, 480, TextureFormat.RGB24, false);
+            RenderTexture previous = RenderTexture.active;
+            try
+            {
+                Camera camera = owner.AddComponent<Camera>();
+                camera.orthographic = true;
+                camera.orthographicSize = 2f;
+                camera.transform.position = new Vector3(1, 1, -10);
+                camera.clearFlags = CameraClearFlags.SolidColor;
+                camera.backgroundColor = Color.black;
+                camera.targetTexture = target;
+                camera.Render();
+                RenderTexture.active = target;
+                image.ReadPixels(new Rect(0, 0, 640, 480), 0, 0);
+                image.Apply();
+                Assert.That(image.GetPixels().Count(color => color.r > 0.2f || color.g > 0.2f || color.b > 0.2f),
+                    Is.GreaterThan(100), "The actual source and attack result must render, not only update an Animator.");
+                File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M714-" + suffix + ".png"), image.EncodeToPNG());
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                UnityEngine.Object.DestroyImmediate(owner);
+                UnityEngine.Object.DestroyImmediate(target);
+                UnityEngine.Object.DestroyImmediate(image);
+            }
+        }
+
+        private LegacyBoardView View(LegacyBoardContentKind kind, int horizontal, int vertical, string prefabPath = null)
+        {
+            var instance = prefabPath == null ? new GameObject(kind.ToString()) :
+                UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath));
             instance.transform.position = new Vector3(horizontal, vertical, 3f);
             objects.Add(instance);
-            return new LegacyBoardView(instance, kind, new GridPosition(horizontal, vertical));
+            return new LegacyBoardView(instance, kind, new GridPosition(horizontal, vertical),
+                kind == LegacyBoardContentKind.Enemy ? (int?)10 : null);
         }
 
         private static EntityId Find(BoardRuntime runtime, string content) => runtime.BoardState.GetEntities()

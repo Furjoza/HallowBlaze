@@ -754,6 +754,8 @@ namespace HallowBlaze.Core.Session
         /// <summary>
         /// Reconciles profile discovery from durable completed-traversal history after arrival or recovery.
         /// A crash between run and profile saves cannot require replaying the final segment.
+        /// The named one-board Day 1 opening remains valid against its three-board v2 publication;
+        /// its historical completed count is never rewritten or extended.
         /// </summary>
         /// <returns>An idempotent profile-save result; no run progress or route choice is changed.</returns>
         public WorldMapCommandResult ReconcileCompletedTravel()
@@ -772,7 +774,9 @@ namespace HallowBlaze.Core.Session
                     continue;
                 if (!world.TryGetEdge(entry.EdgeId, out WorldEdgeDefinition edge) ||
                     edge.FromNodeId != entry.FromNodeId || edge.ToNodeId != entry.ToNodeId ||
-                    edge.Segments.Count != entry.CompletedSegmentCount)
+                    edge.Segments.Count != entry.CompletedSegmentCount &&
+                    !(entry.DayNumber == 1 && entry.CompletedSegmentCount == 1 &&
+                        BoardAddressFactory.IsPublishedThreeBoardOpening(edge)))
                     return WorldMapCommandResult.Rejected("Completed travel does not match the authored world.");
                 operationId = edge.EdgeId;
                 if (session.Profile.GetEdgeDiscoveryState(edge.EdgeId) < EdgeDiscoveryState.Traversed && edges.Add(edge.EdgeId))

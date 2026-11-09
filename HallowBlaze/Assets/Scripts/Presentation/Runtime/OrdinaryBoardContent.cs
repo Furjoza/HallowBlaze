@@ -43,7 +43,7 @@ namespace HallowBlaze.Presentation.Runtime
         }
 
         /// <summary>Resolves retained v1/v2 budgets or version-3 entry-safe generation; arbitrary IDs/versions are rejected.</summary>
-        /// <param name="address">The actual segment identity; day affects obstacle/enemy pressure, not board size.</param>
+        /// <param name="address">The actual segment identity; day affects pressure, with pinned v2 opening stages on Day 1.</param>
         /// <returns>A detached inclusive budget; this is a first-family preset, not final balance.</returns>
         /// <exception cref="ArgumentException">The generation family or version is unsupported.</exception>
         /// <exception cref="ArgumentNullException">The address is null.</exception>
@@ -58,12 +58,28 @@ namespace HallowBlaze.Presentation.Runtime
                     "/" + address.GenerationVersion, nameof(address));
             int obstacleMinimum = 5 + Math.Min(2, (address.DayNumber - 1) / 3);
             int enemyCount = Math.Min(3, (int)Math.Log(address.DayNumber, 2));
+            int openingStage = 0;
+            if (address.GenerationVersion == 3 && address.DayNumber == 1 && address.EdgeId == "road.shelter-warm-up")
+            {
+                switch (address.SegmentId)
+                {
+                    case "segment.shelter-warm-up.v2.entry": openingStage = 1; break;
+                    case "segment.shelter-warm-up.v2.stretch": openingStage = 2; break;
+                    case "segment.shelter-warm-up.v2.arrival": openingStage = 3; break;
+                }
+            }
+            if (openingStage > 0)
+            {
+                obstacleMinimum = 4 + openingStage;
+                enemyCount = openingStage == 3 ? 1 : 0;
+            }
             return new BoardGenerationConfig(address.GenerationConfigurationId, address.GenerationVersion,
                 new GenerationRange(8, 14), new GenerationRange(20, 58),
                 new GenerationRange(obstacleMinimum, obstacleMinimum + 2), new GenerationRange(enemyCount, enemyCount),
                 Math.Min(1, enemyCount), 2,
                 new[] { "legacy.player", "legacy.floor", "legacy.wall", "legacy.food", "legacy.soda", ExitTerrainId, Enemy10Id, Enemy20Id },
-                new[] { new ResourceGenerationBudget("food", new GenerationRange(2, 5)) });
+                new[] { new ResourceGenerationBudget("food", openingStage == 0 ? new GenerationRange(2, 5) :
+                    new GenerationRange(4 - openingStage, 5 - openingStage)) });
         }
     }
 }
