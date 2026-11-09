@@ -6471,7 +6471,7 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 
 ## `M7.13` - Illustrated keyboard Controls view
 
-**Status:** `Planned`
+**Status:** `Done` - 2026-11-03. Runtime-derived keyboard diagram, context labels and keyboard-safe main/pause entry implemented. Full graphics PlayMode 229/229 passed; final Controls/focus checks after self-review corrections 20/20 passed. Independent review: Not run, invocation failed with `429 ProviderRequestError`; Lead self-review passed after correcting focus contrast and giving keypad Enter its own keycap. Render/context policy is in `Docs/Testing.md`; human integrated acceptance remains M7.17.
 **Priority:** P1 discoverability.
 **Related contract:** Sections 3.1 and 18.1; controls are basic information, not discoveries.
 **Rationale:** Keyboard support needs discoverable bindings and visible mode differences, not experimentation to find a working key.

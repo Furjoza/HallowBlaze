@@ -22,6 +22,9 @@ namespace HallowBlaze.Presentation.Runtime
         private RectTransform focusFrame;
         private Action cancel;
 
+        /// <summary>Gets or sets the focus outline color so a menu can maintain contrast with its own surface.</summary>
+        public Color FrameColor { get; set; } = Color.white;
+
         /// <summary>Installs transient navigation on an existing menu without changing its authored actions.</summary>
         public static KeyboardMenuFocus Attach(GameObject root, GameObject initial = null, Action cancel = null)
         {
@@ -146,7 +149,7 @@ namespace HallowBlaze.Presentation.Runtime
                 {
                     Image edge = new GameObject("Focus edge", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
                     edge.transform.SetParent(focusFrame, false);
-                    edge.color = Color.white;
+                    edge.color = FrameColor;
                     edge.raycastTarget = false;
                     RectTransform rect = edge.rectTransform;
                     bool horizontal = index < 2;
@@ -161,6 +164,7 @@ namespace HallowBlaze.Presentation.Runtime
             focusFrame.anchorMax = Vector2.one;
             focusFrame.offsetMin = new Vector2(-3, -3);
             focusFrame.offsetMax = new Vector2(3, 3);
+            foreach (Image edge in focusFrame.GetComponentsInChildren<Image>()) edge.color = FrameColor;
             focusFrame.gameObject.SetActive(true);
         }
 

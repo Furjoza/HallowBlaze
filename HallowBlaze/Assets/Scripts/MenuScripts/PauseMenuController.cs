@@ -23,6 +23,8 @@ public class PauseMenuController : MonoBehaviour
     private PauseViewState currentState = PauseViewState.Closed;
     private bool isExiting;
     private Action<string> sceneLoader = SceneManager.LoadScene;
+    private KeyboardControlsView controls;
+    private bool controlsInstalled;
 
     public PauseViewState CurrentState
     {
@@ -36,12 +38,14 @@ public class PauseMenuController : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Escape))
+        if (Input.GetKeyDown(PcInputBindings.Cancel))
             HandleEscape();
     }
 
     private void HandleEscape()
     {
+        if (KeyboardControlsView.ClosedFrame == Time.frameCount) return;
+        if (controls != null && controls.IsOpen) { controls.Close(); return; }
         if (currentState == PauseViewState.Settings)
             BackFromSettings();
         else if (currentState == PauseViewState.PauseRoot)
@@ -50,6 +54,7 @@ public class PauseMenuController : MonoBehaviour
             OpenPause();
     }
 
+    /// <summary>Opens the pause menu with visible keyboard focus and blocks gameplay until an explicit resume.</summary>
     public void OpenPause()
     {
         if (!CanOpenPause())
@@ -59,29 +64,45 @@ public class PauseMenuController : MonoBehaviour
         Time.timeScale = 0f;
         currentState = PauseViewState.PauseRoot;
         SetPanels(true, false);
+        if (!controlsInstalled && pauseRoot != null)
+        {
+            KeyboardControlsView.InstallEntry(pauseRoot, OpenControls);
+            controlsInstalled = true;
+        }
         Select(resumeButton);
         KeyboardMenuFocus.Attach(pauseRoot, resumeButton);
     }
 
+    /// <summary>Closes pause and its read-only help; gameplay input remains deferred through the closing frame.</summary>
     public void Resume()
     {
         if (isExiting || currentState == PauseViewState.Closed)
             return;
+        if (controls != null && controls.IsOpen) controls.Close();
 
         RestoreRuntimeState();
         currentState = PauseViewState.Closed;
         SetPanels(false, false);
     }
 
+    /// <summary>Opens settings only from the pause root, without stealing focus from an open Controls modal.</summary>
     public void OpenSettings()
     {
         if (isExiting || currentState != PauseViewState.PauseRoot)
             return;
+        if (controls != null && controls.IsOpen) return;
 
         currentState = PauseViewState.Settings;
         SetPanels(false, true);
         Select(settingsBackButton);
         KeyboardMenuFocus.Attach(settingsRoot, settingsBackButton);
+    }
+
+    /// <summary>Shows read-only Controls while retaining pause and its gameplay block; closing help never resumes the run.</summary>
+    public void OpenControls()
+    {
+        if (isExiting || currentState != PauseViewState.PauseRoot || !isActiveAndEnabled) return;
+        controls = KeyboardControlsView.Open(pauseRoot.transform);
     }
 
     public void BackFromSettings()
@@ -146,6 +167,7 @@ public class PauseMenuController : MonoBehaviour
 
     private void OnDisable()
     {
+        if (controls != null && controls.IsOpen) controls.Close();
         currentState = PauseViewState.Closed;
         SetPanels(false, false);
         RestoreRuntimeState();

@@ -31,6 +31,22 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(new PcCommandSource(key => key == KeyCode.E).TryTakeCommand(out _), Is.False);
         }
 
+        /// <summary>Controls derives contextual F/Q/E/Space and menu descriptions from actual input definitions.</summary>
+        [Test]
+        public void ControlsHintsMatchTheImplementedContextualKeys()
+        {
+            var walking = PcInputBindings.GetHints(PcInputContext.Walking);
+            Assert.That(walking.Single(hint => hint.Label.StartsWith("Interaction")).Keys, Is.EqualTo(new[] { PcInputBindings.InteractionToggle }));
+            Assert.That(walking.Single(hint => hint.Label.StartsWith("Wait")).Keys, Does.Contain(PcInputBindings.Space));
+            Assert.That(walking.Single(hint => hint.Label.StartsWith("Visual left")).Keys, Does.Contain(PcInputBindings.TurnLeft));
+            var interaction = PcInputBindings.GetHints(PcInputContext.Interaction);
+            Assert.That(interaction.Single(hint => hint.Label.StartsWith("Next object")).Keys, Does.Contain(PcInputBindings.NextObject));
+            Assert.That(interaction.Single(hint => hint.Label.StartsWith("Confirm")).Keys, Does.Contain(PcInputBindings.Space));
+            foreach (var hint in PcInputBindings.GetHints(PcInputContext.Menus))
+                foreach (KeyCode key in hint.Keys)
+                    Assert.That(PcInputBindings.MenuKeys.Contains(key) || key == PcInputBindings.Notes || key == KeyCode.LeftShift, Is.True);
+        }
+
         /// <summary>Visual quarter-turns wrap both ways without rotating the actor or accepting chords, held frames or blocked input.</summary>
         [Test]
         public void VisualFacingTurnsOnlyAnIsolatedCosmeticPivot()

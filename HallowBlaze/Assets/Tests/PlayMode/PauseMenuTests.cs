@@ -321,6 +321,43 @@ namespace HallowBlaze.Tests.PlayMode
                 new Rect(0, 72, 280, 200), 120), Is.EqualTo(72));
         }
 
+            /// <summary>Controls owns keys above pause and returns focus without leaking Escape, a turn or resource changes.</summary>
+            [UnityTest]
+            public IEnumerator PauseControlsCanOpenAndCloseWithKeyboardOnly()
+            {
+                Invoke(pauseMenu, "OpenPause");
+                KeyboardMenuFocus focus = pauseRoot.GetComponent<KeyboardMenuFocus>();
+                focus.HandleKey(KeyCode.Tab);
+                Assert.That(EventSystem.current.currentSelectedGameObject.name, Is.EqualTo("Controls"));
+                focus.HandleKey(KeyCode.Return);
+                KeyboardControlsView view = KeyboardControlsView.Current;
+                Assert.That(view, Is.Not.Null);
+                Assert.That(view.IsOpen, Is.True);
+                int food = session.ActiveRun.Food;
+                KeyboardMenuFocus helpFocus = view.GetComponent<KeyboardMenuFocus>();
+                helpFocus.HandleKey(KeyCode.Tab);
+                helpFocus.HandleKey(KeyCode.Tab);
+                helpFocus.HandleKey(KeyCode.Return);
+                Assert.That(view.Context, Is.EqualTo(PcInputContext.Interaction));
+                view.Resize(new Vector2(320, 480));
+                for (int index = 0; index < 10 && EventSystem.current.currentSelectedGameObject.GetComponent<ScrollRect>() == null; index++)
+                    helpFocus.HandleKey(KeyCode.Tab);
+                Assert.That(EventSystem.current.currentSelectedGameObject.GetComponent<ScrollRect>(), Is.Not.Null);
+                helpFocus.HandleKey(KeyCode.End);
+                Assert.That(EventSystem.current.currentSelectedGameObject.GetComponent<ScrollRect>().verticalNormalizedPosition, Is.EqualTo(0).Within(0.01f));
+                helpFocus.HandleKey(KeyCode.Escape);
+                Invoke(pauseMenu, "HandleEscape");
+                AssertState("PauseRoot");
+                Assert.That(Time.timeScale, Is.Zero);
+                Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.False);
+                Assert.That(EventSystem.current.currentSelectedGameObject.name, Is.EqualTo("Controls"));
+                Assert.That(session.ActiveRun.Food, Is.EqualTo(food));
+                Assert.That(GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
+                yield return null;
+                Invoke(pauseMenu, "HandleEscape");
+                AssertState("Closed");
+            }
+
         [UnityTest]
         public IEnumerator ResumeDefersGameplayInputUntilFollowingFrame()
         {

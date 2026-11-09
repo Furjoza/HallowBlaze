@@ -25,6 +25,20 @@ namespace HallowBlaze.Presentation.Runtime
         public const KeyCode Cancel = KeyCode.Escape;
         /// <summary>Opens or closes the read-only Field Notes.</summary>
         public const KeyCode Notes = KeyCode.N;
+        /// <summary>Compatible arrow alias for previous interaction object or replacement slot.</summary>
+        public const KeyCode PreviousObjectAlias = KeyCode.LeftArrow;
+        /// <summary>Compatible arrow alias for next interaction object or replacement slot.</summary>
+        public const KeyCode NextObjectAlias = KeyCode.RightArrow;
+        /// <summary>Selects the previous explicit action on the selected object.</summary>
+        public const KeyCode PreviousAction = KeyCode.UpArrow;
+        /// <summary>Selects the next explicit action on the selected object.</summary>
+        public const KeyCode NextAction = KeyCode.DownArrow;
+        /// <summary>Cycles actions forward, or backward with either Shift key held.</summary>
+        public const KeyCode CycleAction = KeyCode.Tab;
+        /// <summary>Compatible main Enter confirmation.</summary>
+        public const KeyCode Enter = KeyCode.Return;
+        /// <summary>Compatible numeric keypad confirmation.</summary>
+        public const KeyCode KeypadEnter = KeyCode.KeypadEnter;
 
         /// <summary>Absolute grid movement, independent of cosmetic facing.</summary>
         public static IReadOnlyDictionary<KeyCode, Direction> Movement { get; } =
@@ -45,6 +59,68 @@ namespace HallowBlaze.Presentation.Runtime
         });
 
         /// <summary>Recognizes confirmation aliases shared by the picker and menu submit path.</summary>
-        public static bool IsConfirmation(KeyCode key) => key == Space || key == KeyCode.Return || key == KeyCode.KeypadEnter;
+        public static bool IsConfirmation(KeyCode key) => key == Space || key == Enter || key == KeypadEnter;
+
+        /// <summary>Builds context-specific help from the actual runtime key definitions, never a separate hard-coded key map.</summary>
+        public static IReadOnlyList<ControlHint> GetHints(PcInputContext context)
+        {
+            var hints = new List<ControlHint>();
+            if (context == PcInputContext.Walking)
+            {
+                foreach (Direction direction in new[] { Direction.North, Direction.West, Direction.South, Direction.East })
+                {
+                    var keys = new List<KeyCode>();
+                    foreach (var binding in Movement) if (binding.Value.Equals(direction)) keys.Add(binding.Key);
+                    hints.Add(new ControlHint("Move " + direction.ToString().ToLowerInvariant(), keys.ToArray()));
+                }
+                hints.Add(new ControlHint("Wait - one turn", Space));
+                hints.Add(new ControlHint("Interaction - open / close", InteractionToggle));
+                hints.Add(new ControlHint("Visual left 90 degrees - free", TurnLeft));
+                hints.Add(new ControlHint("Visual right 90 degrees - free", TurnRight));
+                hints.Add(new ControlHint("Field Notes", Notes));
+                hints.Add(new ControlHint("Pause", Cancel));
+            }
+            else if (context == PcInputContext.Interaction)
+            {
+                hints.Add(new ControlHint("Previous object / replacement slot", PreviousObject, PreviousObjectAlias));
+                hints.Add(new ControlHint("Next object / replacement slot", NextObject, NextObjectAlias));
+                hints.Add(new ControlHint("Previous action: " + KeyboardControlsView.KeyName(PreviousAction) + " or Shift + " + CycleAction, PreviousAction, CycleAction, KeyCode.LeftShift));
+                hints.Add(new ControlHint("Next action", NextAction, CycleAction));
+                hints.Add(new ControlHint("Confirm selected action", Space, Enter, KeypadEnter));
+                hints.Add(new ControlHint("Cancel draft - free", InteractionToggle, Cancel));
+            }
+            else
+            {
+                hints.Add(new ControlHint("Next control", KeyCode.Tab, KeyCode.DownArrow, KeyCode.RightArrow));
+                hints.Add(new ControlHint("Previous control: Up / Left or Shift + Tab", KeyCode.Tab, KeyCode.LeftShift, KeyCode.UpArrow, KeyCode.LeftArrow));
+                hints.Add(new ControlHint("Activate / choose route", Space, KeyCode.Return, KeyCode.KeypadEnter));
+                hints.Add(new ControlHint("Back / cancel when available", Cancel));
+                hints.Add(new ControlHint("Scroll focused region", KeyCode.PageUp, KeyCode.PageDown, KeyCode.Home, KeyCode.End));
+                hints.Add(new ControlHint("Close Field Notes", Notes, Cancel));
+                hints.Add(new ControlHint("Adjust focused slider", KeyCode.LeftArrow, KeyCode.RightArrow));
+            }
+            return hints.AsReadOnly();
+        }
+
+        /// <summary>Immutable visible action description associated with actual keys in one input context.</summary>
+        public sealed class ControlHint
+        {
+            internal ControlHint(string label, params KeyCode[] keys) { Label = label; Keys = Array.AsReadOnly(keys); }
+            /// <summary>Gets the context-specific player-facing action, including free versus turn-consuming behavior.</summary>
+            public string Label { get; }
+            /// <summary>Gets the runtime keys highlighted by the diagram.</summary>
+            public IReadOnlyList<KeyCode> Keys { get; }
+        }
+    }
+
+    /// <summary>Distinct player-facing contexts displayed without changing the active gameplay input owner.</summary>
+    public enum PcInputContext
+    {
+        /// <summary>Absolute movement, Wait and free cosmetic facing outside drafts and modals.</summary>
+        Walking,
+        /// <summary>Free object/action selection and explicit confirmed interaction.</summary>
+        Interaction,
+        /// <summary>Keyboard focus, route choice, settings and read-only Notes.</summary>
+        Menus
     }
 }

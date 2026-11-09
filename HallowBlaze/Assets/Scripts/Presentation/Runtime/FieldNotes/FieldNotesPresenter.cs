@@ -271,8 +271,8 @@ namespace HallowBlaze.Presentation.Runtime
             if (size != viewport) Resize(size);
             openButton.interactable = !IsOpen && releaseAfterFrame < 0 && mayOpen();
             if (IsOpen && !mayOpen()) { Close(); return; }
-            if (Input.GetKeyDown(KeyCode.N)) { if (IsOpen) Close(); else Open(); }
-            else if (IsOpen && Input.GetKeyDown(KeyCode.Escape)) Close();
+            if (Input.GetKeyDown(PcInputBindings.Notes)) { if (IsOpen) Close(); else Open(); }
+            else if (IsOpen && Input.GetKeyDown(PcInputBindings.Cancel)) Close();
         }
 
         private void LateUpdate()
