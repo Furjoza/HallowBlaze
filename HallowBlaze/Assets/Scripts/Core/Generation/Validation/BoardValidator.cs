@@ -188,7 +188,7 @@ namespace HallowBlaze.Core.Generation.Validation
                 if (!budgeted)
                     errors.Add(new BoardValidationError("UnbudgetedResource", "No initial item-count budget exists for family " + entry.ResourceFamilyId + ".", context));
             }
-            if (errors.Count == 0 && blueprint.Config.Id == "ordinary.board.v1" && blueprint.Config.Version == 3 &&
+            if (errors.Count == 0 && blueprint.Config.Id == "ordinary.board.v1" && blueprint.Config.Version >= 3 &&
                 !BoardEntrySafety.Check(blueprint, catalog).HasEscape)
                 errors.Add(new BoardValidationError("EntryEscapeHorizon", "No surviving Move/Wait witness reaches distance three or an exit within four accepted commands at one HP and five Food.", context, blueprint.Start));
             return new BoardValidationReport(blueprint.Address, blueprint.Config, errors,

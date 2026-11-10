@@ -160,7 +160,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(opening.Segments, Has.Count.EqualTo(3));
             Assert.That(opening.Segments[0].SegmentId, Is.EqualTo("segment.shelter-warm-up.v2.entry"));
             Assert.That(opening.Segments[0].GenerationConfigurationId, Is.EqualTo("ordinary.board.v1"));
-            Assert.That(opening.Segments[0].GenerationVersion, Is.EqualTo(3));
+            Assert.That(opening.Segments[0].GenerationVersion, Is.EqualTo(4));
             Assert.That(world.GetOutgoingEdges(world.GoalNodeId), Is.Empty);
             Assert.Throws<KeyNotFoundException>(() => world.GetOutgoingEdges("unknown.node"));
         }
@@ -498,7 +498,7 @@ namespace HallowBlaze.Tests.EditMode
                     else
                     {
                         Assert.That(segment.GenerationConfigurationId, Is.EqualTo("ordinary.board.v1"));
-                        Assert.That(segment.GenerationVersion, Is.EqualTo(3));
+                        Assert.That(segment.GenerationVersion, Is.EqualTo(4));
                     }
             }
             Assert.That(world.Edges.SelectMany(edge => edge.Segments).Select(segment => segment.SegmentId), Is.Unique);

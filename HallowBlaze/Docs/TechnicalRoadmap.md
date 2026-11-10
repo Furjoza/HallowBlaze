@@ -6513,7 +6513,7 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 
 ## `M7.15` - Restore berry-bush and carrot food presence
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-11-04; final generation/regression gates and independent review PASS. Owner manual smoke remains assigned to M7.17.
 **Priority:** P1 current-content repair.
 **Related contract:** Sections 9, 18 and transitional O-003 food collection; M10 stays deferred.
 **Rationale:** Familiar food varieties belong in the current survival experience rather than waiting for a bag or becoming only one generic icon.
@@ -6527,6 +6527,10 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 **Test plan:** Catalog/manifest/reward EditMode tests, deterministic representative seeds and required validator/seed gates for changed configurations; real-view PlayMode collection/+Food for both, Continue and animations-off. No promise that every board contains both.
 **Save and compatibility impact:** Preserve published identities/old generation versions, explicitly migrate changed persisted mappings. Do not change Food caps/costs or implement deferred satiety.
 **Required evidence:** Content-to-art/effect/supply matrix, version policy, exact results and visible collected examples of both foods.
+
+**Current content contract (2026-11-04):** The owner requires different fixed rewards, never rolled values or average-based compensation. New ordinary/4 food is berries `ordinary.berries` +5 (`Food2` prefab), food `legacy.food` +10 (`Food`), carrot `ordinary.carrot` +15 (`Carrot`) and soda `legacy.soda` +20 (`Soda`). The existing shared item-count supply remains 2-5, with opening stages 3-4/2-3/1-2; no individual type or total Food value is guaranteed. Each item grants its own fixed amount once, before the existing cost. Carrots are visible automatic food in new boards; old buried-cache rules and old `legacy.bush-food` +10 are unchanged. Fresh publication is ordinary/4, with versions 1-3 and imported legacy RNG kept pinned. No save schema, Food cap, action cost, prefab, scene or package changes.
+
+**Focused evidence:** Production catalog regression reproduced missing `legacy.bush-food` before restoration. Fixed-reward/catalog/generation and world compatibility tests pass; production views show both existing foods, exact +5/+15 HUD gains and one removal in both animation modes, with free stale rejection and no reward after synchronization. Parameterized serialized Continue covers ordinary versions 1-4. Final EditMode 1269 passed plus one expected explicit milestone skip, graphics PlayMode 240/240, and the separately selected 10,000-seed gate twice passed. Both milestone passes have zero invalid boards/fallbacks and fingerprint `b2437f150de2c33dedc028efed2112a84e6d9fcb4a00a063f89e046fed3d382a`, taking 67.56/94.22 seconds. Independent review PASS. Owner visual/resource smoke remains in M7.17 by explicit approval.
 
 ---
 
