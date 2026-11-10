@@ -6706,6 +6706,63 @@ No DTO/schema change, profile erasure or inventory activation.
 
 ---
 
+## `M7.23` - Shared atlas, inspection and keyboard follow-up
+
+**Status:** `Done` - accepted 2026-11-10. Shared atlas, keyboard access and board-scoped
+discovery feedback implemented. Reviewer terminal focus/final-atlas/death-popup findings
+corrected; lifecycle 40/40 and final graphics PlayMode 250/250 passed with fresh XML.
+Independent recheck PASS. M7.17 remains Revise pending the owner's retest.
+**Priority:** P0 before repeating M7.17.
+**Related contract:** Sections 7, 13.4 and 18.1; explicit owner decision on 2026-11-09.
+**Scope:** W/S supplement A/D, arrows and Tab in menus; WASD also navigates contextual
+objects/actions. L opens/closes the intent legend with keyboard scrolling. Selected contextual
+options and board markers share the authored menu color without removing their shape/number cues.
+Replace the standalone Field Notes reader with the existing atlas. Every known node/road is
+inspectable by mouse/keyboard and its filtered details appear in the former MAP KEY area;
+recorded system facts remain readable there. Clear transient observation popups at board
+boundaries without erasing durable facts. Preserve explicit legal route confirmation.
+**Closed write scope:** GameManager; AtlasScreenController; EnemyIntentLegend;
+FieldNotesPresenter (profile access/feedback only), InteractionPresenter, KeyboardMenuFocus,
+PcCommandSource, PcInputBindings and PlayerVisualFacing; existing AtlasScreenTests,
+AxePresentationTests, EnemyIntentPresentationTests, FieldNotesPresentationTests,
+GameSessionLifecycleTests, OrderedBoardPresentationTests and PlayModeInfrastructureTests;
+GameDesignContract, Testing and this roadmap. No asset, scene, prefab, package, settings or
+agent-configuration changes; only the known Unity-generated SENTIS token exception applies.
+**Acceptance criteria:** All requested keys are effective and modal-safe; selection, legend
+inspection and atlas reading are free and never replay gameplay input. Known historical and
+current map objects are reachable without revealing unknown content or automatically travelling.
+Facts survive death/new run and remain spoiler-safe; only New Game replaces the profile.
+An old board's discovery popup cannot reappear on the atlas or a later board. Desktop and
+320x480 layout remain readable, scrollable and nonblank, preserving the selected fact on resize.
+**Non-goals:** Miss audio (M7.24), Controls redesign (M7.20), directional art (M7.21), route
+resource collection/statistics (M8.3/M8.4), tool-source discovery (M8.5), migration or human-gate closure.
+**Validation:** Focused key/render/lifecycle tests; final graphics PlayMode with fresh XML,
+expected test identities and counts; scoped diff/integrity check; independent review after
+the mechanical gate. Owner physical-key/visual acceptance remains the M7.17 retest.
+**Save impact:** No schema, ID, profile reset, resource sample or route-travel change.
+**Historical clarification:** M7.22's W/S exclusion remains its dated evidence, not the current
+menu contract after the owner's additional-alias decision.
+
+---
+
+## `M7.24` - Audible zombie attack miss
+
+**Status:** `Planned` - explicitly requested as later work by the owner on 2026-11-09.
+**Priority:** P2.
+**Scope:** Add a recognizable miss cue to the actual executed zombie attack miss path,
+using approved/authored audio and the existing presentation-owned attack/audio lifetime.
+Keep hit and miss distinguishable without relying only on color. Preserve the existing
+animation-off audio policy unless the owner explicitly revises it.
+**Acceptance criteria:** A completed miss plays its cue once; hit, rest, preview and rejected
+commands cannot play it. Mute, interruption, recovery, deactivation and disposal do not leak,
+duplicate or strand playback. Audio never changes damage, target/intent, turn costs or RNG.
+**Validation:** Focused hit/miss/cancellation/mute PlayMode checks with non-silent samples,
+both presentation modes and an owner listening verdict.
+**Non-goals:** New combat rules, mechanical noise, sprite redesign or save changes.
+**Save impact:** None.
+
+---
+
 ### M7 gate
 
 M7 is complete only after the original M7.1-M7.8 obligations and follow-ups M7.9-M7.18 are
@@ -6716,6 +6773,8 @@ separately changes the order. Optional authoring-tool planning substitutes for n
 M7.19 repairs the owner smoke before its repeat; future visual redesigns M7.20-M7.21 do not
 block testing the agreed interim presentation and do not waive the M7.17 owner verdict.
 M7.22 applies the owner's explicit berry, route-key and step-noise corrections before that retest.
+M7.23 applies the later shared-atlas and additional-key corrections before the same retest;
+M7.24 is explicitly deferred and is not implemented or accepted by this repair.
 
 ---
 

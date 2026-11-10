@@ -1,5 +1,55 @@
 # HallowBlaze Testing
 
+## M7.23 Shared Atlas And Keyboard Follow-Up
+
+The owner accepted additional W/S menu navigation on 2026-11-09: W/A select the previous
+control, S/D the next; arrows and Tab/Shift+Tab remain. In the contextual picker, A/D join
+Q/E and left/right for objects, W/S join up/down and Tab/Shift+Tab for per-object actions.
+Only explicit confirmation resolves a turn. The selected option text, numbered target and
+diamond outline share `InteractionPresenter.SelectionColor`, the authored menu selected
+color `(150, 200, 200, 255)`; unselected targets remain white squares.
+
+L toggles the enemy-intent legend on an idle board. Page Up/Down and Home/End scroll it;
+blocked and duplicate samples are discarded, and an L/movement chord cannot produce a move.
+
+The standalone Field Notes reader no longer exists. N or the book opens the shared atlas
+without observing exits, changing knowledge or selecting travel. Known nodes and roads have
+mouse and keyboard controls; the former MAP KEY area contains their knowledge-filtered
+details. Observations opens the profile-owned fact list in the same inspector, retaining
+distinct icons, full text, provenance and neutral missing-definition entries. Reading owns
+its independent input block and closing holds it through the frame. Required route choice
+and the final atlas cannot be cancelled as voluntary reading.
+
+Only the transient current-board discovery queue is cleared when leaving the board. Saved
+facts, deduplication and discovery counts remain. Death/new run preserve profile knowledge;
+explicit New Game still replaces the profile. There is no DTO/schema or generator change.
+M8.3 route-family clues and M8.4 structured resource observations remain Planned. M8.4 is
+min/max/count for completed visits, not a promised average; the current inspector cannot
+invent berry totals or treat unrecorded resources as zero. Miss audio is deferred to M7.24.
+
+Focused checks reuse `AtlasScreenTests`, `FieldNotesPresentationTests`,
+`EnemyIntentPresentationTests`, `AxePresentationTests`, `OrderedBoardPresentationTests` and
+`GameSessionLifecycleTests`. They exercise all known map controls and reject unknown IDs,
+keep inspection save/turn-free, preserve explicit route identity, cover modal/scene/death/reset
+lifecycle and render desktop/narrow pixel evidence. Atlas text uses fixed pixel sizes, a
+pannable map and a scrollable inspector; resizing preserves the selected knowledge entry.
+`PlayModeInfrastructureTests.WriteLiveTestReport` arms one official Unity Test Framework
+XML outside the project across a live PlayMode domain reload. Final acceptance requires a
+fresh report with expected identities, nonzero execution and zero failures, then review.
+Automated input/rendering is not the owner's physical-key or visual/listening verdict.
+
+On 2026-11-10 the final graphics PlayMode regression passed 250/250 with a fresh XML,
+zero failures/skips and the expected atlas, interaction, legend, knowledge and production
+lifecycle test identities. Focused atlas checks passed 4/4 and knowledge checks 7/7; the final
+desktop/portrait render recheck passed 2/2. Independent review found terminal focus ownership,
+retained final-atlas visibility and production death-popup gaps. All three were corrected;
+the expanded lifecycle fixture passed 40/40 before the final full regression. It opens reading
+through the production N sampler after victory, confirms facts without restarting, closes with
+N/Escape/X, restores terminal actions and the map, and checks an unread popup through actual
+health/starvation `HandleBoardOutcome` paths and subsequent reading. Independent recheck passed
+on 2026-11-10 after inspecting the corrected code, diff and fresh reports.
+M7.17 still requires the owner's retest; no visual/listening acceptance is inferred here.
+
 ## M7.9 Three-Board Opening
 
 Fresh New Game and post-death runs use exactly three ordered boards on
@@ -92,8 +142,9 @@ route ID, travel cost, scene or prefab changes are involved.
 
 ## M7.19 Owner Smoke Follow-Up
 
-**Superseded details (2026-11-06):** M7.22 corrects three M7.19 interpretations. Current
-menu/route aliases are A/D and arrows, not W/S. Fresh ordinary/6 berries are on a real blocking
+**Superseded details (2026-11-06):** M7.22 corrects three M7.19 interpretations. At that publication,
+menu/route aliases were A/D and arrows, not W/S; M7.23 later accepts W/S as additional aliases.
+Fresh ordinary/6 berries are on a real blocking
 bush and require existing manual/axe clearing before +5 Food collection on entry. Movement
 noise lasts only its own turn; interaction/tool noise and full authored audio are unchanged.
 The owner explicitly kept tool-source discovery/atlas icons in the existing M8.5 order.
