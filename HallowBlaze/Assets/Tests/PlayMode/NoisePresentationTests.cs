@@ -56,7 +56,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(board.GetActiveNoises().Single(), Is.SameAs(noise));
         }
 
-        /// <summary>Real runtime command replay publishes noise once, silent Wait ages it and terminal/disposal clears it.</summary>
+        /// <summary>Runtime replay shows step noise only in its emitting turn and clears its footprint on the next accepted command.</summary>
         [UnityTest]
         public IEnumerator RuntimeReplayPublishesAndExpiresWithoutExtraResolution()
         {
@@ -82,12 +82,17 @@ namespace HallowBlaze.Tests.PlayMode
                         yield return null;
                     Assert.That(moved.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
                     NoiseEvent noise = moved.Result.Result.Events.OfType<NoiseEvent>().Single();
+                    Assert.That(noise.Noise.RemainingTurns, Is.EqualTo(1));
                     Assert.That(presenter.NoiseDisplay.Projections.Single(), Is.SameAs(noise.Noise));
                     Assert.That(sinks.Noises, Is.EqualTo(1));
                     Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
                     Assert.That(run.Food, Is.EqualTo(9));
                     presenter.Coordinator.SubmitAsync(new WaitCommand()).GetAwaiter().GetResult();
-                    Assert.That(presenter.NoiseDisplay.Projections.Single().RemainingTurns, Is.EqualTo(1));
+                    Assert.That(presenter.NoiseDisplay.Projections, Is.Empty);
+                    Assert.That(presenter.NoiseDisplay.GetComponentsInChildren<LineRenderer>(), Is.Empty);
+                    Assert.That(runtime.BoardState.GetActiveNoises(), Is.Empty);
+                    Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(2));
+                    Assert.That(run.Food, Is.EqualTo(8));
                     presenter.Coordinator.SubmitAsync(new WaitCommand()).GetAwaiter().GetResult();
                     Assert.That(presenter.NoiseDisplay.Projections, Is.Empty);
                     Assert.That(sinks.Noises, Is.EqualTo(1));

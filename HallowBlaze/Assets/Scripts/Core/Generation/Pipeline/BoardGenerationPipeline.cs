@@ -176,15 +176,15 @@ namespace HallowBlaze.Core.Generation.Pipeline
     /// <summary>Orchestrates generate, validate, retry and authored fallback with hard synchronous work-count bounds.</summary>
     public static class BoardGenerationPipeline
     {
-        /// <summary>Versions the ordinary food catalog and distribution; published versions 1-3 retain their saved layouts.</summary>
-        public const int OrdinaryConfigurationVersion = 4;
+        /// <summary>Versions guarded berry placement; published versions 1-5 retain their saved layouts and resource bands.</summary>
+        public const int OrdinaryConfigurationVersion = 6;
 
         /// <summary>Caps candidate calls; larger requested limits are rejected before executing a builder.</summary>
         public const int MaximumAttempts = 8;
         /// <summary>Caps the ordered fallback library; builders must themselves perform bounded work.</summary>
         public const int MaximumFallbacks = 8;
 
-        /// <summary>Runs versions 3-4 with entry-safety validation, or retained version 2 with its original validation and selection.</summary>
+        /// <summary>Runs versions 3-6 with entry-safety validation, or retained version 2 with its original validation and selection.</summary>
         /// <exception cref="ArgumentNullException">The request is null.</exception>
         /// <exception cref="ArgumentException">The request does not name the supported ordinary pipeline version.</exception>
         public static BoardGenerationResult GenerateOrdinary(BoardGenerationRequest request)
@@ -192,7 +192,7 @@ namespace HallowBlaze.Core.Generation.Pipeline
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (request.Configuration.Id != OrdinaryBoardGenerator.ConfigurationId ||
                 (request.Configuration.Version < 2 || request.Configuration.Version > OrdinaryConfigurationVersion))
-                throw new ArgumentException("Ordinary pipeline requires ordinary.board.v1 versions 2-4.", nameof(request));
+                throw new ArgumentException("Ordinary pipeline requires ordinary.board.v1 versions 2-6.", nameof(request));
             return Generate(request, (input, subSeed) => OrdinaryBoardGenerator.Generate(input.Address,
                 input.Configuration, input.Catalog, subSeed), OrdinaryBoardFallbacks.CreateLibrary());
         }

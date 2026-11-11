@@ -118,7 +118,29 @@ namespace HallowBlaze.Tests.PlayMode
             first.gameObject.SetActive(false);
             focus.RecoverFocus();
             Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(last.gameObject));
-            Assert.That(last.transform.Find("Keyboard focus").gameObject.activeSelf, Is.True);
+            Assert.That(last.transform.Find("Keyboard focus"), Is.Null);
+        }
+
+        /// <summary>Independent Controls closes with a hidden host or ancestor and releases keyboard ownership to the remaining menu.</summary>
+        [UnityTest]
+        public IEnumerator ControlsClosesWhenHostOrAncestorBecomesInactive([Values(false, true)] bool hideAncestor)
+        {
+            GameObject background = Track(new GameObject("Remaining menu", typeof(RectTransform)));
+            Button remaining = new GameObject("Remaining action", typeof(RectTransform), typeof(Image), typeof(Button)).GetComponent<Button>();
+            remaining.transform.SetParent(background.transform, false);
+            KeyboardMenuFocus remainingFocus = KeyboardMenuFocus.Attach(background, remaining.gameObject);
+            GameObject ancestor = Track(new GameObject("Controls host ancestor", typeof(RectTransform)));
+            GameObject host = new GameObject("Controls host", typeof(RectTransform));
+            host.transform.SetParent(ancestor.transform, false);
+            KeyboardMenuFocus.Attach(host);
+            KeyboardControlsView view = KeyboardControlsView.Open(host.transform);
+            Assert.That(view.IsOpen, Is.True);
+            (hideAncestor ? ancestor : host).SetActive(false);
+            yield return null;
+            Assert.That(view == null || !view.IsOpen, Is.True);
+            Assert.That(KeyboardControlsView.Current, Is.Null);
+            remainingFocus.RecoverFocus();
+            Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(remaining.gameObject));
         }
 
         /// <summary>A child menu exclusively owns keyboard activation and returns a valid parent focus.</summary>

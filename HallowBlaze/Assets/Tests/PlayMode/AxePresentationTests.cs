@@ -102,6 +102,20 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(picker.SelectedIndex, Is.EqualTo(picker.Options.Count));
             Assert.That(picker.RefreshOptions(), Is.True);
             Assert.That(picker.SelectedIndex, Is.EqualTo(picker.Options.Count));
+            picker.SampleInputAsync(key => key == KeyCode.W, -175);
+            Assert.That(picker.SelectedIndex, Is.Zero);
+            picker.SampleInputAsync(key => key == KeyCode.S, -174);
+            Assert.That(picker.SelectedIndex, Is.EqualTo(picker.Options.Count));
+            picker.SampleInputAsync(key => key == KeyCode.UpArrow, -173);
+            Assert.That(picker.SelectedIndex, Is.Zero);
+            picker.SampleInputAsync(key => key == KeyCode.Tab, -172);
+            Assert.That(picker.SelectedIndex, Is.EqualTo(picker.Options.Count));
+            picker.SampleInputAsync(key => key == KeyCode.Tab, -171, true);
+            Assert.That(picker.SelectedIndex, Is.Zero);
+            picker.SampleInputAsync(key => key == KeyCode.S, -170);
+            Assert.That(picker.SelectedIndex, Is.EqualTo(picker.Options.Count));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+            Assert.That(fixture.Run.Food, Is.EqualTo(20));
             picker.SampleInputAsync(key => key == KeyCode.E, -160);
             Assert.That(picker.SelectedIndex, Is.EqualTo(picker.Options.Count), "Wrapping one object must not replace its selected action.");
             picker.SampleInputAsync(key => key == KeyCode.Q || key == KeyCode.E, -16);
@@ -165,8 +179,8 @@ namespace HallowBlaze.Tests.PlayMode
             string[] entities = fixture.Runtime.BoardState.GetEntities().Select(entity => entity.Id + "@" + entity.Position).ToArray();
             var retained = fixture.Runtime.Listeners.Single().LockedIntent;
             for (int frame = 10000; frame < 10040; frame++)
-                Assert.That(facing.SampleInput(key => key == KeyCode.E, frame, fixture.Presenter.Coordinator.CanSubmit), Is.True);
-            Assert.That(facing.QuarterTurns, Is.Zero);
+                Assert.That(facing.SampleInput(key => key == (frame % 2 == 0 ? KeyCode.E : KeyCode.Q), frame, fixture.Presenter.Coordinator.CanSubmit), Is.True);
+            Assert.That(facing.QuarterTurns, Is.EqualTo(3));
             Assert.That(PersistenceJsonSerializer.SerializeRun(fixture.Run), Is.EqualTo(before));
             Assert.That(fixture.Runtime.BoardState.GetEntities().Select(entity => entity.Id + "@" + entity.Position), Is.EqualTo(entities));
             Assert.That(fixture.Runtime.Listeners.Single().LockedIntent, Is.SameAs(retained));
@@ -179,7 +193,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(facing.SampleInput(key => key == KeyCode.E, 10041, fixture.Presenter.Coordinator.CanSubmit), Is.False);
             picker.SampleInputAsync(key => key == KeyCode.E, -49);
             Assert.That(picker.SelectedIndex, Is.GreaterThanOrEqualTo(0));
-            Assert.That(facing.QuarterTurns, Is.Zero);
+            Assert.That(facing.QuarterTurns, Is.EqualTo(3));
         }
 
         /// <summary>The visible emitted snapshot is the Listener's hearing memory and only then documents the durable fact.</summary>

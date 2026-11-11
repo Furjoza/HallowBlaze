@@ -9,6 +9,7 @@ using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.Random;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
+using HallowBlaze.Core.Turns.Resolution;
 using HallowBlaze.Presentation.Runtime;
 using UnityEngine;
 using EntityId = HallowBlaze.Core.Board.Primitives.EntityId;
@@ -179,7 +180,7 @@ public class BoardManager : MonoBehaviour
 
     /// <summary>
     /// Creates and validates the addressed layout before publishing one authoritative runtime.
-    /// Ordinary version 4 adds fixed-value food varieties; versions 1-3, checkpoint and legacy boards retain their generation.
+    /// Ordinary version 5 adds medical supply; versions 1-4, checkpoint and legacy boards retain their generation.
     /// Authored landmarks require the exact durably selected template/version/variant and use the same runtime/resolver.
     /// A failed setup destroys its staged views and leaves no active request or runtime.
     /// Ordinary enemy rules come from the catalog; legacy variants retain prefab 10/20 HP data.
@@ -403,6 +404,19 @@ public class BoardManager : MonoBehaviour
                 {
                     GameObject prefab = landmarkContent?.FindPrefab(entity.Definition.ContentId) ?? ResolveOrdinaryPrefab(entity.Definition);
                     view = Instantiate(prefab, position, Quaternion.identity, stagingHolder);
+                    if (entity.Definition.ContentId == OrdinaryBoardContent.BerryFoodId && request.Address.GenerationVersion < 6)
+                    {
+                        RequirePrefabs(wallTiles, nameof(wallTiles));
+                        SpriteRenderer foliage = wallTiles[0].GetComponent<SpriteRenderer>();
+                        SpriteRenderer berries = view.GetComponent<SpriteRenderer>();
+                        var bush = new GameObject("Berry bush", typeof(SpriteRenderer)).GetComponent<SpriteRenderer>();
+                        bush.transform.SetParent(view.transform, false);
+                        bush.sprite = foliage.sprite;
+                        bush.sharedMaterial = foliage.sharedMaterial;
+                        bush.color = foliage.color;
+                        bush.sortingLayerID = berries.sortingLayerID;
+                        bush.sortingOrder = berries.sortingOrder - 1;
+                    }
                 }
                 views.Add(entity.Id, view);
                 if (entity.Definition.Traits.IsExit)
@@ -465,6 +479,11 @@ public class BoardManager : MonoBehaviour
 
     private GameObject ResolveOrdinaryPrefab(BoardEntityDefinition definition)
     {
+        if (definition.ContentId == FirstAidInteractionAction.ContentId)
+        {
+            RequirePrefabs(aidTiles, nameof(aidTiles));
+            return aidTiles[cosmeticRandom.NextInt(0, aidTiles.Length)];
+        }
         if (definition.ContentId == OrdinaryBoardContent.BerryFoodId)
         {
             if (bushFoodTiles == null)

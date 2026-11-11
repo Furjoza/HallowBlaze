@@ -44,13 +44,13 @@ namespace HallowBlaze.Presentation.Runtime
         void ShowEvent(GameEvent gameEvent);
     }
 
-    /// <summary>Optionally bounds player-step audio to its movement presentation; instant steps are silent.</summary>
+    /// <summary>Owns full authored player-step playback independently of interpolation; instant steps are silent.</summary>
     public interface IPlayerStepAudio
     {
-        /// <summary>Starts at most one short non-looping cue within the supplied unscaled movement duration.</summary>
-        /// <param name="duration">Movement presentation duration in seconds; zero requests silence.</param>
+        /// <summary>Starts one full non-looping cue for animated movement, without cutting it at movement completion.</summary>
+        /// <param name="duration">Movement presentation duration in seconds; zero requests silence, not a deferred cue.</param>
         void BeginStep(float duration);
-        /// <summary>Stops only this player's current step cue on completion, recovery or disposal.</summary>
+        /// <summary>Stops only this player's current step cue on cancellation, recovery or disposal.</summary>
         void StopStep();
     }
 
@@ -190,6 +190,12 @@ namespace HallowBlaze.Presentation.Runtime
                 return Task.CompletedTask;
             });
             Dispatcher.Register<FoodRestoredEvent>((gameEvent, token) => RefreshFood(gameEvent));
+            Dispatcher.Register<HealthRestoredEvent>((gameEvent, token) =>
+            {
+                RefreshHud();
+                (hud as ITurnResourceGains)?.AddResourceGains(gameEvent.Amount, 0);
+                return ShowFeedback(gameEvent);
+            });
             Dispatcher.Register<ActionCostAppliedEvent>((gameEvent, token) => RefreshHud());
             Dispatcher.Register<NoiseEvent>((gameEvent, token) =>
             {
@@ -371,7 +377,7 @@ namespace HallowBlaze.Presentation.Runtime
                     throw new InvalidOperationException("Authoritative position changed during presentation: " + gameEvent.EntityId);
                 feedback.ShowEvent(gameEvent);
             }
-            finally { stepAudio?.StopStep(); }
+            catch { stepAudio?.StopStep(); throw; }
         }
 
         private async Task PushAsync(BoulderPushedEvent gameEvent, CancellationToken token)
@@ -408,7 +414,7 @@ namespace HallowBlaze.Presentation.Runtime
                 ValidatePushPositions(gameEvent);
                 feedback.ShowEvent(gameEvent);
             }
-            finally { stepAudio?.StopStep(); }
+            catch { stepAudio?.StopStep(); throw; }
         }
 
         private void ValidatePushPositions(BoulderPushedEvent gameEvent)

@@ -7,7 +7,7 @@ using UnityEngine.UI;
 
 namespace HallowBlaze.Presentation.Runtime
 {
-    /// <summary>Profile-owned read-only notes and durable discovery feedback; independent from the current board/run and all gameplay commands.</summary>
+    /// <summary>Profile-owned atlas access and board-scoped discovery feedback; recorded facts never belong to the reader or current run.</summary>
     [DefaultExecutionOrder(-60)]
     public sealed class FieldNotesPresenter : MonoBehaviour, IDisposable
     {
@@ -17,17 +17,11 @@ namespace HallowBlaze.Presentation.Runtime
         private Action<bool> ownInput;
         private readonly Queue<FieldNoteEntry> notices = new Queue<FieldNoteEntry>();
         private readonly HashSet<string> notified = new HashSet<string>(StringComparer.Ordinal);
-        private readonly List<GameObject> rows = new List<GameObject>();
         private readonly List<GameObject> hints = new List<GameObject>();
         private readonly Dictionary<string, Sprite> icons = new Dictionary<string, Sprite>(StringComparer.Ordinal);
         private readonly List<Texture2D> textures = new List<Texture2D>();
-        private GameObject panel;
         private GameObject notice;
-        private RectTransform listViewport;
-        private RectTransform listContent;
-        private RectTransform detailViewport;
-        private Text detail;
-        private Text empty;
+        private string selectedText = string.Empty;
         private Text noticeTitle;
         private Text noticeLabel;
         private Image noticeIcon;
@@ -37,6 +31,7 @@ namespace HallowBlaze.Presentation.Runtime
         private bool available = true;
         private bool discoveryObscured;
         private int releaseAfterFrame = -1;
+        private int? sampledFrame;
 
         /// <summary>Gets the transient canvas, never a profile serialization container.</summary>
         public GameObject Root { get; private set; }
@@ -47,47 +42,35 @@ namespace HallowBlaze.Presentation.Runtime
         /// <summary>Gets the current spoiler-safe known entries; the profile remains authoritative.</summary>
         public IReadOnlyList<FieldNoteEntry> Entries { get; private set; } = Array.Empty<FieldNoteEntry>();
         /// <summary>Gets the selected known text, or the empty state without undiscovered rule hints.</summary>
-        public string SelectedText => detail != null ? detail.text : "";
-        /// <summary>Gets the active persistent discovery title, or empty after acknowledgement.</summary>
-        public string FeedbackTitle => notice != null && notice.activeSelf ? noticeTitle.text : "";
+        public string SelectedText => selectedText;
+        /// <summary>Gets the current board's visible discovery title, or empty after acknowledgement or a board transition.</summary>
+        public string FeedbackTitle => notice != null && notice.activeInHierarchy ? noticeTitle.text : "";
         /// <summary>Gets the number of unique committed discoveries received during this UI lifetime.</summary>
         public int DiscoveryFeedbackCount { get; private set; }
+
+        /// <summary>Requests the shared atlas reader after this owner has acquired its independent input block.</summary>
+        public event Action Opened;
+        /// <summary>Closes the shared reader without releasing another input owner.</summary>
+        public event Action Closed;
+        /// <summary>Publishes a selected profile-owned fact ID; undiscovered IDs are never emitted.</summary>
+        public event Action<string> SelectionChanged;
 
         /// <summary>Binds once to a profile and explicit input owner; opening notes never observes facts, saves, or resolves a turn.</summary>
         public void Bind(ProfileState profile, FactKnowledge knowledge, Func<bool> mayOpen, Action<bool> ownInput, Vector2 size)
         {
-            if (IsDisposed || this.profile != null) throw new InvalidOperationException("Field Notes belongs to one profile lifetime.");
+            if (IsDisposed || this.profile != null) throw new InvalidOperationException("Atlas access belongs to one profile lifetime.");
             this.profile = profile ?? throw new ArgumentNullException(nameof(profile));
             this.knowledge = knowledge ?? throw new ArgumentNullException(nameof(knowledge));
             this.mayOpen = mayOpen ?? throw new ArgumentNullException(nameof(mayOpen));
             this.ownInput = ownInput ?? throw new ArgumentNullException(nameof(ownInput));
-            Root = new GameObject("Field Notes canvas", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster)) { hideFlags = HideFlags.DontSave };
+            Root = new GameObject("Atlas access", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster)) { hideFlags = HideFlags.DontSave };
             Root.transform.SetParent(transform, false);
             Root.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
             Root.GetComponent<Canvas>().sortingOrder = 110;
-            openButton = ButtonAt("Open Field Notes", Root.transform, OpenFromButton, "book");
+            openButton = ButtonAt("Open Atlas", Root.transform, OpenFromButton, "book");
             openButton.transition = Selectable.Transition.None;
             Place((RectTransform)openButton.transform, 8, 76, 44, 44);
-            Hint(openButton, "Field Notes");
-            panel = new GameObject("Field Notes", typeof(RectTransform), typeof(Image));
-            panel.transform.SetParent(Root.transform, false);
-            panel.GetComponent<Image>().color = new Color32(239, 244, 241, 255);
-            Text heading = TextAt("Title", panel.transform, "Field Notes", 26);
-            Place(heading.rectTransform, 16, 14, 240, 38);
-            Button close = ButtonAt("Close Field Notes", panel.transform, Close, "close");
-            RectTransform closeRect = (RectTransform)close.transform;
-            closeRect.anchorMin = closeRect.anchorMax = closeRect.pivot = new Vector2(1, 1);
-            closeRect.anchoredPosition = new Vector2(-12, -12);
-            closeRect.sizeDelta = new Vector2(40, 40);
-            Hint(close, "Close Field Notes");
-            listViewport = ScrollArea("Recorded observations", panel.transform, out listContent);
-            detailViewport = ScrollArea("Observation text", panel.transform, out RectTransform detailContent);
-            detail = TextAt("Known observation", detailContent, "", 18);
-            detail.rectTransform.anchorMin = new Vector2(0, 1);
-            detail.rectTransform.anchorMax = Vector2.one;
-            detail.rectTransform.pivot = new Vector2(0, 1);
-            detail.rectTransform.sizeDelta = Vector2.zero;
-            empty = TextAt("No observations", panel.transform, "No observations recorded", 18);
+            Hint(openButton, "Atlas");
             notice = new GameObject("Committed discovery", typeof(RectTransform), typeof(Image));
             notice.transform.SetParent(Root.transform, false);
             notice.GetComponent<Image>().color = new Color32(26, 54, 46, 255);
@@ -106,7 +89,6 @@ namespace HallowBlaze.Presentation.Runtime
             ackRect.sizeDelta = new Vector2(28, 28);
             Resize(size);
             Refresh();
-            panel.SetActive(false);
             notice.SetActive(false);
         }
 
@@ -119,8 +101,8 @@ namespace HallowBlaze.Presentation.Runtime
             ownInput(true);
             try
             {
-                Refresh(); panel.SetActive(true); openButton.gameObject.SetActive(false); notice.SetActive(false);
-                KeyboardMenuFocus.Attach(panel, rows.Count > 0 ? rows[0] : null);
+                Refresh(); openButton.gameObject.SetActive(false); notice.SetActive(false);
+                Opened?.Invoke();
             }
             catch { CloseImmediately(); throw; }
             return true;
@@ -132,8 +114,8 @@ namespace HallowBlaze.Presentation.Runtime
             if (!IsOpen) return;
             IsOpen = false;
             HideHints();
-            panel.SetActive(false);
             openButton.gameObject.SetActive(true);
+            Closed?.Invoke();
             RefreshNotice();
             releaseAfterFrame = Time.frameCount;
             if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(openButton.gameObject);
@@ -144,23 +126,7 @@ namespace HallowBlaze.Presentation.Runtime
         {
             if (IsDisposed || profile == null) return;
             Entries = knowledge.GetEntries(profile);
-            foreach (GameObject row in rows) Release(row);
-            rows.Clear();
-            empty.gameObject.SetActive(Entries.Count == 0);
-            if (Entries.Count == 0) { selectedId = null; detail.text = ""; }
-            float width = Mathf.Max(40, listViewport.rect.width);
-            for (int index = 0; index < Entries.Count; index++)
-            {
-                FieldNoteEntry entry = Entries[index];
-                Button row = ButtonAt("Recorded " + entry.FactId, listContent, () => Select(entry.FactId), entry.IconId);
-                Place((RectTransform)row.transform, 0, index * 74, width, 68);
-                Image rowIcon = row.transform.Find("Icon").GetComponent<Image>();
-                Place(rowIcon.rectTransform, 10, 18, 30, 30);
-                Text label = TextAt("Recorded title", row.transform, entry.Title, 16);
-                Place(label.rectTransform, 52, 6, width - 60, 56);
-                rows.Add(row.gameObject);
-            }
-            listContent.sizeDelta = new Vector2(0, Entries.Count * 74);
+            if (Entries.Count == 0) { selectedId = null; selectedText = string.Empty; }
             bool retained = false;
             foreach (FieldNoteEntry entry in Entries) retained |= entry.FactId == selectedId;
             if (Entries.Count > 0) Select(retained ? selectedId : Entries[0].FactId);
@@ -174,13 +140,9 @@ namespace HallowBlaze.Presentation.Runtime
             {
                 if (entry.FactId != factId) continue;
                 selectedId = factId;
-                detail.text = entry.Title + "\n\n" + entry.Description +
+                selectedText = entry.Title + "\n\n" + entry.Description +
                     (entry.SourceSystem == null ? "" : "\n\n" + entry.SourceSystem);
-                float height = detail.preferredHeight + 24;
-                detail.rectTransform.sizeDelta = new Vector2(0, height);
-                ((RectTransform)detail.transform.parent).sizeDelta = new Vector2(0, height);
-                foreach (GameObject row in rows) row.GetComponent<Image>().color = row.name == "Recorded " + factId
-                    ? new Color32(186, 224, 209, 255) : new Color32(219, 230, 224, 255);
+                SelectionChanged?.Invoke(factId);
                 return true;
             }
             return false;
@@ -211,6 +173,7 @@ namespace HallowBlaze.Presentation.Runtime
         public void SetAvailable(bool value)
         {
             if (IsDisposed || Root == null) return;
+            if (available && !value) ClearDiscoveryFeedback();
             available = value;
             if (!value) CloseImmediately();
             Root.SetActive(value);
@@ -220,20 +183,25 @@ namespace HallowBlaze.Presentation.Runtime
         public void Resize(Vector2 size)
         {
             if (!float.IsFinite(size.x) || !float.IsFinite(size.y) || size.x < 320 || size.y < 480)
-                throw new ArgumentException("Field Notes requires at least 320 by 480 pixels.", nameof(size));
+                throw new ArgumentException("Atlas access requires at least 320 by 480 pixels.", nameof(size));
             viewport = size;
-            Place((RectTransform)panel.transform, 0, 0, size.x, size.y);
-            bool wide = size.x >= 720;
-            float listWidth = wide ? 280 : size.x - 32;
-            float listHeight = wide ? size.y - 88 : Mathf.Min(208, size.y * 0.34f);
-            Place(listViewport, 16, 72, listWidth, listHeight);
-            Place(detailViewport, wide ? 320 : 16, wide ? 72 : 88 + listHeight,
-                wide ? size.x - 336 : size.x - 32, wide ? size.y - 88 : size.y - listHeight - 104);
-            Place(empty.rectTransform, 16, 76, size.x - 32, 52);
             float noticeWidth = Mathf.Min(360, size.x - 72);
             Place((RectTransform)notice.transform, size.x - noticeWidth - 8, 76, noticeWidth, 104);
             Place(noticeTitle.rectTransform, 44, 30, noticeWidth - 56, 66);
-            if (profile != null && detail != null) Refresh();
+        }
+
+        /// <summary>Ends only transient board feedback; profile facts, deduplication and the lifetime discovery count remain intact.</summary>
+        public void ClearDiscoveryFeedback()
+        {
+            notices.Clear();
+            RefreshNotice();
+        }
+
+        /// <summary>Gets the icon of a recorded fact for the shared atlas, or null for an unknown ID without revealing its definition.</summary>
+        public Sprite GetKnownIcon(string factId)
+        {
+            foreach (FieldNoteEntry entry in Entries) if (entry.FactId == factId) return Icon(entry.IconId);
+            return null;
         }
 
         /// <summary>Places durable feedback in a borrowed free panel area; an informational overlay may hide it temporarily without acknowledging any queued discovery.</summary>
@@ -261,7 +229,6 @@ namespace HallowBlaze.Presentation.Runtime
             foreach (Texture2D texture in textures) Release(texture);
             icons.Clear();
             textures.Clear();
-            rows.Clear();
         }
 
         private void Update()
@@ -271,8 +238,22 @@ namespace HallowBlaze.Presentation.Runtime
             if (size != viewport) Resize(size);
             openButton.interactable = !IsOpen && releaseAfterFrame < 0 && mayOpen();
             if (IsOpen && !mayOpen()) { Close(); return; }
-            if (Input.GetKeyDown(PcInputBindings.Notes)) { if (IsOpen) Close(); else Open(); }
-            else if (IsOpen && Input.GetKeyDown(PcInputBindings.Cancel)) Close();
+            SampleInput(Input.GetKeyDown, Time.frameCount);
+        }
+
+        /// <summary>Samples atlas open/close edges once per frame, without activating another context or buffering blocked input.</summary>
+        /// <param name="keyDown">Current-frame key edges, not held keys.</param>
+        /// <param name="frame">Consumed frame identity; repeated samples cannot reopen a just-closed reader.</param>
+        /// <returns>Whether an atlas or reader-cancel edge was consumed.</returns>
+        public bool SampleInput(Func<KeyCode, bool> keyDown, int frame)
+        {
+            if (keyDown == null) throw new ArgumentNullException(nameof(keyDown));
+            if (sampledFrame == frame) return false;
+            sampledFrame = frame;
+            if (!Usable()) return false;
+            if (keyDown(PcInputBindings.Notes)) { if (IsOpen) Close(); else Open(); return true; }
+            if (IsOpen && keyDown(PcInputBindings.Cancel)) { Close(); return true; }
+            return false;
         }
 
         private void LateUpdate()
@@ -292,9 +273,9 @@ namespace HallowBlaze.Presentation.Runtime
             IsOpen = false;
             releaseAfterFrame = -1;
             HideHints();
-            if (panel != null) panel.SetActive(false);
             if (openButton != null) openButton.gameObject.SetActive(true);
             if (held) ownInput?.Invoke(false);
+            if (held) Closed?.Invoke();
         }
 
         private void RefreshNotice()
@@ -339,26 +320,6 @@ namespace HallowBlaze.Presentation.Runtime
             text.raycastTarget = false;
             text.text = value;
             return text;
-        }
-
-        private static RectTransform ScrollArea(string name, Transform parent, out RectTransform content)
-        {
-            var owner = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect), typeof(Selectable));
-            owner.transform.SetParent(parent, false);
-            owner.GetComponent<Image>().color = new Color(0, 0, 0, 0);
-            var child = new GameObject("Content", typeof(RectTransform));
-            child.transform.SetParent(owner.transform, false);
-            content = (RectTransform)child.transform;
-            content.anchorMin = new Vector2(0, 1);
-            content.anchorMax = Vector2.one;
-            content.pivot = new Vector2(0, 1);
-            content.sizeDelta = Vector2.zero;
-            ScrollRect scroll = owner.GetComponent<ScrollRect>();
-            scroll.viewport = (RectTransform)owner.transform;
-            scroll.content = content;
-            scroll.horizontal = false;
-            scroll.movementType = ScrollRect.MovementType.Clamped;
-            return (RectTransform)owner.transform;
         }
 
         private void Hint(Button button, string value)
@@ -410,7 +371,7 @@ namespace HallowBlaze.Presentation.Runtime
             texture.SetPixels32(pixels);
             texture.Apply();
             Sprite sprite = Sprite.Create(texture, new Rect(0, 0, 24, 24), new Vector2(0.5f, 0.5f), 24);
-            sprite.name = "Field Notes " + id;
+            sprite.name = "Atlas " + id;
             sprite.hideFlags = HideFlags.DontSave;
             icons.Add(id, sprite);
             textures.Add(texture);

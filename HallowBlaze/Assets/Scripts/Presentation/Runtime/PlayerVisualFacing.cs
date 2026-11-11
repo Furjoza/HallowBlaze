@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace HallowBlaze.Presentation.Runtime
 {
-    /// <summary>Mirrors the animated player sprite on a cosmetic pivot; never rotates the actor, grid or colliders.</summary>
+    /// <summary>Faces the animated sprite left or right by horizontal mirroring; never rotates the actor, grid or colliders.</summary>
     public sealed class PlayerVisualFacing : MonoBehaviour
     {
         private SpriteRenderer source;
@@ -11,7 +11,7 @@ namespace HallowBlaze.Presentation.Runtime
         private bool originalRenderingOff;
         private int? sampledFrame;
 
-        /// <summary>Clockwise cardinal quarter-turns from the authored North pose; movement preserves this transient value.</summary>
+        /// <summary>Gets the transient facing code: 0 authored pose, 1 right or 3 left; it is not a sprite rotation.</summary>
         public int QuarterTurns { get; private set; }
 
         /// <summary>Gets the visual-only pivot; no gameplay component is parented to it.</summary>
@@ -36,9 +36,9 @@ namespace HallowBlaze.Presentation.Runtime
             visual.gameObject.SetActive(true);
         }
 
-        /// <summary>Admits one isolated Q/E down edge per idle walking frame. Movement/Wait/F/N/Escape wins; opposite turns cancel.</summary>
+        /// <summary>Sets left with Q or right with E on an isolated idle walking edge; other gameplay keys win.</summary>
         /// <param name="keyDown">Current-frame key-down edges, never held state.</param>
-        /// <param name="frame">Consumed even while blocked, preventing deferred or duplicate rotation.</param>
+        /// <param name="frame">Consumed even while blocked, preventing deferred or duplicate facing changes.</param>
         /// <param name="inputAllowed">The owning current board's complete gameplay-input permission.</param>
         /// <returns>Whether the cosmetic pivot changed; no command, RNG or domain object is accessed.</returns>
         public bool SampleInput(Func<KeyCode, bool> keyDown, int frame, bool inputAllowed)
@@ -48,13 +48,15 @@ namespace HallowBlaze.Presentation.Runtime
             sampledFrame = frame;
             if (!inputAllowed || !isActiveAndEnabled || visual == null) return false;
             if (keyDown(PcInputBindings.InteractionToggle) || keyDown(PcInputBindings.Space) ||
-                keyDown(PcInputBindings.Notes) || keyDown(PcInputBindings.Cancel)) return false;
+                keyDown(PcInputBindings.Notes) || keyDown(PcInputBindings.Cancel) || keyDown(PcInputBindings.Legend)) return false;
             foreach (KeyCode key in PcInputBindings.Movement.Keys) if (keyDown(key)) return false;
             bool left = keyDown(PcInputBindings.TurnLeft);
             bool right = keyDown(PcInputBindings.TurnRight);
             if (left == right) return false;
-            QuarterTurns = (QuarterTurns + (right ? 1 : 3)) % 4;
-            visual.transform.localRotation = Quaternion.Euler(0, 0, -90 * QuarterTurns);
+            int facing = right ? 1 : 3;
+            if (QuarterTurns == facing) return false;
+            QuarterTurns = facing;
+            Synchronize();
             return true;
         }
 
@@ -65,7 +67,7 @@ namespace HallowBlaze.Presentation.Runtime
             if (source == null || visual == null) return;
             visual.sprite = source.sprite;
             visual.color = source.color;
-            visual.flipX = source.flipX;
+            visual.flipX = QuarterTurns == 0 ? source.flipX : QuarterTurns == 3;
             visual.flipY = source.flipY;
             visual.sortingLayerID = source.sortingLayerID;
             visual.sortingOrder = source.sortingOrder;

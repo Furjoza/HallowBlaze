@@ -359,6 +359,12 @@ Collider mówi, co aktualnie znajduje się w scenie, ale nie jest dobrym modelem
 - Zapis środka planszy jest rozszerzeniem po stabilizacji resolvera.
 - Pełny reset profilu jest jawną opcją `New Game`, odrębną od restartu wyprawy.
 
+**Continue clarification (2026-11-11):** Continue is available only for a valid active saved
+run. Reaching the destination finalizes Won, saves the profile summary and deletes the ended
+run save; Continue is then unavailable regardless of atlas completion. Recorded knowledge is
+retained. Restart on the terminal screen starts another run with that profile, while New Game
+remains an explicit profile reset. This clarification does not introduce post-victory travel.
+
 #### Rationale — dlaczego
 
 Zapis po każdej animowanej klatce zwiększyłby koszt pierwszego vertical slice. Najważniejsza obietnica wymaga natomiast, by odkrycie nie zniknęło nawet po zamknięciu gry bezpośrednio po wyborze drogi.
@@ -509,6 +515,16 @@ Wybór „lewo albo prawo” bez informacji jest losowaniem, nie decyzją. Pełn
 - aktualna pozycja: ruchomy znacznik;
 - plotki i niepewne kierunki: linia przerywana lub szkic;
 - nieodkryty obszar: bez pełnej topologii.
+
+**Route preview clarification - M7.25 (2026-11-11):** The focused outgoing route option must
+be unambiguous without reading its clue name. Use a high-contrast selected background, text,
+outline and a non-color selection mark; inactive options must not look preselected. Keyboard
+focus and pointer hover identify the same option. Preview highlights its known directed road
+and destination with a separate frame, retaining the current-position indicator. Reveal the
+destination within the pannable map without committing travel or revealing unknown content.
+An optional slow opacity pulse may emphasize the destination when atlas animations are enabled;
+animation-off retains the same clear static selection, with stable text and control dimensions.
+Changing selection, leaving the preview or closing/rebuilding the atlas removes the old cue.
 
 #### Rationale — dlaczego
 
@@ -795,6 +811,12 @@ Focused tests must cover shortest paths around obstacles, the North/East/West/So
 
 ## 12. Hałas
 
+**Accepted owner correction (2026-11-06):** Movement noise has strength 2 and is active only
+in the emitting turn. It expires before the next accepted command's enemy phase and planning;
+rejected input does not age it. Each later step emits its own new signal. Interaction/tool
+lifetimes are unchanged (prototype interaction strength 4, lifetime 2). This domain lifetime
+is independent of authored footstep audio duration.
+
 ### Decyzja
 
 Hałas jest jawnym zdarzeniem rozgrywki posiadającym źródło, pozycję, siłę/zasięg i czas obowiązywania. Nie jest wyłącznie odtwarzanym klipem audio.
@@ -859,7 +881,7 @@ Samo „szybciej” jest mało interesujące. Hałas zamienia oszczędność cza
 
 Pierwsze zaobserwowanie konsekwencji może odkryć fakt, np. `AXE_CREATES_LOUD_NOISE` lub `PIT_TRAPS_SHAMBLER`.
 
-#### Accepted Field Notes Contract - M5.7
+#### Accepted Profile Knowledge Contract - M5.7, M7.23
 
 Mechanical knowledge belongs to the profile, not the reader or the current run. Only ordered
 presentation of an actual consequence emits a supported `FactObservation`: axe noise after its
@@ -870,14 +892,29 @@ one `FactDiscovery`; gameplay rules never require this knowledge to work.
 
 The profile checkpoint precedes discovery feedback. Failed writes retain pending discoveries for
 retry without a second discovery event. Existing profile schema v2 IDs remain authoritative and
-already known facts do not replay discovery feedback on load. Death and a new run preserve notes;
+already known facts do not replay discovery feedback on load. Death and a new run preserve knowledge;
 only explicit New Game replaces the profile. Missing definitions use a neutral placeholder and
 retain their saved IDs.
 
-Field Notes reads only recorded entries with working English text and distinct icons. It contains
+The shared atlas reads only recorded entries with working English text and distinct icons. It contains
 no unknown checklist, hidden rule identifiers, source-location hints, completion percentage,
 tutorial or stat bonus. Its own input block makes reading free without releasing pause or other
-modal ownership. Mechanical `FactDiscovery` is not M7.5 `ToolSourceSighted`; source-system labels
+modal ownership. The standalone Field Notes screen is removed by the owner's 2026-11-09 decision.
+The atlas is both the route-choice view and the free reader during a board or after a terminal outcome. Every
+known node and road is mouse/keyboard selectable; inspection fills the information panel without
+discovering topology, saving, spending resources or choosing travel. Only explicit legal outgoing
+route confirmation travels. Recorded observations are accessible in that same information panel.
+Unknown nodes, edges and facts never create selectable controls or hidden-definition text.
+During voluntary reading, terminal Restart/Menu controls relinquish focus and cannot receive
+pointer input over the reader. Closing restores their ownership and any already visible final
+atlas rather than hiding the retained map or starting another run.
+
+Discovery feedback belongs to the current board, not the profile's UI lifetime: acknowledgement
+or leaving the board clears its transient queue. This never erases the saved fact or replays its
+discovery event. Resource statistics are still deferred to M8.4; an unrecorded value is not zero,
+an average, a future loot guarantee or an inferred observation.
+
+Mechanical `FactDiscovery` is not M8.5 `ToolSourceSighted`; source-system labels
 describe provenance, not atlas locations. The authored registry and exact observation/text mapping
 are documented in [Testing](Testing.md#m57-field-notes).
 
@@ -1064,7 +1101,8 @@ confirm, cancel or leave an available action. This applies to current and future
 settings menus, route choice, Notes/atlas/help, interaction targeting and equipment decisions,
 and later inventory screens if separately activated. It does not activate deferred features.
 
-- Menus provide a visible initial focus, predictable Tab/Shift+Tab and arrow navigation,
+- Menus provide visible color-based initial focus without an added focus frame, predictable
+	Tab/Shift+Tab, arrows and WASD navigation (W/A previous, S/D next; accepted 2026-11-09),
 	keyboard activation and Escape/back where cancellation is legal. Disabled or hidden controls
 	cannot trap focus; scrolling content and settings remain operable without a pointer. Reopening
 	or replacing a view restores valid focus without silently confirming a choice.
@@ -1074,15 +1112,23 @@ and later inventory screens if separately activated. It does not activate deferr
 	previous object, E selects the next, and Space confirms the selected legal action. Multiple
 	actions on one object remain explicitly keyboard-selectable. Space means Wait only in
 	normal board input; no single keypress may reach both contexts.
-- In idle walking mode, outside all menus and interaction drafts, Q turns the player's visual
-	facing left by 90 degrees and E turns it right by 90 degrees. This is a free cosmetic action:
+- In interaction mode, A/D also select objects and W/S select their actions; the existing
+	left/right and up/down arrows, Q/E, Tab/Shift+Tab and confirmation aliases remain available.
+	The selected contextual label, target outline and target number share the authored menu
+	selection color, while numbering and diamond/square shapes remain non-color cues.
+- L toggles the enemy-intent legend and Home/End/Page Up/Page Down scroll it while visible.
+	These are informational edges without commands, costs or changes to a locked intent;
+	blocked input is not replayed later. Atlas access remains N or its book button.
+- In idle walking mode, outside all menus and interaction drafts, Q faces the player's sprite
+	left and E faces it right using horizontal mirroring, never a planar image rotation. This
+	2026-11-05 owner correction supersedes the earlier 90-degree placeholder rendering; proper
+	directional artwork is deferred to M7.21. This remains a free cosmetic action:
 	no resolver call, turn, resource/charge cost, noise emission/aging, RNG use or enemy phase.
 	It changes neither grid position nor gameplay facing, target availability, damage, detection
 	or locked intents. Movement remains absolute WASD/arrows, not relative to visual facing.
-	The input/animation gate owns when rotation is available; menus, pause and replay cannot leak
-	rotation into the board. Visual facing is not saved gameplay state and may reset when a board
-	is recreated. Its initial pose and interaction with movement animation are specified in M7.18
-	before implementation; neither may introduce a hidden gameplay rule.
+	The input/animation gate owns when facing changes are available; menus, pause and replay cannot
+	leak them into the board. Visual facing is not saved gameplay state and may reset when a board
+	is recreated. The initial authored pose and movement-preserved facing remain cosmetic.
 - Target/action lists use deterministic ordering and retain valid selection where possible.
 	Opening, browsing and cancellation submit no gameplay command and consume no turn, resource,
 	noise lifetime or enemy opportunity. Confirmation submits at most one command and uses the
@@ -1101,6 +1147,7 @@ and later inventory screens if separately activated. It does not activate deferr
 
 This is an accepted product policy, not a claim that current screens already satisfy it.
 M7.10-M7.13 and M7.17-M7.18 in `Docs/TechnicalRoadmap.md` own implementation and verification.
+M7.19 applies the dated owner smoke corrections; M7.20-M7.21 are separate future visual tasks.
 Manual interaction means work on obstacles; it does not authorize direct combat with zombies.
 
 ## 19. Zwycięstwo, śmierć i regrywalność
@@ -1391,6 +1438,42 @@ on each board or a particular reward total. No reward is averaged or randomized.
 Automatic collection on entry still precedes the one central Food cost. There is no Food
 cap or satiety change. Pinned ordinary versions 1-3 keep their original content and rewards;
 legacy `legacy.bush-food` still grants 10, and buried caches keep their existing interaction.
+
+**Accepted owner correction (2026-11-06):** In fresh ordinary version 6, berries are protected
+by a real blocking, manually clearable bush (`legacy.wall`) on the same cell. They cannot be
+collected by entering or interacting through the bush. Existing manual clearing or an axe cut
+must remove it first; entering the cleared cell then collects the same fixed +5 Food once.
+Cutting does not itself grant the reward. Existing work, tool, Food and noise costs apply;
+bare hands remain a legal alternative and no optional tool is required for the exit. The
+generator uses existing obstacle positions without increasing their count and keeps a reachable
+approach to every berry bush. Versions 1-5 retain their pinned layouts and earlier supply.
+
+### 26.2. Current first-aid use
+
+The owner accepted this bounded pre-M9 medical rule on 2026-11-04. A concrete
+`legacy.aid` kit supports the conscious `use-first-aid` interaction on its current cell
+or a cardinally adjacent cell. Movement, triggers, preview and inventory do not heal.
+
+- Each accepted use consumes that exact kit once and restores up to 10 Health, limited
+	by the kit's own ceiling of 100. Excess healing is discarded, not stored.
+- At 100 or more Health, use is unavailable. It does not consume the kit, Food or a turn,
+	emit noise, advance enemies or reduce existing excess Health. Zero Health cannot use it.
+- Healing and item removal precede the existing central cost of 1 Food. Standard
+	interaction noise is strength 4, lifetime 2. Later enemy/environment/planning phases
+	execute once unless existing terminal ordering, including starvation, ends resolution.
+- The ordered event reports the actual applied increase; HUD feedback displays this
+	amount rather than the nominal 10, without applying it again.
+- Fresh ordinary configuration version 5 has a separate `medical` count budget of 0-1
+	kits per board, including opening boards. The Food family and its fixed rewards are
+	unchanged. No board or route guarantees a kit.
+- Versions 1-4 keep their saved layouts and supply. Existing legacy kits acquire this
+	supported interaction; their identity is not rewritten. Global `RestoreHealth` remains
+	uncapped compatibility behavior; this rule does not silently activate the M9 Health cap.
+- Continue retains the current board-boundary checkpoint/rollback policy, not exact-turn
+	persistence. Uncommitted use rolls back both its effects and the reconstructed item.
+	Committed resource totals are not healed again on loading or presentation recovery.
+
+This does not enable the deferred bag, pockets, satiety, revival or a save-format reset.
 
 ## 27. Accepted future contract: route legs, atlas observations, and inventory
 
