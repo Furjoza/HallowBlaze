@@ -300,8 +300,10 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(buttons[0].transform.position.x, Is.LessThan(buttons[1].transform.position.x));
                 KeyboardMenuFocus focus = atlasObject.GetComponent<KeyboardMenuFocus>();
                 Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[0].gameObject));
+                AssertRouteDestination(atlas, west.EdgeId);
                 focus.HandleKey(KeyCode.RightArrow);
                 Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[1].gameObject));
+                AssertRouteDestination(atlas, east.EdgeId);
                 focus.HandleKey(KeyCode.LeftArrow);
                 Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[0].gameObject));
                 focus.HandleKey(KeyCode.D);
@@ -314,9 +316,16 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[1].gameObject));
                 focus.HandleKey(KeyCode.A);
                 Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[0].gameObject));
+                AssertRouteDestination(atlas, west.EdgeId);
                 Assert.That(session.ActiveRun.ActiveLeg, Is.Null);
                 Assert.That(session.ActiveRun.CurrentDay, Is.Zero);
                 Assert.That(GetProperty<string>(atlas, "SelectedRouteEdgeId"), Is.Null);
+                var pointer = new PointerEventData(EventSystem.current);
+                ExecuteEvents.Execute(buttons[1].gameObject, pointer, ExecuteEvents.pointerEnterHandler);
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[1].gameObject));
+                AssertRouteDestination(atlas, east.EdgeId);
+                ExecuteEvents.Execute(buttons[0].gameObject, pointer, ExecuteEvents.pointerEnterHandler);
+                AssertRouteDestination(atlas, west.EdgeId);
             }
 
             atlasObject.GetComponent<KeyboardMenuFocus>().HandleKey(KeyCode.RightArrow);
@@ -324,6 +333,7 @@ namespace HallowBlaze.Tests.PlayMode
             yield return null;
             Assert.That(session.ActiveRun.ActiveLeg.EdgeId, Is.EqualTo(east.EdgeId));
             Assert.That(GetProperty<string>(atlas, "SelectedRouteEdgeId"), Is.EqualTo(east.EdgeId));
+            Assert.That(atlasObject.GetComponentsInChildren<Transform>().Any(child => child.name == "RouteDestination"), Is.False);
         }
 
         /// <summary>All cardinal/diagonal directions and unrecognized alternatives have an input-independent order.</summary>
@@ -417,12 +427,23 @@ namespace HallowBlaze.Tests.PlayMode
                             Assert.That(retainedBounds.min.x, Is.GreaterThanOrEqualTo(scroll.viewport.rect.xMin - 1f));
                             Assert.That(retainedBounds.max.x, Is.LessThanOrEqualTo(scroll.viewport.rect.xMax + 1f));
                         }
+                        buttons[0].Select();
+                        Invoke(atlas, "LateUpdate");
+                        AssertRouteDestination(atlas, GetField<System.Collections.Generic.Dictionary<Button, string>>(atlas,
+                            "routeButtonEdges")[buttons[0]]);
+                        Canvas.ForceUpdateCanvases();
                         camera.Render();
                         RenderTexture.active = target;
                         capture.ReadPixels(new Rect(0, 0, size.x, size.y), 0, 0);
                         capture.Apply();
                         Assert.That(capture.GetPixels32().Distinct().Count(), Is.GreaterThan(12));
-                        File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M710-routes-" + options.Length + "-" + size.x + "x" + size.y + ".png"), capture.EncodeToPNG());
+                        RectTransform activeRect = (RectTransform)buttons[0].transform;
+                        Vector2 activeSample = RectTransformUtility.WorldToScreenPoint(camera,
+                            activeRect.TransformPoint(new Vector3(activeRect.rect.xMin + 12, activeRect.rect.yMin + 8)));
+                        Color activeColor = capture.GetPixel(Mathf.FloorToInt(activeSample.x), Mathf.FloorToInt(activeSample.y));
+                        Assert.That(Vector4.Distance(activeColor, (Color)new Color32(218, 166, 67, 255)), Is.LessThan(0.04f),
+                            "The selected option must render its contrasting background at " + size);
+                        File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M725-routes-" + options.Length + "-" + size.x + "x" + size.y + ".png"), capture.EncodeToPNG());
                         if (buttons.Length > 1)
                         {
                             buttons[0].interactable = false;
@@ -447,6 +468,41 @@ namespace HallowBlaze.Tests.PlayMode
                 canvas.renderMode = RenderMode.ScreenSpaceOverlay;
                 canvas.worldCamera = null;
                 UnityEngine.Object.DestroyImmediate(cameraObject);
+            }
+        }
+
+        private static void AssertRouteDestination(Component atlas, string edgeId)
+        {
+            WorldMapSnapshot snapshot = GetField<WorldMapSnapshot>(atlas, "snapshot");
+            WorldMapEdgeView edge = snapshot.Edges.Single(candidate => candidate.EdgeId == edgeId);
+            var nodes = GetField<System.Collections.Generic.Dictionary<string, Button>>(atlas, "nodeButtons");
+            Assert.That(nodes[edge.ToNodeId].image.color, Is.EqualTo((Color)new Color32(218, 166, 67, 255)),
+                "The focused route must visibly identify its known destination, not only the road.");
+            Assert.That(nodes[edge.FromNodeId].image.color, Is.Not.EqualTo(nodes[edge.ToNodeId].image.color),
+                "The current location must not be mistaken for the destination.");
+            CanvasGroup pulse = nodes[edge.ToNodeId].transform.Find("RouteDestination").GetComponent<CanvasGroup>();
+            Assert.That(pulse.gameObject.activeSelf && !pulse.blocksRaycasts, Is.True);
+            Vector3 scale = pulse.transform.localScale;
+            SetField(atlas, "animationsEnabled", false);
+            Invoke(atlas, "UpdateRouteDestinationPulse", 0.5f);
+            Assert.That(pulse.alpha, Is.EqualTo(1));
+            SetField(atlas, "animationsEnabled", true);
+            Invoke(atlas, "UpdateRouteDestinationPulse", 0f);
+            float initial = pulse.alpha;
+            Invoke(atlas, "UpdateRouteDestinationPulse", 0.5f);
+            Assert.That(pulse.alpha, Is.GreaterThan(initial));
+            Assert.That(pulse.transform.localScale, Is.EqualTo(scale), "Pulsing must not move or resize map content.");
+            SetField(atlas, "animationsEnabled", false);
+            Invoke(atlas, "UpdateRouteDestinationPulse", 0f);
+            Button selected = EventSystem.current.currentSelectedGameObject.GetComponent<Button>();
+            Assert.That(selected.image.color, Is.EqualTo((Color)new Color32(218, 166, 67, 255)));
+            Assert.That(selected.GetComponent<Outline>().enabled, Is.True);
+            Assert.That(selected.transform.Find("RouteSelectionMark").gameObject.activeSelf, Is.True);
+            foreach (Button alternative in selected.transform.parent.GetComponentsInChildren<Button>().Where(button => button != selected))
+            {
+                Assert.That(alternative.image.color, Is.EqualTo((Color)new Color32(39, 45, 42, 255)));
+                Assert.That(alternative.GetComponent<Outline>().enabled, Is.False);
+                Assert.That(alternative.transform.Find("RouteSelectionMark").gameObject.activeSelf, Is.False);
             }
         }
 

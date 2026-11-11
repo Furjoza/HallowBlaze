@@ -6567,6 +6567,15 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 but reported menu/help, resource artwork, facing, medical feedback, route-key, footstep,
 terminal-flow and atlas-source issues. Repairs and deferred items are tracked in M7.19-M7.21
 and M8.5. Keyboard completion is positive evidence, not acceptance of the visual/audio gate.
+**Owner retest (2026-11-11):** Menu, Controls, opening, interaction selection and existing audio
+were reported working. The legend opens correctly and its current content fits, so scrolling
+is not applicable at that size. Resource pickup works; route-resource knowledge is still
+the deferred M8.3/M8.4 scope. The owner could not reliably identify route destinations from
+option names and found active-button highlighting too subtle; M7.25 owns that bounded repair.
+Continue worked for the earlier active save; its absence after Destination reached is expected
+Won finalization, not a completed-atlas restriction. No save/Continue change is authorized here.
+Keep Revise pending route-readability retest and an explicit owner verdict; do not infer unreported
+medical, portrait, terminal-reader or specific checkpoint checks from the general observations.
 **Priority:** P0 follow-up release gate.
 **Related contract:** Sections 18.1, 27.2 and accepted current food/medical rules; original M7.8 obligations remain.
 **Rationale:** Input contexts, route order, attack cues and resource content must work together in the real opening/travel loop, not just isolated fixtures.
@@ -6763,6 +6772,45 @@ both presentation modes and an owner listening verdict.
 
 ---
 
+## `M7.25` - Readable route focus and destination preview
+
+**Status:** `Done` - accepted 2026-11-11. Requested during the M7.17 owner retest; focused
+atlas regression and desktop/portrait render checks passed 4/4. Initial full PlayMode was
+249/250 because the unchanged legend test required exact ScrollRect zero after End and
+received -1.18285186E-07; the isolated unchanged test reproduced the failure. The owner
+approved extending the scope to that test on 2026-11-11. Both Home/End endpoint assertions
+now use a 1e-6 normalized-position tolerance, retaining the overflow and input assertions;
+the focused legend check passed 1/1 with fresh XML. No production legend or filter change.
+The final full graphics PlayMode rerun passed 250/250 with fresh XML, zero failures/skips
+and the expected atlas/legend/terminal test identities. Independent review PASS; M7.17
+remains Revise pending the owner's route-readability retest and explicit verdict.
+**Priority:** P0 before the route-readability retest.
+**Related contract:** Sections 6.5, 7.6 and 18.1.
+**Scope:** Strong selected-button background/text contrast, outline and a non-color mark;
+keyboard and pointer-hover parity; highlight the previewed known road and destination, reveal
+the target in the map viewport, and optionally pulse its frame without resizing content.
+Static animation-off cues remain equally informative. Record the owner's smoke observations
+and clarify the existing Won/Continue rule without changing saves or terminal behavior.
+**Closed write scope:** Assets/Scripts/Presentation/Atlas/AtlasScreenController.cs;
+Assets/Tests/PlayMode/AtlasScreenTests.cs; Docs/GameDesignContract.md, Docs/Testing.md and this
+roadmap. Owner-approved extension (2026-11-11):
+Assets/Tests/PlayMode/EnemyIntentPresentationTests.cs, only the two numerical endpoint assertions.
+No new assets, scenes, prefabs, packages, settings, agent configuration or domain changes.
+**Acceptance criteria:** Focus cannot be confused with an inactive option. The selected button,
+known road and correct directed destination agree when moving by keyboard or pointer; the
+current position and other destinations remain distinguishable. Inspection/hover is free,
+does not save, reveal hidden topology or travel, and confirmation retains the original edge ID.
+Selection changes, closure, rebuild and disable clean up prior cues. Both desktop and 320x480
+render nonblank readable controls, fixed dimensions and the correctly framed destination,
+with a clear animation-off state and an optional slow pulse.
+**Non-goals:** Continue after Won, post-victory exploration, save migration/profile reset,
+M8.3/M8.4 resource knowledge, M8.5 sources, M7.24 miss audio or closing the M7.17 human gate.
+**Validation:** Red/green route-selection regression; focused atlas input/render tests and
+relevant final PlayMode regression with fresh XML, scope integrity and independent review.
+**Save impact:** None. Continue remains restricted to active valid saved runs.
+
+---
+
 ### M7 gate
 
 M7 is complete only after the original M7.1-M7.8 obligations and follow-ups M7.9-M7.18 are
@@ -6775,6 +6823,8 @@ block testing the agreed interim presentation and do not waive the M7.17 owner v
 M7.22 applies the owner's explicit berry, route-key and step-noise corrections before that retest.
 M7.23 applies the later shared-atlas and additional-key corrections before the same retest;
 M7.24 is explicitly deferred and is not implemented or accepted by this repair.
+M7.25 addresses route focus/destination readability raised during the 2026-11-11 retest;
+it does not convert positive smoke observations into an implicit M7.17 Accept verdict.
 
 ---
 

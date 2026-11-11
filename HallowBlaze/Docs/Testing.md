@@ -1,5 +1,52 @@
 # HallowBlaze Testing
 
+## M7.25 Route Focus And Destination Preview
+
+Owner smoke on 2026-11-11 reported working menu/Controls, opening, legend access, interaction
+selection, resource pickups and satisfactory existing audio. The current legend fits its
+panel, so absent scrolling is expected rather than a failure. The owner requested clearer
+route-button focus and a map-space destination cue because clue names did not make direction
+clear. M7.17 remains Revise for that retest and an explicit owner verdict; unreported individual
+medical, narrow-layout, terminal-reader and checkpoint cases are not claimed manually tested.
+
+Continue worked for an earlier active save. After Destination reached, Won finalization
+persists the profile and removes the ended run save, so Continue is correctly unavailable.
+This is independent of the number of discovered nodes/roads. Terminal Restart preserves the
+profile; New Game explicitly replaces it. No Continue/save change is part of M7.25.
+Route-resource quantities remain M8.3/M8.4, not a newly discovered pickup defect or fabricated
+atlas total. M7.24 miss audio and M8.5 source knowledge remain deferred.
+
+Route preview now pairs an amber selected option with dark text, bold weight, an outline and
+a non-color selection mark; alternatives use a dark background and light text. Pointer hover
+sets the same focus that Enter would confirm. The known directed road and its destination are
+highlighted, retaining the current-place cue; the map reveals the destination without travel.
+A separate destination frame uses a slow two-second opacity pulse only when atlas animations
+are enabled. With animations off it is fully visible and static. Neither mode scales text,
+controls or map nodes. Prior markers are removed on selection changes and lifecycle boundaries.
+
+The expanded existing route-order regression first failed on the prior implementation because
+the focused road left its destination unhighlighted. It now checks both input orderings,
+keyboard and pointer, exact active/inactive button states, correct destination, static/pulsed
+frame behavior, no draft travel and the unchanged explicitly committed edge ID. The existing
+layout test covers one/two/five alternatives at 1280x720 and 320x480, checks visible selected
+background pixels and saves external images as `%TEMP%/HB-M725-routes-<count>-<size>.png`.
+Focused atlas checks passed 4/4 with fresh Unity XML. Full graphics PlayMode on 2026-11-11
+executed 250 tests: 249 passed and the unchanged
+`EnemyIntentPresentationTests.Legend_MatchesSymbolsWithoutSubmittingCommands` failed on
+an exact ScrollRect endpoint assertion after End: expected 0, actual -1.18285186E-07.
+The isolated unchanged test reproduced the same result; no filters or assertions were
+changed in that initial attempt. The failed full report is external at
+`%TEMP%/tmp65b7572a.tmp` (Unity XML, 17:42:31Z-17:44:12Z). On 2026-11-11 the owner approved
+extending the closed scope to the legend test: Home and End still have to reach their
+respective endpoints, now within 1e-6 normalized-position tolerance. Actual overflow,
+key consumption and domain-state assertions remain. Production legend code and test
+filters are unchanged. The corrected focused test passed 1/1 with fresh XML. The final
+full graphics PlayMode rerun passed 250/250, with zero failures/skips/inconclusive and
+expected atlas/legend/terminal identities verified in fresh XML outside the project
+(`%TEMP%/tmp7d5bc663.tmp`, 2026-11-11 17:54:30Z-17:56:15Z). Independent review passed on
+2026-11-11 after inspecting the implementation, approved endpoint assertions and fresh reports.
+Automated rendering does not replace the owner's route-readability verdict.
+
 ## M7.23 Shared Atlas And Keyboard Follow-Up
 
 The owner accepted additional W/S menu navigation on 2026-11-09: W/A select the previous

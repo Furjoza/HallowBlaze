@@ -359,6 +359,12 @@ Collider mówi, co aktualnie znajduje się w scenie, ale nie jest dobrym modelem
 - Zapis środka planszy jest rozszerzeniem po stabilizacji resolvera.
 - Pełny reset profilu jest jawną opcją `New Game`, odrębną od restartu wyprawy.
 
+**Continue clarification (2026-11-11):** Continue is available only for a valid active saved
+run. Reaching the destination finalizes Won, saves the profile summary and deletes the ended
+run save; Continue is then unavailable regardless of atlas completion. Recorded knowledge is
+retained. Restart on the terminal screen starts another run with that profile, while New Game
+remains an explicit profile reset. This clarification does not introduce post-victory travel.
+
 #### Rationale — dlaczego
 
 Zapis po każdej animowanej klatce zwiększyłby koszt pierwszego vertical slice. Najważniejsza obietnica wymaga natomiast, by odkrycie nie zniknęło nawet po zamknięciu gry bezpośrednio po wyborze drogi.
@@ -509,6 +515,16 @@ Wybór „lewo albo prawo” bez informacji jest losowaniem, nie decyzją. Pełn
 - aktualna pozycja: ruchomy znacznik;
 - plotki i niepewne kierunki: linia przerywana lub szkic;
 - nieodkryty obszar: bez pełnej topologii.
+
+**Route preview clarification - M7.25 (2026-11-11):** The focused outgoing route option must
+be unambiguous without reading its clue name. Use a high-contrast selected background, text,
+outline and a non-color selection mark; inactive options must not look preselected. Keyboard
+focus and pointer hover identify the same option. Preview highlights its known directed road
+and destination with a separate frame, retaining the current-position indicator. Reveal the
+destination within the pannable map without committing travel or revealing unknown content.
+An optional slow opacity pulse may emphasize the destination when atlas animations are enabled;
+animation-off retains the same clear static selection, with stable text and control dimensions.
+Changing selection, leaving the preview or closing/rebuilding the atlas removes the old cue.
 
 #### Rationale — dlaczego
 

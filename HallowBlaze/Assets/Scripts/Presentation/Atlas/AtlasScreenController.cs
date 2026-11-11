@@ -37,6 +37,7 @@ namespace HallowBlaze.Presentation.Atlas
         private readonly List<GameObject> renderedNodes = new List<GameObject>();
         private readonly List<GameObject> renderedEdges = new List<GameObject>();
         private readonly List<Button> routeButtons = new List<Button>();
+        private readonly Dictionary<Button, string> routeButtonEdges = new Dictionary<Button, string>();
         private readonly Dictionary<string, Vector2> positionedNodes =
             new Dictionary<string, Vector2>(StringComparer.Ordinal);
 
@@ -81,6 +82,10 @@ namespace HallowBlaze.Presentation.Atlas
         private string selectedRouteEdgeId;
         private string lastDiscoveryMessage = string.Empty;
         private KeyboardMenuFocus keyboardFocus;
+        private Button routeDestination;
+        private GameObject routeDestinationMarker;
+        private CanvasGroup routeDestinationPulse;
+        private float routePulseStarted;
 
         /// <summary>Gets whether the modal atlas is currently visible.</summary>
         public bool IsOpen => canvasGroup != null && canvasGroup.alpha > 0.5f;
@@ -138,6 +143,7 @@ namespace HallowBlaze.Presentation.Atlas
         /// <summary>Displays only profile-owned facts in the atlas inspector, including their neutral missing-definition entries.</summary>
         public void ShowObservations()
         {
+            ClearRouteDestination();
             ClearFactRows();
             inspectedNodeId = inspectedEdgeId = null;
             inspectedFactId = null;
@@ -178,6 +184,7 @@ namespace HallowBlaze.Presentation.Atlas
             foreach (FieldNoteEntry entry in reader.Entries)
             {
                 if (entry.FactId != factId) continue;
+                ClearRouteDestination();
                 ClearFactRows();
                 inspectedNodeId = inspectedEdgeId = null;
                 inspectedFactId = factId;
@@ -235,6 +242,9 @@ namespace HallowBlaze.Presentation.Atlas
                     "\nFrom: " + KnownPlaceName(edge.FromNodeId) + "\nTo: " + KnownPlaceName(edge.ToNodeId) +
                     "\n\nResource observations: Unrecorded";
                 HighlightInspection(edgeButtons, edgeId);
+                if (!reading && gameManager != null && gameManager.IsRouteChoiceActive &&
+                    routeButtons.Exists(button => button.IsInteractable() && routeButtonEdges[button] == edgeId))
+                    HighlightRouteDestination(edge.ToNodeId);
                 LayoutInspector();
                 return true;
             }
@@ -291,6 +301,7 @@ namespace HallowBlaze.Presentation.Atlas
 
         private void OnDisable()
         {
+            ClearRouteDestination();
             UnbindGameManager();
         }
 
@@ -316,6 +327,7 @@ namespace HallowBlaze.Presentation.Atlas
                 return;
 
             snapshot = worldMapService.GetAtlasSnapshot();
+            ClearRouteDestination();
             nodeButtons.Clear();
             edgeButtons.Clear();
             inspectionColors.Clear();
@@ -622,6 +634,7 @@ namespace HallowBlaze.Presentation.Atlas
             if (!IsOpen) return;
             if (viewportSize != CurrentViewport()) RefreshAtlas();
             LayoutInspector();
+            UpdateRouteDestinationPulse(Time.unscaledTime - routePulseStarted);
             if (routeButtons.Count == 0) return;
             LayoutRouteButtons();
             GameObject selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
@@ -876,17 +889,34 @@ namespace HallowBlaze.Presentation.Atlas
                 typeof(Button));
             RectTransform buttonTransform = buttonObject.GetComponent<RectTransform>();
             buttonTransform.SetParent(routeButtonArea, false);
-            buttonObject.GetComponent<Image>().color = index == 0 ? AmberColor : PaperColor;
-            buttonObject.AddComponent<Outline>().effectColor = CoralColor;
+            buttonObject.GetComponent<Image>().color = BandColor;
+            Outline outline = buttonObject.AddComponent<Outline>();
+            outline.effectColor = PaperColor;
+            outline.effectDistance = new Vector2(2f, -2f);
+            outline.enabled = false;
 
             string edgeId = option.EdgeId;
             Button button = buttonObject.GetComponent<Button>();
-            button.transition = Selectable.Transition.ColorTint;
+            button.transition = Selectable.Transition.None;
             button.onClick.AddListener(() => SubmitRoute(edgeId));
             var trigger = buttonObject.AddComponent<EventTrigger>();
             var select = new EventTrigger.Entry { eventID = EventTriggerType.Select };
-            select.callback.AddListener(_ => InspectEdge(edgeId));
+            select.callback.AddListener(_ =>
+            {
+                SetRouteButtonSelected(button, true);
+                InspectEdge(edgeId);
+            });
             trigger.triggers.Add(select);
+            var deselect = new EventTrigger.Entry { eventID = EventTriggerType.Deselect };
+            deselect.callback.AddListener(_ =>
+            {
+                SetRouteButtonSelected(button, false);
+                ClearRouteDestination();
+            });
+            trigger.triggers.Add(deselect);
+            var hover = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+            hover.callback.AddListener(_ => { if (button.IsInteractable()) button.Select(); });
+            trigger.triggers.Add(hover);
             Navigation navigation = button.navigation;
             navigation.mode = Navigation.Mode.Automatic;
             button.navigation = navigation;
@@ -894,13 +924,27 @@ namespace HallowBlaze.Presentation.Atlas
             CreateText(
                 "RouteLabel",
                 buttonTransform,
-                new Vector2(0.05f, 0.02f),
+                new Vector2(0.12f, 0.02f),
                 new Vector2(0.95f, 0.98f),
                 FormatRouteLabel(option),
                 12,
                 TextAnchor.MiddleCenter,
-                InkColor);
+                PaperColor);
+            Text marker = CreateText("RouteSelectionMark", buttonTransform, new Vector2(0.01f, 0.05f),
+                new Vector2(0.1f, 0.95f), ">", 18, TextAnchor.MiddleCenter, InkColor);
+            marker.gameObject.SetActive(false);
             routeButtons.Add(button);
+            routeButtonEdges.Add(button, edgeId);
+        }
+
+        private static void SetRouteButtonSelected(Button button, bool selected)
+        {
+            button.image.color = selected ? AmberColor : BandColor;
+            button.GetComponent<Outline>().enabled = selected;
+            Text label = button.transform.Find("RouteLabel").GetComponent<Text>();
+            label.color = selected ? InkColor : PaperColor;
+            label.fontStyle = selected ? FontStyle.Bold : FontStyle.Normal;
+            button.transform.Find("RouteSelectionMark").gameObject.SetActive(selected);
         }
 
         private static void StyleReaderControl(Button button)
@@ -931,15 +975,68 @@ namespace HallowBlaze.Presentation.Atlas
 
         private void HighlightInspection(Dictionary<string, Button> buttons, string id)
         {
+            ClearRouteDestination();
             foreach (var pair in inspectionColors) if (pair.Key != null) pair.Key.image.color = pair.Value;
             if (!buttons.TryGetValue(id, out Button selected)) return;
             selected.image.color = buttons == nodeButtons ? AmberColor : new Color(0.85f, 0.65f, 0.26f, 0.35f);
+            RevealMapObject(selected.transform);
+        }
+
+        private void RevealMapObject(Transform target)
+        {
             mapScroll.StopMovement();
-            Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(mapArea, selected.transform);
+            Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(mapArea, target);
             Rect viewport = mapArea.rect;
             mapContent.anchoredPosition += new Vector2(
                 bounds.min.x < viewport.xMin ? viewport.xMin - bounds.min.x : bounds.max.x > viewport.xMax ? viewport.xMax - bounds.max.x : 0,
                 bounds.min.y < viewport.yMin ? viewport.yMin - bounds.min.y : bounds.max.y > viewport.yMax ? viewport.yMax - bounds.max.y : 0);
+        }
+
+        private void HighlightRouteDestination(string nodeId)
+        {
+            if (!nodeButtons.TryGetValue(nodeId, out routeDestination)) return;
+            routeDestination.image.color = AmberColor;
+            RectTransform marker = CreateRect("RouteDestination", (RectTransform)routeDestination.transform, Vector2.zero, Vector2.one);
+            marker.offsetMin = new Vector2(-6, -6);
+            marker.offsetMax = new Vector2(6, 6);
+            routeDestinationMarker = marker.gameObject;
+            routeDestinationPulse = marker.gameObject.AddComponent<CanvasGroup>();
+            routeDestinationPulse.blocksRaycasts = false;
+            RectTransform top = CreateImage("Top", marker, new Vector2(0, 1), Vector2.one, CoralColor);
+            top.pivot = new Vector2(0.5f, 1);
+            top.sizeDelta = new Vector2(0, 3);
+            RectTransform bottom = CreateImage("Bottom", marker, Vector2.zero, new Vector2(1, 0), CoralColor);
+            bottom.pivot = new Vector2(0.5f, 0);
+            bottom.sizeDelta = new Vector2(0, 3);
+            RectTransform left = CreateImage("Left", marker, Vector2.zero, new Vector2(0, 1), CoralColor);
+            left.pivot = new Vector2(0, 0.5f);
+            left.sizeDelta = new Vector2(3, 0);
+            RectTransform right = CreateImage("Right", marker, new Vector2(1, 0), Vector2.one, CoralColor);
+            right.pivot = new Vector2(1, 0.5f);
+            right.sizeDelta = new Vector2(3, 0);
+            routePulseStarted = Time.unscaledTime;
+            RevealMapObject(routeDestination.transform);
+        }
+
+        private void UpdateRouteDestinationPulse(float elapsedSeconds)
+        {
+            if (routeDestinationPulse == null) return;
+            routeDestinationPulse.alpha = animationsEnabled ? 0.8f + 0.2f * Mathf.Sin(elapsedSeconds * Mathf.PI) : 1;
+        }
+
+        private void ClearRouteDestination()
+        {
+            if (routeDestination != null && inspectionColors.TryGetValue(routeDestination, out Color color))
+                routeDestination.image.color = color;
+            if (routeDestinationMarker != null)
+            {
+                routeDestinationMarker.SetActive(false);
+                routeDestinationMarker.transform.SetParent(null, false);
+                Destroy(routeDestinationMarker);
+            }
+            routeDestination = null;
+            routeDestinationMarker = null;
+            routeDestinationPulse = null;
         }
 
         private string KnownPlaceName(string nodeId)
@@ -1010,6 +1107,7 @@ namespace HallowBlaze.Presentation.Atlas
 
         private void ClearRouteButtons()
         {
+            ClearRouteDestination();
             for (int index = 0; index < routeButtons.Count; index++)
             {
                 if (routeButtons[index] != null)
@@ -1020,6 +1118,7 @@ namespace HallowBlaze.Presentation.Atlas
             }
 
             routeButtons.Clear();
+            routeButtonEdges.Clear();
         }
 
         private void SetOpen(bool open)
@@ -1030,6 +1129,7 @@ namespace HallowBlaze.Presentation.Atlas
             canvasGroup.alpha = open ? 1f : 0f;
             canvasGroup.interactable = open;
             canvasGroup.blocksRaycasts = open;
+            if (!open) ClearRouteDestination();
             if (open)
             {
                 if (keyboardFocus == null) keyboardFocus = KeyboardMenuFocus.Attach(gameObject, null, () => { if (reading) gameManager?.FieldNotes?.Close(); });
