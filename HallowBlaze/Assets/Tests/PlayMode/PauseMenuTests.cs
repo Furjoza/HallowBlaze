@@ -362,6 +362,59 @@ namespace HallowBlaze.Tests.PlayMode
                 helpFocus.HandleKey(KeyCode.Return);
                 Assert.That(view.Context, Is.EqualTo(PcInputContext.Interaction));
                 view.Resize(new Vector2(320, 480));
+                RectTransform diagram = view.GetComponentsInChildren<RectTransform>()
+                    .Single(rect => rect.name == "Keyboard diagram");
+                ScrollRect bindings = view.GetComponentInChildren<ScrollRect>();
+                Assert.That(diagram.IsChildOf(bindings.transform), Is.False,
+                    "Browsing bindings must not scroll the illustrated keys out of sight.");
+                Assert.That(view.GetComponentsInChildren<Button>().Count(button => button.name.StartsWith("Binding ")),
+                    Is.EqualTo(view.Hints.Count), "Every binding must be keyboard- and pointer-selectable.");
+                foreach (PcInputContext context in Enum.GetValues(typeof(PcInputContext)))
+                {
+                    view.SelectContext(context);
+                    Button[] rows = bindings.GetComponentsInChildren<Button>();
+                    Assert.That(rows.Length, Is.EqualTo(view.Hints.Count));
+                    for (int index = 0; index < rows.Length; index++)
+                    {
+                        rows[index].Select();
+                        Text action = rows[index].transform.Find("Binding action").GetComponent<Text>();
+                        Assert.That(action.text, Is.EqualTo(view.Hints[index].Label));
+                        foreach (KeyCode key in view.Hints[index].Keys)
+                        {
+                            Image keycap = diagram.Find("Key " + key).GetComponent<Image>();
+                            Assert.That(keycap.color, Is.EqualTo((Color)new Color32(24, 107, 79, 255)));
+                            Assert.That(keycap.GetComponent<Outline>().effectDistance, Is.EqualTo(new Vector2(2, -2)));
+                        }
+                    }
+                    Button retained = rows.Last();
+                    view.Resize(new Vector2(1280, 720));
+                    view.Resize(new Vector2(320, 480));
+                    Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(retained.gameObject));
+                    Assert.That(bindings.GetComponentsInChildren<Button>().Last(), Is.SameAs(retained));
+                    Canvas.ForceUpdateCanvases();
+                    Bounds retainedBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(bindings.viewport,
+                        (RectTransform)retained.transform);
+                    Assert.That(retainedBounds.min.y, Is.GreaterThanOrEqualTo(bindings.viewport.rect.yMin - 1));
+                    Assert.That(retainedBounds.max.y, Is.LessThanOrEqualTo(bindings.viewport.rect.yMax + 1));
+                    Assert.That(retained.transform.Find("Selected binding").gameObject.activeSelf, Is.True);
+                    ExecuteEvents.Execute(rows[0].gameObject, new PointerEventData(EventSystem.current), ExecuteEvents.pointerEnterHandler);
+                    Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(rows[0].gameObject));
+                    Assert.That(ExecuteEvents.GetEventHandler<IScrollHandler>(rows[0].gameObject), Is.SameAs(bindings.gameObject));
+                    Assert.That(ExecuteEvents.GetEventHandler<IBeginDragHandler>(rows[0].gameObject), Is.SameAs(bindings.gameObject));
+                    Assert.That(ExecuteEvents.GetEventHandler<IDragHandler>(rows[0].gameObject), Is.SameAs(bindings.gameObject));
+                    Assert.That(ExecuteEvents.GetEventHandler<IEndDragHandler>(rows[0].gameObject), Is.SameAs(bindings.gameObject));
+                    Assert.That(ExecuteEvents.GetEventHandler<IInitializePotentialDragHandler>(rows[0].gameObject), Is.SameAs(bindings.gameObject));
+                    var wheel = new PointerEventData(EventSystem.current) { scrollDelta = new Vector2(0, -1) };
+                    for (int sample = 0; sample < 64; sample++)
+                        ExecuteEvents.ExecuteHierarchy(rows[0].gameObject, wheel, ExecuteEvents.scrollHandler);
+                    Canvas.ForceUpdateCanvases();
+                    Bounds wheelBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(bindings.viewport,
+                        (RectTransform)rows.Last().transform);
+                    Assert.That(wheelBounds.min.y, Is.GreaterThanOrEqualTo(bindings.viewport.rect.yMin - 1));
+                    Assert.That(wheelBounds.max.y, Is.LessThanOrEqualTo(bindings.viewport.rect.yMax + 1));
+                    Assert.That(session.ActiveRun.Food, Is.EqualTo(food));
+                }
+                EventSystem.current.SetSelectedGameObject(bindings.gameObject);
                 for (int index = 0; index < 10 && EventSystem.current.currentSelectedGameObject.GetComponent<ScrollRect>() == null; index++)
                     helpFocus.HandleKey(KeyCode.Tab);
                 Assert.That(EventSystem.current.currentSelectedGameObject.GetComponent<ScrollRect>(), Is.Not.Null);

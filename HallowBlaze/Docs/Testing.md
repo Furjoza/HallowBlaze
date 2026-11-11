@@ -1,5 +1,50 @@
 # HallowBlaze Testing
 
+## M7.20 Contextual Controls Layout
+
+The owner authorized autonomous continuation on 2026-11-11, with visual inspection later.
+Walking, Interaction and Menus remain the existing three contexts, populated exclusively
+from `PcInputBindings`. A stationary keyboard diagram sits beside the scrollable action
+list on desktop and above it on narrow layouts. Every binding is pointer- and keyboard-
+selectable. Its marked row and emphasized key outlines share selection; other context keys
+remain visible in a secondary color. No runtime binding or gameplay input owner changed.
+
+The revised pause regression first failed on the prior diagram's ownership by the scrolling
+content. After the change, all contexts exercise per-row selection, matching key emphasis,
+pointer hover, retained row identity/focus and visible selection after desktop/narrow resize.
+The owning pause fixture passed 19/19. Existing real-main-menu and production-pause Controls
+tests passed 2/2, rendering every context at 1280x720, 320x480 and 480x640 and checking text
+fit, key coverage, nonblank pixels, final-row reachability and safe focus return. The final
+combined focused run passed 21/21 after the selected-row visibility correction. Its fresh
+report is outside the project at `%TEMP%/HB-M720-final-focused.xml`; reused render evidence
+is `%TEMP%/HB-M713-<context>-<width>x<height>.png`.
+
+An initial live focused run used the pre-import assembly and is not evidence for the new
+assertions. The next live run failed in Unity Test Framework's `PlayModeRunTask` and
+`ExitPlayModeTask` without exporting XML. Only the Lead-opened Editor was stopped; batchmode
+then compiled the on-disk sources and produced the expected red and final green reports.
+No test expectation was relaxed. That failed runner left one new `InitTestScene` asset/meta
+pair. After the owner's scoped cleanup question returned autonomous-decision authority,
+both files were copied to `%TEMP%/HB-M720-runner-artifact` with matching SHA-256, then only
+that pair was removed through `AssetDatabase.DeleteAsset`; no baseline asset was removed.
+Final full live graphics PlayMode passed 252/252 with zero failures/skips/inconclusive and
+the expected Controls, actual-atlas and production attack identities. The fresh XML is
+`%TEMP%/HB-M720-live-final.xml` (2026-11-11 22:09:49Z-22:11:57Z), covering the initial
+candidate before the review correction below.
+
+Independent review found that row-level `EventTrigger` intercepted wheel and drag events
+before the parent `ScrollRect`. The new pointer-routing regression first failed with the
+row as the scroll receiver. A transient helper implementing only selection and pointer-enter
+now leaves wheel and the full drag lifecycle to the parent. The same test passed and reaches
+the final row by wheel events originating over the row, without assigning scroll position.
+The complete focused suite after that correction passed 21/21; its current XML is
+`%TEMP%/HB-M720-reviewed-focused.xml`. Final full live revalidation passed 252/252, with
+zero failures/skips/inconclusive and the expected Controls, actual-atlas and attack cases;
+`%TEMP%/HB-M720-reviewed-live.xml` records 2026-11-11 22:24:20Z-22:26:45Z. GameView focus
+was restored during that run without changing gameplay or assertions. Independent technical
+recheck passed on 2026-11-11. Owner desktop/narrow inspection is Not run. M7.8 and M7.17
+remain open.
+
 ## M7.24 Executed Attack Miss Audio
 
 The production-prefab regression first failed because `Enemy.PresentAttack` only created
