@@ -396,17 +396,30 @@ namespace HallowBlaze.Tests.PlayMode
                             button.name.StartsWith("AtlasRouteButton-", StringComparison.Ordinal)).ToArray();
                         Assert.That(buttons, Has.Length.EqualTo(options.Length));
                         ScrollRect scroll = atlasObject.transform.Find("AtlasRouteBand/AtlasRouteViewport").GetComponent<ScrollRect>();
+                        Text routeTitle = atlasObject.transform.Find("AtlasRouteBand/RouteTitle").GetComponent<Text>();
+                        Assert.That(routeTitle.cachedTextGenerator.lineCount, Is.EqualTo(2),
+                            "The route heading must keep CHOOSE and ROUTE intact at " + size);
+                        int secondLineStart = routeTitle.cachedTextGenerator.lines[1].startCharIdx;
+                        Assert.That(routeTitle.text.Substring(0, secondLineStart).Trim(), Is.EqualTo("CHOOSE"));
+                        Assert.That(routeTitle.text.Substring(secondLineStart).Trim(), Is.EqualTo("ROUTE"));
+                        Assert.That(routeTitle.preferredHeight, Is.LessThanOrEqualTo(routeTitle.rectTransform.rect.height + 1f));
+                        Bounds titleBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(
+                            scroll.viewport, routeTitle.rectTransform);
+                        Assert.That(titleBounds.max.x, Is.LessThanOrEqualTo(scroll.viewport.rect.xMin - 1f),
+                            "The heading must not overlap route controls at " + size);
                         foreach (Button button in buttons)
                         {
                             Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(button.gameObject));
                             Invoke(atlas, "LateUpdate");
+                            yield return null;
+                            Canvas.ForceUpdateCanvases();
                             Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(scroll.viewport, (RectTransform)button.transform);
                             Assert.That(bounds.min.x, Is.GreaterThanOrEqualTo(scroll.viewport.rect.xMin - 1f));
                             Assert.That(bounds.max.x, Is.LessThanOrEqualTo(scroll.viewport.rect.xMax + 1f));
                             Text label = button.GetComponentInChildren<Text>();
                             Assert.That(label.fontSize * canvas.scaleFactor, Is.InRange(14f, 16f));
                             Assert.That(label.preferredHeight, Is.LessThanOrEqualTo(label.rectTransform.rect.height + 1f), label.text);
-                            Assert.That(label.cachedTextGenerator.vertexCount, Is.GreaterThan(0));
+                            Assert.That(label.cachedTextGenerator.vertexCount, Is.GreaterThan(0), label.text + " at " + size);
                             focus.HandleKey(KeyCode.RightArrow);
                         }
                         Invoke(atlas, "LateUpdate");

@@ -1,5 +1,46 @@
 # HallowBlaze Testing
 
+## M7.26 Missing Opening Atlas Investigation
+
+The owner reported no atlas after the third opening board on 2026-11-11. PlayMode had ended
+before inspection, so the failed live state and its cause were not captured. This incident
+is not claimed fixed, and M7.17 remains Revise.
+
+The previous `EveryOpeningBoundaryContinuesWithoutRerollRefillOrEarlyChoice` test asserted
+route-choice state without checking the actual atlas. It now also requires a persistent
+production atlas, visibility only at the third boundary, an active/interactable canvas and
+two legal route buttons. The focused probe passed.
+
+`MenuOpeningExitsShowTheActualAtlas` starts through the production menu using keyboard
+activation, traverses all three generated boards through player commands and event replay,
+and verifies the actual atlas, two legal options, focus and no implicit new leg/day. A
+framebuffer check requires visible selected-route pixels and saves external screenshots as
+`%TEMP%/HB-atlas-opening-<False|True>.png`. The same test exits to the menu and resumes the
+arrived checkpoint through Continue, requiring the atlas and choices again. Both animation
+variants passed with fresh Unity XML at `%TEMP%/HB-atlas-opening-check-final2.xml`
+(2026-11-11 18:28:14Z-18:28:27Z, 2/2). Earlier extensions of the probe failed because its
+caller omitted the scene load after `ExitToMenu`; that test setup was corrected without
+weakening the visibility/Continue requirements.
+
+Read-only checkpoint inspection confirmed completed opening progress at `forest.start`,
+one completed day and no active leg. A smoke run using only an external temporary copy of
+the two save files also displayed the atlas, four known places, three roads, two choices
+and focus on the first route. No road was committed and the original save files were not
+used as test persistence. This supports Continue as a recovery probe, not a confirmed fix
+for the original missing view.
+
+The final owning-fixture run passed 42/42 with no failures, skips or inconclusive results;
+fresh XML at `%TEMP%/HB-atlas-opening-lifecycle.xml` records 2026-11-11
+18:30:58Z-18:32:21Z and all three atlas probes. Original profile/run SHA-256 fingerprints
+were unchanged after the isolated smoke. No production implementation changed. The known
+Unity-generated `SENTIS_ANALYTICS_ENABLED` token is handled under the repository exception;
+temporary runner build settings returned to baseline.
+
+Required next evidence is the failed live state or another deterministic reproducer.
+Leave PlayMode running on recurrence; inspect the active scene, atlas existence/canvas,
+route-choice state, selected object and fresh console before restarting or resetting data.
+Do not accept the incident solely because the automated probes are green.
+
 ## M7.25 Route Focus And Destination Preview
 
 Owner smoke on 2026-11-11 reported working menu/Controls, opening, legend access, interaction

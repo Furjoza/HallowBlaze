@@ -6576,6 +6576,9 @@ Continue worked for the earlier active save; its absence after Destination reach
 Won finalization, not a completed-atlas restriction. No save/Continue change is authorized here.
 Keep Revise pending route-readability retest and an explicit owner verdict; do not infer unreported
 medical, portrait, terminal-reader or specific checkpoint checks from the general observations.
+**Additional owner report (2026-11-11):** The atlas did not appear after the third opening
+board. M7.26 tracks this unresolved incident; successful automated route-choice state checks
+and M7.25's earlier results do not prove that the reported presentation failure is fixed.
 **Priority:** P0 follow-up release gate.
 **Related contract:** Sections 18.1, 27.2 and accepted current food/medical rules; original M7.8 obligations remain.
 **Rationale:** Input contexts, route order, attack cues and resource content must work together in the real opening/travel loop, not just isolated fixtures.
@@ -6811,6 +6814,36 @@ relevant final PlayMode regression with fresh XML, scope integrity and independe
 
 ---
 
+## `M7.26` - Atlas missing after the third opening board
+
+**Status:** `Blocked` - investigation on 2026-11-11. The owner reported no atlas after the
+third opening board, but PlayMode had already ended before inspection. No production cause
+or repair is confirmed. The saved run had completed the opening, reached `forest.start`,
+and had no active leg; its progress was not lost. Continue on an isolated external copy
+displayed the actual atlas with four known places, three roads, two choices and route focus.
+**Priority:** P0 before repeating the affected M7.17 transition.
+**Related contract:** The route-leg loop in section 2 and atlas/input ownership in sections
+7.6 and 18.1. The final segment must open the atlas without implicitly choosing a route.
+**Closed investigation write scope:** Assets/Tests/PlayMode/GameSessionLifecycleTests.cs,
+Docs/Testing.md and this roadmap. No production, scene, prefab, package, settings or save
+format changes are made. Tests use isolated temporary saves; the original files are read-only.
+**Evidence:** The existing boundary regression now requires the actual atlas to remain present
+and open only after the third board. A production-menu regression traverses all three generated
+boards through player commands, checks visible selected-route pixels, legal choices and focus,
+then resumes the arrived checkpoint through Continue. Both animation variants pass. The
+incident remains unresolved despite those results; they cover the tested paths, not the lost
+manual state. Validation details are in Docs/Testing.md.
+The final owning-fixture run passed 42/42 with fresh XML and all three atlas probes; original
+save fingerprints were unchanged after the isolated smoke. This does not close the incident.
+**Acceptance criteria:** Capture or reproduce the failed state, identify its owning control
+path, add a regression that fails for that cause, apply a minimal verified repair, and repeat
+the owner's affected transition. Missing live evidence is a blocker, not a passing gate.
+**Next discriminating evidence:** Leave PlayMode running if the atlas fails again, preserving
+the scene, atlas instance/visibility, route-choice state, current selection and fresh console.
+Do not reset the profile or start a new game to collect this evidence. M7.17 stays Revise.
+
+---
+
 ### M7 gate
 
 M7 is complete only after the original M7.1-M7.8 obligations and follow-ups M7.9-M7.18 are
@@ -6825,6 +6858,7 @@ M7.23 applies the later shared-atlas and additional-key corrections before the s
 M7.24 is explicitly deferred and is not implemented or accepted by this repair.
 M7.25 addresses route focus/destination readability raised during the 2026-11-11 retest;
 it does not convert positive smoke observations into an implicit M7.17 Accept verdict.
+M7.26 tracks the subsequent missing-atlas report; passing isolated probes does not close it.
 
 ---
 

@@ -602,7 +602,7 @@ namespace HallowBlaze.Presentation.Atlas
                 routeBand,
                 new Vector2(0.025f, 0.14f),
                 new Vector2(0.2f, 0.86f),
-                "CHOOSE ROUTE",
+                "CHOOSE\nROUTE",
                 20,
                 TextAnchor.MiddleLeft,
                 PaperColor);
@@ -1079,9 +1079,11 @@ namespace HallowBlaze.Presentation.Atlas
             Place(inspectorScroll.viewport, 12, 40, inspector.rect.width - 24, inspector.rect.height - 86);
             Place((RectTransform)observationsButton.transform, 12, inspector.rect.height - 38, inspector.rect.width - 24, 30);
             Place(routeBand, 0, height - 100, width, 100);
-            Place((RectTransform)routeBand.Find("RouteTitle"), 12, 12, 82, 76);
-            routeBand.Find("RouteTitle").GetComponent<Text>().fontSize = 16;
-            Place(routeScroll.viewport, 104, 12, width - 116, 76);
+            Text routeTitle = routeBand.Find("RouteTitle").GetComponent<Text>();
+            routeTitle.fontSize = 16;
+            float routeTitleWidth = Mathf.Ceil(routeTitle.preferredWidth) + 2;
+            Place(routeTitle.rectTransform, 12, 12, routeTitleWidth, 76);
+            Place(routeScroll.viewport, routeTitleWidth + 24, 12, width - routeTitleWidth - 36, 76);
             LayoutInspector();
         }
 
