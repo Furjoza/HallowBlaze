@@ -54,6 +54,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     private GameObject restartButton;
     private GameObject menuButton;
     private KeyboardMenuFocus terminalFocus;
+    private GameObject victoryActions;
     private bool doingSetup;
     private bool gameplayInputBlocked;
     private bool boardStartupInProgress;
@@ -78,6 +79,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     private FactDiscoveryRecorder factRecorder;
     private bool fieldNotesInputBlocked;
     private bool fieldNotesAfterDeath;
+    private bool restoreTerminalFocusAfterReading;
     private bool fieldNotesGameplayScene;
     private Vector2 intentViewport;
     private Camera intentLayoutCamera;
@@ -135,7 +137,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     {
         get
         {
-            return worldMap != null
+            return session?.ActiveRun?.Status == RunStatus.Active && worldMap != null
                 && (worldMap.ChoiceState == RouteChoiceState.AwaitingChoice ||
                     worldMap.ChoiceState == RouteChoiceState.RunSavePending);
         }
@@ -244,12 +246,17 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     }
 
     /// <summary>
-    /// Opens route choice at an arrived checkpoint, never during the mandatory opening leg.
+    /// Opens route choice at an arrived checkpoint or finalizes the explicit world goal, never during the opening leg.
     /// </summary>
     /// <returns>Whether route choice is ready, including a terminal node with no outgoing road.</returns>
     public bool BeginRouteChoice()
     {
         RunState currentRun = session?.ActiveRun;
+        if (currentRun?.Status == RunStatus.Won)
+        {
+            WinGame();
+            return session.ActiveRun == null;
+        }
         if (session == null ||
             currentRun == null ||
             currentRun.Status != RunStatus.Active ||
@@ -275,6 +282,11 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         }
 
         SetRouteChoices(choicesResult.Exits);
+        if (currentRun.WorldNodeId == worldDefinition.GoalNodeId)
+        {
+            WinGame();
+            return session.ActiveRun == null;
+        }
         return true;
     }
 
@@ -412,6 +424,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     {
         if (scene.buildIndex != 1)
         {
+            ClearVictoryActions();
             fieldNotesGameplayScene = false;
             fieldNotes?.SetAvailable(false);
             DisposeActiveBoardRuntime();
@@ -701,6 +714,11 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         return Rect.MinMaxRect(minimum.x, minimum.y, maximum.x, maximum.y);
     }
 
+    private void Update()
+    {
+        activeIntentLegend?.SampleInput(Input.GetKeyDown, Time.frameCount, IsGameplayInputEnabled);
+    }
+
     private void LateUpdate()
     {
         UpdateBoardVisibility();
@@ -786,6 +804,26 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         fieldNotes = fieldNotesOwner.AddComponent<FieldNotesPresenter>();
         fieldNotes.Bind(fieldNotesProfile, factKnowledge, MayOpenFieldNotes, SetFieldNotesInputBlocked,
             new Vector2(Screen.width, Screen.height));
+        fieldNotes.Opened += OpenKnowledgeAtlas;
+        fieldNotes.Closed += CloseKnowledgeAtlas;
+        fieldNotes.SelectionChanged += ShowAtlasFact;
+    }
+
+    private HallowBlaze.Presentation.Atlas.AtlasScreenController FindAtlas(bool create)
+    {
+        var atlas = FindAnyObjectByType<HallowBlaze.Presentation.Atlas.AtlasScreenController>();
+        if (atlas != null || !create) return atlas;
+        GameObject prefab = Resources.Load<GameObject>("Atlas/AtlasScreen");
+        if (prefab == null) throw new InvalidOperationException("Atlas screen prefab is required to read recorded knowledge.");
+        GameObject owner = Instantiate(prefab, transform);
+        return owner.GetComponent<HallowBlaze.Presentation.Atlas.AtlasScreenController>();
+    }
+
+    private void OpenKnowledgeAtlas() => FindAtlas(true).OpenReader();
+    private void CloseKnowledgeAtlas() => FindAtlas(false)?.CloseReader();
+    private void ShowAtlasFact(string factId)
+    {
+        if (fieldNotes.IsOpen) FindAtlas(false)?.ShowFact(factId);
     }
 
     private bool MayOpenFieldNotes()
@@ -803,7 +841,17 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     {
         fieldNotesInputBlocked = blocked;
         if (blocked)
+        {
+            restoreTerminalFocusAfterReading = terminalFocus != null && terminalFocus.isActiveAndEnabled;
+            if (restoreTerminalFocusAfterReading) terminalFocus.enabled = false;
             activeIntentLegend?.Hide();
+        }
+        else if (restoreTerminalFocusAfterReading)
+        {
+            restoreTerminalFocusAfterReading = false;
+            if (terminalFocus != null) terminalFocus.enabled = true;
+        }
+        if (victoryActions != null) victoryActions.SetActive(!blocked);
         if (!blocked) gameplayInputResumeFrame = Time.frameCount;
         UpdatePresentationBlocks();
     }
@@ -1055,6 +1103,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (session == null || session.ActiveRun == null)
             return;
 
+        fieldNotes?.ClearDiscoveryFeedback();
         CancelInvoke(nameof(HideLevelImage));
         RunState run = session.ActiveRun;
         if (run.Status == RunStatus.Active)
@@ -1105,7 +1154,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void OnRunStarted(RunState runState)
     {
+        restoreTerminalFocusAfterReading = false;
         if (terminalFocus != null) terminalFocus.enabled = false;
+        ClearVictoryActions();
         fieldNotesAfterDeath = false;
         fieldNotes?.Close();
         DisposeActiveBoardRuntime();
@@ -1140,7 +1191,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (!boardStartupInProgress)
             doingSetup = false;
         gameplayInputBlocked = true;
-        SetRouteChoices(NoRouteChoices);
+        if (!handlingBoardOutcome || runState.Status != RunStatus.Won)
+            SetRouteChoices(NoRouteChoices);
     }
 
     public void StartNewRun()
@@ -1199,12 +1251,76 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         return result.IsSuccess;
     }
 
+    /// <summary>Finalizes victory through the existing lifecycle and exposes keyboard-accessible new-run/menu actions.</summary>
+    /// <remarks>Profile knowledge is preserved. Failed persistence leaves finalization retryable instead of starting a run.</remarks>
     public void WinGame()
     {
+        RunState run = session?.ActiveRun;
+        if (run == null || run.Status == RunStatus.Dead) return;
         EnsurePersistence();
-        SaveStoreResult result = lifecycle.MarkWon();
+        bool previousHandling = handlingBoardOutcome;
+        handlingBoardOutcome = true;
+        SaveStoreResult result;
+        try { result = lifecycle.MarkWon(); }
+        finally { handlingBoardOutcome = previousHandling; }
         if (result.IsFailure)
+        {
             Debug.LogError("Run completion save failed: " + result.Type);
+            return;
+        }
+        fieldNotes?.ClearDiscoveryFeedback();
+        CancelInvoke(nameof(HideLevelImage));
+        routeChoices = NoRouteChoices;
+        SetGameplayInputBlocked(true);
+        activePlayerView?.SetHudVisible(false);
+        if (levelText != null)
+            levelText.text = "You reached the destination!\nCompleted days: " + run.CompletedDayCount;
+        int score = ManageScore(run.CompletedDayCount);
+        if (scoreText != null) scoreText.text = "Your current local record is " + score + " days.";
+        if (levelImage != null) levelImage.SetActive(false);
+        fieldNotesAfterDeath = true;
+        enabled = false;
+        victoryActions = new GameObject("Victory actions", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
+        victoryActions.transform.SetParent(transform, false);
+        Canvas canvas = victoryActions.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 150;
+        RectTransform bar = new GameObject("Victory bar", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
+        bar.SetParent(victoryActions.transform, false);
+        bar.anchorMin = Vector2.zero;
+        bar.anchorMax = new Vector2(1, 0);
+        bar.pivot = new Vector2(0.5f, 0);
+        bar.anchoredPosition = Vector2.zero;
+        bar.sizeDelta = new Vector2(0, 112);
+        bar.GetComponent<Image>().color = new Color(0.08f, 0.1f, 0.08f, 0.95f);
+        if (levelText != null)
+        {
+            RectTransform label = levelText.rectTransform;
+            label.SetParent(bar, false);
+            label.anchorMin = Vector2.zero;
+            label.anchorMax = new Vector2(1, 0);
+            label.pivot = new Vector2(0.5f, 0.5f);
+            label.anchoredPosition = new Vector2(0, 80);
+            label.sizeDelta = new Vector2(-16, 48);
+            levelText.fontSize = 18;
+            levelText.alignment = TextAnchor.MiddleCenter;
+        }
+        GameObject[] actions = { restartButton, menuButton };
+        for (int index = 0; index < actions.Length; index++)
+        {
+            if (actions[index] == null) continue;
+            RectTransform button = (RectTransform)actions[index].transform;
+            button.SetParent(bar, false);
+            button.anchorMin = new Vector2(index * 0.5f, 0);
+            button.anchorMax = new Vector2((index + 1) * 0.5f, 0);
+            button.pivot = new Vector2(0.5f, 0.5f);
+            button.anchoredPosition = new Vector2(0, 28);
+            button.sizeDelta = new Vector2(-16, 44);
+            Text text = button.GetComponentInChildren<Text>(true);
+            if (text != null) text.fontSize = 20;
+            actions[index].SetActive(true);
+        }
+        if (restartButton != null) terminalFocus = KeyboardMenuFocus.Attach(bar.gameObject, restartButton);
     }
 
     public void RestartGame()
@@ -1225,10 +1341,19 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             return;
 
         RestoreRuntimeState();
+        ClearVictoryActions();
         if (!enabled)
             enabled = true;
 
         sceneLoader(MenuSceneName);
+    }
+
+    private void ClearVictoryActions()
+    {
+        if (victoryActions == null) return;
+        victoryActions.SetActive(false);
+        Destroy(victoryActions);
+        victoryActions = null;
     }
 
     private bool TryBeginTerminalAction()
@@ -1250,6 +1375,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void DisposeActiveBoardRuntime()
     {
+        fieldNotes?.ClearDiscoveryFeedback();
         if (activeBoardPresenter != null)
             activeBoardPresenter.Dispose();
         activeBoardPresenter = null;

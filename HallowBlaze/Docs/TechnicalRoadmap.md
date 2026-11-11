@@ -6046,6 +6046,10 @@ Independent review passed. The owner visual smoke remains part of M7.8.
 ## `M7.4` - One short footstep per accepted player step
 
 **Status:** `Done` (2026-10-29)
+**Owner correction (2026-11-05):** The report concerned the lingering mechanical noise footprint,
+not the authored audio length. M7.19 restores full clip playback and retains cancellation/mute
+ownership. The exact requested domain lifetime remains to be clarified; this historical card
+does not authorize changing the Noise/Listener rule or treating audio restoration as that fix.
 **Priority:** P2
 **Related contract:** sections 9, 10 and 18; presentation must not own turn resolution.
 
@@ -6536,7 +6540,7 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 
 ## `M7.16` - Restore first-aid content and supported healing
 
-**Status:** `Planned`
+**Status:** `Done` - accepted 2026-11-04; focused and full regression/generation gates plus independent review PASS. Owner fresh-board manual smoke remains assigned to M7.17.
 **Priority:** P1 current-content repair.
 **Related contract:** Sections 6, 9, 10 and 18; clarify the pre-M10 medical effect before Ready.
 **Rationale:** A kit sprite without a working domain effect is not restoration; healing must use the same command/turn ownership as other resources.
@@ -6551,11 +6555,18 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 **Save and compatibility impact:** Retain health ownership/checkpoints and pinned old content; version new distribution. New persistent fields require migration; no profile reset or exact-turn resume.
 **Required evidence:** Accepted healing/full-health/cost/noise policy, content/supply matrix, exact tests and actual mouse-free kit use.
 
+**Accepted medical rule (2026-11-04):** The owner approved kit healing of up to 10, capped locally at 100 Health, conscious same-cell/adjacent use, no full-health waste, one Food cost, prototype interaction noise 4/2 and supply 0-1. The global legacy Health API stays unchanged. Exact stable `legacy.aid` / existing AidKit artwork maps to `use-first-aid`; HealthRestored reports actual applied healing after consumption, not a requested amount. Generic paid `interact` is excluded for kits. Movement/preview/rejection never heal. Ordinary/5 publishes a separate medical family without changing Food supply, and versions 1-4 keep their content/layouts. No bag, save schema, profile reset, new combat rule or authored medical audio clip is introduced; visible +Health feedback is identical in both animation modes.
+
+**Focused evidence:** Partial/full/excess HP, stale/missing/replaced/distant targets, repeat use, free preview, one cost/noise and terminal ordering are tested through the resolver/controller. Production AidKit tests sample F/E/Space through the real picker at 95/100/120 HP, assert actual +5 HUD/removal versus free unavailable use, and verify synchronization and checkpoint rollback/serialized totals. Continue reconstructs ordinary versions 1-5. A deterministic 100-seed fixture observes both zero and one medical kit and checks manifest/identity separately from Food. Final EditMode 1290 passed plus one expected explicit milestone skip; graphics PlayMode 244/244; separate 10,000-seed gate twice passed with zero invalid boards/fallbacks, 38.89/37.66 seconds and identical fingerprint `3cde6d6f11a662369ab73d33a469d8f1ab23cb054dc21ac8aa756cbfb9e5efaa`. Existing noise tests now use neutral test interaction targets instead of relying on inert first aid, retaining their original cost/noise/enemy expectations. Independent review PASS. Owner fresh-board manual smoke remains in M7.17 by explicit approval.
+
 ---
 
 ## `M7.17` - Expanded keyboard, opening and resource acceptance gate
 
-**Status:** `Planned`
+**Status:** `Revise` - owner smoke on 2026-11-05 completed the whole game using only the keyboard,
+but reported menu/help, resource artwork, facing, medical feedback, route-key, footstep,
+terminal-flow and atlas-source issues. Repairs and deferred items are tracked in M7.19-M7.21
+and M8.5. Keyboard completion is positive evidence, not acceptance of the visual/audio gate.
 **Priority:** P0 follow-up release gate.
 **Related contract:** Sections 18.1, 27.2 and accepted current food/medical rules; original M7.8 obligations remain.
 **Rationale:** Input contexts, route order, attack cues and resource content must work together in the real opening/travel loop, not just isolated fixtures.
@@ -6575,6 +6586,9 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 ## `M7.18` - Free 90-degree visual turns in idle walking mode
 
 **Status:** `Done` - 2026-11-03. Presentation-only quarter-turns and idle/context/lifecycle gates implemented; full graphics PlayMode 225/225 and focused state/render checks 3/3 passed. Independent review PASS, including actual Git scope evidence. Authored North pose, movement-preserved facing and chord policy are in `Docs/Testing.md`; human integrated acceptance remains M7.17.
+**Owner correction (2026-11-05):** Planar rotation of the existing sprite was rejected during
+smoke. M7.19 replaces only that rendering policy with Q=left/E=right horizontal mirroring;
+all free-action, input-gate and state invariants remain. M7.21 owns proper directional art.
 **Priority:** P1 requested input behavior within the keyboard follow-up.
 **Related contract:** Section 18.1 contextual input and free cosmetic facing; existing grid/turn/intent invariants.
 **Rationale:** A harmless, responsive visual action lets players turn the character while thinking without spending a tactical opportunity or accidentally selecting an interaction.
@@ -6589,6 +6603,166 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 **Save and compatibility impact:** Cosmetic orientation is not part of BoardState/RunState, saves, gameplay RNG or deterministic command results. No schema/checkpoint change or promise of restoring the same visual facing on Continue.
 **Required evidence:** Context/key and pose/movement policy, visible 90-degree/four-turn checks, exact no-gameplay-effect assertions and integrated owner smoke in M7.17.
 
+## `M7.19` - Bounded owner-smoke usability repairs
+
+**Status:** `Done` - 2026-11-05. Bounded usability repairs accepted after final graphics
+PlayMode 248/248 and independent review PASS, including recheck of modal-host lifetime and
+visible scroll focus. Owner retest remains M7.17 Revise; the two explicitly outstanding
+noise/source issues below are not claimed resolved.
+**Priority:** P0 repairs before repeating M7.17.
+**Related contract:** Sections 18.1, 19 and 26; owner smoke corrections dated 2026-11-05.
+**Scope:** Remove the intrusive focus frame while retaining selection tint and keyboard ownership;
+match Controls hover to the existing menu, center its modal independently of the host panel and
+keep the last binding scroll-reachable. Render ordinary berries on a cosmetic bush without
+adding a blocking obstacle. Replace planar Q/E rotation with left/right mirroring. Explain
+full-Health first-aid rejection. Support literal A/S route navigation plus W/D aliases. Restore
+full authored footstep audio with mute/cancel/recovery ownership. Finalize the explicit world
+goal through the existing Won lifecycle and expose existing Restart/Menu actions.
+The completed atlas stays visible behind a responsive terminal action bar; that transient bar
+is removed on menu/new-run transitions. Save failures remain retryable without replaying rewards.
+**Closed write scope:** Nine owning production scripts (BoardManager, GameManager, PlayerScript,
+BoardEventPresenter, InteractionPresenter, KeyboardControlsView, KeyboardMenuFocus, PcInputBindings,
+PlayerVisualFacing); six existing PlayMode test files (AtlasScreenTests, AxePresentationTests,
+BoardRuntimeStartupTests, GameSessionLifecycleTests, PauseMenuTests, PlayModeInfrastructureTests);
+this roadmap, GameDesignContract and Testing. No scene/prefab/GUID/settings/package changes.
+**Acceptance criteria:** Color-based focus and pointer hover remain visible; Controls is centered
+and its final Interaction row reachable at desktop/narrow sizes; berries retain +5 Food and
+walkability; free facing preserves domain snapshots/noise/plans; full-health aid rejection is
+readable and free; A/S/W/D browse without choosing a route or consuming resources; authored
+audio is not cut at 100 ms or movement completion; victory offers keyboard menu/new-run actions
+and preserves profile knowledge and exactly-once completion statistics.
+**Validation:** Focused owner-fixture tests followed by final graphics PlayMode regression,
+fresh report identity/count/failure checks, scope inspection and independent review.
+**Outstanding smoke issues:** The owner distinguishes domain step-noise persistence from audio;
+the requested lifetime needs clarification before changing Noise/Listener semantics. Axe-source
+markers require the already planned M8.5 discovery/profile/atlas feature, not a decorative icon.
+Neither issue is silently accepted or claimed fixed. M7.17 remains Revise pending owner retest.
+**Save impact:** Existing lifecycle finalizes Won, saves profile and deletes only the ended run;
+Restart uses the existing new-run policy. No schema, profile reset or replay architecture.
+
+---
+
+## `M7.20` - Redesign the manual Controls presentation
+
+**Status:** `Planned` - requested by the owner on 2026-11-05; future visual work, not a prerequisite
+for testing the centered, non-clipped interim Controls view.
+**Priority:** P2.
+**Scope:** Revisit manual layout, diagram, context grouping, navigation and desktop/narrow
+readability as a coherent design. Agree the design before production asset/layout changes.
+**Non-goals:** New gameplay bindings, rule discoveries, inventory activation or changing input ownership.
+**Acceptance criteria:** Runtime-derived bindings, complete reachable context lists, readable
+layout without clipping, mouse/keyboard parity and safe focus return in main and pause menus.
+**Validation:** Graphics PlayMode layout/context/lifecycle tests and owner desktop/narrow inspection.
+
+---
+
+## `M7.21` - Proper directional player sprites and animations
+
+**Status:** `Planned` - requested by the owner on 2026-11-05; Q/E horizontal mirroring is the interim behavior.
+**Priority:** P2.
+**Scope:** Agree directional artwork/animation requirements and implement a presentation-owned
+facing view that looks into the intended direction rather than rotating a flat sprite. Preserve
+absolute movement, the shared input contexts, animation ownership and the free cosmetic contract.
+**Non-goals:** Gameplay-facing, relative movement, directional damage/detection, turn costs or saved orientation.
+**Acceptance criteria:** Approved art makes direction legible during idle/movement/action animation;
+Q/E never rotates the image in the screen plane or mutates domain state, noise, targets or enemy plans.
+**Validation:** Direction/context/lifecycle tests, rendered desktop/narrow evidence and owner visual acceptance.
+
+---
+
+## `M7.22` - Guarded berries, corrected route keys and one-turn step noise
+
+**Status:** `Done` - 2026-11-06. Blocking berry bushes, corrected A/D navigation and one-turn
+movement noise implemented. Full EditMode 1301 passed plus one expected Explicit skip,
+graphics PlayMode 250/250 and the repeated 10,000-seed gate passed; independent review PASS.
+Owner acceptance remains the M7.17 retest; M8.5 retains its existing order.
+**Priority:** P0 before repeating M7.17.
+**Related contract:** Sections 12, 18.1 and 26.1.
+**Scope:** Fresh ordinary/6 berries occupy an existing blocking clearable bush; collection is
+impossible before clearing and still grants +5 Food once on entry afterwards. Manual/axe rules,
+obstacle counts and required exit reachability remain unchanged. Navigation uses A/D and arrows,
+not W/S; ordinary board movement stays WASD. Movement noise is active only in its emitting turn
+and expires before the next accepted enemy phase; interaction/tool lifetimes and audio stay unchanged.
+**Closed write scope:** BoardManager; OrdinaryBoardGenerator, BoardGenerationPipeline,
+BoardValidator and OrdinaryBoardContent; BoardAddressFactory and RouteTravelService;
+ActionNoiseProfile and TurnResolver; KeyboardMenuFocus and PcInputBindings; prototype-world.json;
+existing OrdinaryBoardGeneratorTests, NoiseTurnTests, RouteLegTests, WorldDefinitionTests,
+AtlasScreenTests, BoardRuntimeStartupTests, GameSessionLifecycleTests and NoisePresentationTests; GameDesignContract,
+BoardGeneration, Testing and this roadmap. No new asset, prefab, scene, settings, package or agent files.
+**Acceptance criteria:** Berries require a domain obstacle, reachable approach and real clearing;
+blocked entry/preview is free and cannot award food. The independent validator rejects unguarded
+ordinary/6 berries, including fallback outputs. A/D selects predictably while W/S does nothing
+in menus/routes. A step cannot persist into the next accepted enemy phase, but rejected input
+does not age it; interaction/tool noise remains unchanged. Saved ordinary/1-5 and legacy legs
+retain addresses, seeds and layouts against the new publication. No real-profile reset.
+**Validation:** Focused domain, publication, keyboard and graphics tests; final EditMode and
+PlayMode regression; representative repeated seeds and the existing explicit 10,000-seed gate;
+independent review after the mechanical checks.
+**Owner ordering decision (2026-11-06):** M8.5 remains in its current order with its dependencies.
+Missing tool-source markers are deferred by that explicit decision, not an authorization to
+implement them now or a new prerequisite for this repair. M7.17 still needs the owner retest.
+**Save impact:** Publish ordinary/6 for new segments; reconstruct saved versions 1-5 unchanged.
+No DTO/schema change, profile erasure or inventory activation.
+
+---
+
+## `M7.23` - Shared atlas, inspection and keyboard follow-up
+
+**Status:** `Done` - accepted 2026-11-10. Shared atlas, keyboard access and board-scoped
+discovery feedback implemented. Reviewer terminal focus/final-atlas/death-popup findings
+corrected; lifecycle 40/40 and final graphics PlayMode 250/250 passed with fresh XML.
+Independent recheck PASS. M7.17 remains Revise pending the owner's retest.
+**Priority:** P0 before repeating M7.17.
+**Related contract:** Sections 7, 13.4 and 18.1; explicit owner decision on 2026-11-09.
+**Scope:** W/S supplement A/D, arrows and Tab in menus; WASD also navigates contextual
+objects/actions. L opens/closes the intent legend with keyboard scrolling. Selected contextual
+options and board markers share the authored menu color without removing their shape/number cues.
+Replace the standalone Field Notes reader with the existing atlas. Every known node/road is
+inspectable by mouse/keyboard and its filtered details appear in the former MAP KEY area;
+recorded system facts remain readable there. Clear transient observation popups at board
+boundaries without erasing durable facts. Preserve explicit legal route confirmation.
+**Closed write scope:** GameManager; AtlasScreenController; EnemyIntentLegend;
+FieldNotesPresenter (profile access/feedback only), InteractionPresenter, KeyboardMenuFocus,
+PcCommandSource, PcInputBindings and PlayerVisualFacing; existing AtlasScreenTests,
+AxePresentationTests, EnemyIntentPresentationTests, FieldNotesPresentationTests,
+GameSessionLifecycleTests, OrderedBoardPresentationTests and PlayModeInfrastructureTests;
+GameDesignContract, Testing and this roadmap. No asset, scene, prefab, package, settings or
+agent-configuration changes; only the known Unity-generated SENTIS token exception applies.
+**Acceptance criteria:** All requested keys are effective and modal-safe; selection, legend
+inspection and atlas reading are free and never replay gameplay input. Known historical and
+current map objects are reachable without revealing unknown content or automatically travelling.
+Facts survive death/new run and remain spoiler-safe; only New Game replaces the profile.
+An old board's discovery popup cannot reappear on the atlas or a later board. Desktop and
+320x480 layout remain readable, scrollable and nonblank, preserving the selected fact on resize.
+**Non-goals:** Miss audio (M7.24), Controls redesign (M7.20), directional art (M7.21), route
+resource collection/statistics (M8.3/M8.4), tool-source discovery (M8.5), migration or human-gate closure.
+**Validation:** Focused key/render/lifecycle tests; final graphics PlayMode with fresh XML,
+expected test identities and counts; scoped diff/integrity check; independent review after
+the mechanical gate. Owner physical-key/visual acceptance remains the M7.17 retest.
+**Save impact:** No schema, ID, profile reset, resource sample or route-travel change.
+**Historical clarification:** M7.22's W/S exclusion remains its dated evidence, not the current
+menu contract after the owner's additional-alias decision.
+
+---
+
+## `M7.24` - Audible zombie attack miss
+
+**Status:** `Planned` - explicitly requested as later work by the owner on 2026-11-09.
+**Priority:** P2.
+**Scope:** Add a recognizable miss cue to the actual executed zombie attack miss path,
+using approved/authored audio and the existing presentation-owned attack/audio lifetime.
+Keep hit and miss distinguishable without relying only on color. Preserve the existing
+animation-off audio policy unless the owner explicitly revises it.
+**Acceptance criteria:** A completed miss plays its cue once; hit, rest, preview and rejected
+commands cannot play it. Mute, interruption, recovery, deactivation and disposal do not leak,
+duplicate or strand playback. Audio never changes damage, target/intent, turn costs or RNG.
+**Validation:** Focused hit/miss/cancellation/mute PlayMode checks with non-silent samples,
+both presentation modes and an owner listening verdict.
+**Non-goals:** New combat rules, mechanical noise, sprite redesign or save changes.
+**Save impact:** None.
+
+---
+
 ### M7 gate
 
 M7 is complete only after the original M7.1-M7.8 obligations and follow-ups M7.9-M7.18 are
@@ -6596,6 +6770,11 @@ accepted. Historical Done cards retain their evidence; M7.9 owns the new length 
 than rewriting M7.1. Planning does not repair gameplay or close earlier human gates. Stones
 and M8 wait for this expanded repair gate and their own prerequisites, unless the owner
 separately changes the order. Optional authoring-tool planning substitutes for no human gate.
+M7.19 repairs the owner smoke before its repeat; future visual redesigns M7.20-M7.21 do not
+block testing the agreed interim presentation and do not waive the M7.17 owner verdict.
+M7.22 applies the owner's explicit berry, route-key and step-noise corrections before that retest.
+M7.23 applies the later shared-atlas and additional-key corrections before the same retest;
+M7.24 is explicitly deferred and is not implemented or accepted by this repair.
 
 ---
 
@@ -6742,6 +6921,12 @@ separately changes the order. Optional authoring-tool planning substitutes for n
 ## `M8.5` — Fixed tool sources and persistent atlas icons
 
 **Status:** `Planned`
+**Owner smoke evidence (2026-11-05):** After completing the game, the owner found no atlas
+marker at the axe source. Radio Tower already authors `source.radio-tower.axe`, but profile
+source discovery and atlas icons are not implemented. This blocks evaluating that particular
+atlas reward; moving M8.5 ahead of its gate/dependencies requires an explicit priority decision.
+**Owner ordering decision (2026-11-06):** Keep M8.5 in its existing order and retain its
+dependencies; do not advance it before the M7 owner retest.
 **Priority:** P1
 **Related contract:** sections 7.4–7.6, 13, 18, 21.3, and 27.3.
 

@@ -23,8 +23,10 @@ namespace HallowBlaze.Presentation.Runtime
         public const KeyCode Space = KeyCode.Space;
         /// <summary>Cancels a draft or leaves a menu when cancellation is legal.</summary>
         public const KeyCode Cancel = KeyCode.Escape;
-        /// <summary>Opens or closes the read-only Field Notes.</summary>
+        /// <summary>Opens or closes the shared read-only atlas and recorded observations.</summary>
         public const KeyCode Notes = KeyCode.N;
+        /// <summary>Toggles the informational enemy-intent legend without resolving a turn.</summary>
+        public const KeyCode Legend = KeyCode.L;
         /// <summary>Compatible arrow alias for previous interaction object or replacement slot.</summary>
         public const KeyCode PreviousObjectAlias = KeyCode.LeftArrow;
         /// <summary>Compatible arrow alias for next interaction object or replacement slot.</summary>
@@ -54,6 +56,7 @@ namespace HallowBlaze.Presentation.Runtime
         public static IReadOnlyList<KeyCode> MenuKeys { get; } = Array.AsReadOnly(new[]
         {
             KeyCode.Tab, KeyCode.DownArrow, KeyCode.UpArrow, KeyCode.LeftArrow, KeyCode.RightArrow,
+            KeyCode.A, KeyCode.D, KeyCode.W, KeyCode.S,
             KeyCode.Return, KeyCode.KeypadEnter, Space, KeyCode.PageDown, KeyCode.PageUp,
             KeyCode.Home, KeyCode.End, Cancel
         });
@@ -75,29 +78,30 @@ namespace HallowBlaze.Presentation.Runtime
                 }
                 hints.Add(new ControlHint("Wait - one turn", Space));
                 hints.Add(new ControlHint("Interaction - open / close", InteractionToggle));
-                hints.Add(new ControlHint("Visual left 90 degrees - free", TurnLeft));
-                hints.Add(new ControlHint("Visual right 90 degrees - free", TurnRight));
-                hints.Add(new ControlHint("Field Notes", Notes));
+                hints.Add(new ControlHint("Visual left - free", TurnLeft));
+                hints.Add(new ControlHint("Visual right - free", TurnRight));
+                hints.Add(new ControlHint("Atlas", Notes));
+                hints.Add(new ControlHint("Enemy intents", Legend));
                 hints.Add(new ControlHint("Pause", Cancel));
             }
             else if (context == PcInputContext.Interaction)
             {
-                hints.Add(new ControlHint("Previous object / replacement slot", PreviousObject, PreviousObjectAlias));
-                hints.Add(new ControlHint("Next object / replacement slot", NextObject, NextObjectAlias));
-                hints.Add(new ControlHint("Previous action: " + KeyboardControlsView.KeyName(PreviousAction) + " or Shift + " + CycleAction, PreviousAction, CycleAction, KeyCode.LeftShift));
-                hints.Add(new ControlHint("Next action", NextAction, CycleAction));
+                hints.Add(new ControlHint("Previous object / replacement slot", PreviousObject, PreviousObjectAlias, KeyCode.A));
+                hints.Add(new ControlHint("Next object / replacement slot", NextObject, NextObjectAlias, KeyCode.D));
+                hints.Add(new ControlHint("Previous action: W / " + KeyboardControlsView.KeyName(PreviousAction) + " or Shift + " + CycleAction, PreviousAction, KeyCode.W, CycleAction, KeyCode.LeftShift));
+                hints.Add(new ControlHint("Next action", NextAction, KeyCode.S, CycleAction));
                 hints.Add(new ControlHint("Confirm selected action", Space, Enter, KeypadEnter));
                 hints.Add(new ControlHint("Cancel draft - free", InteractionToggle, Cancel));
             }
             else
             {
-                hints.Add(new ControlHint("Next control", KeyCode.Tab, KeyCode.DownArrow, KeyCode.RightArrow));
-                hints.Add(new ControlHint("Previous control: Up / Left or Shift + Tab", KeyCode.Tab, KeyCode.LeftShift, KeyCode.UpArrow, KeyCode.LeftArrow));
+                hints.Add(new ControlHint("Next control", KeyCode.Tab, KeyCode.DownArrow, KeyCode.RightArrow, KeyCode.D, KeyCode.S));
+                hints.Add(new ControlHint("Previous control: W / A / Up / Left or Shift + Tab", KeyCode.Tab, KeyCode.LeftShift, KeyCode.UpArrow, KeyCode.LeftArrow, KeyCode.A, KeyCode.W));
                 hints.Add(new ControlHint("Activate / choose route", Space, KeyCode.Return, KeyCode.KeypadEnter));
                 hints.Add(new ControlHint("Back / cancel when available", Cancel));
                 hints.Add(new ControlHint("Scroll focused region", KeyCode.PageUp, KeyCode.PageDown, KeyCode.Home, KeyCode.End));
-                hints.Add(new ControlHint("Close Field Notes", Notes, Cancel));
-                hints.Add(new ControlHint("Adjust focused slider", KeyCode.LeftArrow, KeyCode.RightArrow));
+                hints.Add(new ControlHint("Close atlas reader", Notes, Cancel));
+                hints.Add(new ControlHint("Adjust focused slider", KeyCode.LeftArrow, KeyCode.RightArrow, KeyCode.A, KeyCode.D));
             }
             return hints.AsReadOnly();
         }
@@ -120,7 +124,7 @@ namespace HallowBlaze.Presentation.Runtime
         Walking,
         /// <summary>Free object/action selection and explicit confirmed interaction.</summary>
         Interaction,
-        /// <summary>Keyboard focus, route choice, settings and read-only Notes.</summary>
+        /// <summary>Keyboard focus, route choice, settings and read-only atlas.</summary>
         Menus
     }
 }

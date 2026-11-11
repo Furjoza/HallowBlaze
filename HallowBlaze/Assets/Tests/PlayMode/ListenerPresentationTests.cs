@@ -49,7 +49,7 @@ namespace HallowBlaze.Tests.PlayMode
                     var listener = runtime.Listeners.Single();
                     Assert.That(runtime.Enemies, Is.Empty);
                     Assert.That(display.Projections.Single().Symbol, Is.EqualTo(EnemyIntentSymbol.Wait));
-                    EntityId leverId = runtime.BoardState.GetEntities().Single(entity => entity.Definition.ContentId == "legacy.aid").Id;
+                    EntityId leverId = runtime.BoardState.GetEntities().Single(entity => entity.Definition.ContentId == "test.noise-lever").Id;
                     var interaction = presenter.Coordinator.SubmitAsync(new InteractCommand(leverId));
                     while (!interaction.IsCompleted) yield return null;
                     Assert.That(interaction.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
@@ -118,7 +118,12 @@ namespace HallowBlaze.Tests.PlayMode
             layout.Add(View(LegacyBoardContentKind.Listener, 3, 1));
             layout.Add(View(LegacyBoardContentKind.Exit, 4, 4));
             layout.Add(View(LegacyBoardContentKind.Aid, 1, 2));
-            return LegacyBoardRuntimeComposer.Compose(Request(run), run, new GridBounds(0, 0, 4, 4), layout);
+            BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(Request(run), run, new GridBounds(0, 0, 4, 4), layout);
+            BoardEntityState lever = runtime.BoardState.GetEntities().Single(entity => entity.Definition.ContentId == "legacy.aid");
+            runtime.BoardState.TryRemove(lever.Id);
+            runtime.BoardState.TryAdd(new BoardEntityState(lever.Id, new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item,
+                "test.noise-lever", new BoardEntityTraits(false, false, true)), lever.Position));
+            return runtime;
         }
 
         private static BoardRequest Request(RunState run) => new BoardRequest(run.RunId, run.RunSeed, run.WorldNodeId,

@@ -103,7 +103,7 @@ namespace HallowBlaze.Tests.PlayMode
             StringAssert.Contains("SHELTER", initialText);
             StringAssert.Contains("VISITED / SOLID", initialText);
             StringAssert.Contains("SIGHTED ROAD / DASHED", initialText);
-            StringAssert.Contains("UNKNOWN  HIDDEN", initialText);
+            StringAssert.DoesNotContain("MAP KEY", initialText);
             StringAssert.Contains("CURRENT", initialText);
             StringAssert.DoesNotContain("FOREST.", initialText);
             StringAssert.DoesNotContain("CROSSROADS", initialText);
@@ -134,7 +134,7 @@ namespace HallowBlaze.Tests.PlayMode
 
             CanvasScaler scaler = atlasObject.GetComponent<CanvasScaler>();
             Assert.That(scaler, Is.Not.Null);
-            Assert.That(scaler.uiScaleMode, Is.EqualTo(CanvasScaler.ScaleMode.ScaleWithScreenSize));
+            Assert.That(scaler.uiScaleMode, Is.EqualTo(CanvasScaler.ScaleMode.ConstantPixelSize));
             Assert.That(scaler.referenceResolution, Is.EqualTo(new Vector2(1920f, 1080f)));
 
             WorldMapExitOption[] choices = GetProperty<System.Collections.Generic.IReadOnlyList<WorldMapExitOption>>(
@@ -174,6 +174,35 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(profileNodesBeforeOpen, Is.EqualTo(2));
             Assert.That(profileEdgesBeforeOpen, Is.Zero);
 
+            string stableProfile = File.ReadAllText(Path.Combine(persistenceRoot, "profile.json"));
+            foreach (Button mapObject in atlasObject.GetComponentsInChildren<Button>().Where(button =>
+                button.name.StartsWith("AtlasNode-") || button.name.StartsWith("AtlasEdge-")))
+            {
+                ExecuteEvents.Execute(mapObject.gameObject, new BaseEventData(EventSystem.current), ExecuteEvents.selectHandler);
+                Assert.That(GetProperty<string>(atlas, "InspectedDetails"), Is.Not.Empty);
+                mapObject.onClick.Invoke();
+                Assert.That(GetProperty<bool>(atlas, "IsOpen"), Is.True);
+                Assert.That(run.ActiveLeg, Is.Null);
+                Assert.That(run.CurrentDay, Is.Zero);
+            }
+            Assert.That((bool)Invoke(atlas, "InspectNode", "landmark.radio-tower"), Is.False);
+            Assert.That((bool)Invoke(atlas, "InspectEdge", "unknown.edge"), Is.False);
+            Assert.That(File.ReadAllText(Path.Combine(persistenceRoot, "profile.json")), Is.EqualTo(stableProfile));
+            Button[] mapChoices = atlasObject.GetComponentsInChildren<Button>().Where(button =>
+                button.name.StartsWith("AtlasNode-") || button.name.StartsWith("AtlasEdge-")).ToArray();
+            var reached = new System.Collections.Generic.HashSet<GameObject>();
+            KeyboardMenuFocus mapFocus = atlasObject.GetComponent<KeyboardMenuFocus>();
+            for (int step = 0; step < atlasObject.GetComponentsInChildren<Selectable>().Length; step++)
+            {
+                mapFocus.HandleKey(KeyCode.Tab);
+                GameObject selected = EventSystem.current.currentSelectedGameObject;
+                if (!mapChoices.Any(button => button.gameObject == selected)) continue;
+                reached.Add(selected);
+                mapFocus.HandleKey(KeyCode.Return);
+                Assert.That(run.ActiveLeg, Is.Null);
+            }
+            Assert.That(reached.Count, Is.EqualTo(mapChoices.Length), "Every known node and road must be keyboard reachable.");
+
             string chosenEdgeId = choices[0].EdgeId;
             ExecuteEvents.Execute(
                 routeButtons[0].gameObject,
@@ -211,7 +240,8 @@ namespace HallowBlaze.Tests.PlayMode
             AssertNamedObjectCount(atlasObject, "AtlasEdge-Traversed-", 1);
             string advancedText = GetVisibleText(atlasObject);
             StringAssert.Contains("CURRENT ROUTE / SOLID", advancedText);
-            StringAssert.Contains("TRAVERSED  SOLID", advancedText);
+            Assert.That((bool)Invoke(atlas, "InspectEdge", chosenEdgeId), Is.True);
+            StringAssert.Contains("Knowledge: Traversed", GetProperty<string>(atlas, "InspectedDetails"));
 
             session.StartNewRun("atlas-second-checkpoint", 8,
                 new RunStateConfiguration(100, 100, 0, "forest.start"));
@@ -273,6 +303,16 @@ namespace HallowBlaze.Tests.PlayMode
                 focus.HandleKey(KeyCode.RightArrow);
                 Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[1].gameObject));
                 focus.HandleKey(KeyCode.LeftArrow);
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[0].gameObject));
+                focus.HandleKey(KeyCode.D);
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[1].gameObject));
+                Assert.That(PcInputBindings.MenuKeys.Contains(KeyCode.W), Is.True);
+                Assert.That(PcInputBindings.MenuKeys.Contains(KeyCode.S), Is.True);
+                focus.HandleKey(KeyCode.W);
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[0].gameObject));
+                focus.HandleKey(KeyCode.S);
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[1].gameObject));
+                focus.HandleKey(KeyCode.A);
                 Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[0].gameObject));
                 Assert.That(session.ActiveRun.ActiveLeg, Is.Null);
                 Assert.That(session.ActiveRun.CurrentDay, Is.Zero);
@@ -345,7 +385,7 @@ namespace HallowBlaze.Tests.PlayMode
                         Button[] buttons = atlasObject.GetComponentsInChildren<Button>().Where(button =>
                             button.name.StartsWith("AtlasRouteButton-", StringComparison.Ordinal)).ToArray();
                         Assert.That(buttons, Has.Length.EqualTo(options.Length));
-                        ScrollRect scroll = atlasObject.GetComponentInChildren<ScrollRect>();
+                        ScrollRect scroll = atlasObject.transform.Find("AtlasRouteBand/AtlasRouteViewport").GetComponent<ScrollRect>();
                         foreach (Button button in buttons)
                         {
                             Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(button.gameObject));

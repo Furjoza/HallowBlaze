@@ -25,7 +25,7 @@ namespace HallowBlaze.Core.Turns.Resolution
         /// <inheritdoc />
         public bool Supports(BoardEntityState target) => target.Definition.Traits.IsInteractable &&
             target.Definition.AutomaticFoodReward == 0 && target.Definition.ContentId != excludedContentId &&
-            target.Definition.ContentId != additionalExcludedContentId;
+            target.Definition.ContentId != additionalExcludedContentId && target.Definition.ContentId != FirstAidInteractionAction.ContentId;
         /// <inheritdoc />
         public InteractionAvailability Evaluate(BoardState board, RunState run, BoardEntityState player, BoardEntityState target)
             => InteractionAvailability.Available;
@@ -58,6 +58,44 @@ namespace HallowBlaze.Core.Turns.Resolution
             run.RestoreFood(target.Definition.AutomaticFoodReward);
             events.Add(new ItemCollectedEvent(player.Id, target.Id));
             events.Add(new FoodRestoredEvent(player.Id, target.Id, target.Definition.AutomaticFoodReward));
+        }
+    }
+
+    /// <summary>Consumes one exact first-aid kit for at most ten Health up to 100; full or excess Health rejects without waste.</summary>
+    public sealed class FirstAidInteractionAction : IInteractionAction, IInteractionConsequences
+    {
+        /// <summary>Identifies the existing medical item independently of artwork or Unity tags.</summary>
+        public const string ContentId = "legacy.aid";
+        /// <summary>Identifies the conscious use command, not automatic pickup or inventory storage.</summary>
+        public const string ActionId = "use-first-aid";
+        /// <summary>Gets the kit's fixed maximum restoration before its own Health ceiling.</summary>
+        public const int HealAmount = 10;
+        /// <summary>Gets the kit-specific ceiling; this does not change the legacy global Health API.</summary>
+        public const int HealthCeiling = 100;
+
+        /// <inheritdoc />
+        public string Id => ActionId;
+        /// <inheritdoc />
+        public int NoiseStrength => ActionNoiseProfile.Prototype.InteractionStrength;
+        /// <inheritdoc />
+        public int NoiseLifetimeTurns => ActionNoiseProfile.Prototype.LifetimeTurns;
+        /// <inheritdoc />
+        public string DescribeEffect(BoardState board, BoardEntityState target) => "First aid: +10 Health (max 100)";
+        /// <inheritdoc />
+        public bool Supports(BoardEntityState target) => target.Definition.Layer == BoardLayer.Item &&
+            target.Definition.ContentId == ContentId && target.Definition.Traits.IsInteractable;
+        /// <inheritdoc />
+        public InteractionAvailability Evaluate(BoardState board, RunState run, BoardEntityState player, BoardEntityState target)
+            => run.Health > 0 && run.Health < HealthCeiling ? InteractionAvailability.Available : InteractionAvailability.InvalidState;
+        /// <inheritdoc />
+        public void Apply(BoardState board, RunState run, BoardEntityState player, BoardEntityState target, ICollection<GameEvent> events)
+        {
+            int amount = Math.Min(HealAmount, HealthCeiling - run.Health);
+            if (amount <= 0 || !board.TryRemove(target.Id))
+                throw new InvalidOperationException("A validated medical item changed during commit.");
+            run.RestoreHealth(amount);
+            events.Add(new ItemCollectedEvent(player.Id, target.Id));
+            events.Add(new HealthRestoredEvent(player.Id, target.Id, amount));
         }
     }
 

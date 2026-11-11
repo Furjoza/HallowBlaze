@@ -12,6 +12,7 @@ using HallowBlaze.Core.State;
 using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.Turns.Resolution;
 using HallowBlaze.Presentation.Runtime;
+using HallowBlaze.Presentation.Runtime.Interaction;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -675,7 +676,11 @@ namespace HallowBlaze.Tests.PlayMode
             LineRenderer[] lines = picker.GetComponentsInChildren<LineRenderer>();
             Assert.That(lines.Length, Is.EqualTo(2));
             Assert.That(picker.GetComponentsInChildren<TextMesh>().Select(text => text.text), Is.EqualTo(new[] { ">1", "2" }));
-            Assert.That(lines.All(line => line.startColor == Color.white && line.loop), Is.True);
+            Assert.That(lines.All(line => line.loop), Is.True);
+            Assert.That(lines[0].startColor, Is.EqualTo(InteractionPresenter.SelectionColor));
+            Assert.That(lines[0].endColor, Is.EqualTo(InteractionPresenter.SelectionColor));
+            Assert.That(lines[1].startColor, Is.EqualTo(Color.white));
+            Assert.That(picker.GetComponentsInChildren<TextMesh>().First().color, Is.EqualTo(InteractionPresenter.SelectionColor));
             Assert.That(lines[0].GetPosition(0), Is.Not.EqualTo(lines[1].GetPosition(0)));
             var owner = new GameObject("Interaction evidence camera");
             objects.Add(owner);
@@ -699,12 +704,14 @@ namespace HallowBlaze.Tests.PlayMode
                 {
                     Vector3 center = camera.WorldToViewportPoint(new Vector3(option.TargetPosition.X, option.TargetPosition.Y, 0));
                     int marked = 0;
+                    bool selected = option == picker.Options[picker.SelectedIndex];
                     for (int vertical = -80; vertical <= 80; vertical++)
                         for (int horizontal = -80; horizontal <= 80; horizontal++)
                         {
                             Color color = pixels.GetPixel(Mathf.RoundToInt(center.x * 512) + horizontal,
                                 Mathf.RoundToInt(center.y * 512) + vertical);
-                            if (color.r > 0.8f && color.g > 0.8f && color.b > 0.8f) marked++;
+                            if (selected ? color.g > 0.6f && color.b > 0.6f && color.g > color.r * 1.1f :
+                                color.r > 0.8f && color.g > 0.8f && color.b > 0.8f) marked++;
                         }
                     Assert.That(marked, Is.GreaterThan(100), "Visible numbered target " + option.TargetId);
                 }
@@ -931,6 +938,11 @@ namespace HallowBlaze.Tests.PlayMode
             layout.Add(View(LegacyBoardContentKind.Food, 1, 0));
             layout.Add(View(LegacyBoardContentKind.Aid, 0, 1, attackPrefab));
             BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(request, run, new GridBounds(0, 0, 2, 1), layout, tools);
+            EntityId contextId = Find(runtime, "legacy.aid");
+            runtime.BoardState.TryGetEntity(contextId, out BoardEntityState context);
+            runtime.BoardState.TryRemove(contextId);
+            runtime.BoardState.TryAdd(new BoardEntityState(contextId, new BoardEntityDefinition(BoardLayer.Item,
+                EntityKind.Item, "test.context-target", new BoardEntityTraits(false, false, true)), context.Position));
             runtimes.Add(runtime);
             var sink = new TestSinks { ActiveRequest = request };
             var presenter = new BoardEventPresenter(runtime, sink, sink, sink, value => sink.Diagnostic = value, 0.05f)
@@ -941,7 +953,7 @@ namespace HallowBlaze.Tests.PlayMode
             presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Setup, false);
             EntityId food = Find(runtime, "legacy.food");
             return new Fixture { Runtime = runtime, Presenter = presenter, Sink = sink, FoodId = food,
-                FoodView = runtime.Views[food], AidId = Find(runtime, "legacy.aid"), ExitId = Find(runtime, "legacy.exit") };
+                FoodView = runtime.Views[food], AidId = contextId, ExitId = Find(runtime, "legacy.exit") };
         }
 
         private static void CaptureAttackFrame(string suffix)
@@ -1033,7 +1045,7 @@ namespace HallowBlaze.Tests.PlayMode
         private sealed class MoveToolTarget : IInteractionAction
         {
             public string Id => "test.move";
-            public bool Supports(BoardEntityState target) => target.Definition.ContentId == "legacy.aid";
+            public bool Supports(BoardEntityState target) => target.Definition.ContentId == "test.context-target";
             public InteractionAvailability Evaluate(BoardState board, RunState run, BoardEntityState player, BoardEntityState target)
                 => board.TryGetEntity(BoardLayer.Item, new GridPosition(1, 1), out _)
                     ? InteractionAvailability.Blocked : InteractionAvailability.Available;

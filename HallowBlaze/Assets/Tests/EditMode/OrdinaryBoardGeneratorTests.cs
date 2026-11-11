@@ -196,10 +196,111 @@ namespace HallowBlaze.Tests.EditMode
                 TestContext.WriteLine(count.Key + ": " + count.Value + " items; fixed reward=" + rewards[count.Key]);
         }
 
-        /// <summary>Extra catalog definitions cannot alter pinned content, IDs, positions, supply or effects in versions 1-3.</summary>
+        /// <summary>Every new berry is protected by an existing clearable bush, without adding obstacles or blocking the required exit.</summary>
+        [Test]
+        public void VersionSixBerriesRequireAccessibleBlockingBushes()
+        {
+            int berries = 0;
+            for (int seed = 0; seed < 100; seed++)
+            {
+                var address = new BoardAddress("berry-bush", "leg", "road", "segment", 1,
+                    OrdinaryBoardGenerator.ConfigurationId, 6, seed);
+                BoardGenerationConfig config = OrdinaryBoardContent.CreateConfiguration(address);
+                BoardValidationCatalog catalog = OrdinaryBoardContent.CreateCatalog();
+                var request = new BoardGenerationRequest(address, config, catalog, seed);
+                BoardGenerationResult generated = BoardGenerationPipeline.GenerateOrdinary(request);
+                Assert.That(generated.IsSuccess, Is.True, "seed=" + seed + "; " + generated);
+                BoardBlueprint blueprint = generated.Blueprint;
+                Assert.That(BoardGenerationPipeline.GenerateOrdinary(request).Blueprint, Is.EqualTo(blueprint));
+                Assert.That(BoardValidator.Validate(blueprint, catalog).IsValid, Is.True, "seed=" + seed);
+                BoardState board = blueprint.CreateState();
+                foreach (BoardEntityState item in blueprint.Entities.Where(entity => entity.Definition.ContentId == OrdinaryBoardContent.BerryFoodId))
+                {
+                    berries++;
+                    Assert.That(board.TryGetEntity(BoardLayer.Obstacle, item.Position, out BoardEntityState bush), Is.True, "seed=" + seed);
+                    Assert.That(bush.Definition.ContentId, Is.EqualTo("legacy.wall"));
+                    Assert.That(bush.Definition.Traits.IsWalkable, Is.False);
+                    Assert.That(AxeContent.LoadRules().Supports(bush), Is.True);
+                    Assert.That(item.Definition.AutomaticFoodReward, Is.EqualTo(5));
+                    Assert.That(new[] { Direction.North, Direction.East, Direction.South, Direction.West }.Any(direction =>
+                        board.TryGetEntity(BoardLayer.Terrain, item.Position.Move(direction), out _) &&
+                        !board.TryGetEntity(BoardLayer.Obstacle, item.Position.Move(direction), out _)), Is.True);
+                }
+                Assert.That(blueprint.Entities.Count(entity => entity.Definition.Layer == BoardLayer.Obstacle),
+                    Is.InRange(config.ObstacleCount.Minimum, config.ObstacleCount.Maximum));
+            }
+            Assert.That(berries, Is.GreaterThan(0));
+        }
+
+        /// <summary>Validation rejects unguarded berries and the authored production fallbacks preserve the same invariant.</summary>
+        [Test]
+        public void GuardedBerryValidationAlsoAppliesToFallbacks()
+        {
+            for (int seed = 0; seed < 100; seed++)
+            {
+                var address = new BoardAddress("berry-validation", "leg", "road", "segment", 1,
+                    OrdinaryBoardGenerator.ConfigurationId, 6, seed);
+                BoardGenerationConfig config = OrdinaryBoardContent.CreateConfiguration(address);
+                BoardValidationCatalog catalog = OrdinaryBoardContent.CreateCatalog();
+                var request = new BoardGenerationRequest(address, config, catalog, seed);
+                BoardBlueprint blueprint = BoardGenerationPipeline.GenerateOrdinary(request).Blueprint;
+                BoardEntityState berry = blueprint.Entities.FirstOrDefault(entity => entity.Definition.ContentId == OrdinaryBoardContent.BerryFoodId);
+                if (berry == null) continue;
+                BoardEntityState[] corrupted = blueprint.Entities.Select(entity => entity.Id.Equals(berry.Id)
+                    ? new BoardEntityState(entity.Id, entity.Definition, blueprint.Start) : entity).ToArray();
+                BoardValidationReport report = BoardValidator.Validate(address, config, corrupted, blueprint.Items, catalog);
+                Assert.That(report.Errors.Any(error => error.Code == "UnguardedBerries"), Is.True);
+                foreach (BoardGenerationFallback fallback in OrdinaryBoardFallbacks.CreateLibrary())
+                {
+                    BoardGenerationResult result = BoardGenerationPipeline.Generate(request, (_, __) => null, new[] { fallback }, 1);
+                    Assert.That(result.IsSuccess, Is.True, fallback.Id);
+                    Assert.That(result.UsedFallback, Is.True);
+                    Assert.That(BoardValidator.Validate(result.Blueprint, catalog).IsValid, Is.True);
+                }
+                return;
+            }
+            Assert.Fail("The deterministic seed fixture did not produce berries.");
+        }
+
+        /// <summary>Medical supply is independently budgeted, observable and deterministic, never disguised as Food.</summary>
+        [Test]
+        public void MedicalSupplyHasZeroOrOneKitAndPreservesFoodFamilies()
+        {
+            var observedCounts = new HashSet<int>();
+            int total = 0;
+            for (int seed = 0; seed < 100; seed++)
+            {
+                var address = new BoardAddress("medical-supply", "leg", "road", "segment", 4,
+                    OrdinaryBoardGenerator.ConfigurationId, 5, seed);
+                var request = new BoardGenerationRequest(address, OrdinaryBoardContent.CreateConfiguration(address),
+                    OrdinaryBoardContent.CreateCatalog(), seed);
+                BoardGenerationResult result = BoardGenerationPipeline.GenerateOrdinary(request);
+                Assert.That(result.IsSuccess, Is.True, "seed=" + seed + "; " + result);
+                Assert.That(BoardGenerationPipeline.GenerateOrdinary(request).Blueprint, Is.EqualTo(result.Blueprint));
+                BoardItemSpawn[] kits = result.Blueprint.Items.Where(item => item.ResourceFamilyId == "medical").ToArray();
+                Assert.That(kits.Length, Is.InRange(0, 1));
+                observedCounts.Add(kits.Length);
+                total += kits.Length;
+                foreach (BoardItemSpawn kit in kits)
+                {
+                    Assert.That(kit.ItemDefinitionId, Is.EqualTo(FirstAidInteractionAction.ContentId));
+                    Assert.That(result.Blueprint.Entities.Single(entity => entity.Id.Equals(kit.EntityId)).Definition.AutomaticFoodReward, Is.Zero);
+                    Assert.That(kit.InitiallyObservable, Is.True);
+                }
+                Assert.That(result.Blueprint.Items.Count(item => item.ResourceFamilyId == "food"), Is.InRange(2, 5));
+                InitialResourceManifestEntry medical = result.Blueprint.InitialResources.SingleOrDefault(entry => entry.ResourceFamilyId == "medical");
+                Assert.That(medical?.ItemCount ?? 0, Is.EqualTo(kits.Length));
+            }
+            CollectionAssert.AreEquivalent(new[] { 0, 1 }, observedCounts);
+            TestContext.WriteLine("100 ordinary/5 boards; medical kits=" + total + "; per-board band=0..1");
+        }
+
+        /// <summary>Extra catalog definitions cannot alter pinned content, IDs, positions, supply or effects in versions 1-5.</summary>
         [TestCase(1)]
         [TestCase(2)]
         [TestCase(3)]
+        [TestCase(4)]
+        [TestCase(5)]
         public void PinnedFoodVersionsMatchTheOriginalCatalog(int version)
         {
             var definitions = new List<BoardEntityDefinition>
@@ -214,8 +315,21 @@ namespace HallowBlaze.Tests.EditMode
                 new BoardEntityTraits(true, true, false)));
             definitions.Add(new BoardEntityDefinition(BoardLayer.Actor, EntityKind.Enemy, OrdinaryBoardContent.Enemy10Id));
             definitions.Add(new BoardEntityDefinition(BoardLayer.Actor, EntityKind.Enemy, OrdinaryBoardContent.Enemy20Id));
-            var original = new BoardValidationCatalog(definitions,
-                new Dictionary<string, string> { { "legacy.food", "food" }, { "legacy.soda", "food" } },
+            var families = new Dictionary<string, string> { { "legacy.food", "food" }, { "legacy.soda", "food" } };
+            if (version >= 4)
+            {
+                definitions.Add(new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, OrdinaryBoardContent.BerryFoodId, BoardEntityTraits.Default, 5));
+                definitions.Add(new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, OrdinaryBoardContent.CarrotFoodId, BoardEntityTraits.Default, 15));
+                families.Add(OrdinaryBoardContent.BerryFoodId, "food");
+                families.Add(OrdinaryBoardContent.CarrotFoodId, "food");
+            }
+            if (version >= 5)
+            {
+                LegacyBoardContentCatalog.TryGetDefinition(LegacyBoardContentKind.Aid, out LegacyBoardContentDefinition aid);
+                definitions.Add(new BoardEntityDefinition(aid.Layer.Value, aid.EntityKind, aid.ContentId, aid.Traits, aid.AutomaticFoodReward));
+                families.Add(FirstAidInteractionAction.ContentId, "medical");
+            }
+            var original = new BoardValidationCatalog(definitions, families,
                 new Dictionary<string, string>(), new Dictionary<string, ShamblerDefinition>
                 {
                     { OrdinaryBoardContent.Enemy10Id, new ShamblerDefinition(10) },

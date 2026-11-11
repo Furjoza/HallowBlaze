@@ -8,8 +8,6 @@ using UnityEngine.UI;
 /// <summary>Samples complete PC commands and presents authoritative resources/audio; never applies gameplay rules.</summary>
 public class PlayerScript : MovingObject, IRunHud, ITurnFeedback, IPlayerStepAudio, ITurnResourceGains
 {
-    /// <summary>Maximum player-step playback in seconds, additionally bounded by the movement presentation.</summary>
-    public const float MaximumStepSeconds = 0.1f;
     public float restartLevelDelay = 1f;
     public int wallDamage = 1;
     public int pointsPerFood = 10;
@@ -99,7 +97,6 @@ public class PlayerScript : MovingObject, IRunHud, ITurnFeedback, IPlayerStepAud
             ? (UnityEngine.Random.Range(0, 2) == 0 ? moveSound1 : moveSound2)
             : (moveSound1 != null ? moveSound1 : moveSound2);
         stepSource.Play();
-        stepSource.SetScheduledEndTime(AudioSettings.dspTime + Mathf.Min(duration, MaximumStepSeconds));
         PresentedSoundCount++;
     }
 

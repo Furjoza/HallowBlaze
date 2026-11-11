@@ -19,6 +19,47 @@ namespace HallowBlaze.Tests.PlayMode
 {
     public sealed class PlayModeInfrastructureTests
     {
+#if UNITY_EDITOR
+        private const string LiveReportKey = "HallowBlaze.LiveValidationReport";
+        private static UnityEditor.TestTools.TestRunner.Api.TestRunnerApi reportApi;
+
+        /// <summary>Arms one fresh Unity Test Framework XML report for the next live test run, surviving the PlayMode domain reload.</summary>
+        /// <param name="outputPath">Absolute XML path outside the Unity project; existing player storage is never used.</param>
+        public static void WriteLiveTestReport(string outputPath)
+        {
+            if (string.IsNullOrWhiteSpace(outputPath) || !Path.IsPathRooted(outputPath))
+                throw new ArgumentException("An absolute external report path is required.", nameof(outputPath));
+            string fullPath = Path.GetFullPath(outputPath);
+            string projectPath = Directory.GetParent(Application.dataPath).FullName + Path.DirectorySeparatorChar;
+            if (fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Validation output must be outside the Unity project.", nameof(outputPath));
+            UnityEditor.SessionState.SetString(LiveReportKey, fullPath);
+            RestoreLiveReport();
+        }
+
+        [UnityEditor.InitializeOnLoadMethod]
+        private static void RestoreLiveReport()
+        {
+            string path = UnityEditor.SessionState.GetString(LiveReportKey, string.Empty);
+            if (string.IsNullOrEmpty(path)) return;
+            reportApi = ScriptableObject.CreateInstance<UnityEditor.TestTools.TestRunner.Api.TestRunnerApi>();
+            reportApi.RegisterCallbacks(new XmlReportCallbacks(path));
+        }
+
+        private sealed class XmlReportCallbacks : UnityEditor.TestTools.TestRunner.Api.ICallbacks
+        {
+            private readonly string path;
+            public XmlReportCallbacks(string path) { this.path = path; }
+            public void RunStarted(UnityEditor.TestTools.TestRunner.Api.ITestAdaptor testsToRun) { }
+            public void TestStarted(UnityEditor.TestTools.TestRunner.Api.ITestAdaptor test) { }
+            public void TestFinished(UnityEditor.TestTools.TestRunner.Api.ITestResultAdaptor result) { }
+            public void RunFinished(UnityEditor.TestTools.TestRunner.Api.ITestResultAdaptor result)
+            {
+                UnityEditor.TestTools.TestRunner.Api.TestRunnerApi.SaveResultToFile(result, path);
+                UnityEditor.SessionState.EraseString(LiveReportKey);
+            }
+        }
+#endif
         /// <summary>F owns interaction entry while idle E is not a picker-opening or command-suppression key.</summary>
         [Test]
         public void InteractionEntrySuppressesNormalCommandButIdleEDoesNot()
@@ -47,7 +88,7 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(PcInputBindings.MenuKeys.Contains(key) || key == PcInputBindings.Notes || key == KeyCode.LeftShift, Is.True);
         }
 
-        /// <summary>Visual quarter-turns wrap both ways without rotating the actor or accepting chords, held frames or blocked input.</summary>
+        /// <summary>Q/E mirrors left/right without rotating the sprite or actor, accepting chords or replaying blocked input.</summary>
         [Test]
         public void VisualFacingTurnsOnlyAnIsolatedCosmeticPivot()
         {
@@ -58,10 +99,14 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(facing.QuarterTurns, Is.Zero);
                 Assert.That(facing.SampleInput(key => key == KeyCode.Q, -30, true), Is.True);
                 Assert.That(facing.QuarterTurns, Is.EqualTo(3));
-                Assert.That(Vector3.Angle(facing.Pivot.up, Vector3.left), Is.LessThan(0.01f));
+                Assert.That(facing.Pivot.localRotation, Is.EqualTo(Quaternion.identity));
+                Assert.That(facing.Pivot.GetComponent<SpriteRenderer>().flipX, Is.True);
                 Assert.That(facing.SampleInput(key => key == KeyCode.E, -30, true), Is.False);
-                for (int frame = -29; frame < -25; frame++) facing.SampleInput(key => key == KeyCode.E, frame, true);
-                Assert.That(facing.QuarterTurns, Is.EqualTo(3));
+                Assert.That(facing.SampleInput(key => key == KeyCode.E, -29, true), Is.True);
+                Assert.That(facing.SampleInput(key => key == KeyCode.E, -28, true), Is.False);
+                Assert.That(facing.QuarterTurns, Is.EqualTo(1));
+                Assert.That(facing.Pivot.GetComponent<SpriteRenderer>().flipX, Is.False);
+                Assert.That(facing.Pivot.localRotation, Is.EqualTo(Quaternion.identity));
                 Assert.That(facing.SampleInput(key => key == KeyCode.Q || key == KeyCode.E, -24, true), Is.False);
                 Assert.That(facing.SampleInput(key => key == KeyCode.E || key == KeyCode.W, -23, true), Is.False);
                 Assert.That(facing.SampleInput(key => key == KeyCode.E, -22, false), Is.False);
@@ -176,9 +221,9 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(runtime.Controller.IsTerminal, Is.False);
         }
 
-        /// <summary>An accepted animated step cannot leave a long audio tail after movement presentation completes.</summary>
+        /// <summary>An accepted animated step plays its authored tail after interpolation without extra cues or unrelated audio.</summary>
         [UnityTest]
-        public IEnumerator PlayerStepAudioEndsWithMovementPresentation()
+        public IEnumerator PlayerStepAudioKeepsAuthoredLengthAfterMovementPresentation()
         {
             GameObject playerObject = CreatePlayer("Bounded step player", 0.1f);
             Component player = playerObject.GetComponent(playerType);
@@ -193,10 +238,10 @@ namespace HallowBlaze.Tests.PlayMode
                 yield return null;
             Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(1));
-            Assert.That(playerObject.GetComponents<AudioSource>().All(source => !source.isPlaying), Is.True);
+            Assert.That(playerObject.GetComponent<AudioSource>().isPlaying, Is.True);
             Component soundManager = (Component)soundManagerType.GetField("instance").GetValue(null);
             Assert.That(GetField<AudioSource>(soundManager, "efxSource").isPlaying, Is.False,
-                "The movement cue must not begin a full-length clip after interpolation has finished.");
+                "The owned step source must not overwrite unrelated effects.");
             int cues = 1;
             foreach (Direction direction in new[] { Direction.West, Direction.East, Direction.West, Direction.East })
             {
@@ -204,7 +249,7 @@ namespace HallowBlaze.Tests.PlayMode
                 while (!pending.IsCompleted) yield return null;
                 Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(++cues));
                 Assert.That(playerObject.GetComponents<AudioSource>(), Has.Length.EqualTo(1));
-                Assert.That(playerObject.GetComponent<AudioSource>().isPlaying, Is.False);
+                Assert.That(playerObject.GetComponent<AudioSource>().isPlaying, Is.True);
             }
             Assert.That(TrySubmit(player, new WaitCommand(), out pending), Is.True);
             while (!pending.IsCompleted) yield return null;
@@ -213,9 +258,9 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(cues));
         }
 
-        /// <summary>Real authored clips contain an audible prefix and stop within the cap without affecting mute or unrelated effects.</summary>
+        /// <summary>Real footsteps retain their authored duration and natural ending while respecting live mute and source ownership.</summary>
         [UnityTest]
-        public IEnumerator AuthoredFootstepsAreBoundedAndRespectMute()
+        public IEnumerator AuthoredFootstepsKeepFullLengthAndRespectMute()
         {
 #if UNITY_EDITOR
             GameObject playerObject = CreatePlayer("Authored footstep player", 0.3f);
@@ -235,8 +280,8 @@ namespace HallowBlaze.Tests.PlayMode
                     var prefix = new float[Mathf.Min(clip.samples, Mathf.CeilToInt(clip.frequency * 0.1f)) * clip.channels];
                     Assert.That(clip.GetData(prefix, 0), Is.True);
                     double energy = Math.Sqrt(prefix.Select(value => (double)value * value).Average());
-                    Assert.That(energy, Is.GreaterThan(0.0001), "The bounded prefix must contain actual footstep samples.");
-                    TestContext.WriteLine(name + ": original=" + clip.length + "s, cap=0.1s, prefixRms=" + energy);
+                    Assert.That(energy, Is.GreaterThan(0.0001), "The authored clip must contain actual footstep samples.");
+                    TestContext.WriteLine(name + ": authored=" + clip.length + "s, prefixRms=" + energy);
                     SetField(player, "moveSound1", clip);
                     SetField(player, "moveSound2", clip);
                     Invoke(sounds, "SetSoundEnabled", false);
@@ -254,7 +299,9 @@ namespace HallowBlaze.Tests.PlayMode
                     yield return null;
                     Assert.That(step.mute, Is.True, "Mute changes during playback also reach the owned step source.");
                     yield return new WaitForSecondsRealtime(0.16f);
-                    Assert.That(step.isPlaying, Is.False, "The real step cannot play its full authored tail.");
+                    Assert.That(step.isPlaying, Is.True, "The authored tail must not be cut at 0.1 seconds.");
+                    yield return new WaitForSecondsRealtime(clip.length / step.pitch);
+                    Assert.That(step.isPlaying, Is.False, "The non-looping clip ends naturally.");
                     ((IPlayerStepAudio)player).BeginStep(0f);
                     Assert.That(step.isPlaying, Is.False, "Instant movement has no deferred audio tail.");
                 }

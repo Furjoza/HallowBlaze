@@ -29,11 +29,11 @@ namespace HallowBlaze.Presentation.Runtime
                 content.noiseStrength, content.noiseLifetimeTurns);
         }
 
-        /// <summary>Registers clearing, cache work and explicit boulder pushing without paid contextual no-op alternatives.</summary>
+        /// <summary>Registers clearing, cache work, first aid and boulder pushing without paid contextual no-op alternatives.</summary>
         public static InteractionQuery CreateInteractions(ObstacleClearingRules axe, ShovelRules shovel) => new InteractionQuery(new IInteractionAction[]
         {
             new ContextInteractionAction(shovel.CacheContentId, BoulderPushAction.ContentId), new CollectInteractionAction(),
-            new ClearObstacleAction(axe, false), new CacheDigAction(shovel, false), new BoulderPushAction()
+            new ClearObstacleAction(axe, false), new CacheDigAction(shovel, false), new BoulderPushAction(), new FirstAidInteractionAction()
         });
 
         /// <summary>Registers independent definition-specific axe and shovel effects; no item is automatically equipped.</summary>

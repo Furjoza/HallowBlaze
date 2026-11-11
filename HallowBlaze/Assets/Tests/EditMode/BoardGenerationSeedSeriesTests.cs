@@ -285,8 +285,10 @@ namespace HallowBlaze.Tests.EditMode
                     Assert.That(config.EnemyCount.Minimum, Is.EqualTo(index == 2 ? 1 : 0));
                     Assert.That(config.EnemyCount.Maximum, Is.EqualTo(index == 2 ? 1 : 0));
                     Assert.That(config.ObstacleCount.Minimum, Is.EqualTo(5 + index));
-                    Assert.That(config.ResourceBudgets.Single().ItemCount.Minimum, Is.EqualTo(3 - index));
-                    Assert.That(config.ResourceBudgets.Single().ItemCount.Maximum, Is.EqualTo(4 - index));
+                    Assert.That(config.ResourceBudgets.Single(budget => budget.ResourceFamilyId == "food").ItemCount.Minimum, Is.EqualTo(3 - index));
+                    Assert.That(config.ResourceBudgets.Single(budget => budget.ResourceFamilyId == "food").ItemCount.Maximum, Is.EqualTo(4 - index));
+                    Assert.That(config.ResourceBudgets.Single(budget => budget.ResourceFamilyId == "medical").ItemCount.Minimum, Is.Zero);
+                    Assert.That(config.ResourceBudgets.Single(budget => budget.ResourceFamilyId == "medical").ItemCount.Maximum, Is.EqualTo(1));
                     cases.Add(new SeedSeriesCase(new BoardGenerationRequest(address, config, catalog, seed), "opening-v2", index, 3));
                     if (index < 2) Assert.That(run.TryAdvanceSegment(run.ActiveLeg.LegId, address.SegmentId), Is.True);
                 }

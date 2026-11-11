@@ -202,7 +202,7 @@ namespace HallowBlaze.Tests.PlayMode
 
         /// <summary>Ordinary setup retains blueprint identity, initial state, enemy rules and view parity across Continue and cosmetic changes.</summary>
         [UnityTest]
-        public IEnumerator OrdinarySetupBuildsViewsFromValidatedBlueprintAndContinuesIdentically([Values(1, 2, 3, 4)] int version)
+        public IEnumerator OrdinarySetupBuildsViewsFromValidatedBlueprintAndContinuesIdentically([Values(1, 2, 3, 4, 5, 6)] int version)
         {
             UnityEngine.Random.State previousRandom = UnityEngine.Random.state;
             try
@@ -285,6 +285,7 @@ namespace HallowBlaze.Tests.PlayMode
             SetField(manager, "groundFoodTiles", new[] { food, soda });
             SetField(manager, "bushFoodTiles", AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Food2.prefab"));
             SetField(manager, "buriedFoodTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Carrot.prefab") });
+            SetField(manager, "aidTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/AidKit.prefab") });
             var enemies = new List<GameObject>();
             foreach (int damage in new[] { 10, 20 })
             {
@@ -296,9 +297,9 @@ namespace HallowBlaze.Tests.PlayMode
             return manager;
         }
 
-        /// <summary>Real food artwork, applied gains and removal agree with fixed rewards in both replay modes and after recovery.</summary>
+        /// <summary>Food gains/removal agree in both replay modes; new berries require clearing a blocking bush before collection.</summary>
         [UnityTest]
-        public IEnumerator ProductionFoodVarietiesCollectOnceWithExactHudGains()
+        public IEnumerator ProductionFoodVarietiesCollectOnceWithExactHudGains([Values(4, 6)] int version)
         {
             foreach (bool animations in new[] { true, false })
                 foreach (string foodId in new[] { OrdinaryBoardContent.BerryFoodId, OrdinaryBoardContent.CarrotFoodId })
@@ -320,7 +321,7 @@ namespace HallowBlaze.Tests.PlayMode
                         var run = new RunState("resource-view-" + seed, seed, new RunStateConfiguration(100, 100, 0, "forest.start"));
                         run.StartLeg("edge", run.WorldNodeId, "destination", new[]
                         {
-                            new RouteSegmentState("ordinary.segment", OrdinaryBoardGenerator.ConfigurationId, 4)
+                            new RouteSegmentState("ordinary.segment", OrdinaryBoardGenerator.ConfigurationId, version)
                         });
                         var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed,
                             run.WorldNodeId, "forest", "temperate", 1);
@@ -332,6 +333,16 @@ namespace HallowBlaze.Tests.PlayMode
                     string prefab = foodId == OrdinaryBoardContent.BerryFoodId ? "Food2" : "Carrot";
                     Assert.That(itemView.GetComponent<SpriteRenderer>().sprite,
                         Is.SameAs(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/" + prefab + ".prefab").GetComponent<SpriteRenderer>().sprite));
+                    if (foodId == OrdinaryBoardContent.BerryFoodId && version < 6)
+                    {
+                        Transform bush = itemView.transform.Find("Berry bush");
+                        Assert.That(bush, Is.Not.Null);
+                        SpriteRenderer foliage = bush.GetComponent<SpriteRenderer>();
+                        Assert.That(foliage.sprite, Is.SameAs(GetManagerField<GameObject[]>(authored, "wallTiles")[0].GetComponent<SpriteRenderer>().sprite));
+                        Assert.That(foliage.sortingOrder, Is.LessThan(itemView.GetComponent<SpriteRenderer>().sortingOrder));
+                        Assert.That(bush.GetComponentsInChildren<Collider2D>(), Is.Empty);
+                        Assert.That(runtime.BoardState.TryGetEntity(BoardLayer.Obstacle, item.Position, out _), Is.False);
+                    }
                     Direction step = Direction.East;
                     bool positioned = false;
                     foreach (Direction direction in new[] { Direction.East, Direction.West, Direction.North, Direction.South })
@@ -354,14 +365,50 @@ namespace HallowBlaze.Tests.PlayMode
                         presenter.AnimationsEnabled = animations;
                         presenter.SynchronizeFromState();
                         presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Setup, false);
+                        if (foodId == OrdinaryBoardContent.BerryFoodId && version >= 6)
+                        {
+                            Assert.That(itemView.transform.Find("Berry bush"), Is.Null, "The bush must be a real domain obstacle, not item decoration.");
+                            Assert.That(runtime.BoardState.TryGetEntity(BoardLayer.Obstacle, item.Position, out BoardEntityState bush), Is.True);
+                            GameObject bushView = runtime.Views[bush.Id];
+                            Assert.That(bushView.activeSelf, Is.True);
+                            CommandSubmission blocked = presenter.Coordinator.SubmitAsync(new MoveCommand(step)).Result;
+                            Assert.That(blocked.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+                            Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+                            Assert.That(runtime.BoardState.TryGetEntity(item.Id, out _), Is.True);
+                            Assert.That(runtime.BoardState.TryGetEntity(runtime.PlayerId, out BoardEntityState playerState), Is.True);
+                            Assert.That(playerState.Position, Is.Not.EqualTo(item.Position));
+                            Assert.That(sinks.Events.OfType<FoodRestoredEvent>(), Is.Empty);
+                            int frame = 1000000;
+                            for (int work = 0; work < runtime.ClearingRules.RequiredWork; work++)
+                            {
+                                var picker = presenter.InteractionDisplay;
+                                picker.SampleInputAsync(key => key == KeyCode.F, frame++);
+                                Assert.That(picker.IsOpen, Is.True);
+                                Assert.That(picker.Options.Any(option => option.TargetId.Equals(item.Id)), Is.False, "Berries cannot be collected through the bush.");
+                                int clear = picker.Options.ToList().FindIndex(option => option.TargetId.Equals(bush.Id) && option.ActionId == "clear");
+                                Assert.That(picker.Select(clear), Is.True);
+                                Task<CommandSubmission> clearing = picker.SampleInputAsync(key => key == KeyCode.Space, frame++);
+                                while (!clearing.IsCompleted) yield return null;
+                                Assert.That(clearing.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                                Assert.That(runtime.BoardState.TryGetEntity(item.Id, out _), Is.True);
+                                Assert.That(sinks.Events.OfType<FoodRestoredEvent>(), Is.Empty);
+                                yield return null;
+                            }
+                            Assert.That(runtime.BoardState.TryGetEntity(bush.Id, out _), Is.False);
+                            Assert.That(bushView.activeSelf, Is.False);
+                            Assert.That(itemView.activeSelf, Is.True);
+                            presenter.SynchronizeFromState();
+                            Assert.That(bushView.activeSelf, Is.False);
+                        }
+                        int beforePickup = runtime.RunState.Food;
                         player.GetComponent<Animator>().Update(0f);
                         CaptureLandmark(runtime, new Vector2Int(1280, 720), prefab + "-before-" + animations, "HB-M715");
                         Task<CommandSubmission> pending = presenter.Coordinator.SubmitAsync(new MoveCommand(step));
                         while (!pending.IsCompleted) yield return null;
                         Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
                         int reward = foodId == OrdinaryBoardContent.BerryFoodId ? 5 : 15;
-                        Assert.That(runtime.RunState.Food, Is.EqualTo(100 + reward - 1));
-                        Assert.That(foodText.text, Is.EqualTo("Food: " + (100 + reward - 1) + " +" + reward));
+                        Assert.That(runtime.RunState.Food, Is.EqualTo(beforePickup + reward - 1));
+                        Assert.That(foodText.text, Is.EqualTo("Food: " + (beforePickup + reward - 1) + " +" + reward));
                         Assert.That(itemView.activeSelf, Is.False);
                         Assert.That(runtime.BoardState.TryGetEntity(item.Id, out _), Is.False);
                         Assert.That(sinks.Events.OfType<FoodRestoredEvent>().Single().Amount, Is.EqualTo(reward));
@@ -375,6 +422,117 @@ namespace HallowBlaze.Tests.PlayMode
                         CaptureLandmark(runtime, new Vector2Int(1280, 720), prefab + "-after-" + animations, "HB-M715");
                     }
                 }
+        }
+
+        /// <summary>Production medical items are used only through a conscious keyboard command and replay once within the checkpoint boundary.</summary>
+        [UnityTest]
+        public IEnumerator ProductionFirstAidKeyboardUseAndCheckpointRecovery([Values(95, 100, 120)] int initialHealth)
+        {
+            foreach (bool animations in new[] { true, false })
+            {
+                Component manager = CreateOrdinaryBoardManager();
+                Component authored = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/GameManager.prefab").GetComponent(boardManagerType);
+                foreach (string field in new[] { "floorTiles", "outerWallTiles", "wallTiles", "groundFoodTiles", "enemyTiles", "aidTiles" })
+                    SetField(manager, field, GetManagerField<GameObject[]>(authored, field));
+                SetField(manager, "exit", GetManagerField<GameObject>(authored, "exit"));
+                GameObject player = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Player.prefab"));
+                createdObjects.Add(player);
+                Component hud = player.GetComponent(boardManagerType.Assembly.GetType("PlayerScript", true));
+                var healthText = CreateObject("Medical gain", 0, 0).AddComponent<UnityEngine.UI.Text>();
+                SetField(hud, "healthText", healthText);
+                BoardRuntime runtime = null;
+                BoardEntityState kit = null;
+                for (int seed = 0; seed < 32 && kit == null; seed++)
+                {
+                    var run = new RunState("medical-view-" + seed, seed, new RunStateConfiguration(initialHealth, 100, 0, "forest.start"));
+                    run.StartLeg("edge", run.WorldNodeId, "destination", new[]
+                    {
+                        new RouteSegmentState("medical.segment", OrdinaryBoardGenerator.ConfigurationId, 5)
+                    });
+                    var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed,
+                        run.WorldNodeId, "forest", "temperate", 1);
+                    runtime = InvokeSetup(manager, request, run, player);
+                    kit = runtime.BoardState.GetEntities().FirstOrDefault(entity => entity.Definition.ContentId == FirstAidInteractionAction.ContentId);
+                }
+                Assert.That(kit, Is.Not.Null);
+                Assert.That(runtime.Views[kit.Id].GetComponent<SpriteRenderer>().sprite,
+                    Is.SameAs(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/AidKit.prefab").GetComponent<SpriteRenderer>().sprite));
+                Assert.That(runtime.BoardState.TryMove(runtime.PlayerId, kit.Position), Is.True);
+                string boundaryJson = PersistenceJsonSerializer.SerializeRun(runtime.RunState);
+                BoardRequest boundaryRequest = runtime.Request;
+                BoardBlueprint blueprint = GetProperty<BoardBlueprint>(manager, "ActiveBlueprint");
+                string appliedStateJson = null;
+                var sinks = new ResourceFeedback();
+                using (var presenter = new BoardEventPresenter(runtime, (IRunHud)hud, sinks, sinks,
+                    diagnostic => Assert.Fail(diagnostic.ToString())))
+                {
+                    presenter.AnimationsEnabled = animations;
+                    presenter.SynchronizeFromState();
+                    presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Setup, false);
+                    var picker = presenter.InteractionDisplay;
+                    int frame = 1000000;
+                    Assert.That(picker.SampleInputAsync(key => key == KeyCode.F, frame++).Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+                    Assert.That(picker.IsOpen, Is.True);
+                    picker.SampleInputAsync(key => key == KeyCode.E, frame++);
+                    if (initialHealth >= 100)
+                    {
+                        Assert.That(picker.Options.Single(option => option.TargetId.Equals(kit.Id)).IsAvailable, Is.False);
+                        int kitIndex = picker.Options.ToList().FindIndex(option => option.TargetId.Equals(kit.Id));
+                        Assert.That(picker.GetUnavailableReason(kitIndex), Is.EqualTo("Health is full - first aid is not needed."));
+                        Assert.That(picker.SelectedIndex < 0 || !picker.Options[picker.SelectedIndex].TargetId.Equals(kit.Id), Is.True);
+                        picker.Cancel();
+                        yield return null;
+                        Assert.That(presenter.Coordinator.SubmitAsync(new InteractCommand(kit.Id, kit.Position, FirstAidInteractionAction.ActionId)).Result.Status,
+                            Is.EqualTo(CommandSubmissionStatus.Rejected));
+                        Assert.That(runtime.RunState.Health, Is.EqualTo(initialHealth));
+                        Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+                        Assert.That(runtime.BoardState.TryGetEntity(kit.Id, out _), Is.True);
+                        Assert.That(runtime.Views[kit.Id].activeSelf, Is.True);
+                        Assert.That(sinks.Events, Is.Empty);
+                        Assert.That(presenter.Coordinator.CanSubmit, Is.True);
+                        continue;
+                    }
+                    Assert.That(picker.SelectedIndex, Is.GreaterThanOrEqualTo(0));
+                    Assert.That(picker.Options[picker.SelectedIndex].ActionId, Is.EqualTo(FirstAidInteractionAction.ActionId));
+                    Assert.That(picker.GetOptionLabel(picker.SelectedIndex), Does.Contain("Health").And.Contain("Food -1").And.Contain("Noise 4"));
+                    Assert.That(runtime.RunState.Health, Is.EqualTo(95));
+                    player.GetComponent<Animator>().Update(0f);
+                    CaptureLandmark(runtime, new Vector2Int(1280, 720), "aid-before-" + animations, "HB-M716");
+                    Task<CommandSubmission> pending = picker.SampleInputAsync(key => key == KeyCode.Space, frame++);
+                    while (!pending.IsCompleted) yield return null;
+                    Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                    Assert.That(runtime.RunState.Health, Is.EqualTo(100));
+                    Assert.That(runtime.RunState.Food, Is.EqualTo(99));
+                    Assert.That(healthText.text, Is.EqualTo("Health: 100 +5"));
+                    Assert.That(runtime.Views[kit.Id].activeSelf, Is.False);
+                    Assert.That(runtime.BoardState.TryGetEntity(kit.Id, out _), Is.False);
+                    Assert.That(sinks.Events.OfType<HealthRestoredEvent>().Single().Amount, Is.EqualTo(5));
+                    Assert.That(picker.SampleInputAsync(key => key == KeyCode.Space, frame++).Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+                    yield return null;
+                    CommandSubmission duplicate = presenter.Coordinator.SubmitAsync(new InteractCommand(kit.Id, kit.Position, FirstAidInteractionAction.ActionId)).Result;
+                    Assert.That(duplicate.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+                    presenter.SynchronizeFromState();
+                    Assert.That(healthText.text, Is.EqualTo("Health: 100"));
+                    Assert.That(runtime.RunState.Health, Is.EqualTo(100));
+                    Assert.That(runtime.RunState.Food, Is.EqualTo(99));
+                    CaptureLandmark(runtime, new Vector2Int(1280, 720), "aid-after-" + animations, "HB-M716");
+                    appliedStateJson = PersistenceJsonSerializer.SerializeRun(runtime.RunState);
+                }
+                RunState restored = PersistenceJsonSerializer.DeserializeRun(boundaryJson);
+                BoardRuntime resumed = InvokeSetup(manager, boundaryRequest, restored, player);
+                Assert.That(GetProperty<BoardBlueprint>(manager, "ActiveBlueprint"), Is.EqualTo(blueprint));
+                Assert.That(restored.Health, Is.EqualTo(95), "Continue restores the pre-board checkpoint, not uncommitted healing.");
+                Assert.That(restored.Food, Is.EqualTo(100));
+                Assert.That(resumed.BoardState.TryGetEntity(kit.Id, out _), Is.True);
+                RunState applied = PersistenceJsonSerializer.DeserializeRun(appliedStateJson);
+                BoardRuntime appliedReload = InvokeSetup(manager, boundaryRequest, applied, player);
+                Assert.That(applied.Health, Is.EqualTo(100), "Loading serialized totals cannot apply another healing effect.");
+                Assert.That(applied.Food, Is.EqualTo(99));
+                Assert.That(appliedReload.BoardState.TryMove(appliedReload.PlayerId, kit.Position), Is.True);
+                Assert.That(appliedReload.Controller.Resolve(new InteractCommand(kit.Id, kit.Position, FirstAidInteractionAction.ActionId)).Accepted, Is.False);
+                Assert.That(applied.Health, Is.EqualTo(100));
+                Assert.That(applied.Food, Is.EqualTo(99));
+            }
         }
 
         private sealed class ResourceFeedback : ITurnFeedback, IBoardOutcomeSink
@@ -1273,9 +1431,13 @@ namespace HallowBlaze.Tests.PlayMode
                     yield return null;
                     BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
                     Assert.That(session.ActiveRun.ActiveLandmark.VariantId, Is.EqualTo(variantId));
+                    RunState durable = session.ActiveRun;
                     LandmarkSolverResult solution = SolveLandmark(runtime, outcomeId);
                     yield return ExecuteLandmarkSteps(manager, solution.SolutionPath);
-                    RunState durable = store.LoadRun().Data;
+                    Assert.That(session.ActiveRun, Is.Null);
+                    Assert.That(durable.Status, Is.EqualTo(RunStatus.Won));
+                    Assert.That(store.LoadRun().IsSuccess, Is.False);
+                    Assert.That(store.LoadProfile().Data.WonRunCount, Is.EqualTo(1));
                     LandmarkRecord completed = durable.CompletedLandmarks.Single();
                     Assert.That(completed.VariantId, Is.EqualTo(variantId));
                     Assert.That(completed.OutcomeId, Is.EqualTo(outcomeId));
@@ -1318,8 +1480,12 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That((bool)InvokeManager(manager, "HandleBoardOutcome", BoardOutcome.ExitReached(runtime.Request)), Is.False);
                 InvokeManager(manager, "HideLevelImage");
                 yield return null;
+                RunState durable = session.ActiveRun;
                 yield return ExecuteLandmark(manager, supplies ? "NNPNEECCCENE" : "NNNNNEE");
-                RunState durable = store.LoadRun().Data;
+                Assert.That(session.ActiveRun, Is.Null);
+                Assert.That(durable.Status, Is.EqualTo(RunStatus.Won));
+                Assert.That(store.LoadRun().IsSuccess, Is.False);
+                Assert.That(store.LoadProfile().Data.WonRunCount, Is.EqualTo(1));
                 Assert.That(durable.CompletedLandmarks.Single().OutcomeId, Is.EqualTo(supplies ? "tower.supplies" : "tower.arrival"));
                 Assert.That(durable.CompletedDayCount, Is.EqualTo(5));
                 Assert.That(durable.Food, Is.EqualTo(supplies ? 108 : 93));
@@ -1369,10 +1535,22 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(store.LoadProfile().Data.GetNodeDiscoveryState("landmark.radio-tower"), Is.Not.EqualTo(NodeDiscoveryState.Visited));
             int saves = store.RunSaves;
             store.FailProfile = false;
+            RunState completed = session.ActiveRun;
+            store.FailTerminalProfile = true;
+            LogAssert.Expect(LogType.Error, "Run completion save failed: IoError");
+            Assert.That((bool)InvokeManager(manager, "RetryTravelCheckpoint"), Is.False);
+            Assert.That(session.ActiveRun, Is.SameAs(completed));
+            Assert.That(completed.Status, Is.EqualTo(RunStatus.Won));
+            Assert.That(completed.Food, Is.EqualTo(expectedFood));
+            Assert.That(session.Profile.WonRunCount, Is.EqualTo(1));
+            store.FailTerminalProfile = false;
             Assert.That((bool)InvokeManager(manager, "RetryTravelCheckpoint"), Is.True);
             Assert.That(store.RunSaves, Is.EqualTo(saves));
-            Assert.That(session.ActiveRun.CompletedLandmarks.Count, Is.EqualTo(1));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(expectedFood));
+            Assert.That(session.ActiveRun, Is.Null);
+            Assert.That(completed.Status, Is.EqualTo(RunStatus.Won));
+            Assert.That(completed.CompletedLandmarks.Count, Is.EqualTo(1));
+            Assert.That(completed.Food, Is.EqualTo(expectedFood));
+            Assert.That(store.LoadProfile().Data.WonRunCount, Is.EqualTo(1));
             Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.EqualTo(resolutions));
             Assert.That(store.LoadProfile().Data.GetNodeDiscoveryState("landmark.radio-tower"), Is.EqualTo(NodeDiscoveryState.Visited));
         }
@@ -1695,13 +1873,14 @@ namespace HallowBlaze.Tests.PlayMode
             public TravelFaultStore(ISaveStore inner) { this.inner = inner; }
             public bool FailRun { get; set; }
             public bool FailProfile { get; set; }
+            public bool FailTerminalProfile { get; set; }
             public int RunSaves { get; private set; }
             public SaveStoreResult SaveRun(RunState run)
             {
                 RunSaves++;
                 return FailRun ? SaveStoreResult.IoError("Injected travel checkpoint failure.") : inner.SaveRun(run);
             }
-            public SaveStoreResult SaveProfile(ProfileState profile) => FailProfile
+            public SaveStoreResult SaveProfile(ProfileState profile) => FailProfile || FailTerminalProfile && profile.WonRunCount > 0
                 ? SaveStoreResult.IoError("Injected discovery checkpoint failure.") : inner.SaveProfile(profile);
             public SaveStoreResult<RunState> LoadRun() => inner.LoadRun();
             public SaveStoreResult<ProfileState> LoadProfile() => inner.LoadProfile();
@@ -1731,6 +1910,7 @@ namespace HallowBlaze.Tests.PlayMode
             GameObject floor = CreateObject("Floor Prefab", 0, 0);
             GameObject outer = CreateObject("Outer Prefab", 0, 0);
             GameObject unused = CreateObject("Unused Prefab", 0, 0);
+            unused.AddComponent<SpriteRenderer>();
             GameObject exit = CreateObject("Exit Prefab", 0, 0);
             SetField(manager, "floorTiles", new[] { floor });
             SetField(manager, "outerWallTiles", new[] { outer });
