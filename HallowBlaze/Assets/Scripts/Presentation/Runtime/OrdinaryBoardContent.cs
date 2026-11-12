@@ -19,7 +19,7 @@ namespace HallowBlaze.Presentation.Runtime
         public const string Enemy10Id = "ordinary.shambler.10";
         /// <summary>Identifies the current 20 HP Shambler variant independently of prefab identity.</summary>
         public const string Enemy20Id = "ordinary.shambler.20";
-        /// <summary>Identifies visible berries worth exactly five Food; legacy bush rewards remain unchanged.</summary>
+        /// <summary>Identifies berries worth five Food; version 6 protects them with a clearable blocking bush.</summary>
         public const string BerryFoodId = "ordinary.berries";
         /// <summary>Identifies a visible carrot worth exactly fifteen Food, separate from legacy buried caches.</summary>
         public const string CarrotFoodId = "ordinary.carrot";
@@ -53,7 +53,7 @@ namespace HallowBlaze.Presentation.Runtime
                 });
         }
 
-        /// <summary>Resolves retained versions 1-4 or version-5 medical supply, preserving food, safety and count budgets.</summary>
+        /// <summary>Resolves versions 1-6 with retained budgets; version 5 adds medicine and version 6 guards berries with bushes.</summary>
         /// <param name="address">The actual segment identity; day affects pressure, with pinned v2 opening stages on Day 1.</param>
         /// <returns>A detached inclusive budget; this is a first-family preset, not final balance.</returns>
         /// <exception cref="ArgumentException">The generation family or version is unsupported.</exception>

@@ -202,7 +202,7 @@ namespace HallowBlaze.Tests.PlayMode
 
         /// <summary>Ordinary setup retains blueprint identity, initial state, enemy rules and view parity across Continue and cosmetic changes.</summary>
         [UnityTest]
-        public IEnumerator OrdinarySetupBuildsViewsFromValidatedBlueprintAndContinuesIdentically([Values(1, 2, 3, 4, 5)] int version)
+        public IEnumerator OrdinarySetupBuildsViewsFromValidatedBlueprintAndContinuesIdentically([Values(1, 2, 3, 4, 5, 6)] int version)
         {
             UnityEngine.Random.State previousRandom = UnityEngine.Random.state;
             try
@@ -297,9 +297,9 @@ namespace HallowBlaze.Tests.PlayMode
             return manager;
         }
 
-        /// <summary>Real food artwork, applied gains and removal agree with fixed rewards in both replay modes and after recovery.</summary>
+        /// <summary>Food gains/removal agree in both replay modes; new berries require clearing a blocking bush before collection.</summary>
         [UnityTest]
-        public IEnumerator ProductionFoodVarietiesCollectOnceWithExactHudGains()
+        public IEnumerator ProductionFoodVarietiesCollectOnceWithExactHudGains([Values(4, 6)] int version)
         {
             foreach (bool animations in new[] { true, false })
                 foreach (string foodId in new[] { OrdinaryBoardContent.BerryFoodId, OrdinaryBoardContent.CarrotFoodId })
@@ -321,7 +321,7 @@ namespace HallowBlaze.Tests.PlayMode
                         var run = new RunState("resource-view-" + seed, seed, new RunStateConfiguration(100, 100, 0, "forest.start"));
                         run.StartLeg("edge", run.WorldNodeId, "destination", new[]
                         {
-                            new RouteSegmentState("ordinary.segment", OrdinaryBoardGenerator.ConfigurationId, 4)
+                            new RouteSegmentState("ordinary.segment", OrdinaryBoardGenerator.ConfigurationId, version)
                         });
                         var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed,
                             run.WorldNodeId, "forest", "temperate", 1);
@@ -333,7 +333,7 @@ namespace HallowBlaze.Tests.PlayMode
                     string prefab = foodId == OrdinaryBoardContent.BerryFoodId ? "Food2" : "Carrot";
                     Assert.That(itemView.GetComponent<SpriteRenderer>().sprite,
                         Is.SameAs(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/" + prefab + ".prefab").GetComponent<SpriteRenderer>().sprite));
-                    if (foodId == OrdinaryBoardContent.BerryFoodId)
+                    if (foodId == OrdinaryBoardContent.BerryFoodId && version < 6)
                     {
                         Transform bush = itemView.transform.Find("Berry bush");
                         Assert.That(bush, Is.Not.Null);
@@ -365,14 +365,50 @@ namespace HallowBlaze.Tests.PlayMode
                         presenter.AnimationsEnabled = animations;
                         presenter.SynchronizeFromState();
                         presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Setup, false);
+                        if (foodId == OrdinaryBoardContent.BerryFoodId && version >= 6)
+                        {
+                            Assert.That(itemView.transform.Find("Berry bush"), Is.Null, "The bush must be a real domain obstacle, not item decoration.");
+                            Assert.That(runtime.BoardState.TryGetEntity(BoardLayer.Obstacle, item.Position, out BoardEntityState bush), Is.True);
+                            GameObject bushView = runtime.Views[bush.Id];
+                            Assert.That(bushView.activeSelf, Is.True);
+                            CommandSubmission blocked = presenter.Coordinator.SubmitAsync(new MoveCommand(step)).Result;
+                            Assert.That(blocked.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+                            Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+                            Assert.That(runtime.BoardState.TryGetEntity(item.Id, out _), Is.True);
+                            Assert.That(runtime.BoardState.TryGetEntity(runtime.PlayerId, out BoardEntityState playerState), Is.True);
+                            Assert.That(playerState.Position, Is.Not.EqualTo(item.Position));
+                            Assert.That(sinks.Events.OfType<FoodRestoredEvent>(), Is.Empty);
+                            int frame = 1000000;
+                            for (int work = 0; work < runtime.ClearingRules.RequiredWork; work++)
+                            {
+                                var picker = presenter.InteractionDisplay;
+                                picker.SampleInputAsync(key => key == KeyCode.F, frame++);
+                                Assert.That(picker.IsOpen, Is.True);
+                                Assert.That(picker.Options.Any(option => option.TargetId.Equals(item.Id)), Is.False, "Berries cannot be collected through the bush.");
+                                int clear = picker.Options.ToList().FindIndex(option => option.TargetId.Equals(bush.Id) && option.ActionId == "clear");
+                                Assert.That(picker.Select(clear), Is.True);
+                                Task<CommandSubmission> clearing = picker.SampleInputAsync(key => key == KeyCode.Space, frame++);
+                                while (!clearing.IsCompleted) yield return null;
+                                Assert.That(clearing.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                                Assert.That(runtime.BoardState.TryGetEntity(item.Id, out _), Is.True);
+                                Assert.That(sinks.Events.OfType<FoodRestoredEvent>(), Is.Empty);
+                                yield return null;
+                            }
+                            Assert.That(runtime.BoardState.TryGetEntity(bush.Id, out _), Is.False);
+                            Assert.That(bushView.activeSelf, Is.False);
+                            Assert.That(itemView.activeSelf, Is.True);
+                            presenter.SynchronizeFromState();
+                            Assert.That(bushView.activeSelf, Is.False);
+                        }
+                        int beforePickup = runtime.RunState.Food;
                         player.GetComponent<Animator>().Update(0f);
                         CaptureLandmark(runtime, new Vector2Int(1280, 720), prefab + "-before-" + animations, "HB-M715");
                         Task<CommandSubmission> pending = presenter.Coordinator.SubmitAsync(new MoveCommand(step));
                         while (!pending.IsCompleted) yield return null;
                         Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
                         int reward = foodId == OrdinaryBoardContent.BerryFoodId ? 5 : 15;
-                        Assert.That(runtime.RunState.Food, Is.EqualTo(100 + reward - 1));
-                        Assert.That(foodText.text, Is.EqualTo("Food: " + (100 + reward - 1) + " +" + reward));
+                        Assert.That(runtime.RunState.Food, Is.EqualTo(beforePickup + reward - 1));
+                        Assert.That(foodText.text, Is.EqualTo("Food: " + (beforePickup + reward - 1) + " +" + reward));
                         Assert.That(itemView.activeSelf, Is.False);
                         Assert.That(runtime.BoardState.TryGetEntity(item.Id, out _), Is.False);
                         Assert.That(sinks.Events.OfType<FoodRestoredEvent>().Single().Amount, Is.EqualTo(reward));

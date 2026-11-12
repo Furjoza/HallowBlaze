@@ -90,6 +90,19 @@ namespace HallowBlaze.Core.Generation.Validation
                 }
             }
 
+            if (blueprint.Config.Id == "ordinary.board.v1" && blueprint.Config.Version >= 6)
+                foreach (BoardEntityState item in blueprint.Entities)
+                {
+                    if (item.Definition.ContentId != "ordinary.berries") continue;
+                    bool guarded = state.TryGetEntity(BoardLayer.Obstacle, item.Position, out BoardEntityState bush) &&
+                        bush.Definition.ContentId == "legacy.wall" && !bush.Definition.Traits.IsWalkable;
+                    bool approachable = false;
+                    foreach (Direction direction in Directions)
+                        approachable |= distances.ContainsKey(item.Position.Move(direction));
+                    if (!guarded || !approachable)
+                        errors.Add(new BoardValidationError("UnguardedBerries", "Berries require a blocking clearable bush beside reachable ground.", context, item.Position));
+                }
+
             int branches = 0;
             foreach (GridPosition position in passable)
             {

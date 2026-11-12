@@ -29,7 +29,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(emitted.Noise.SourceId, Is.EqualTo(PlayerId));
             Assert.That(emitted.Noise.Position, Is.EqualTo(new GridPosition(2, 1)));
             Assert.That(emitted.Noise.Strength, Is.EqualTo(2));
-            Assert.That(emitted.Noise.RemainingTurns, Is.EqualTo(2));
+            Assert.That(emitted.Noise.RemainingTurns, Is.EqualTo(1));
             Assert.That(result.Events.OfType<ActionCostAppliedEvent>().Count(), Is.EqualTo(1));
         }
 
@@ -60,18 +60,28 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(board.GetActiveNoises().Single(), Is.SameAs(noise));
         }
 
-        /// <summary>Wait remains silent, ages existing signals once and preserves an old event's immutable lifetime.</summary>
+        /// <summary>A step is audible in its own turn but expires before the next accepted enemy phase; rejected inputs do not age it.</summary>
         [Test]
         public void SubsequentAcceptedCommandsExpireNoise()
         {
             BoardState board = CreateBoard();
-            var controller = new TurnController(board, CreateRun(), PlayerId, new TurnResolver(ActionNoiseProfile.Prototype));
+            int executedPhases = 0;
+            var phases = new TurnPhaseHandlers(executeLockedIntents: (current, run, actor, events) =>
+            {
+                Assert.That(current.GetActiveNoises().Count, Is.EqualTo(executedPhases == 0 ? 1 : 0));
+                executedPhases++;
+            });
+            var controller = new TurnController(board, CreateRun(), PlayerId, new TurnResolver(ActionNoiseProfile.Prototype), phases);
             NoiseEvent emitted = controller.Resolve(new MoveCommand(Direction.East)).Events.OfType<NoiseEvent>().Single();
+            Assert.That(controller.Resolve(null).Accepted, Is.False);
+            Assert.That(board.GetActiveNoises().Single(), Is.SameAs(emitted.Noise));
+            Assert.That(executedPhases, Is.EqualTo(1));
             Assert.That(controller.Resolve(new WaitCommand()).Events.OfType<NoiseEvent>(), Is.Empty);
-            Assert.That(board.GetActiveNoises().Single().RemainingTurns, Is.EqualTo(1));
-            Assert.That(emitted.Noise.RemainingTurns, Is.EqualTo(2));
+            Assert.That(board.GetActiveNoises(), Is.Empty);
+            Assert.That(emitted.Noise.RemainingTurns, Is.EqualTo(1));
             controller.Resolve(new WaitCommand());
             Assert.That(board.GetActiveNoises(), Is.Empty);
+            Assert.That(executedPhases, Is.EqualTo(3));
         }
 
         /// <summary>Later emissions retain their full lifetime while older signals age before planning.</summary>
@@ -84,7 +94,7 @@ namespace HallowBlaze.Tests.EditMode
                 executeLockedIntents: (current, run, actor, events) =>
                 {
                     Assert.That(current.GetActiveNoises().Count, Is.EqualTo(1));
-                    Assert.That(current.GetActiveNoises()[0].RemainingTurns, Is.EqualTo(2));
+                    Assert.That(current.GetActiveNoises()[0].RemainingTurns, Is.EqualTo(1));
                     Assert.That(current.GetActiveNoises()[0].Id, Is.EqualTo(1));
                 });
             var controller = new TurnController(board, CreateRun(), PlayerId,
@@ -107,6 +117,25 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(emitted.Noise.Position, Is.EqualTo(new GridPosition(1, 1)));
             Assert.That(controller.Resolve(new InteractCommand(new EntityId(999))).Accepted, Is.False);
             Assert.That(board.GetActiveNoises().Single(), Is.SameAs(emitted.Noise));
+        }
+
+        /// <summary>Shortening footsteps does not shorten the prototype interaction signal.</summary>
+        [Test]
+        public void PrototypeInteractionRetainsTwoTurnLifetime()
+        {
+            BoardState board = CreateBoard();
+            var targetId = new EntityId(800);
+            Assert.That(board.TryAdd(new BoardEntityState(targetId,
+                new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, "lever", new BoardEntityTraits(true, false, true)),
+                new GridPosition(1, 2))), Is.True);
+            var controller = new TurnController(board, CreateRun(), PlayerId, new TurnResolver(ActionNoiseProfile.Prototype));
+            NoiseEvent emitted = controller.Resolve(new InteractCommand(targetId)).Events.OfType<NoiseEvent>().Single();
+            Assert.That(emitted.Noise.RemainingTurns, Is.EqualTo(2));
+            Assert.That(emitted.Noise.Strength, Is.EqualTo(4));
+            controller.Resolve(new WaitCommand());
+            Assert.That(board.GetActiveNoises().Single().RemainingTurns, Is.EqualTo(1));
+            controller.Resolve(new WaitCommand());
+            Assert.That(board.GetActiveNoises(), Is.Empty);
         }
 
         /// <summary>Starvation still emits an accepted action's noise before its terminal outcome.</summary>
@@ -142,6 +171,8 @@ namespace HallowBlaze.Tests.EditMode
             Assert.Throws<ArgumentOutOfRangeException>(() => new ActionNoiseProfile(-1, 1, 1));
             Assert.Throws<ArgumentOutOfRangeException>(() => new ActionNoiseProfile(1, -1, 1));
             Assert.Throws<ArgumentOutOfRangeException>(() => new ActionNoiseProfile(1, 1, 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new ActionNoiseProfile(1, 1, 1, 0));
+            Assert.That(new ActionNoiseProfile(1, 1, 3).MovementLifetimeTurns, Is.EqualTo(3));
             Assert.Throws<ArgumentNullException>(() => new NoiseEvent(null));
         }
 

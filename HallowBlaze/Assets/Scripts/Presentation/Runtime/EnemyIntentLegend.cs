@@ -20,6 +20,7 @@ namespace HallowBlaze.Presentation.Runtime
         private readonly RectTransform content;
         private readonly ScrollRect scroll;
         private bool disposed;
+        private int? sampledFrame;
 
         /// <summary>Gets the owned transient canvas; no scene, runtime, or input source is owned.</summary>
         public GameObject Root { get; }
@@ -97,6 +98,27 @@ namespace HallowBlaze.Presentation.Runtime
         {
             EnsureOpen();
             panel.gameObject.SetActive(false);
+        }
+
+        /// <summary>Handles L and visible-legend scrolling for free, discarding blocked or duplicate frame edges.</summary>
+        /// <param name="keyDown">Current-frame key edges, not held state.</param>
+        /// <param name="frame">Frame identity consumed even when gameplay input is blocked.</param>
+        /// <param name="inputAllowed">Whether the current idle board may expose informational controls.</param>
+        /// <returns>Whether a legend-only key was consumed; no command or domain mutation is produced.</returns>
+        public bool SampleInput(Func<KeyCode, bool> keyDown, int frame, bool inputAllowed)
+        {
+            if (keyDown == null) throw new ArgumentNullException(nameof(keyDown));
+            if (sampledFrame == frame || disposed) return false;
+            sampledFrame = frame;
+            if (!inputAllowed || !Root.activeInHierarchy) return false;
+            if (keyDown(PcInputBindings.Legend)) { Toggle(); return true; }
+            if (!IsVisible) return false;
+            if (keyDown(KeyCode.Home)) scroll.verticalNormalizedPosition = 1;
+            else if (keyDown(KeyCode.End)) scroll.verticalNormalizedPosition = 0;
+            else if (keyDown(KeyCode.PageUp)) scroll.verticalNormalizedPosition = Mathf.Clamp01(scroll.verticalNormalizedPosition + 0.25f);
+            else if (keyDown(KeyCode.PageDown)) scroll.verticalNormalizedPosition = Mathf.Clamp01(scroll.verticalNormalizedPosition - 0.25f);
+            else return false;
+            return true;
         }
 
         /// <summary>
