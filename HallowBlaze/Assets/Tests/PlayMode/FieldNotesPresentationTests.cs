@@ -88,9 +88,15 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(notes.FeedbackTitle, Is.EqualTo("Following the sound"));
                 notes.Acknowledge();
                 Assert.That(notes.FeedbackTitle, Is.Empty);
+                Invoke(fixture.Manager, "ObservePresentedObservation", FactObservation.ShamblerTrappedPresented);
+                Assert.That(notes.FeedbackTitle, Is.EqualTo("Held by the ground"));
+                notes.SetAvailable(false);
+                notes.SetAvailable(true);
+                Assert.That(notes.FeedbackTitle, Is.Empty, "A later board must not resurrect a previous board's popup.");
+                Assert.That(notes.Entries.Any(entry => entry.FactId == "PIT_TRAPS_SHAMBLER"), Is.True);
                 operation = fixture.Presenter.Coordinator.SubmitAsync(new WaitCommand());
                 while (!operation.IsCompleted) yield return null;
-                Assert.That(notes.DiscoveryFeedbackCount, Is.EqualTo(2));
+                Assert.That(notes.DiscoveryFeedbackCount, Is.EqualTo(3));
                 fixture.Dispose();
                 yield return null;
             }
@@ -103,17 +109,20 @@ namespace HallowBlaze.Tests.PlayMode
             Fixture fixture = CreateFixture(false, true);
             yield return null;
             FieldNotesPresenter notes = fixture.Notes;
-            Button open = notes.Root.GetComponentsInChildren<Button>(true).Single(button => button.name == "Open Field Notes");
-            Button close = notes.Root.GetComponentsInChildren<Button>(true).Single(button => button.name == "Close Field Notes");
+            Button open = notes.Root.GetComponentsInChildren<Button>(true).Single(button => button.name == "Open Atlas");
             var pointer = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current);
             UnityEngine.EventSystems.ExecuteEvents.Execute(open.gameObject, pointer, UnityEngine.EventSystems.ExecuteEvents.pointerEnterHandler);
             Assert.That(notes.Root.GetComponentsInChildren<Text>().Count(text => text.name == "Tooltip"), Is.EqualTo(1));
             Assert.That(notes.Open(), Is.True);
+            Component atlas = CurrentAtlas();
+            Assert.That((bool)atlas.GetType().GetProperty("IsOpen").GetValue(atlas), Is.True);
+            Assert.That(notes.Root.GetComponentsInChildren<Transform>(true).Any(child => child.name == "Field Notes"), Is.False);
+            Button close = atlas.GetComponentsInChildren<Button>(true).Single(button => button.name == "Close Atlas");
             Assert.That(notes.Root.GetComponentsInChildren<Text>().Count(text => text.name == "Tooltip"), Is.Zero,
                 "Hiding the hovered book must also hide its label without relying on PointerExit.");
             UnityEngine.EventSystems.ExecuteEvents.Execute(close.gameObject, pointer, UnityEngine.EventSystems.ExecuteEvents.pointerEnterHandler);
-            Assert.That(notes.Root.GetComponentsInChildren<Text>().Where(text => text.name == "Tooltip").Select(text => text.text),
-                Is.EqualTo(new[] { "Close Field Notes" }));
+            Assert.That(close.GetComponentsInChildren<Text>().Where(text => text.name == "Tooltip").Select(text => text.text),
+                Is.EqualTo(new[] { "Close atlas" }));
             notes.Close();
             yield return null;
             Assert.That(notes.Root.GetComponentsInChildren<Text>().Count(text => text.name == "Tooltip"), Is.Zero);
@@ -125,7 +134,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(open.targetGraphic.canvasRenderer.GetColor(), Is.EqualTo(idle));
             Assert.That(open.gameObject.activeInHierarchy, Is.True);
             Assert.That(open.transform.position, Is.EqualTo(position));
-            Assert.That(notes.Root.GetComponentsInChildren<Button>(true).Count(button => button.name == "Open Field Notes"), Is.EqualTo(1));
+            Assert.That(notes.Root.GetComponentsInChildren<Button>(true).Count(button => button.name == "Open Atlas"), Is.EqualTo(1));
             Invoke(fixture.Manager, "SetGameplayInputBlocked", false);
             yield return null;
             foreach (PlayerCommand command in new PlayerCommand[] { new MoveCommand(Direction.North),
@@ -140,7 +149,7 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(open.transform.position, Is.EqualTo(position));
                 }
                 yield return null;
-                Assert.That(notes.Root.GetComponentsInChildren<Button>(true).Single(button => button.name == "Open Field Notes"), Is.SameAs(open));
+                Assert.That(notes.Root.GetComponentsInChildren<Button>(true).Single(button => button.name == "Open Atlas"), Is.SameAs(open));
                 Assert.That(open.gameObject.activeInHierarchy, Is.True);
             }
         }
@@ -168,8 +177,10 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(notes.SelectedText, Does.Contain("causes no damage"));
             notes.Resize(new Vector2(320, 480));
             yield return null;
-            Assert.That(notes.Root.transform.Find("Field Notes").GetComponent<RectTransform>().rect.width,
-                Is.EqualTo(Screen.width), "The disabled manager must not own the surviving reader's resize.");
+            Assert.That(CurrentAtlas().GetComponent<RectTransform>().rect.width,
+                Is.EqualTo(Screen.width).Within(0.5f), "The disabled manager must not own the surviving reader's resize.");
+            Assert.That((Vector2)CurrentAtlas().GetType().GetField("viewportSize", BindingFlags.NonPublic | BindingFlags.Instance)
+                .GetValue(CurrentAtlas()), Is.EqualTo(new Vector2(Screen.width, Screen.height)));
             notes.Close();
             yield return null;
             Invoke(fixture.Manager, "StartNewRun");
@@ -216,9 +227,9 @@ namespace HallowBlaze.Tests.PlayMode
         public void NotesRenderKnownContentWithoutClippingOrUnknownChecklist(int width, int height)
         {
             Assert.That(SystemInfo.graphicsDeviceType, Is.Not.EqualTo(UnityEngine.Rendering.GraphicsDeviceType.Null));
-            var owner = new GameObject("Field Notes rendered fixture");
-            var cameraOwner = new GameObject("Field Notes camera");
-            var notes = owner.AddComponent<FieldNotesPresenter>();
+            Fixture fixture = CreateFixture(false, false);
+            var notes = fixture.Notes;
+            var cameraOwner = new GameObject("Atlas evidence camera");
             Camera camera = cameraOwner.AddComponent<Camera>();
             camera.enabled = false;
             camera.clearFlags = CameraClearFlags.SolidColor;
@@ -228,48 +239,60 @@ namespace HallowBlaze.Tests.PlayMode
             RenderTexture previous = RenderTexture.active;
             try
             {
-                var profile = new ProfileState("notes-visual", "forest", 1);
-                FactKnowledge knowledge = FactContentCatalog.Load();
-                knowledge.Observe(profile, FactObservation.AxeNoisePresented);
-                knowledge.Observe(profile, FactObservation.ShamblerTrappedPresented);
-                knowledge.Observe(profile, FactObservation.ListenerInvestigationPresented);
-                profile.DiscoverFact("missing.fact");
-                notes.Bind(profile, knowledge, () => true, _ => { }, new Vector2(width, height));
+                foreach (FactObservation observation in new[] { FactObservation.AxeNoisePresented,
+                    FactObservation.ShamblerTrappedPresented, FactObservation.ListenerInvestigationPresented })
+                    Invoke(fixture.Manager, "ObservePresentedObservation", observation);
+                fixture.Profile.DiscoverFact("missing.fact");
+                notes.Refresh();
                 Assert.That(notes.Open(), Is.True);
-                Canvas canvas = notes.Root.GetComponent<Canvas>();
-                canvas.renderMode = RenderMode.ScreenSpaceCamera;
-                canvas.worldCamera = camera;
-                canvas.planeDistance = 1;
+                Component atlas = CurrentAtlas();
+                foreach (Canvas canvas in new[] { notes.Root.GetComponent<Canvas>(), atlas.GetComponent<Canvas>() })
+                {
+                    canvas.renderMode = RenderMode.ScreenSpaceCamera;
+                    canvas.worldCamera = camera;
+                    canvas.planeDistance = 1;
+                }
                 camera.targetTexture = target;
                 Canvas.ForceUpdateCanvases();
-                notes.Refresh();
+                Invoke(atlas, "Resize", new Vector2(width, height));
+                Invoke(atlas, "ShowObservations");
+                Canvas.ForceUpdateCanvases();
+                Assert.That(atlas.GetComponentsInChildren<Image>().Where(image => image.sprite != null)
+                    .Select(image => image.sprite.name).Distinct().Count(), Is.EqualTo(4));
                 Assert.That(notes.Select("LISTENER_FOLLOWS_NOISE"), Is.True);
-                Button closeControl = notes.Root.GetComponentsInChildren<Button>().Single(button => button.name == "Close Field Notes");
+                Assert.That((string)atlas.GetType().GetProperty("InspectedDetails").GetValue(atlas),
+                    Is.EqualTo(notes.SelectedText));
+                string selectedDetails = notes.SelectedText;
+                Invoke(atlas, "Resize", new Vector2(width, height));
+                Assert.That((string)atlas.GetType().GetProperty("InspectedDetails").GetValue(atlas), Is.EqualTo(selectedDetails));
+                Assert.That(UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject.name, Is.EqualTo("AtlasDetailViewport"));
+                Button closeControl = atlas.GetComponentsInChildren<Button>().Single(button => button.name == "Close Atlas");
                 var hover = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current);
                 UnityEngine.EventSystems.ExecuteEvents.Execute(closeControl.gameObject, hover,
                     UnityEngine.EventSystems.ExecuteEvents.pointerEnterHandler);
                 Canvas.ForceUpdateCanvases();
                 Text tooltip = closeControl.GetComponentsInChildren<Text>().Single(text => text.name == "Tooltip");
-                RectTransform title = notes.Root.transform.Find("Field Notes/Title").GetComponent<RectTransform>();
-                Bounds tooltipBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(notes.Root.transform, tooltip.rectTransform);
-                Bounds titleBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(notes.Root.transform, title);
-                Assert.That(tooltipBounds.Intersects(titleBounds), Is.False, "A visible close tooltip must not overwrite the Notes title.");
-                foreach (Text text in notes.Root.GetComponentsInChildren<Text>())
+                RectTransform title = atlas.transform.Find("AtlasHeader/AtlasTitle").GetComponent<RectTransform>();
+                Bounds tooltipBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(atlas.transform, tooltip.rectTransform);
+                Bounds titleBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(atlas.transform, title);
+                Assert.That(tooltipBounds.Intersects(titleBounds), Is.False, "The close tooltip must not overwrite the atlas title.");
+                Bounds currentBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(atlas.transform,
+                    atlas.transform.Find("AtlasHeader/CurrentNode"));
+                Assert.That(tooltipBounds.Intersects(currentBounds), Is.False, "The close tooltip must not overwrite the current place.");
+                foreach (Text text in atlas.GetComponentsInChildren<Text>())
                     Assert.That(text.preferredHeight, Is.LessThanOrEqualTo(text.rectTransform.rect.height + 1), text.name + ": " + text.text);
                 Assert.That(notes.Entries, Has.Count.EqualTo(4));
-                Assert.That(notes.Root.GetComponentsInChildren<Image>().Where(image => image.sprite != null)
-                    .Select(image => image.sprite.name).Distinct().Count(), Is.GreaterThanOrEqualTo(4));
                 camera.Render();
                 RenderTexture.active = target;
                 pixels.ReadPixels(new Rect(0, 0, width, height), 0, 0);
                 pixels.Apply();
                 Assert.That(pixels.GetPixels32().Count(color => color.r < 100 && color.g < 140 && color.b < 120), Is.GreaterThan(800));
-                string path = Path.Combine(Path.GetTempPath(), "HB-M57-notes-" + width + "x" + height + ".png");
+                string path = Path.Combine(Path.GetTempPath(), "HB-M723-atlas-" + width + "x" + height + ".png");
                 File.WriteAllBytes(path, pixels.EncodeToPNG());
-                TestContext.WriteLine("Field Notes evidence: " + path);
+                TestContext.WriteLine("Atlas evidence: " + path);
                 Assert.That(notes.Select("missing.fact"), Is.True);
                 Assert.That(notes.SelectedText, Does.Contain("Uncatalogued observation").And.Not.Contain("missing.fact"));
-                Assert.That(profile.DiscoveredFactIds, Does.Contain("missing.fact"));
+                Assert.That(fixture.Profile.DiscoveredFactIds, Does.Contain("missing.fact"));
                 notes.Close();
                 Canvas.ForceUpdateCanvases();
                 camera.Render();
@@ -277,7 +300,7 @@ namespace HallowBlaze.Tests.PlayMode
                 pixels.ReadPixels(new Rect(0, 0, width, height), 0, 0);
                 pixels.Apply();
                 Color[] idleBook = pixels.GetPixels(8, height - 120, 44, 44);
-                Button book = notes.Root.GetComponentsInChildren<Button>().Single(button => button.name == "Open Field Notes");
+                Button book = notes.Root.GetComponentsInChildren<Button>().Single(button => button.name == "Open Atlas");
                 book.interactable = false;
                 camera.Render();
                 RenderTexture.active = target;
@@ -292,8 +315,7 @@ namespace HallowBlaze.Tests.PlayMode
             {
                 camera.targetTexture = null;
                 RenderTexture.active = previous;
-                notes.Dispose();
-                Object.DestroyImmediate(owner);
+                fixture.Dispose();
                 Object.DestroyImmediate(cameraOwner);
                 Object.DestroyImmediate(pixels);
                 Object.DestroyImmediate(target);
@@ -346,7 +368,9 @@ namespace HallowBlaze.Tests.PlayMode
             return new LegacyBoardView(owner, kind, new GridPosition(horizontal, vertical), kind == LegacyBoardContentKind.Enemy ? (int?)10 : null);
         }
 
-        private static string AllText(FieldNotesPresenter notes) => string.Join(" ", notes.Root.GetComponentsInChildren<Text>(true).Select(text => text.text));
+        private static Component CurrentAtlas() => Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
+            .Single(component => component.GetType().FullName == "HallowBlaze.Presentation.Atlas.AtlasScreenController");
+        private static string AllText(FieldNotesPresenter notes) => string.Join(" ", notes.Root.GetComponentsInChildren<Text>(true).Select(text => text.text)) + " " + notes.SelectedText;
         private static object Invoke(Component owner, string method, params object[] arguments) => owner.GetType().GetMethod(method,
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Invoke(owner, arguments);
 

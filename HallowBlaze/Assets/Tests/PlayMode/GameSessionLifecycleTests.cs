@@ -642,8 +642,37 @@ namespace HallowBlaze.Tests.PlayMode
                 UnityEngine.Object.DestroyImmediate(capture);
             }
             KeyboardMenuFocus focus = action.GetComponentInParent<KeyboardMenuFocus>();
+            FieldNotesPresenter knowledge = GetProperty<FieldNotesPresenter>(manager, "FieldNotes");
+            Invoke(manager, "ObservePresentedObservation", FactObservation.ShamblerTrappedPresented);
+            Component atlas = manager.GetComponentsInChildren<MonoBehaviour>().Single(component =>
+                component.GetType().FullName == "HallowBlaze.Presentation.Atlas.AtlasScreenController");
+            foreach (int closeMode in new[] { 0, 1, 2 })
+            {
+                Assert.That(knowledge.SampleInput(key => key == KeyCode.N, -200 - closeMode * 2), Is.True);
+                Assert.That(knowledge.IsOpen, Is.True);
+                Assert.That(focus.isActiveAndEnabled, Is.False);
+                Assert.That(action.activeInHierarchy, Is.False, "Terminal actions must not cover or receive pointer input over the reader.");
+                yield return null;
+                KeyboardMenuFocus readerFocus = atlas.GetComponent<KeyboardMenuFocus>();
+                Assert.That(UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject.name, Is.EqualTo("AtlasObservation"));
+                readerFocus.HandleKey(KeyCode.Return);
+                Assert.That(GetProperty<string>(atlas, "InspectedDetails"), Does.Contain("causes no damage"));
+                readerFocus.HandleKey(KeyCode.Tab);
+                Assert.That(UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject.transform.IsChildOf(atlas.transform), Is.True);
+                Assert.That(session.ActiveRun, Is.Null, "Reading/confirmation must never restart the completed run.");
+                Assert.That(profile.WonRunCount, Is.EqualTo(1));
+                if (closeMode == 0) knowledge.SampleInput(key => key == KeyCode.N, -201 - closeMode * 2);
+                else if (closeMode == 1) readerFocus.HandleKey(KeyCode.Escape);
+                else atlas.GetComponentsInChildren<Button>().Single(button => button.name == "Close Atlas").onClick.Invoke();
+                yield return null;
+                Assert.That(knowledge.IsOpen, Is.False);
+                Assert.That(GetProperty<bool>(atlas, "IsOpen"), Is.True, "Closing reading must preserve the final atlas.");
+                Assert.That(focus.isActiveAndEnabled && action.activeInHierarchy, Is.True);
+                Assert.That(UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject.transform.IsChildOf(action.transform.parent), Is.True);
+                Assert.That(session.ActiveRun, Is.Null);
+            }
             for (int index = 0; index < 10 && UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject != action; index++)
-                focus.HandleKey(KeyCode.S);
+                focus.HandleKey(KeyCode.D);
             Assert.That(UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject, Is.SameAs(action));
             focus.HandleKey(KeyCode.Return);
             float deadline = Time.realtimeSinceStartup + 5f;
@@ -856,7 +885,7 @@ namespace HallowBlaze.Tests.PlayMode
                     try
                     {
                         Color top = modal.GetPixel(4, size.y - 4);
-                        Assert.That(Vector4.Distance(top, (Color)new Color32(239, 244, 241, 255)), Is.LessThan(0.05f));
+                        Assert.That(Vector4.Distance(top, (Color)new Color32(39, 45, 42, 255)), Is.LessThan(0.05f));
                         File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M72-Notes-" + size.x + "x" + size.y + ".png"), modal.EncodeToPNG());
                     }
                     finally { UnityEngine.Object.DestroyImmediate(modal); }
@@ -945,11 +974,11 @@ namespace HallowBlaze.Tests.PlayMode
                     EnemyIntentLegend legend = GetField<EnemyIntentLegend>(manager, "activeIntentLegend");
                     Rect tools = GetProperty<ToolHudPresenter>(manager, "ActiveToolHud").Bounds;
                     Button book = GetProperty<FieldNotesPresenter>(manager, "FieldNotes").Root
-                        .GetComponentsInChildren<Button>(true).Single(button => button.name == "Open Field Notes");
+                        .GetComponentsInChildren<Button>(true).Single(button => button.name == "Open Atlas");
                     Rect bookBounds = ScreenBounds((RectTransform)book.transform);
                     RectTransform notice = notes.Root.GetComponentsInChildren<RectTransform>(true)
                         .Single(rect => rect.name == "Committed discovery");
-                    Assert.That(notice.gameObject.activeInHierarchy, Is.True);
+                    Assert.That(notice.gameObject.activeInHierarchy, Is.EqualTo(boardIndex == 0));
                     Rect noticeBounds = ScreenBounds(notice);
                     foreach (Text label in notice.GetComponentsInChildren<Text>())
                         if (label.preferredHeight > label.rectTransform.rect.height + 1)
@@ -959,9 +988,10 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(notice.gameObject.activeSelf, Is.False);
                     legend.Hide();
                     Invoke(manager, "LayoutFieldNotesFeedback");
-                    Assert.That(notice.gameObject.activeInHierarchy, Is.True);
+                    Assert.That(notice.gameObject.activeInHierarchy, Is.EqualTo(boardIndex == 0));
                     Assert.That(notes.DiscoveryFeedbackCount, Is.EqualTo(1));
-                    foreach (Rect reserved in new[] { legend.ControlBounds, legend.PanelBounds, tools, bookBounds, noticeBounds })
+                    foreach (Rect reserved in new[] { legend.ControlBounds, legend.PanelBounds, tools, bookBounds }
+                        .Concat(boardIndex == 0 ? new[] { noticeBounds } : Array.Empty<Rect>()))
                         if (reserved.Overlaps(board) || reserved.Overlaps(group))
                             failures.Add(size + " control overlaps board/resources: " + reserved);
                     foreach (Text text in labels)
@@ -1031,8 +1061,8 @@ namespace HallowBlaze.Tests.PlayMode
             Invoke(manager, "LayoutFieldNotesFeedback");
             Invoke(manager, "DisposeIntentUi");
             Assert.That(notes.Root.GetComponentsInChildren<RectTransform>(true)
-                .Single(rect => rect.name == "Committed discovery").gameObject.activeSelf, Is.True,
-                "Ending a board must not leave its unacknowledged discovery hidden by a disposed legend.");
+                .Single(rect => rect.name == "Committed discovery").gameObject.activeSelf, Is.False,
+                "A later board must not resurrect a previous board's transient discovery.");
         }
 
         /// <summary>Combines the real opening, first route, safe later entry, overlays and pinned Continue in both presentation modes using isolated storage.</summary>
@@ -1195,6 +1225,9 @@ namespace HallowBlaze.Tests.PlayMode
                     canvas.planeDistance = uiCamera.nearClipPlane + 1;
                 }
                 Canvas.ForceUpdateCanvases();
+                foreach (MonoBehaviour atlas in manager.GetComponentsInChildren<MonoBehaviour>().Where(component =>
+                    component.GetType().FullName == "HallowBlaze.Presentation.Atlas.AtlasScreenController"))
+                    Invoke(atlas, "Resize", size);
                 inspectLayout?.Invoke();
                 RenderTexture.active = target;
                 GL.Clear(true, true, Color.magenta);
@@ -1272,6 +1305,85 @@ namespace HallowBlaze.Tests.PlayMode
             yield return SceneManager.UnloadSceneAsync("Main");
         }
 
+        /// <summary>Production menu startup, presented exits, and checkpoint continuation render the actual atlas without implicitly selecting a route.</summary>
+        [UnityTest]
+        public IEnumerator MenuOpeningExitsShowTheActualAtlas([Values(false, true)] bool animations)
+        {
+            yield return SceneManager.LoadSceneAsync("Menu", LoadSceneMode.Single);
+            yield return null;
+            yield return null;
+            GameObject menu = GameObject.Find("MainMenuPanel");
+            Button start = menu.GetComponentsInChildren<Button>().Single(button => button.name == "StartBttn");
+            start.Select();
+            menu.GetComponent<KeyboardMenuFocus>().HandleKey(KeyCode.Return);
+            yield return null;
+            yield return null;
+            Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo("Main"));
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            AssertOpeningWarmUp(manager);
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            RunState run = session.ActiveRun;
+            for (int index = 0; index < 3; index++)
+            {
+                Assert.That(run.ActiveLeg.SegmentIndex, Is.EqualTo(index));
+                yield return PresentSegmentExit(manager, animations);
+                yield return null;
+                yield return null;
+                Component atlas = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
+                    .SingleOrDefault(component => component.GetType().FullName ==
+                        "HallowBlaze.Presentation.Atlas.AtlasScreenController");
+                Assert.That(atlas, Is.Not.Null);
+                Assert.That(GetProperty<bool>(atlas, "IsOpen"), Is.EqualTo(index == 2));
+                Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.EqualTo(index == 2));
+            }
+            Assert.That(run.ActiveLeg, Is.Null);
+            Assert.That(run.CompletedDayCount, Is.EqualTo(1));
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.WorldNodeId, Is.EqualTo("forest.start"));
+            Component visibleAtlas = manager.GetComponentsInChildren<MonoBehaviour>().Single(component =>
+                component.GetType().FullName == "HallowBlaze.Presentation.Atlas.AtlasScreenController");
+            Assert.That(GetProperty<int>(visibleAtlas, "RouteButtonCount"), Is.EqualTo(2));
+            Assert.That(visibleAtlas.GetComponent<CanvasGroup>().interactable &&
+                visibleAtlas.GetComponent<CanvasGroup>().blocksRaycasts, Is.True);
+            Assert.That(UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject.transform.IsChildOf(visibleAtlas.transform), Is.True);
+            yield return new WaitForEndOfFrame();
+            Texture2D capture = ScreenCapture.CaptureScreenshotAsTexture();
+            try
+            {
+                Assert.That(capture.GetPixels32().Count(pixel =>
+                    Math.Abs(pixel.r - 218) < 6 && Math.Abs(pixel.g - 166) < 6 && Math.Abs(pixel.b - 67) < 6),
+                    Is.GreaterThan(100), "The selected route must be rendered on screen, not only enabled in an invisible canvas.");
+                File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-atlas-opening-" + animations + ".png"), capture.EncodeToPNG());
+            }
+            finally { UnityEngine.Object.DestroyImmediate(capture); }
+
+            Assert.That((bool)Invoke(manager, "ExitToMenu"), Is.True);
+            yield return SceneManager.LoadSceneAsync("Menu", LoadSceneMode.Single);
+            float deadline = Time.realtimeSinceStartup + 10;
+            while ((SceneManager.GetActiveScene().name != "Menu" || GameObject.Find("ContinueBttn") == null) &&
+                Time.realtimeSinceStartup < deadline)
+                yield return null;
+            yield return null;
+            Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo("Menu"));
+            Assert.That(GameObject.Find("ContinueBttn"), Is.Not.Null);
+            Button continueButton = GameObject.Find("ContinueBttn").GetComponent<Button>();
+            Assert.That(continueButton.IsInteractable(), Is.True);
+            continueButton.Select();
+            GameObject.Find("MainMenuPanel").GetComponent<KeyboardMenuFocus>().HandleKey(KeyCode.Return);
+            deadline = Time.realtimeSinceStartup + 10;
+            while (SceneManager.GetActiveScene().name != "Main" && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            yield return null;
+            Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo("Main"));
+            manager = (Component)GetStaticField(gameManagerType, "instance");
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+            visibleAtlas = manager.GetComponentsInChildren<MonoBehaviour>().Single(component =>
+                component.GetType().FullName == "HallowBlaze.Presentation.Atlas.AtlasScreenController");
+            Assert.That(GetProperty<bool>(visibleAtlas, "IsOpen"), Is.True);
+            Assert.That(GetProperty<int>(visibleAtlas, "RouteButtonCount"), Is.EqualTo(2));
+            Assert.That(GetProperty<GameSession>(manager, "Session").ActiveRun.ActiveLeg, Is.Null);
+        }
+
         /// <summary>Every opening entry restores its pinned board and supplies without replaying Day or offering an early choice.</summary>
         [UnityTest]
         public IEnumerator EveryOpeningBoundaryContinuesWithoutRerollRefillOrEarlyChoice()
@@ -1323,6 +1435,18 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(store.LoadRun().Data.Food, Is.EqualTo(food));
                     Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(index == 2 ? 1 : 0));
                     Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.EqualTo(index == 2));
+                    Component atlas = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
+                        .SingleOrDefault(component => component.GetType().FullName ==
+                            "HallowBlaze.Presentation.Atlas.AtlasScreenController");
+                    Assert.That(atlas, Is.Not.Null, "The production scene must retain the atlas through every opening boundary.");
+                    Assert.That(GetProperty<bool>(atlas, "IsOpen"), Is.EqualTo(index == 2),
+                        "The atlas must actually become visible after the third opening board, not only enter route-choice state.");
+                    if (index == 2)
+                    {
+                        CanvasGroup atlasGroup = atlas.GetComponent<CanvasGroup>();
+                        Assert.That(atlasGroup.interactable && atlasGroup.blocksRaycasts && atlas.gameObject.activeInHierarchy, Is.True);
+                        Assert.That(GetProperty<int>(atlas, "RouteButtonCount"), Is.EqualTo(2));
+                    }
                 }
                 Assert.That(choicesPublished, Is.EqualTo(1));
                 Assert.That(GetProperty<GameSession>(manager, "Session").ActiveRun.TravelHistory, Has.Count.EqualTo(1));
@@ -2195,11 +2319,14 @@ namespace HallowBlaze.Tests.PlayMode
             RunState completedRun = session.ActiveRun;
             BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
             BoardRequest request = runtime.Request;
+            Invoke(manager, "HideLevelImage");
+            yield return null;
+            Invoke(manager, "ObservePresentedObservation", FactObservation.ShamblerTrappedPresented);
+            FieldNotesPresenter knowledge = GetProperty<FieldNotesPresenter>(manager, "FieldNotes");
+            Assert.That(knowledge.FeedbackTitle, Is.EqualTo("Held by the ground"));
             if (deathReason == DeathReason.Starvation)
             {
                 session.ConsumeFood(completedRun.Food - 1);
-                Invoke(manager, "HideLevelImage");
-                yield return null;
                 object[] arguments = { new WaitCommand(), null };
                 Assert.That((bool)Invoke(FindSceneComponent(playerType, "Main"), "TrySubmitCommand", arguments), Is.True);
                 var submission = (Task<CommandSubmission>)arguments[1];
@@ -2214,6 +2341,18 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(session.ActiveRun, Is.Null);
             Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.False);
             Assert.That(GetField<Text>(manager, "levelText").text, Does.Contain(expectedMessage));
+            Assert.That(knowledge.FeedbackTitle, Is.Empty, "The production HandleBoardOutcome death path must clear transient feedback.");
+            Assert.That(knowledge.DiscoveryFeedbackCount, Is.EqualTo(1));
+            Assert.That(session.Profile.DiscoveredFactIds, Does.Contain("PIT_TRAPS_SHAMBLER"));
+            Assert.That(knowledge.SampleInput(key => key == KeyCode.N, -300), Is.True);
+            yield return null;
+            Assert.That(knowledge.IsOpen, Is.True);
+            Assert.That(knowledge.Select("PIT_TRAPS_SHAMBLER"), Is.True);
+            Assert.That(knowledge.SelectedText, Does.Contain("causes no damage"));
+            Assert.That(knowledge.SampleInput(key => key == KeyCode.N, -299), Is.True);
+            yield return null;
+            Assert.That(knowledge.FeedbackTitle, Is.Empty);
+            Assert.That(session.ActiveRun, Is.Null);
             Assert.That(((IBoardOutcomeSink)manager).TryNotify(request,
                 new PlayerDiedEvent(runtime.PlayerId)), Is.False);
             Assert.That(session.Profile.RunSummaries, Has.Count.EqualTo(1));

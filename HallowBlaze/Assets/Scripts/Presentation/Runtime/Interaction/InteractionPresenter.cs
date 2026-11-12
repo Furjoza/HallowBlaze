@@ -17,6 +17,8 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
     [DefaultExecutionOrder(-50)]
     public sealed class InteractionPresenter : MonoBehaviour, IDisposable
     {
+        /// <summary>Shared tint for the selected contextual button, target glyph and number, matching the authored menu selection.</summary>
+        public static Color SelectionColor { get; } = new Color32(150, 200, 200, 255);
         private BoardRuntime runtime;
         private CommandPresentationCoordinator coordinator;
         private Func<bool> inputAllowed;
@@ -188,10 +190,10 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             }
             if (!IsOpen) return none;
             if (keyDown(PcInputBindings.Cancel)) { Cancel(); return none; }
-            bool previousObject = keyDown(PcInputBindings.PreviousObject) || keyDown(PcInputBindings.PreviousObjectAlias);
-            bool nextObject = keyDown(PcInputBindings.NextObject) || keyDown(PcInputBindings.NextObjectAlias);
-            bool previousAction = keyDown(PcInputBindings.PreviousAction) || keyDown(PcInputBindings.CycleAction) && shift;
-            bool nextAction = keyDown(PcInputBindings.NextAction) || keyDown(PcInputBindings.CycleAction) && !shift;
+            bool previousObject = keyDown(PcInputBindings.PreviousObject) || keyDown(PcInputBindings.PreviousObjectAlias) || keyDown(KeyCode.A);
+            bool nextObject = keyDown(PcInputBindings.NextObject) || keyDown(PcInputBindings.NextObjectAlias) || keyDown(KeyCode.D);
+            bool previousAction = keyDown(PcInputBindings.PreviousAction) || keyDown(KeyCode.W) || keyDown(PcInputBindings.CycleAction) && shift;
+            bool nextAction = keyDown(PcInputBindings.NextAction) || keyDown(KeyCode.S) || keyDown(PcInputBindings.CycleAction) && !shift;
             bool confirm = keyDown(PcInputBindings.Space) || keyDown(PcInputBindings.Enter) || keyDown(PcInputBindings.KeypadEnter);
             int edges = (previousObject ? 1 : 0) + (nextObject ? 1 : 0) + (previousAction ? 1 : 0) + (nextAction ? 1 : 0) + (confirm ? 1 : 0);
             if (edges != 1) return none;
@@ -296,10 +298,11 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 GUILayout.Label(DescribeTool(replacement.Tool.DefinitionId, replacement.Tool.Charges));
                 scroll = GUILayout.BeginScrollView(scroll);
                 var comparisonStyle = new GUIStyle(GUI.skin.button) { wordWrap = true, alignment = TextAnchor.MiddleLeft };
+                GUIStyle selectedComparisonStyle = SelectedStyle(comparisonStyle);
                 foreach (PickupToolCommand choice in replacement.Choices)
                 {
                     if (GUILayout.Button((replacementChoice == choice ? "> " : "") + replacementLabels[choice.SlotIndex],
-                        comparisonStyle, GUILayout.MinHeight(90f))) SelectReplacement(choice.SlotIndex);
+                        replacementChoice == choice ? selectedComparisonStyle : comparisonStyle, GUILayout.MinHeight(90f))) SelectReplacement(choice.SlotIndex);
                     if (Event.current.type == EventType.Repaint && replacementChoice == choice)
                         selectedRow = GUILayoutUtility.GetLastRect();
                 }
@@ -317,11 +320,13 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             GUILayout.Label("Interaction");
             scroll = GUILayout.BeginScrollView(scroll);
             var optionStyle = new GUIStyle(GUI.skin.button) { wordWrap = true, alignment = TextAnchor.MiddleLeft };
+            GUIStyle selectedOptionStyle = SelectedStyle(optionStyle);
             for (int index = 0; index < OptionCount; index++)
             {
                 GUI.enabled = IsAvailable(index);
                 string label = (index == SelectedIndex ? "> " : "") + (index + 1) + ". " + GetOptionLabel(index);
-                if (GUILayout.Button(label, optionStyle, GUILayout.MinHeight(index < Options.Count ? 32f : 72f))) Select(index);
+                if (GUILayout.Button(label, index == SelectedIndex ? selectedOptionStyle : optionStyle,
+                    GUILayout.MinHeight(index < Options.Count ? 32f : 72f))) Select(index);
                 if (Event.current.type == EventType.Repaint && index == SelectedIndex)
                     selectedRow = GUILayoutUtility.GetLastRect();
                 GUI.enabled = true;
@@ -334,6 +339,13 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             GUI.enabled = true;
             if (GUILayout.Button("Cancel", GUILayout.Height(32f))) Cancel();
             GUILayout.EndArea();
+        }
+
+        private static GUIStyle SelectedStyle(GUIStyle source)
+        {
+            var selected = new GUIStyle(source);
+            selected.normal.textColor = selected.hover.textColor = selected.active.textColor = selected.focused.textColor = SelectionColor;
+            return selected;
         }
 
         private void RevealSelectedRow()
@@ -441,7 +453,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                     ? new[] { new Vector3(0, 0.46f), new Vector3(0.46f, 0), new Vector3(0, -0.46f), new Vector3(-0.46f, 0) }
                     : new[] { new Vector3(-0.4f, -0.4f), new Vector3(0.4f, -0.4f), new Vector3(0.4f, 0.4f), new Vector3(-0.4f, 0.4f) });
                 line.widthMultiplier = 0.035f;
-                line.startColor = line.endColor = Color.white;
+                line.startColor = line.endColor = index == SelectedIndex ? SelectionColor : Color.white;
                 line.sortingLayerName = EnemyIntentView.GlyphSortingLayer;
                 line.sortingOrder = EnemyIntentView.GlyphSortingOrder + 2;
                 slots.TryGetValue(targetPosition, out int slot);
@@ -455,7 +467,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 text.characterSize = 0.07f;
                 text.anchor = TextAnchor.MiddleCenter;
                 text.text = (index == SelectedIndex ? ">" : "") + (index + 1);
-                text.color = Color.white;
+                text.color = index == SelectedIndex ? SelectionColor : Color.white;
                 MeshRenderer renderer = label.GetComponent<MeshRenderer>();
                 renderer.sharedMaterial = text.font.material;
                 renderer.sortingLayerName = EnemyIntentView.GlyphSortingLayer;

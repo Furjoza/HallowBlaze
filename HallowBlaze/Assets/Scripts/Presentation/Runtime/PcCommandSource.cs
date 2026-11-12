@@ -50,7 +50,7 @@ namespace HallowBlaze.Presentation.Runtime
             if (sampledFrame == frame)
                 return false;
             sampledFrame = frame;
-            if (keyDown(PcInputBindings.InteractionToggle))
+            if (keyDown(PcInputBindings.InteractionToggle) || keyDown(PcInputBindings.Legend))
                 return false;
             Func<PlayerCommand> selected = null;
             foreach (var binding in bindings)

@@ -6567,6 +6567,18 @@ are unrecovered. M7.8 and the milestone remain open, as do M4.9/M6.6. Do not adv
 but reported menu/help, resource artwork, facing, medical feedback, route-key, footstep,
 terminal-flow and atlas-source issues. Repairs and deferred items are tracked in M7.19-M7.21
 and M8.5. Keyboard completion is positive evidence, not acceptance of the visual/audio gate.
+**Owner retest (2026-11-11):** Menu, Controls, opening, interaction selection and existing audio
+were reported working. The legend opens correctly and its current content fits, so scrolling
+is not applicable at that size. Resource pickup works; route-resource knowledge is still
+the deferred M8.3/M8.4 scope. The owner could not reliably identify route destinations from
+option names and found active-button highlighting too subtle; M7.25 owns that bounded repair.
+Continue worked for the earlier active save; its absence after Destination reached is expected
+Won finalization, not a completed-atlas restriction. No save/Continue change is authorized here.
+Keep Revise pending route-readability retest and an explicit owner verdict; do not infer unreported
+medical, portrait, terminal-reader or specific checkpoint checks from the general observations.
+**Additional owner report (2026-11-11):** The atlas did not appear after the third opening
+board. M7.26 tracks this unresolved incident; successful automated route-choice state checks
+and M7.25's earlier results do not prove that the reported presentation failure is fixed.
 **Priority:** P0 follow-up release gate.
 **Related contract:** Sections 18.1, 27.2 and accepted current food/medical rules; original M7.8 obligations remain.
 **Rationale:** Input contexts, route order, attack cues and resource content must work together in the real opening/travel loop, not just isolated fixtures.
@@ -6670,6 +6682,176 @@ Q/E never rotates the image in the screen plane or mutates domain state, noise, 
 
 ---
 
+## `M7.22` - Guarded berries, corrected route keys and one-turn step noise
+
+**Status:** `Done` - 2026-11-06. Blocking berry bushes, corrected A/D navigation and one-turn
+movement noise implemented. Full EditMode 1301 passed plus one expected Explicit skip,
+graphics PlayMode 250/250 and the repeated 10,000-seed gate passed; independent review PASS.
+Owner acceptance remains the M7.17 retest; M8.5 retains its existing order.
+**Priority:** P0 before repeating M7.17.
+**Related contract:** Sections 12, 18.1 and 26.1.
+**Scope:** Fresh ordinary/6 berries occupy an existing blocking clearable bush; collection is
+impossible before clearing and still grants +5 Food once on entry afterwards. Manual/axe rules,
+obstacle counts and required exit reachability remain unchanged. Navigation uses A/D and arrows,
+not W/S; ordinary board movement stays WASD. Movement noise is active only in its emitting turn
+and expires before the next accepted enemy phase; interaction/tool lifetimes and audio stay unchanged.
+**Closed write scope:** BoardManager; OrdinaryBoardGenerator, BoardGenerationPipeline,
+BoardValidator and OrdinaryBoardContent; BoardAddressFactory and RouteTravelService;
+ActionNoiseProfile and TurnResolver; KeyboardMenuFocus and PcInputBindings; prototype-world.json;
+existing OrdinaryBoardGeneratorTests, NoiseTurnTests, RouteLegTests, WorldDefinitionTests,
+AtlasScreenTests, BoardRuntimeStartupTests, GameSessionLifecycleTests and NoisePresentationTests; GameDesignContract,
+BoardGeneration, Testing and this roadmap. No new asset, prefab, scene, settings, package or agent files.
+**Acceptance criteria:** Berries require a domain obstacle, reachable approach and real clearing;
+blocked entry/preview is free and cannot award food. The independent validator rejects unguarded
+ordinary/6 berries, including fallback outputs. A/D selects predictably while W/S does nothing
+in menus/routes. A step cannot persist into the next accepted enemy phase, but rejected input
+does not age it; interaction/tool noise remains unchanged. Saved ordinary/1-5 and legacy legs
+retain addresses, seeds and layouts against the new publication. No real-profile reset.
+**Validation:** Focused domain, publication, keyboard and graphics tests; final EditMode and
+PlayMode regression; representative repeated seeds and the existing explicit 10,000-seed gate;
+independent review after the mechanical checks.
+**Owner ordering decision (2026-11-06):** M8.5 remains in its current order with its dependencies.
+Missing tool-source markers are deferred by that explicit decision, not an authorization to
+implement them now or a new prerequisite for this repair. M7.17 still needs the owner retest.
+**Save impact:** Publish ordinary/6 for new segments; reconstruct saved versions 1-5 unchanged.
+No DTO/schema change, profile erasure or inventory activation.
+
+---
+
+## `M7.23` - Shared atlas, inspection and keyboard follow-up
+
+**Status:** `Done` - accepted 2026-11-10. Shared atlas, keyboard access and board-scoped
+discovery feedback implemented. Reviewer terminal focus/final-atlas/death-popup findings
+corrected; lifecycle 40/40 and final graphics PlayMode 250/250 passed with fresh XML.
+Independent recheck PASS. M7.17 remains Revise pending the owner's retest.
+**Priority:** P0 before repeating M7.17.
+**Related contract:** Sections 7, 13.4 and 18.1; explicit owner decision on 2026-11-09.
+**Scope:** W/S supplement A/D, arrows and Tab in menus; WASD also navigates contextual
+objects/actions. L opens/closes the intent legend with keyboard scrolling. Selected contextual
+options and board markers share the authored menu color without removing their shape/number cues.
+Replace the standalone Field Notes reader with the existing atlas. Every known node/road is
+inspectable by mouse/keyboard and its filtered details appear in the former MAP KEY area;
+recorded system facts remain readable there. Clear transient observation popups at board
+boundaries without erasing durable facts. Preserve explicit legal route confirmation.
+**Closed write scope:** GameManager; AtlasScreenController; EnemyIntentLegend;
+FieldNotesPresenter (profile access/feedback only), InteractionPresenter, KeyboardMenuFocus,
+PcCommandSource, PcInputBindings and PlayerVisualFacing; existing AtlasScreenTests,
+AxePresentationTests, EnemyIntentPresentationTests, FieldNotesPresentationTests,
+GameSessionLifecycleTests, OrderedBoardPresentationTests and PlayModeInfrastructureTests;
+GameDesignContract, Testing and this roadmap. No asset, scene, prefab, package, settings or
+agent-configuration changes; only the known Unity-generated SENTIS token exception applies.
+**Acceptance criteria:** All requested keys are effective and modal-safe; selection, legend
+inspection and atlas reading are free and never replay gameplay input. Known historical and
+current map objects are reachable without revealing unknown content or automatically travelling.
+Facts survive death/new run and remain spoiler-safe; only New Game replaces the profile.
+An old board's discovery popup cannot reappear on the atlas or a later board. Desktop and
+320x480 layout remain readable, scrollable and nonblank, preserving the selected fact on resize.
+**Non-goals:** Miss audio (M7.24), Controls redesign (M7.20), directional art (M7.21), route
+resource collection/statistics (M8.3/M8.4), tool-source discovery (M8.5), migration or human-gate closure.
+**Validation:** Focused key/render/lifecycle tests; final graphics PlayMode with fresh XML,
+expected test identities and counts; scoped diff/integrity check; independent review after
+the mechanical gate. Owner physical-key/visual acceptance remains the M7.17 retest.
+**Save impact:** No schema, ID, profile reset, resource sample or route-travel change.
+**Historical clarification:** M7.22's W/S exclusion remains its dated evidence, not the current
+menu contract after the owner's additional-alias decision.
+
+---
+
+## `M7.24` - Audible zombie attack miss
+
+**Status:** `Active` - 2026-11-11. The owner authorized completing the remaining M7 work.
+Distinct presentation-owned miss audio is implemented with the existing authored enemy clip;
+focused graphics PlayMode passed 30/30 and final full live graphics PlayMode passed 252/252.
+Independent technical review passed. Owner listening remains pending; automated playback
+is not an audible acceptance verdict, so this card and the M7 human gates are not closed.
+**Priority:** P2.
+**Scope:** Add a recognizable miss cue to the actual executed zombie attack miss path,
+using approved/authored audio and the existing presentation-owned attack/audio lifetime.
+Keep hit and miss distinguishable without relying only on color. Preserve the existing
+animation-off audio policy unless the owner explicitly revises it.
+**Acceptance criteria:** A completed miss plays its cue once; hit, rest, preview and rejected
+commands cannot play it. Mute, interruption, recovery, deactivation and disposal do not leak,
+duplicate or strand playback. Audio never changes damage, target/intent, turn costs or RNG.
+**Validation:** Focused hit/miss/cancellation/mute PlayMode checks with non-silent samples,
+both presentation modes and an owner listening verdict.
+**Closed write scope (2026-11-11):** Assets/Scripts/Enemy.cs;
+Assets/Scripts/Presentation/Runtime/EnemyAttackPresenter.cs; Assets/Prefabs/Enemy1.prefab;
+Assets/Prefabs/Enemy2.prefab; Assets/Tests/PlayMode/OrderedBoardPresentationTests.cs;
+Docs/Testing.md and this roadmap. Existing audio assets, imports and metadata are unchanged.
+**Non-goals:** New combat rules, mechanical noise, sprite redesign or save changes.
+**Save impact:** None.
+
+---
+
+## `M7.25` - Readable route focus and destination preview
+
+**Status:** `Done` - accepted 2026-11-11. Requested during the M7.17 owner retest; focused
+atlas regression and desktop/portrait render checks passed 4/4. Initial full PlayMode was
+249/250 because the unchanged legend test required exact ScrollRect zero after End and
+received -1.18285186E-07; the isolated unchanged test reproduced the failure. The owner
+approved extending the scope to that test on 2026-11-11. Both Home/End endpoint assertions
+now use a 1e-6 normalized-position tolerance, retaining the overflow and input assertions;
+the focused legend check passed 1/1 with fresh XML. No production legend or filter change.
+The final full graphics PlayMode rerun passed 250/250 with fresh XML, zero failures/skips
+and the expected atlas/legend/terminal test identities. Independent review PASS; M7.17
+remains Revise pending the owner's route-readability retest and explicit verdict.
+**Priority:** P0 before the route-readability retest.
+**Related contract:** Sections 6.5, 7.6 and 18.1.
+**Scope:** Strong selected-button background/text contrast, outline and a non-color mark;
+keyboard and pointer-hover parity; highlight the previewed known road and destination, reveal
+the target in the map viewport, and optionally pulse its frame without resizing content.
+Static animation-off cues remain equally informative. Record the owner's smoke observations
+and clarify the existing Won/Continue rule without changing saves or terminal behavior.
+**Closed write scope:** Assets/Scripts/Presentation/Atlas/AtlasScreenController.cs;
+Assets/Tests/PlayMode/AtlasScreenTests.cs; Docs/GameDesignContract.md, Docs/Testing.md and this
+roadmap. Owner-approved extension (2026-11-11):
+Assets/Tests/PlayMode/EnemyIntentPresentationTests.cs, only the two numerical endpoint assertions.
+No new assets, scenes, prefabs, packages, settings, agent configuration or domain changes.
+**Acceptance criteria:** Focus cannot be confused with an inactive option. The selected button,
+known road and correct directed destination agree when moving by keyboard or pointer; the
+current position and other destinations remain distinguishable. Inspection/hover is free,
+does not save, reveal hidden topology or travel, and confirmation retains the original edge ID.
+Selection changes, closure, rebuild and disable clean up prior cues. Both desktop and 320x480
+render nonblank readable controls, fixed dimensions and the correctly framed destination,
+with a clear animation-off state and an optional slow pulse.
+**Non-goals:** Continue after Won, post-victory exploration, save migration/profile reset,
+M8.3/M8.4 resource knowledge, M8.5 sources, M7.24 miss audio or closing the M7.17 human gate.
+**Validation:** Red/green route-selection regression; focused atlas input/render tests and
+relevant final PlayMode regression with fresh XML, scope integrity and independent review.
+**Save impact:** None. Continue remains restricted to active valid saved runs.
+
+---
+
+## `M7.26` - Atlas missing after the third opening board
+
+**Status:** `Blocked` - investigation on 2026-11-11. The owner reported no atlas after the
+third opening board, but PlayMode had already ended before inspection. No production cause
+or repair is confirmed. The saved run had completed the opening, reached `forest.start`,
+and had no active leg; its progress was not lost. Continue on an isolated external copy
+displayed the actual atlas with four known places, three roads, two choices and route focus.
+**Priority:** P0 before repeating the affected M7.17 transition.
+**Related contract:** The route-leg loop in section 2 and atlas/input ownership in sections
+7.6 and 18.1. The final segment must open the atlas without implicitly choosing a route.
+**Closed investigation write scope:** Assets/Tests/PlayMode/GameSessionLifecycleTests.cs,
+Docs/Testing.md and this roadmap. No production, scene, prefab, package, settings or save
+format changes are made. Tests use isolated temporary saves; the original files are read-only.
+**Evidence:** The existing boundary regression now requires the actual atlas to remain present
+and open only after the third board. A production-menu regression traverses all three generated
+boards through player commands, checks visible selected-route pixels, legal choices and focus,
+then resumes the arrived checkpoint through Continue. Both animation variants pass. The
+incident remains unresolved despite those results; they cover the tested paths, not the lost
+manual state. Validation details are in Docs/Testing.md.
+The final owning-fixture run passed 42/42 with fresh XML and all three atlas probes; original
+save fingerprints were unchanged after the isolated smoke. This does not close the incident.
+**Acceptance criteria:** Capture or reproduce the failed state, identify its owning control
+path, add a regression that fails for that cause, apply a minimal verified repair, and repeat
+the owner's affected transition. Missing live evidence is a blocker, not a passing gate.
+**Next discriminating evidence:** Leave PlayMode running if the atlas fails again, preserving
+the scene, atlas instance/visibility, route-choice state, current selection and fresh console.
+Do not reset the profile or start a new game to collect this evidence. M7.17 stays Revise.
+
+---
+
 ### M7 gate
 
 M7 is complete only after the original M7.1-M7.8 obligations and follow-ups M7.9-M7.18 are
@@ -6679,6 +6861,13 @@ and M8 wait for this expanded repair gate and their own prerequisites, unless th
 separately changes the order. Optional authoring-tool planning substitutes for no human gate.
 M7.19 repairs the owner smoke before its repeat; future visual redesigns M7.20-M7.21 do not
 block testing the agreed interim presentation and do not waive the M7.17 owner verdict.
+M7.22 applies the owner's explicit berry, route-key and step-noise corrections before that retest.
+M7.23 applies the later shared-atlas and additional-key corrections before the same retest;
+M7.24 was explicitly deferred from that repair; the owner's 2026-11-11 continuation now
+authorizes its separate implementation, without waiving its listening verdict.
+M7.25 addresses route focus/destination readability raised during the 2026-11-11 retest;
+it does not convert positive smoke observations into an implicit M7.17 Accept verdict.
+M7.26 tracks the subsequent missing-atlas report; passing isolated probes does not close it.
 
 ---
 
@@ -6829,6 +7018,8 @@ block testing the agreed interim presentation and do not waive the M7.17 owner v
 marker at the axe source. Radio Tower already authors `source.radio-tower.axe`, but profile
 source discovery and atlas icons are not implemented. This blocks evaluating that particular
 atlas reward; moving M8.5 ahead of its gate/dependencies requires an explicit priority decision.
+**Owner ordering decision (2026-11-06):** Keep M8.5 in its existing order and retain its
+dependencies; do not advance it before the M7 owner retest.
 **Priority:** P1
 **Related contract:** sections 7.4–7.6, 13, 18, 21.3, and 27.3.
 
