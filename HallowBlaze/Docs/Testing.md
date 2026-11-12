@@ -1,5 +1,17 @@
 # HallowBlaze Testing
 
+## M4.9 And M6.6 Owner Acceptance - 2026-11-12
+
+Both human gates are Done with owner-recorded Proceed. The owner accepts the available
+questionnaire/playtest feedback from two external testers and separate owner participation,
+and waives further recruitment, the original 5-8-person minimum and missing protocol-specific
+measurements. The owner is not a third independent tester. No case scores, completed formal
+cohort or human coverage of every landmark variant is inferred. The dated decisions in
+[M4.9](Validation/M4.9.md) and [M6.6](Validation/M6.6.md) supersede their historical Pending
+statements below; the protocols, raw responses and technical results retain their original
+meaning. Existing M7 closeout and M7.21/M7.26 deferrals are unchanged. This documentation-only
+acceptance adds no Unity test run or implementation authorization for another card.
+
 ## M7 Owner-Directed Closeout - 2026-11-12
 
 The owner instructed that M7.21 and M7.26 may wait and the rest should be finalized.
@@ -669,7 +681,8 @@ or replace the explicit M7.8 owner visual/audio smoke gate.
 ## M6.6 Curated Landmark Variants
 
 [Protocol, variant/cost matrix and actual evidence](Validation/M6.6.md) separate technical
-validation from the Pending human gate. Three authored variants solve and execute both outcomes
+validation from human evidence. The human gate was accepted by the owner with a limited-sample
+exception on 2026-11-12; it is not a scored v1 cohort. Three authored variants solve both outcomes
 with and without the axe. Focused coverage includes addressed selection/order independence,
 stable golden vectors, old saved selections, checkpoint-before-presentation, failure rollback,
 Continue without reroll/extra writes, all outcome branches and the bounded geometric softlock audit.
@@ -694,8 +707,9 @@ sizes, plus a tested explicit exporter for isolated pinned profile/run boundarie
 does not launch gameplay or redirect the player's storage: follow the protocol's isolation
 preflight, use a fresh temporary session per attempt, and never overwrite the real profile.
 Captures and automated execution do not count as sessions. The owner authorized direct work and
-self-review, not an independent verdict. M6.6 is Active with zero human participants; M4.9 is
-still Pending and M7 is not authorized by these checks.
+self-review, not an independent verdict. At technical preparation, M6.6 was Active with no human
+participants and M4.9 was Pending. Their later owner-recorded Proceed decisions are summarized
+above and do not turn these automated checks into participant evidence.
 
 ## M6.5 Bounded Landmark Solver
 

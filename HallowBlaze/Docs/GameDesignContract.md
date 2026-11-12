@@ -1307,6 +1307,19 @@ Test jednostkowy może potwierdzić poprawny ruch Listenera, ale nie sprawdzi, c
 - Istnieją co najmniej dwa sensowne rezultaty.
 - Gracz potrafi wyjaśnić konsekwencję wybranego rozwiązania.
 
+### M4.9 And M6.6 Owner Acceptance - 2026-11-12
+
+The owner accepts both human gates with `Proceed` based on the available feedback from two
+external testers and separate owner participation. Further recruitment, the planned 5-8-person
+minimum and missing protocol-specific measurements are waived for these two cards only.
+Owner participation is not a third independent tester. This is explicit acceptance of limited
+evidence and remaining product risk, not a measured comprehension rate, a completed protocol
+or proof of human coverage of all landmark variants. Preserve the original protocols and raw
+responses; do not infer missing scores. Technical correctness requirements and unrelated gates
+remain unchanged. The dated decisions are in [M4.9](Validation/M4.9.md) and
+[M6.6](Validation/M6.6.md). The separately recorded M7 closeout and M7.21/M7.26 deferrals
+remain unchanged; this exception does not activate another card.
+
 ### Inventory and resource-pressure gate
 
 - No accepted or rejected path duplicates or silently loses an item.
