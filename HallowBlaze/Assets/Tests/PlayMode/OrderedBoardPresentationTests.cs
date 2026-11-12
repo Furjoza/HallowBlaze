@@ -12,6 +12,7 @@ using HallowBlaze.Core.State;
 using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.Turns.Resolution;
 using HallowBlaze.Presentation.Runtime;
+using HallowBlaze.Presentation.Runtime.Interaction;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -288,25 +289,35 @@ namespace HallowBlaze.Tests.PlayMode
                             attackPresenters.Add(attack);
                             var gameEvent = new EnemyAttackResolvedEvent(fixture.AidId, new GridPosition(0, 0),
                                 hit, hit ? (EntityId?)fixture.Runtime.PlayerId : null, hit ? -10 : 0);
+                            using (var beforeStart = new CancellationTokenSource())
+                            {
+                                beforeStart.Cancel();
+                                Task canceledBeforeStart = attack.ReplayAsync(gameEvent, beforeStart.Token);
+                                Assert.That(canceledBeforeStart.IsCanceled, Is.True);
+                                Assert.That(view.GetComponent<AudioSource>(), Is.Null);
+                            }
                             Task pending = attack.ReplayAsync(gameEvent, CancellationToken.None);
                             animator.Update(0f);
                             Assert.That(animator.GetCurrentAnimatorStateInfo(0).IsName("Enemy1Attack"), Is.EqualTo(animations),
                                 prefab + "; animations=" + animations + "; hit=" + hit);
                             AudioSource source = view.GetComponent<AudioSource>();
                             int cueCount = (int)cue.GetType().GetProperty("PresentedAttackSoundCount").GetValue(cue);
+                            int missCount = (int)cue.GetType().GetProperty("PresentedMissSoundCount").GetValue(cue);
                             Assert.That(cueCount, Is.EqualTo(hit ? 1 : 0));
-                            if (hit)
-                            {
-                                Assert.That(source.clip, Is.Not.Null);
-                                Assert.That(source.loop, Is.False);
-                                Assert.That(source.mute, Is.False);
-                                var samples = new float[source.clip.samples * source.clip.channels];
-                                Assert.That(source.clip.GetData(samples, 0), Is.True);
-                                Assert.That(samples.Any(sample => Mathf.Abs(sample) > 0.001f), Is.True);
-                                PlayerPrefs.SetString("Sound", "Off");
-                                yield return null;
-                                Assert.That(source.mute, Is.True, "Mute changes must reach an in-flight hit cue.");
-                            }
+                            Assert.That(missCount, Is.EqualTo(hit ? 0 : 1));
+                            Assert.That(source, Is.Not.Null, "Every executed attack needs its recorded hit or miss cue.");
+                            Assert.That(source.clip, Is.Not.Null);
+                            AudioClip missClip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/scavengers_enemy1.aif");
+                            Assert.That(missClip, Is.Not.Null);
+                            Assert.That(source.clip == missClip, Is.EqualTo(!hit));
+                            Assert.That(source.loop, Is.False);
+                            Assert.That(source.mute, Is.False);
+                            var samples = new float[source.clip.samples * source.clip.channels];
+                            Assert.That(source.clip.GetData(samples, 0), Is.True);
+                            Assert.That(samples.Any(sample => Mathf.Abs(sample) > 0.001f), Is.True);
+                            PlayerPrefs.SetString("Sound", "Off");
+                            yield return null;
+                            Assert.That(source.mute, Is.True, "Mute changes must reach an in-flight hit or miss cue.");
                             while (!pending.IsCompleted)
                                 yield return null;
                             Assert.That(pending.IsFaulted, Is.False);
@@ -315,6 +326,7 @@ namespace HallowBlaze.Tests.PlayMode
                             Assert.That(animator.GetCurrentAnimatorStateInfo(0).IsName("Enemy1Attack"), Is.False);
                             if (source != null) Assert.That(source.isPlaying, Is.False);
                             Assert.That((int)cue.GetType().GetProperty("PresentedAttackSoundCount").GetValue(cue), Is.EqualTo(cueCount));
+                            Assert.That((int)cue.GetType().GetProperty("PresentedMissSoundCount").GetValue(cue), Is.EqualTo(missCount));
                             Assert.That(fixture.Runtime.RunState.Health, Is.EqualTo(100));
                             using (var cancellation = new CancellationTokenSource())
                             {
@@ -326,10 +338,34 @@ namespace HallowBlaze.Tests.PlayMode
                                 Assert.That(attack.TargetFeedback, Is.Null);
                                 if (source != null) Assert.That(source.isPlaying, Is.False);
                             }
+                            Assert.That((int)cue.GetType().GetProperty("PresentedAttackSoundCount").GetValue(cue), Is.EqualTo(cueCount * 2));
+                            Assert.That((int)cue.GetType().GetProperty("PresentedMissSoundCount").GetValue(cue), Is.EqualTo(missCount * 2));
+                            PlayerPrefs.SetString("Sound", "Off");
+                            cue.PresentAttack(false, hit);
+                            Assert.That(source.mute, Is.True, "A cue started while sound is disabled must start muted.");
+                            PlayerPrefs.SetString("Sound", "On");
+                            yield return null;
+                            Assert.That(source.mute, Is.False);
+                            effects.mute = true;
+                            yield return null;
+                            Assert.That(source.mute, Is.True, "The shared effects mute must reach owned attack sources.");
+                            effects.mute = false;
+                            yield return null;
+                            Assert.That(source.mute, Is.False);
+                            view.SetActive(false);
+                            Assert.That(source.isPlaying, Is.False);
+                            int beforeDisableHit = (int)cue.GetType().GetProperty("PresentedAttackSoundCount").GetValue(cue);
+                            int beforeDisableMiss = (int)cue.GetType().GetProperty("PresentedMissSoundCount").GetValue(cue);
+                            Assert.That(cue.PresentAttack(animations, hit), Is.Zero);
+                            Assert.That((int)cue.GetType().GetProperty("PresentedAttackSoundCount").GetValue(cue), Is.EqualTo(beforeDisableHit));
+                            Assert.That((int)cue.GetType().GetProperty("PresentedMissSoundCount").GetValue(cue), Is.EqualTo(beforeDisableMiss));
+                            view.SetActive(true);
                             int beforeDisposal = (int)cue.GetType().GetProperty("PresentedAttackSoundCount").GetValue(cue);
+                            int missBeforeDisposal = (int)cue.GetType().GetProperty("PresentedMissSoundCount").GetValue(cue);
                             attack.Dispose();
                             fixture.Presenter.Dispose();
                             Assert.That((int)cue.GetType().GetProperty("PresentedAttackSoundCount").GetValue(cue), Is.EqualTo(beforeDisposal));
+                            Assert.That((int)cue.GetType().GetProperty("PresentedMissSoundCount").GetValue(cue), Is.EqualTo(missBeforeDisposal));
                             Assert.That(fixture.Runtime.RunState.Health, Is.EqualTo(100));
                         }
             }
@@ -675,7 +711,11 @@ namespace HallowBlaze.Tests.PlayMode
             LineRenderer[] lines = picker.GetComponentsInChildren<LineRenderer>();
             Assert.That(lines.Length, Is.EqualTo(2));
             Assert.That(picker.GetComponentsInChildren<TextMesh>().Select(text => text.text), Is.EqualTo(new[] { ">1", "2" }));
-            Assert.That(lines.All(line => line.startColor == Color.white && line.loop), Is.True);
+            Assert.That(lines.All(line => line.loop), Is.True);
+            Assert.That(lines[0].startColor, Is.EqualTo(InteractionPresenter.SelectionColor));
+            Assert.That(lines[0].endColor, Is.EqualTo(InteractionPresenter.SelectionColor));
+            Assert.That(lines[1].startColor, Is.EqualTo(Color.white));
+            Assert.That(picker.GetComponentsInChildren<TextMesh>().First().color, Is.EqualTo(InteractionPresenter.SelectionColor));
             Assert.That(lines[0].GetPosition(0), Is.Not.EqualTo(lines[1].GetPosition(0)));
             var owner = new GameObject("Interaction evidence camera");
             objects.Add(owner);
@@ -699,12 +739,14 @@ namespace HallowBlaze.Tests.PlayMode
                 {
                     Vector3 center = camera.WorldToViewportPoint(new Vector3(option.TargetPosition.X, option.TargetPosition.Y, 0));
                     int marked = 0;
+                    bool selected = option == picker.Options[picker.SelectedIndex];
                     for (int vertical = -80; vertical <= 80; vertical++)
                         for (int horizontal = -80; horizontal <= 80; horizontal++)
                         {
                             Color color = pixels.GetPixel(Mathf.RoundToInt(center.x * 512) + horizontal,
                                 Mathf.RoundToInt(center.y * 512) + vertical);
-                            if (color.r > 0.8f && color.g > 0.8f && color.b > 0.8f) marked++;
+                            if (selected ? color.g > 0.6f && color.b > 0.6f && color.g > color.r * 1.1f :
+                                color.r > 0.8f && color.g > 0.8f && color.b > 0.8f) marked++;
                         }
                     Assert.That(marked, Is.GreaterThan(100), "Visible numbered target " + option.TargetId);
                 }

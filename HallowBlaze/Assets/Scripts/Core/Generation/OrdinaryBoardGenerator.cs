@@ -42,7 +42,9 @@ namespace HallowBlaze.Core.Generation
 
         /// <summary>
         /// Reserves a south-to-north cardinal route and opening, places perimeter/interior obstacles,
-        /// then separated enemies and generic reachable items. Every loop is bounded by board/content capacity.
+        /// then separated enemies and items. Ordinary version 6 places berries on existing clearable
+        /// bushes adjacent to reachable ground, without changing obstacle counts or the reserved route.
+        /// Every loop is bounded by board/content capacity.
         /// Unsupported joint budgets reject the candidate rather than relaxing targets or repairing scene objects.
         /// </summary>
         /// <param name="address">Full stable board identity; every address field participates in the layout stream.</param>
@@ -139,6 +141,7 @@ namespace HallowBlaze.Core.Generation
 
             free.RemoveAll(cell => cell.Equals(exit) || occupiedActors.Contains(cell));
             var items = new List<BoardItemSpawn>();
+            var berryBushes = new HashSet<GridPosition>();
             foreach (ResourceGenerationBudget budget in config.ResourceBudgets)
             {
                 var choices = new List<BoardEntityDefinition>();
@@ -151,6 +154,23 @@ namespace HallowBlaze.Core.Generation
                     GridPosition cell = free[free.Count - 1];
                     free.RemoveAt(free.Count - 1);
                     BoardEntityDefinition definition = choices[random.NextInt(0, choices.Count)];
+                    if (config.Id == ConfigurationId && config.Version >= 6 && definition.ContentId == "ordinary.berries")
+                    {
+                        bool foundBush = false;
+                        foreach (BoardEntityState candidate in entities)
+                        {
+                            if (candidate.Definition.Layer != BoardLayer.Obstacle || candidate.Definition.ContentId != "legacy.wall" ||
+                                berryBushes.Contains(candidate.Position)) continue;
+                            foreach (GridPosition neighbor in Neighbors(candidate.Position))
+                                if (reachable.Contains(neighbor)) { foundBush = true; break; }
+                            if (!foundBush) continue;
+                            cell = candidate.Position;
+                            berryBushes.Add(cell);
+                            break;
+                        }
+                        if (!foundBush)
+                            throw new ArgumentException("Ordinary berry supply requires a distinct clearable bush beside reachable ground.");
+                    }
                     var id = new EntityId(nextId++);
                     entities.Add(new BoardEntityState(id, definition, cell));
                     items.Add(new BoardItemSpawn("item-" + Number(cell.X) + "-" + Number(cell.Y),

@@ -85,7 +85,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             if (!result.Accepted || strength == 0)
                 return result;
             boardState.TryGetEntity(playerId, out BoardEntityState currentPlayer);
-            BoardNoise noise = boardState.EmitNoise(playerId, currentPlayer.Position, strength, noiseProfile.LifetimeTurns);
+            BoardNoise noise = boardState.EmitNoise(playerId, currentPlayer.Position, strength, noiseProfile.MovementLifetimeTurns);
             var events = new List<GameEvent>(result.Events);
             int terminalIndex = events.FindIndex(gameEvent => gameEvent is ExitReachedEvent ||
                 gameEvent is PlayerStarvedEvent || gameEvent is PlayerDiedEvent);
