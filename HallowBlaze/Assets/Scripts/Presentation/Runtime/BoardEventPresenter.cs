@@ -190,6 +190,12 @@ namespace HallowBlaze.Presentation.Runtime
                 return Task.CompletedTask;
             });
             Dispatcher.Register<FoodRestoredEvent>((gameEvent, token) => RefreshFood(gameEvent));
+            Dispatcher.Register<HealthRestoredEvent>((gameEvent, token) =>
+            {
+                RefreshHud();
+                (hud as ITurnResourceGains)?.AddResourceGains(gameEvent.Amount, 0);
+                return ShowFeedback(gameEvent);
+            });
             Dispatcher.Register<ActionCostAppliedEvent>((gameEvent, token) => RefreshHud());
             Dispatcher.Register<NoiseEvent>((gameEvent, token) =>
             {

@@ -202,7 +202,7 @@ namespace HallowBlaze.Tests.PlayMode
 
         /// <summary>Ordinary setup retains blueprint identity, initial state, enemy rules and view parity across Continue and cosmetic changes.</summary>
         [UnityTest]
-        public IEnumerator OrdinarySetupBuildsViewsFromValidatedBlueprintAndContinuesIdentically([Values(1, 2, 3, 4)] int version)
+        public IEnumerator OrdinarySetupBuildsViewsFromValidatedBlueprintAndContinuesIdentically([Values(1, 2, 3, 4, 5)] int version)
         {
             UnityEngine.Random.State previousRandom = UnityEngine.Random.state;
             try
@@ -285,6 +285,7 @@ namespace HallowBlaze.Tests.PlayMode
             SetField(manager, "groundFoodTiles", new[] { food, soda });
             SetField(manager, "bushFoodTiles", AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Food2.prefab"));
             SetField(manager, "buriedFoodTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Carrot.prefab") });
+            SetField(manager, "aidTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/AidKit.prefab") });
             var enemies = new List<GameObject>();
             foreach (int damage in new[] { 10, 20 })
             {
@@ -375,6 +376,115 @@ namespace HallowBlaze.Tests.PlayMode
                         CaptureLandmark(runtime, new Vector2Int(1280, 720), prefab + "-after-" + animations, "HB-M715");
                     }
                 }
+        }
+
+        /// <summary>Production medical items are used only through a conscious keyboard command and replay once within the checkpoint boundary.</summary>
+        [UnityTest]
+        public IEnumerator ProductionFirstAidKeyboardUseAndCheckpointRecovery([Values(95, 100, 120)] int initialHealth)
+        {
+            foreach (bool animations in new[] { true, false })
+            {
+                Component manager = CreateOrdinaryBoardManager();
+                Component authored = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/GameManager.prefab").GetComponent(boardManagerType);
+                foreach (string field in new[] { "floorTiles", "outerWallTiles", "wallTiles", "groundFoodTiles", "enemyTiles", "aidTiles" })
+                    SetField(manager, field, GetManagerField<GameObject[]>(authored, field));
+                SetField(manager, "exit", GetManagerField<GameObject>(authored, "exit"));
+                GameObject player = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Player.prefab"));
+                createdObjects.Add(player);
+                Component hud = player.GetComponent(boardManagerType.Assembly.GetType("PlayerScript", true));
+                var healthText = CreateObject("Medical gain", 0, 0).AddComponent<UnityEngine.UI.Text>();
+                SetField(hud, "healthText", healthText);
+                BoardRuntime runtime = null;
+                BoardEntityState kit = null;
+                for (int seed = 0; seed < 32 && kit == null; seed++)
+                {
+                    var run = new RunState("medical-view-" + seed, seed, new RunStateConfiguration(initialHealth, 100, 0, "forest.start"));
+                    run.StartLeg("edge", run.WorldNodeId, "destination", new[]
+                    {
+                        new RouteSegmentState("medical.segment", OrdinaryBoardGenerator.ConfigurationId, 5)
+                    });
+                    var request = new BoardRequest(BoardAddressFactory.CreateFromState(run), run.RunSeed,
+                        run.WorldNodeId, "forest", "temperate", 1);
+                    runtime = InvokeSetup(manager, request, run, player);
+                    kit = runtime.BoardState.GetEntities().FirstOrDefault(entity => entity.Definition.ContentId == FirstAidInteractionAction.ContentId);
+                }
+                Assert.That(kit, Is.Not.Null);
+                Assert.That(runtime.Views[kit.Id].GetComponent<SpriteRenderer>().sprite,
+                    Is.SameAs(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/AidKit.prefab").GetComponent<SpriteRenderer>().sprite));
+                Assert.That(runtime.BoardState.TryMove(runtime.PlayerId, kit.Position), Is.True);
+                string boundaryJson = PersistenceJsonSerializer.SerializeRun(runtime.RunState);
+                BoardRequest boundaryRequest = runtime.Request;
+                BoardBlueprint blueprint = GetProperty<BoardBlueprint>(manager, "ActiveBlueprint");
+                string appliedStateJson = null;
+                var sinks = new ResourceFeedback();
+                using (var presenter = new BoardEventPresenter(runtime, (IRunHud)hud, sinks, sinks,
+                    diagnostic => Assert.Fail(diagnostic.ToString())))
+                {
+                    presenter.AnimationsEnabled = animations;
+                    presenter.SynchronizeFromState();
+                    presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Setup, false);
+                    var picker = presenter.InteractionDisplay;
+                    int frame = 1000000;
+                    Assert.That(picker.SampleInputAsync(key => key == KeyCode.F, frame++).Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+                    Assert.That(picker.IsOpen, Is.True);
+                    picker.SampleInputAsync(key => key == KeyCode.E, frame++);
+                    if (initialHealth >= 100)
+                    {
+                        Assert.That(picker.Options.Single(option => option.TargetId.Equals(kit.Id)).IsAvailable, Is.False);
+                        Assert.That(picker.SelectedIndex < 0 || !picker.Options[picker.SelectedIndex].TargetId.Equals(kit.Id), Is.True);
+                        picker.Cancel();
+                        yield return null;
+                        Assert.That(presenter.Coordinator.SubmitAsync(new InteractCommand(kit.Id, kit.Position, FirstAidInteractionAction.ActionId)).Result.Status,
+                            Is.EqualTo(CommandSubmissionStatus.Rejected));
+                        Assert.That(runtime.RunState.Health, Is.EqualTo(initialHealth));
+                        Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+                        Assert.That(runtime.BoardState.TryGetEntity(kit.Id, out _), Is.True);
+                        Assert.That(runtime.Views[kit.Id].activeSelf, Is.True);
+                        Assert.That(sinks.Events, Is.Empty);
+                        Assert.That(presenter.Coordinator.CanSubmit, Is.True);
+                        continue;
+                    }
+                    Assert.That(picker.SelectedIndex, Is.GreaterThanOrEqualTo(0));
+                    Assert.That(picker.Options[picker.SelectedIndex].ActionId, Is.EqualTo(FirstAidInteractionAction.ActionId));
+                    Assert.That(picker.GetOptionLabel(picker.SelectedIndex), Does.Contain("Health").And.Contain("Food -1").And.Contain("Noise 4"));
+                    Assert.That(runtime.RunState.Health, Is.EqualTo(95));
+                    player.GetComponent<Animator>().Update(0f);
+                    CaptureLandmark(runtime, new Vector2Int(1280, 720), "aid-before-" + animations, "HB-M716");
+                    Task<CommandSubmission> pending = picker.SampleInputAsync(key => key == KeyCode.Space, frame++);
+                    while (!pending.IsCompleted) yield return null;
+                    Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+                    Assert.That(runtime.RunState.Health, Is.EqualTo(100));
+                    Assert.That(runtime.RunState.Food, Is.EqualTo(99));
+                    Assert.That(healthText.text, Is.EqualTo("Health: 100 +5"));
+                    Assert.That(runtime.Views[kit.Id].activeSelf, Is.False);
+                    Assert.That(runtime.BoardState.TryGetEntity(kit.Id, out _), Is.False);
+                    Assert.That(sinks.Events.OfType<HealthRestoredEvent>().Single().Amount, Is.EqualTo(5));
+                    Assert.That(picker.SampleInputAsync(key => key == KeyCode.Space, frame++).Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+                    yield return null;
+                    CommandSubmission duplicate = presenter.Coordinator.SubmitAsync(new InteractCommand(kit.Id, kit.Position, FirstAidInteractionAction.ActionId)).Result;
+                    Assert.That(duplicate.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+                    presenter.SynchronizeFromState();
+                    Assert.That(healthText.text, Is.EqualTo("Health: 100"));
+                    Assert.That(runtime.RunState.Health, Is.EqualTo(100));
+                    Assert.That(runtime.RunState.Food, Is.EqualTo(99));
+                    CaptureLandmark(runtime, new Vector2Int(1280, 720), "aid-after-" + animations, "HB-M716");
+                    appliedStateJson = PersistenceJsonSerializer.SerializeRun(runtime.RunState);
+                }
+                RunState restored = PersistenceJsonSerializer.DeserializeRun(boundaryJson);
+                BoardRuntime resumed = InvokeSetup(manager, boundaryRequest, restored, player);
+                Assert.That(GetProperty<BoardBlueprint>(manager, "ActiveBlueprint"), Is.EqualTo(blueprint));
+                Assert.That(restored.Health, Is.EqualTo(95), "Continue restores the pre-board checkpoint, not uncommitted healing.");
+                Assert.That(restored.Food, Is.EqualTo(100));
+                Assert.That(resumed.BoardState.TryGetEntity(kit.Id, out _), Is.True);
+                RunState applied = PersistenceJsonSerializer.DeserializeRun(appliedStateJson);
+                BoardRuntime appliedReload = InvokeSetup(manager, boundaryRequest, applied, player);
+                Assert.That(applied.Health, Is.EqualTo(100), "Loading serialized totals cannot apply another healing effect.");
+                Assert.That(applied.Food, Is.EqualTo(99));
+                Assert.That(appliedReload.BoardState.TryMove(appliedReload.PlayerId, kit.Position), Is.True);
+                Assert.That(appliedReload.Controller.Resolve(new InteractCommand(kit.Id, kit.Position, FirstAidInteractionAction.ActionId)).Accepted, Is.False);
+                Assert.That(applied.Health, Is.EqualTo(100));
+                Assert.That(applied.Food, Is.EqualTo(99));
+            }
         }
 
         private sealed class ResourceFeedback : ITurnFeedback, IBoardOutcomeSink

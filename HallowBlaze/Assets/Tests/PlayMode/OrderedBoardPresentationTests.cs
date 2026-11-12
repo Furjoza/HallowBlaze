@@ -931,6 +931,11 @@ namespace HallowBlaze.Tests.PlayMode
             layout.Add(View(LegacyBoardContentKind.Food, 1, 0));
             layout.Add(View(LegacyBoardContentKind.Aid, 0, 1, attackPrefab));
             BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(request, run, new GridBounds(0, 0, 2, 1), layout, tools);
+            EntityId contextId = Find(runtime, "legacy.aid");
+            runtime.BoardState.TryGetEntity(contextId, out BoardEntityState context);
+            runtime.BoardState.TryRemove(contextId);
+            runtime.BoardState.TryAdd(new BoardEntityState(contextId, new BoardEntityDefinition(BoardLayer.Item,
+                EntityKind.Item, "test.context-target", new BoardEntityTraits(false, false, true)), context.Position));
             runtimes.Add(runtime);
             var sink = new TestSinks { ActiveRequest = request };
             var presenter = new BoardEventPresenter(runtime, sink, sink, sink, value => sink.Diagnostic = value, 0.05f)
@@ -941,7 +946,7 @@ namespace HallowBlaze.Tests.PlayMode
             presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Setup, false);
             EntityId food = Find(runtime, "legacy.food");
             return new Fixture { Runtime = runtime, Presenter = presenter, Sink = sink, FoodId = food,
-                FoodView = runtime.Views[food], AidId = Find(runtime, "legacy.aid"), ExitId = Find(runtime, "legacy.exit") };
+                FoodView = runtime.Views[food], AidId = contextId, ExitId = Find(runtime, "legacy.exit") };
         }
 
         private static void CaptureAttackFrame(string suffix)
@@ -1033,7 +1038,7 @@ namespace HallowBlaze.Tests.PlayMode
         private sealed class MoveToolTarget : IInteractionAction
         {
             public string Id => "test.move";
-            public bool Supports(BoardEntityState target) => target.Definition.ContentId == "legacy.aid";
+            public bool Supports(BoardEntityState target) => target.Definition.ContentId == "test.context-target";
             public InteractionAvailability Evaluate(BoardState board, RunState run, BoardEntityState player, BoardEntityState target)
                 => board.TryGetEntity(BoardLayer.Item, new GridPosition(1, 1), out _)
                     ? InteractionAvailability.Blocked : InteractionAvailability.Available;

@@ -196,10 +196,44 @@ namespace HallowBlaze.Tests.EditMode
                 TestContext.WriteLine(count.Key + ": " + count.Value + " items; fixed reward=" + rewards[count.Key]);
         }
 
-        /// <summary>Extra catalog definitions cannot alter pinned content, IDs, positions, supply or effects in versions 1-3.</summary>
+        /// <summary>Medical supply is independently budgeted, observable and deterministic, never disguised as Food.</summary>
+        [Test]
+        public void MedicalSupplyHasZeroOrOneKitAndPreservesFoodFamilies()
+        {
+            var observedCounts = new HashSet<int>();
+            int total = 0;
+            for (int seed = 0; seed < 100; seed++)
+            {
+                var address = new BoardAddress("medical-supply", "leg", "road", "segment", 4,
+                    OrdinaryBoardGenerator.ConfigurationId, 5, seed);
+                var request = new BoardGenerationRequest(address, OrdinaryBoardContent.CreateConfiguration(address),
+                    OrdinaryBoardContent.CreateCatalog(), seed);
+                BoardGenerationResult result = BoardGenerationPipeline.GenerateOrdinary(request);
+                Assert.That(result.IsSuccess, Is.True, "seed=" + seed + "; " + result);
+                Assert.That(BoardGenerationPipeline.GenerateOrdinary(request).Blueprint, Is.EqualTo(result.Blueprint));
+                BoardItemSpawn[] kits = result.Blueprint.Items.Where(item => item.ResourceFamilyId == "medical").ToArray();
+                Assert.That(kits.Length, Is.InRange(0, 1));
+                observedCounts.Add(kits.Length);
+                total += kits.Length;
+                foreach (BoardItemSpawn kit in kits)
+                {
+                    Assert.That(kit.ItemDefinitionId, Is.EqualTo(FirstAidInteractionAction.ContentId));
+                    Assert.That(result.Blueprint.Entities.Single(entity => entity.Id.Equals(kit.EntityId)).Definition.AutomaticFoodReward, Is.Zero);
+                    Assert.That(kit.InitiallyObservable, Is.True);
+                }
+                Assert.That(result.Blueprint.Items.Count(item => item.ResourceFamilyId == "food"), Is.InRange(2, 5));
+                InitialResourceManifestEntry medical = result.Blueprint.InitialResources.SingleOrDefault(entry => entry.ResourceFamilyId == "medical");
+                Assert.That(medical?.ItemCount ?? 0, Is.EqualTo(kits.Length));
+            }
+            CollectionAssert.AreEquivalent(new[] { 0, 1 }, observedCounts);
+            TestContext.WriteLine("100 ordinary/5 boards; medical kits=" + total + "; per-board band=0..1");
+        }
+
+        /// <summary>Extra catalog definitions cannot alter pinned content, IDs, positions, supply or effects in versions 1-4.</summary>
         [TestCase(1)]
         [TestCase(2)]
         [TestCase(3)]
+        [TestCase(4)]
         public void PinnedFoodVersionsMatchTheOriginalCatalog(int version)
         {
             var definitions = new List<BoardEntityDefinition>
@@ -214,8 +248,15 @@ namespace HallowBlaze.Tests.EditMode
                 new BoardEntityTraits(true, true, false)));
             definitions.Add(new BoardEntityDefinition(BoardLayer.Actor, EntityKind.Enemy, OrdinaryBoardContent.Enemy10Id));
             definitions.Add(new BoardEntityDefinition(BoardLayer.Actor, EntityKind.Enemy, OrdinaryBoardContent.Enemy20Id));
-            var original = new BoardValidationCatalog(definitions,
-                new Dictionary<string, string> { { "legacy.food", "food" }, { "legacy.soda", "food" } },
+            var families = new Dictionary<string, string> { { "legacy.food", "food" }, { "legacy.soda", "food" } };
+            if (version == 4)
+            {
+                definitions.Add(new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, OrdinaryBoardContent.BerryFoodId, BoardEntityTraits.Default, 5));
+                definitions.Add(new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, OrdinaryBoardContent.CarrotFoodId, BoardEntityTraits.Default, 15));
+                families.Add(OrdinaryBoardContent.BerryFoodId, "food");
+                families.Add(OrdinaryBoardContent.CarrotFoodId, "food");
+            }
+            var original = new BoardValidationCatalog(definitions, families,
                 new Dictionary<string, string>(), new Dictionary<string, ShamblerDefinition>
                 {
                     { OrdinaryBoardContent.Enemy10Id, new ShamblerDefinition(10) },

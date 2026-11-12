@@ -29,7 +29,8 @@ namespace HallowBlaze.Presentation.Runtime
         {
             var definitions = new List<BoardEntityDefinition>();
             foreach (LegacyBoardContentKind kind in new[] { LegacyBoardContentKind.Player, LegacyBoardContentKind.Floor,
-                LegacyBoardContentKind.Wall, LegacyBoardContentKind.Food, LegacyBoardContentKind.Soda, LegacyBoardContentKind.BushFood })
+                LegacyBoardContentKind.Wall, LegacyBoardContentKind.Food, LegacyBoardContentKind.Soda,
+                LegacyBoardContentKind.BushFood, LegacyBoardContentKind.Aid })
             {
                 LegacyBoardContentCatalog.TryGetDefinition(kind, out LegacyBoardContentDefinition content);
                 definitions.Add(content.CreateBoardDefinition());
@@ -44,14 +45,15 @@ namespace HallowBlaze.Presentation.Runtime
                 BoardEntityTraits.Default, automaticFoodReward: 15));
             return new BoardValidationCatalog(definitions,
                 new Dictionary<string, string> { { "legacy.food", "food" }, { "legacy.soda", "food" },
-                    { "legacy.bush-food", "food" }, { BerryFoodId, "food" }, { CarrotFoodId, "food" } },
+                    { "legacy.bush-food", "food" }, { BerryFoodId, "food" }, { CarrotFoodId, "food" },
+                    { FirstAidInteractionAction.ContentId, "medical" } },
                 new Dictionary<string, string>(), new Dictionary<string, ShamblerDefinition>
                 {
                     { Enemy10Id, new ShamblerDefinition(10) }, { Enemy20Id, new ShamblerDefinition(20) }
                 });
         }
 
-        /// <summary>Resolves retained versions 1-3 or version-4 food variety, preserving their entry-safety and count budgets.</summary>
+        /// <summary>Resolves retained versions 1-4 or version-5 medical supply, preserving food, safety and count budgets.</summary>
         /// <param name="address">The actual segment identity; day affects pressure, with pinned v2 opening stages on Day 1.</param>
         /// <returns>A detached inclusive budget; this is a first-family preset, not final balance.</returns>
         /// <exception cref="ArgumentException">The generation family or version is unsupported.</exception>
@@ -88,13 +90,21 @@ namespace HallowBlaze.Presentation.Runtime
                 allowed.Add(BerryFoodId);
                 allowed.Add(CarrotFoodId);
             }
+            var resources = new List<ResourceGenerationBudget>
+            {
+                new ResourceGenerationBudget("food", openingStage == 0 ? new GenerationRange(2, 5) :
+                    new GenerationRange(4 - openingStage, 5 - openingStage))
+            };
+            if (address.GenerationVersion >= 5)
+            {
+                allowed.Add(FirstAidInteractionAction.ContentId);
+                resources.Add(new ResourceGenerationBudget("medical", new GenerationRange(0, 1)));
+            }
             return new BoardGenerationConfig(address.GenerationConfigurationId, address.GenerationVersion,
                 new GenerationRange(8, 14), new GenerationRange(20, 58),
                 new GenerationRange(obstacleMinimum, obstacleMinimum + 2), new GenerationRange(enemyCount, enemyCount),
                 Math.Min(1, enemyCount), 2,
-                allowed,
-                new[] { new ResourceGenerationBudget("food", openingStage == 0 ? new GenerationRange(2, 5) :
-                    new GenerationRange(4 - openingStage, 5 - openingStage)) });
+                allowed, resources);
         }
     }
 }
