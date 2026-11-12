@@ -165,8 +165,8 @@ namespace HallowBlaze.Tests.PlayMode
             string[] entities = fixture.Runtime.BoardState.GetEntities().Select(entity => entity.Id + "@" + entity.Position).ToArray();
             var retained = fixture.Runtime.Listeners.Single().LockedIntent;
             for (int frame = 10000; frame < 10040; frame++)
-                Assert.That(facing.SampleInput(key => key == KeyCode.E, frame, fixture.Presenter.Coordinator.CanSubmit), Is.True);
-            Assert.That(facing.QuarterTurns, Is.Zero);
+                Assert.That(facing.SampleInput(key => key == (frame % 2 == 0 ? KeyCode.E : KeyCode.Q), frame, fixture.Presenter.Coordinator.CanSubmit), Is.True);
+            Assert.That(facing.QuarterTurns, Is.EqualTo(3));
             Assert.That(PersistenceJsonSerializer.SerializeRun(fixture.Run), Is.EqualTo(before));
             Assert.That(fixture.Runtime.BoardState.GetEntities().Select(entity => entity.Id + "@" + entity.Position), Is.EqualTo(entities));
             Assert.That(fixture.Runtime.Listeners.Single().LockedIntent, Is.SameAs(retained));
@@ -179,7 +179,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(facing.SampleInput(key => key == KeyCode.E, 10041, fixture.Presenter.Coordinator.CanSubmit), Is.False);
             picker.SampleInputAsync(key => key == KeyCode.E, -49);
             Assert.That(picker.SelectedIndex, Is.GreaterThanOrEqualTo(0));
-            Assert.That(facing.QuarterTurns, Is.Zero);
+            Assert.That(facing.QuarterTurns, Is.EqualTo(3));
         }
 
         /// <summary>The visible emitted snapshot is the Listener's hearing memory and only then documents the durable fact.</summary>

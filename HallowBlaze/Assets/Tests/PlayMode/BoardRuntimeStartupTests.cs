@@ -333,6 +333,16 @@ namespace HallowBlaze.Tests.PlayMode
                     string prefab = foodId == OrdinaryBoardContent.BerryFoodId ? "Food2" : "Carrot";
                     Assert.That(itemView.GetComponent<SpriteRenderer>().sprite,
                         Is.SameAs(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/" + prefab + ".prefab").GetComponent<SpriteRenderer>().sprite));
+                    if (foodId == OrdinaryBoardContent.BerryFoodId)
+                    {
+                        Transform bush = itemView.transform.Find("Berry bush");
+                        Assert.That(bush, Is.Not.Null);
+                        SpriteRenderer foliage = bush.GetComponent<SpriteRenderer>();
+                        Assert.That(foliage.sprite, Is.SameAs(GetManagerField<GameObject[]>(authored, "wallTiles")[0].GetComponent<SpriteRenderer>().sprite));
+                        Assert.That(foliage.sortingOrder, Is.LessThan(itemView.GetComponent<SpriteRenderer>().sortingOrder));
+                        Assert.That(bush.GetComponentsInChildren<Collider2D>(), Is.Empty);
+                        Assert.That(runtime.BoardState.TryGetEntity(BoardLayer.Obstacle, item.Position, out _), Is.False);
+                    }
                     Direction step = Direction.East;
                     bool positioned = false;
                     foreach (Direction direction in new[] { Direction.East, Direction.West, Direction.North, Direction.South })
@@ -431,6 +441,8 @@ namespace HallowBlaze.Tests.PlayMode
                     if (initialHealth >= 100)
                     {
                         Assert.That(picker.Options.Single(option => option.TargetId.Equals(kit.Id)).IsAvailable, Is.False);
+                        int kitIndex = picker.Options.ToList().FindIndex(option => option.TargetId.Equals(kit.Id));
+                        Assert.That(picker.GetUnavailableReason(kitIndex), Is.EqualTo("Health is full - first aid is not needed."));
                         Assert.That(picker.SelectedIndex < 0 || !picker.Options[picker.SelectedIndex].TargetId.Equals(kit.Id), Is.True);
                         picker.Cancel();
                         yield return null;
@@ -1383,9 +1395,13 @@ namespace HallowBlaze.Tests.PlayMode
                     yield return null;
                     BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
                     Assert.That(session.ActiveRun.ActiveLandmark.VariantId, Is.EqualTo(variantId));
+                    RunState durable = session.ActiveRun;
                     LandmarkSolverResult solution = SolveLandmark(runtime, outcomeId);
                     yield return ExecuteLandmarkSteps(manager, solution.SolutionPath);
-                    RunState durable = store.LoadRun().Data;
+                    Assert.That(session.ActiveRun, Is.Null);
+                    Assert.That(durable.Status, Is.EqualTo(RunStatus.Won));
+                    Assert.That(store.LoadRun().IsSuccess, Is.False);
+                    Assert.That(store.LoadProfile().Data.WonRunCount, Is.EqualTo(1));
                     LandmarkRecord completed = durable.CompletedLandmarks.Single();
                     Assert.That(completed.VariantId, Is.EqualTo(variantId));
                     Assert.That(completed.OutcomeId, Is.EqualTo(outcomeId));
@@ -1428,8 +1444,12 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That((bool)InvokeManager(manager, "HandleBoardOutcome", BoardOutcome.ExitReached(runtime.Request)), Is.False);
                 InvokeManager(manager, "HideLevelImage");
                 yield return null;
+                RunState durable = session.ActiveRun;
                 yield return ExecuteLandmark(manager, supplies ? "NNPNEECCCENE" : "NNNNNEE");
-                RunState durable = store.LoadRun().Data;
+                Assert.That(session.ActiveRun, Is.Null);
+                Assert.That(durable.Status, Is.EqualTo(RunStatus.Won));
+                Assert.That(store.LoadRun().IsSuccess, Is.False);
+                Assert.That(store.LoadProfile().Data.WonRunCount, Is.EqualTo(1));
                 Assert.That(durable.CompletedLandmarks.Single().OutcomeId, Is.EqualTo(supplies ? "tower.supplies" : "tower.arrival"));
                 Assert.That(durable.CompletedDayCount, Is.EqualTo(5));
                 Assert.That(durable.Food, Is.EqualTo(supplies ? 108 : 93));
@@ -1479,10 +1499,22 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(store.LoadProfile().Data.GetNodeDiscoveryState("landmark.radio-tower"), Is.Not.EqualTo(NodeDiscoveryState.Visited));
             int saves = store.RunSaves;
             store.FailProfile = false;
+            RunState completed = session.ActiveRun;
+            store.FailTerminalProfile = true;
+            LogAssert.Expect(LogType.Error, "Run completion save failed: IoError");
+            Assert.That((bool)InvokeManager(manager, "RetryTravelCheckpoint"), Is.False);
+            Assert.That(session.ActiveRun, Is.SameAs(completed));
+            Assert.That(completed.Status, Is.EqualTo(RunStatus.Won));
+            Assert.That(completed.Food, Is.EqualTo(expectedFood));
+            Assert.That(session.Profile.WonRunCount, Is.EqualTo(1));
+            store.FailTerminalProfile = false;
             Assert.That((bool)InvokeManager(manager, "RetryTravelCheckpoint"), Is.True);
             Assert.That(store.RunSaves, Is.EqualTo(saves));
-            Assert.That(session.ActiveRun.CompletedLandmarks.Count, Is.EqualTo(1));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(expectedFood));
+            Assert.That(session.ActiveRun, Is.Null);
+            Assert.That(completed.Status, Is.EqualTo(RunStatus.Won));
+            Assert.That(completed.CompletedLandmarks.Count, Is.EqualTo(1));
+            Assert.That(completed.Food, Is.EqualTo(expectedFood));
+            Assert.That(store.LoadProfile().Data.WonRunCount, Is.EqualTo(1));
             Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.EqualTo(resolutions));
             Assert.That(store.LoadProfile().Data.GetNodeDiscoveryState("landmark.radio-tower"), Is.EqualTo(NodeDiscoveryState.Visited));
         }
@@ -1805,13 +1837,14 @@ namespace HallowBlaze.Tests.PlayMode
             public TravelFaultStore(ISaveStore inner) { this.inner = inner; }
             public bool FailRun { get; set; }
             public bool FailProfile { get; set; }
+            public bool FailTerminalProfile { get; set; }
             public int RunSaves { get; private set; }
             public SaveStoreResult SaveRun(RunState run)
             {
                 RunSaves++;
                 return FailRun ? SaveStoreResult.IoError("Injected travel checkpoint failure.") : inner.SaveRun(run);
             }
-            public SaveStoreResult SaveProfile(ProfileState profile) => FailProfile
+            public SaveStoreResult SaveProfile(ProfileState profile) => FailProfile || FailTerminalProfile && profile.WonRunCount > 0
                 ? SaveStoreResult.IoError("Injected discovery checkpoint failure.") : inner.SaveProfile(profile);
             public SaveStoreResult<RunState> LoadRun() => inner.LoadRun();
             public SaveStoreResult<ProfileState> LoadProfile() => inner.LoadProfile();
@@ -1841,6 +1874,7 @@ namespace HallowBlaze.Tests.PlayMode
             GameObject floor = CreateObject("Floor Prefab", 0, 0);
             GameObject outer = CreateObject("Outer Prefab", 0, 0);
             GameObject unused = CreateObject("Unused Prefab", 0, 0);
+            unused.AddComponent<SpriteRenderer>();
             GameObject exit = CreateObject("Exit Prefab", 0, 0);
             SetField(manager, "floorTiles", new[] { floor });
             SetField(manager, "outerWallTiles", new[] { outer });

@@ -404,6 +404,19 @@ public class BoardManager : MonoBehaviour
                 {
                     GameObject prefab = landmarkContent?.FindPrefab(entity.Definition.ContentId) ?? ResolveOrdinaryPrefab(entity.Definition);
                     view = Instantiate(prefab, position, Quaternion.identity, stagingHolder);
+                    if (entity.Definition.ContentId == OrdinaryBoardContent.BerryFoodId)
+                    {
+                        RequirePrefabs(wallTiles, nameof(wallTiles));
+                        SpriteRenderer foliage = wallTiles[0].GetComponent<SpriteRenderer>();
+                        SpriteRenderer berries = view.GetComponent<SpriteRenderer>();
+                        var bush = new GameObject("Berry bush", typeof(SpriteRenderer)).GetComponent<SpriteRenderer>();
+                        bush.transform.SetParent(view.transform, false);
+                        bush.sprite = foliage.sprite;
+                        bush.sharedMaterial = foliage.sharedMaterial;
+                        bush.color = foliage.color;
+                        bush.sortingLayerID = berries.sortingLayerID;
+                        bush.sortingOrder = berries.sortingOrder - 1;
+                    }
                 }
                 views.Add(entity.Id, view);
                 if (entity.Definition.Traits.IsExit)

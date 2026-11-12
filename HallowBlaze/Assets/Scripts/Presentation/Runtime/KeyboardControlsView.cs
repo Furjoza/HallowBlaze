@@ -20,6 +20,7 @@ namespace HallowBlaze.Presentation.Runtime
         private RectTransform content;
         private RectTransform diagram;
         private RectTransform descriptions;
+        private Transform host;
         private Action closed;
         private Vector2 viewport;
         private Vector2 lastScreen;
@@ -37,17 +38,17 @@ namespace HallowBlaze.Presentation.Runtime
         /// <summary>Gets the actual keys represented by the diagram, including the keypad Enter alias.</summary>
         public IEnumerable<KeyCode> DiagramKeys => keycaps.Keys;
 
-        /// <summary>Opens one modal view beneath its scene owner without resolving, saving or unpausing gameplay.</summary>
+        /// <summary>Opens a scene-owned fullscreen modal independently of its host's layout, without gameplay effects.</summary>
         public static KeyboardControlsView Open(Transform owner, Action onClose = null)
         {
             if (Current != null && Current.IsOpen) return Current;
             var root = new GameObject("Keyboard Controls", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster), typeof(Image));
-            root.transform.SetParent(owner, false);
             Canvas canvas = root.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 140;
             root.GetComponent<Image>().color = Paper;
             KeyboardControlsView view = root.AddComponent<KeyboardControlsView>();
+            view.host = owner;
             view.closed = onClose;
             view.IsOpen = true;
             Current = view;
@@ -55,7 +56,6 @@ namespace HallowBlaze.Presentation.Runtime
             view.lastScreen = new Vector2(Screen.width, Screen.height);
             view.Resize(view.lastScreen);
             KeyboardMenuFocus focus = KeyboardMenuFocus.Attach(root, view.modes[0].gameObject, view.Close);
-            focus.FrameColor = Ink;
             focus.RecoverFocus();
             return view;
         }
@@ -71,7 +71,15 @@ namespace HallowBlaze.Presentation.Runtime
             existing.Insert(Mathf.Min(2, existing.Count), entry);
             Text prototype = existing.Count > 1 ? existing[0].GetComponentInChildren<Text>() : null;
             Text label = entry.GetComponentInChildren<Text>();
-            if (prototype != null) { label.font = prototype.font; label.fontSize = prototype.fontSize; label.color = prototype.color; }
+            if (prototype != null)
+            {
+                label.font = prototype.font;
+                label.fontSize = prototype.fontSize;
+                label.color = prototype.color;
+                entry.colors = existing[0].colors;
+                entry.transition = Selectable.Transition.ColorTint;
+                entry.targetGraphic = label;
+            }
             entry.GetComponent<Image>().color = Color.clear;
             for (int index = 0; index < existing.Count; index++)
             {
@@ -106,9 +114,16 @@ namespace HallowBlaze.Presentation.Runtime
                 modes.Add(mode);
             }
             scrollViewport = RectAt("Controls scroll region", transform);
-            scrollViewport.gameObject.AddComponent<Image>().color = Color.clear;
+            Image scrollSurface = scrollViewport.gameObject.AddComponent<Image>();
+            scrollSurface.color = Color.white;
             scrollViewport.gameObject.AddComponent<RectMask2D>();
-            scrollViewport.gameObject.AddComponent<Selectable>();
+            Selectable scrollFocus = scrollViewport.gameObject.AddComponent<Selectable>();
+            scrollFocus.targetGraphic = scrollSurface;
+            ColorBlock scrollColors = scrollFocus.colors;
+            scrollColors.normalColor = scrollColors.highlightedColor = Paper;
+            scrollColors.selectedColor = new Color32(206, 225, 213, 255);
+            scrollColors.fadeDuration = 0;
+            scrollFocus.colors = scrollColors;
             content = RectAt("Controls content", scrollViewport);
             ScrollRect scroll = scrollViewport.gameObject.AddComponent<ScrollRect>();
             scroll.viewport = scrollViewport;
@@ -254,6 +269,7 @@ namespace HallowBlaze.Presentation.Runtime
 
         private void Update()
         {
+            if (host == null || !host.gameObject.activeInHierarchy) { Close(); return; }
             Vector2 screen = new Vector2(Screen.width, Screen.height);
             if (screen != lastScreen) { lastScreen = screen; Resize(screen); }
         }

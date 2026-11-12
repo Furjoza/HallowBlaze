@@ -1064,7 +1064,8 @@ confirm, cancel or leave an available action. This applies to current and future
 settings menus, route choice, Notes/atlas/help, interaction targeting and equipment decisions,
 and later inventory screens if separately activated. It does not activate deferred features.
 
-- Menus provide a visible initial focus, predictable Tab/Shift+Tab and arrow navigation,
+- Menus provide visible color-based initial focus without an added focus frame, predictable
+	Tab/Shift+Tab, arrow and WASD navigation (W/A previous, S/D next),
 	keyboard activation and Escape/back where cancellation is legal. Disabled or hidden controls
 	cannot trap focus; scrolling content and settings remain operable without a pointer. Reopening
 	or replacing a view restores valid focus without silently confirming a choice.
@@ -1074,15 +1075,16 @@ and later inventory screens if separately activated. It does not activate deferr
 	previous object, E selects the next, and Space confirms the selected legal action. Multiple
 	actions on one object remain explicitly keyboard-selectable. Space means Wait only in
 	normal board input; no single keypress may reach both contexts.
-- In idle walking mode, outside all menus and interaction drafts, Q turns the player's visual
-	facing left by 90 degrees and E turns it right by 90 degrees. This is a free cosmetic action:
+- In idle walking mode, outside all menus and interaction drafts, Q faces the player's sprite
+	left and E faces it right using horizontal mirroring, never a planar image rotation. This
+	2026-11-05 owner correction supersedes the earlier 90-degree placeholder rendering; proper
+	directional artwork is deferred to M7.21. This remains a free cosmetic action:
 	no resolver call, turn, resource/charge cost, noise emission/aging, RNG use or enemy phase.
 	It changes neither grid position nor gameplay facing, target availability, damage, detection
 	or locked intents. Movement remains absolute WASD/arrows, not relative to visual facing.
-	The input/animation gate owns when rotation is available; menus, pause and replay cannot leak
-	rotation into the board. Visual facing is not saved gameplay state and may reset when a board
-	is recreated. Its initial pose and interaction with movement animation are specified in M7.18
-	before implementation; neither may introduce a hidden gameplay rule.
+	The input/animation gate owns when facing changes are available; menus, pause and replay cannot
+	leak them into the board. Visual facing is not saved gameplay state and may reset when a board
+	is recreated. The initial authored pose and movement-preserved facing remain cosmetic.
 - Target/action lists use deterministic ordering and retain valid selection where possible.
 	Opening, browsing and cancellation submit no gameplay command and consume no turn, resource,
 	noise lifetime or enemy opportunity. Confirmation submits at most one command and uses the
@@ -1101,6 +1103,7 @@ and later inventory screens if separately activated. It does not activate deferr
 
 This is an accepted product policy, not a claim that current screens already satisfy it.
 M7.10-M7.13 and M7.17-M7.18 in `Docs/TechnicalRoadmap.md` own implementation and verification.
+M7.19 applies the dated owner smoke corrections; M7.20-M7.21 are separate future visual tasks.
 Manual interaction means work on obstacles; it does not authorize direct combat with zombies.
 
 ## 19. Zwycięstwo, śmierć i regrywalność
