@@ -5759,11 +5759,11 @@ M6.8-M6.10 implementation does not start automatically. No commit or push was pe
 
 ## `M6.8` - Grid painting, object properties and validated template saves
 
-**Status:** `Active` - M6.8a is Done on 2026-11-13; M6.8b is Ready but remains unimplemented.
+**Status:** `Done` - M6.8a and M6.8b accepted on 2026-11-13; final M6.8b acceptance used explicit Lead self-review after review-service unavailability.
 **Priority:** P2 after M6.7.
 **Related contract:** [M6.7 data and lifecycle](BoardGeneration.md#editor-supported-data-matrix), existing schema-1 readers and authoritative validators.
 **Rationale:** Replace repetitive coordinate editing without creating a second format, rule system or validator.
-**Current behavior:** Template authoring still has no general visual editing window. M6.8a adds the Editor-only document/codec/store backend; M6.8b owns painting and property UI.
+**Current behavior:** M6.8a provides the Editor-only document/codec/store backend; M6.8b adds the Board Editor window, painting and property UI without changing runtime content.
 **Expected outcome:** A Unity Editor window creates/opens supported drafts, paints/erases existing content, edits properties, supports undo/redo and saves valid JSON without scene editing.
 **Scope:** M6.8a document/serialization/save contract first, then M6.8b painting/inspection. Use the exact ten-entry palette, all variants/outcomes and 8x8 bounds; no ordinary-only one-exit format. New blank drafts may be incomplete in memory, but only validated schema-1 drafts are saved. Reuse `LandmarkTemplateJson.Deserialize` and existing validator/composer catalogs; the new writer is Editor-only and emits that same schema.
 **Non-goals:** New rules, arbitrary scripts/triggers, automatic publishing/repair, a parallel validator, art production, world-topology editing or current Radio Tower edits. Route assignments belong to M6.10, not to painting grid data.
@@ -5828,7 +5828,7 @@ publication result is claimed. M6.8b is the next Ready stage and does not start 
 
 ### M6.8b - Window, paint, inspect and undo
 
-**Status:** `Ready` - M6.8a accepted; implementation awaits a separate request.
+**Status:** `Done` - implemented, validated and accepted with explicit Lead self-review on 2026-11-13 after final review-service failure.
 
 **Dependencies:** M6.8a passed/reviewed. **Closed writes:**
 `Assets/Editor/BoardAuthoring/BoardAuthoringWindow.cs`, `BoardGridView.cs`,
@@ -5845,6 +5845,56 @@ per-layer occupancy, ID preservation, atomic dependent deletion, undo-to-clean/r
 all-variant save and failed-open retention. Actual Editor keyboard/pointer/narrow-window smoke
 on an external disposable draft; reopen without hand-editing JSON. No Play Mode or publication
 is required for M6.8 acceptance. Drag-and-drop is optional, not a blocker or extra stage.
+
+**Progress (2026-11-13):** The owner requested continuation after M6.8a and retained authorization
+for scoped commit/push. Baseline: Git root `D:/Repos/HallowBlaze`, branch
+`M6/8b/VisualBoardAuthoringWindow`, HEAD `21a682b330df463ea1e9e0b779df552541ae3ffa`.
+Only the documented `SENTIS_ANALYTICS_ENABLED` removal was present and remains outside this
+candidate. Closed writes are the four new UI/test sources with Unity-generated metadata, the
+document's internal Editor recovery adapter and the two authoring documents.
+
+The callable **HallowBlaze > Authoring > Board Editor** supports New/Open/Save/Save As/
+Fork, the ten-entry sprite palette, explicit layers/modes, coordinate-correct painting, typed
+properties, all-variant diagnostics and undo/redo. Dependent changes require confirmation and
+commit atomically; selection is free. Pending fields commit before pointer/file commands.
+Failed IO/navigation and invalid drafts remain intact; serialized/session recovery retains
+snapshots/fingerprints/history across reload and unexpected dirty-window destruction. Native
+keyboard and pointer actions share the document operations. The narrow layout scrolls without
+overlapping panels. See the [implemented workflow](BoardGeneration.md#m68b-visual-board-window).
+
+Unity CLI preflight found no reachable live Pipeline; no second Editor or legacy integration
+was used. Unity 6000.3.21f1 graphics EditMode validation passed **200/200**: window 21, backend
+58, template 41 and validator 80. The real shown-window smoke exercised pointer, arrow/Enter,
+Ctrl-Z/Y, actual 1280px/640px widths, selection-border/nonblank pixel checks and external draft
+save/reopen without JSON hand-editing. A separate lifecycle smoke recovered invalid edits and
+undo after window destruction. Independent review blocked the initial candidate for stale Open
+after an accepted same-file Save, delayed-field loss on tab/context switches, unconfirmed Link/
+Spawn ID dependants and incomplete keyboard actions. The Lead corrected all four with focused
+regressions, followed by the combined gate above. Escape cancels the identity form immediately;
+other deferred actions register before releasing focus. Keyboard smoke now uses bounded waits
+for actual Editor state instead of a fixed test-frame count. A deferred inspector action also
+refreshes native dirty/diagnostic state, with an actual scroll-to-button pointer regression.
+Re-review found mutable delayed brush context, active-layer mismatch and unowned callbacks
+after view detachment; the previous Passed XML also contained a lifecycle exception in output.
+The Lead captured accepted brush state, rejected mismatched paint and moved all UI callbacks
+under a window/document-owned scheduler with disable/close cancellation. Rapid input and
+close/document-replacement regressions passed; the combined gate above now also requires no
+lifecycle/GUI/unhandled exceptions in XML output or the Editor log. Both artifacts are clean.
+C# diagnostics, scope and existing metadata checks passed.
+The next review identified premature pointer selection before delayed-field commit and
+keyboard Delete/undo overtaking queued clicks. Selection now waits for the original inspector
+commit; pointer, keyboard mutations and undo/redo share accepted-input ordering. A separate
+accepted target survives the selection side effect of an entity-property commit. Real event
+regressions cover pending X edit -> empty cell click -> Delete and paint -> Delete/undo without
+an intervening queue drain. The final combined gate above and clean XML/log cover these fixes.
+No human usability verdict, Play Mode, assignment/publication, player-save or current Radio
+Tower change is claimed. The final configured Reviewer invocation failed with
+`TypeError: terminated` (client request `a0a2e73d-1119-4b86-9b4c-8b3c734f45ea`), reporting an
+ongoing GitHub service disruption. No further retry or provider switch was made. The Lead
+completed explicit self-review of the final input-order changes, owner-bound callbacks, prior
+material findings and the clean 200/200 evidence. No unresolved material finding or required
+check was waived; no independent PASS is claimed for the final candidate. M6.8b/M6.8 are
+accepted under that documented fallback. M6.9 does not start as part of this task.
 
 ---
 

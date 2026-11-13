@@ -748,6 +748,96 @@ Focused coverage is [BoardAuthoringDocumentTests](../Assets/Tests/EditMode/Board
 using external disposable directories and unchanged source fixtures. The Editor assembly is
 excluded from Player compilation; no player save, scene, prefab or package is modified.
 
+### M6.8b Visual Board Window
+
+Open **HallowBlaze > Authoring > Board Editor** in the Windows Unity Editor. The
+[window](../Assets/Editor/BoardAuthoring/BoardAuthoringWindow.cs) uses the M6.8a document/store,
+the unchanged ten-entry Radio Tower catalog and existing prefab/animation sprites. It neither
+opens a gameplay scene nor starts Play Mode, assigns a route or publishes a template.
+
+Choose an external local **Draft Folder** before opening/saving files. Project templates open
+read-only: use **Fork** with new template/configuration IDs to start an unpublished copy.
+**New** creates an incomplete base variant; it deliberately does not invent exits, allowed
+content, budgets or pressure links. **Save As** retains every identity and variant and does not
+make a read-only publication writable. Only fully validated schema-1 templates can be saved.
+
+The canvas uses horizontal X, vertical Y, north at the top and **0.0-7.7** coordinates.
+Select, Paint and Erase operate on the explicit occupancy layer; the inspector displays every
+occupant at a selected cell. A player-start paint moves its existing ID rather than duplicating
+the start. New entities get unused IDs; replacement preserves the replaced ID. Painting an item
+or pressure terrain adds its required binding with explicit editable defaults, never a new rule.
+Content excluded by the configuration must first be enabled under **Board / Allowed Content**;
+painting does not silently broaden the configuration.
+Painting also rejects a content/active-layer mismatch instead of editing a different layer.
+An accepted pointer gesture captures its mode, layer and content; subsequent keyboard/palette
+changes cannot turn that already accepted paint into an erase or another brush.
+Pointer selection, keyboard selection/Enter/Delete and undo/redo execute in accepted input
+order through the same scheduler. A pointer's target is retained separately from the inspected
+cell, so delayed property edits commit against the original entity before selection changes.
+
+**Cell** edits IDs/positions, item identity/source/observability and pressure links/rules.
+**Board** edits supported identities, ranges, allowed content and resource budgets.
+**Outcomes** edits/adds/removes named exits and optional/mandatory-tool declarations. Optional
+fields expose Absent / None / Value without normalizing untouched data. Referenced removal or
+renaming lists affected paths and requires confirmation; the entity/bindings change atomically
+in one undo record. Renaming a referenced Link ID updates its linked plate/gate bindings in the
+current variant after consent; renaming a Spawn ID updates its guaranteed-tool outcome
+references. Cancellation changes neither data nor history. Deletion also identifies retained
+textual dependants that may need repair, rather than silently rewriting or cascading them.
+Outcomes are template-wide, so changes are validated against every variant;
+the editor never repairs another variant or silently rewrites its IDs. Variant/selection changes
+are free and do not enter undo history. A diagnostic selects its known variant/cell/layer and
+inspector section; unavailable context is not guessed.
+
+Pointer clicks and native keyboard controls share the same operations. With canvas focus,
+arrows select a cell, Enter applies the active gesture, Delete/Backspace erases its active layer,
+S/P/E selects the mode, L cycles layers and 1-9/0 selects palette entries in display order.
+Ctrl/Cmd+N, O, S, Shift+S and D invoke New, Open, Save, Save As and Fork; Ctrl/Cmd+Z and
+Y/Shift+Z undo/redo outside text-field editing. Enter submits the New/Fork identity form and
+Escape cancels it. Ctrl/Cmd+1/2/3 opens Cell/Board/Outcomes; Alt+Insert adds an outcome,
+Alt+Up/Down selects one and Alt+Delete requests its confirmed removal. Toolbar commands,
+pointer gestures and inspector-context changes commit pending delayed fields before executing.
+All icon buttons have tooltips. Narrow windows stack
+the palette/canvas/inspector in a scrollable layout instead of overlapping them.
+Deferred actions use the originating window/document's scheduler. Disabling/closing that
+window cancels its queued actions, and replacing its document invalidates old callbacks before
+they can mutate a retained snapshot or refresh an already detached native view.
+
+Open validates a candidate before asking to replace the current document; failed/unsupported
+imports show a diagnostic/path and leave both the original file and current edits/history intact.
+If the accepted Save changes the opening candidate's bytes, Open re-reads it before adoption,
+so its in-memory data and fingerprint match that saved file.
+Dirty navigation requires Save / Discard / Cancel (an invalid draft can only Discard / Cancel).
+Failed or cancelled Save cannot authorize navigation. Unity's native close uses the same dirty
+state; failed native save or unexpected window destruction retains/reopens the document.
+Editor-owned serialized/session recovery preserves invalid snapshots, file fingerprints and
+undo/redo across window/script reloads. This is session recovery, not a crash-durable draft
+format, a Play Mode launcher or permission to write invalid JSON.
+
+[BoardAuthoringWindowTests](../Assets/Tests/EditMode/BoardAuthoringWindowTests.cs) exercises
+coordinates/layers/IDs, atomic dependent deletion, all-variant saves, failed IO/navigation,
+clean undo/dirty redo and close/reload recovery. Its shown-window smoke sends real pointer and
+keyboard events at actual 1280px/640px window widths, checks nonblank canvas-selection pixels
+and saves/reopens an external disposable draft without hand-editing JSON. Unity 6000.3.21f1
+graphics EditMode validation passed 21/21 window cases and 200/200 with backend/schema/validator
+fixtures, including same-file Open/Save, delayed-field tab switching, textual reference consent
+and keyboard-only New/Cancel/Fork/outcome operations. Deferred pointer edits refresh the native
+dirty flag and diagnostics immediately; the smoke scrolls the inspector to a visible Add button.
+Rapid pointer/keyboard changes, palette/layer mismatches and close/document replacement before
+queued edits are covered separately. Pending field -> pointer selection -> Delete and pointer
+paint -> Delete/undo sequences verify target preservation, operation order and exact undo units.
+Both XML output and the Editor log are checked for hidden
+lifecycle/GUI/unhandled exceptions; a Passed counter alone is insufficient.
+Asynchronous UI checks wait for concrete
+Editor state within a time budget, not an assumed number of test-runner frames.
+Screenshots/logs/XML are external temporary evidence, not production assets. This
+does not claim human usability acceptance, Play Mode, route assignment or campaign activation.
+M6.8b was accepted on 2026-11-13 after all material independent-review findings were corrected
+and the final 200-case gate passed. The final re-review invocation failed with the review
+service's `TypeError: terminated` during a reported GitHub disruption. The Lead completed
+explicit self-review under the repository fallback policy; no independent PASS is claimed for
+that final candidate, and neither provider switching nor validation waiver was used.
+
 ## Generic items and initial supply
 
 `BoardItemSpawn` binds one non-exit item-layer entity to one textual instance ID,

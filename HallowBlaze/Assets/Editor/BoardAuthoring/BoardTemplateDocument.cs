@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using HallowBlaze.Core.Generation.Landmarks;
 using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.World;
@@ -95,6 +96,26 @@ namespace HallowBlaze.Editor.BoardAuthoring
 
         /// <summary>Returns a complete detached copy; callers cannot mutate a document by retaining a JSON reference.</summary>
         public JObject Snapshot() => (JObject)content.DeepClone();
+
+        internal JObject CaptureEditorState() => new JObject
+        {
+            ["content"] = content.DeepClone(), ["savedContent"] = savedContent, ["path"] = SourcePath,
+            ["fingerprint"] = FileFingerprint, ["readOnly"] = IsReadOnly,
+            ["undo"] = new JArray(undo.Reverse().Select(snapshot => snapshot.DeepClone())),
+            ["redo"] = new JArray(redo.Reverse().Select(snapshot => snapshot.DeepClone()))
+        };
+
+        internal static BoardTemplateDocument RestoreEditorState(JObject state, BoardValidationCatalog catalog)
+        {
+            var document = Template((JObject)state["content"], catalog);
+            document.savedContent = (string)state["savedContent"];
+            document.SourcePath = (string)state["path"];
+            document.FileFingerprint = (string)state["fingerprint"];
+            document.IsReadOnly = (bool)state["readOnly"];
+            foreach (JObject snapshot in state["undo"]) document.undo.Push((JObject)snapshot.DeepClone());
+            foreach (JObject snapshot in state["redo"]) document.redo.Push((JObject)snapshot.DeepClone());
+            return document;
+        }
 
         /// <summary>Applies one undoable edit atomically in memory; rejected callbacks leave data/history unchanged.</summary>
         public void Edit(Action<JObject> edit)
