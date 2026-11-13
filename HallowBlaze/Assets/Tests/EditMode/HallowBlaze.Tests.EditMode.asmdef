@@ -23,6 +23,7 @@
         "HallowBlaze.Core.Board.State",
         "HallowBlaze.Core.Turns.Contracts",
         "HallowBlaze.Core.Turns.Resolution",
-        "HallowBlaze.Presentation.Runtime"
+        "HallowBlaze.Presentation.Runtime",
+        "HallowBlaze.Editor.BoardAuthoring"
     ]
 }

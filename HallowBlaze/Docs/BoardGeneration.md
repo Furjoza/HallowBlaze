@@ -444,7 +444,7 @@ remain read-only, including during future authoring exercises.
 
 | Existing owner | Verified boundary and consequence |
 | --- | --- |
-| [LandmarkTemplateJson](../Assets/Scripts/Core/Generation/Landmarks/LandmarkTemplateJson.cs) | Strict schema-1 template and placement readers; no writer exists. Reject unknown/duplicate/miscased fields, coercion and unknown schemas. A deterministic writer/document adapter is M6.8a work, not an existing capability. |
+| [LandmarkTemplateJson](../Assets/Scripts/Core/Generation/Landmarks/LandmarkTemplateJson.cs) | Runtime retains strict schema-1 readers only, rejecting unknown/duplicate/miscased fields, coercion and unknown schemas. The Editor-only M6.8a writer below emits the same schema and verifies it through these unchanged readers. |
 | [LandmarkTemplate and LandmarkBoard](../Assets/Scripts/Core/Generation/Landmarks/LandmarkTemplate.cs) | Fixed 8x8 blueprint, named variants, at least two distinct exit outcomes and at least one mandatory outcome. Construction checks structure, links and mandatory tool guarantees; it does not run every budget/topology check. |
 | [BoardValidator](../Assets/Scripts/Core/Generation/Validation/BoardValidator.cs) and [PlateGateValidator](../Assets/Scripts/Core/Board/State/PlateGateLayout.cs) | Reuse catalog/occupancy/start/exit/budget/opening checks and exact pressure-link rules. `LandmarkBoard.Validate` suppresses only static `UnreachableExit` for explicitly optional exits. |
 | [LandmarkPlacement](../Assets/Scripts/Core/Generation/Landmarks/LandmarkPlacement.cs) | Requires the final segment of an existing directed edge whose destination has `placeKind: landmark`, matching configuration ID/version and a known variant. `EdgeId` is derived from segment membership. |
@@ -548,9 +548,12 @@ JSON field path or entity ID with `x.y` where known. Clicking a row selects that
 document-wide errors stay document-wide. Do not invent a coordinate for an unknown-field error.
 
 1. Use strict `LandmarkTemplateJson` decoding with the external palette catalog, retaining raw
-  field paths. Collect editable structural diagnostics through the existing `BoardValidator`
-  entity/item overload before constructing a valid immutable template. If structure fails, do
-  not run downstream rules against a partially constructed board.
+  field paths. M6.8a forwards the first reader/constructor failure, including the owning
+  structural code/cell when provided. The current reader constructs its template internally
+  and the catalog exposes no public raw-definition enumeration, so a pre-construction aggregate
+  through the raw `BoardValidator` overload is not available at this boundary. Do not duplicate
+  decoding/catalog rules or widen runtime APIs to pretend otherwise. If structure fails, do not
+  run downstream rules against a partially constructed board; fix/revalidate the reported error.
 2. Construct `LandmarkTemplate` and each addressed `LandmarkBoard`; use `PlateGateValidator`
   and `LandmarkBoard.Validate(catalog)`. Do not treat ordinary optional-exit `UnreachableExit`
   as a landmark failure, or suppress any other error. Check all variants, not just the active tab.
@@ -694,6 +697,56 @@ M6.10b assignment UI/integrated acceptance**. The exact closed path lists, depen
 acceptance criteria and required EditMode/PlayMode/manual checks live in the corresponding
 [roadmap cards](TechnicalRoadmap.md#m68---grid-painting-object-properties-and-validated-template-saves).
 No stage starts automatically on M6.7 closeout; M6.8a is the first implementation-ready stage.
+
+### M6.8a Document Backend
+
+The owner authorized implementation on 2026-11-13. This stage provides a callable Editor-only
+backend, not a painting window, route chooser, publisher or test launcher. The runtime readers,
+rules, current Radio Tower assets and player schemas remain unchanged.
+
+- [BoardTemplateDocument](../Assets/Editor/BoardAuthoring/BoardTemplateDocument.cs) owns one
+  template or separate placement snapshot with per-document path/file fingerprint, dirty state
+  and detached undo/redo. `Edit` commits one cloned change; invalid edits stay in memory and
+  block `ToJson`/Save. `NewTemplate` is deliberately incomplete. `Fork` changes template and
+  configuration identities; Save As does not. `CanLeave` checks explicit Save/Discard/Cancel
+  consent without silently replacing a document.
+- [BoardAuthoringJson](../Assets/Editor/BoardAuthoring/BoardAuthoringJson.cs) retains all known
+  fields, all variants and optional absence/null. Structured, invariant UTF-8 serialization
+  sorts schema fields/collections deterministically and re-decodes output through the current
+  template/placement readers before a transforming save.
+- [BoardAuthoringValidation](../Assets/Editor/BoardAuthoring/BoardAuthoringValidation.cs)
+  adapts constructor errors and full `LandmarkBoard.Validate` reports for every constructed
+  variant. Diagnostics are blocking errors, preserve original messages/codes and carry available
+  field/variant/entity/cell context; no guessed coordinates or copied game rules.
+- [BoardDocumentStore](../Assets/Editor/BoardAuthoring/BoardDocumentStore.cs) requires an
+  explicit external draft root, separate from project and persistent player data. Project files
+  and explicitly registered external publications open read-only. Only unpublished `.json`
+  drafts within that root may be written; parent traversal/reparse-point paths and Windows
+  device/extended-length aliases are rejected before protected-root comparisons and I/O.
+  The store is currently Windows Editor-only; macOS/Linux and Player platforms are refused
+  before filesystem access instead of assuming their case-sensitivity. Windows comparisons
+  use handle-resolved Volume GUID paths for existing files/ancestors and append only missing
+  path components, so drive letters, casing and short-name aliases cannot conceal a protected
+  directory/file. SUBST, network and unresolved
+  drive mappings are refused rather than assumed separate; only resolvable local volumes are
+  supported on Windows. Existing parent chains are checked for reparse points before I/O.
+  Existing Save As targets require consent plus their previewed byte fingerprint. A sibling
+  temporary file is flushed and checked against validated bytes, target/document changes and
+  cancellation are rechecked immediately before atomic installation, and only actual success
+  updates the saved path/fingerprint. Conflicts/errors leave dirty data and undo history intact.
+
+Use `OpenTemplate`/`OpenPlacement` for file-backed documents and `Save(document)` for their
+current target. New/Fork/Save As supplies a target explicitly; capture an existing target's
+fingerprint for its overwrite preview. A rejected Open throws before returning a candidate,
+leaving the caller's current document untouched; M6.8b owns the corresponding diagnostic view
+and navigation UI. Placement serialization here does not register or activate an assignment.
+File-operation injection exists only for deterministic fault tests and must obey the documented
+atomic-install contract. Like other Editor operations, document/save calls are synchronous;
+this is not a cross-process transactional publishing service.
+
+Focused coverage is [BoardAuthoringDocumentTests](../Assets/Tests/EditMode/BoardAuthoringDocumentTests.cs),
+using external disposable directories and unchanged source fixtures. The Editor assembly is
+excluded from Player compilation; no player save, scene, prefab or package is modified.
 
 ## Generic items and initial supply
 
