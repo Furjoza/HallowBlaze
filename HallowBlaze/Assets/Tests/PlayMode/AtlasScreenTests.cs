@@ -274,13 +274,16 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[1].gameObject));
                 focus.HandleKey(KeyCode.LeftArrow);
                 Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[0].gameObject));
-                foreach (KeyCode next in new[] { KeyCode.S, KeyCode.D })
+                focus.HandleKey(KeyCode.D);
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[1].gameObject));
+                foreach (KeyCode ignored in new[] { KeyCode.W, KeyCode.S })
                 {
-                    focus.HandleKey(next);
+                    Assert.That(PcInputBindings.MenuKeys.Contains(ignored), Is.False);
+                    focus.HandleKey(ignored);
                     Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[1].gameObject));
-                    focus.HandleKey(next == KeyCode.S ? KeyCode.A : KeyCode.W);
-                    Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[0].gameObject));
                 }
+                focus.HandleKey(KeyCode.A);
+                Assert.That(EventSystem.current.currentSelectedGameObject, Is.SameAs(buttons[0].gameObject));
                 Assert.That(session.ActiveRun.ActiveLeg, Is.Null);
                 Assert.That(session.ActiveRun.CurrentDay, Is.Zero);
                 Assert.That(GetProperty<string>(atlas, "SelectedRouteEdgeId"), Is.Null);

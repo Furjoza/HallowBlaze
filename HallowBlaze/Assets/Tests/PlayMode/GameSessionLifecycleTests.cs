@@ -643,7 +643,7 @@ namespace HallowBlaze.Tests.PlayMode
             }
             KeyboardMenuFocus focus = action.GetComponentInParent<KeyboardMenuFocus>();
             for (int index = 0; index < 10 && UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject != action; index++)
-                focus.HandleKey(KeyCode.S);
+                focus.HandleKey(KeyCode.D);
             Assert.That(UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject, Is.SameAs(action));
             focus.HandleKey(KeyCode.Return);
             float deadline = Time.realtimeSinceStartup + 5f;

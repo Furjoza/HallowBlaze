@@ -795,6 +795,12 @@ Focused tests must cover shortest paths around obstacles, the North/East/West/So
 
 ## 12. Hałas
 
+**Accepted owner correction (2026-11-06):** Movement noise has strength 2 and is active only
+in the emitting turn. It expires before the next accepted command's enemy phase and planning;
+rejected input does not age it. Each later step emits its own new signal. Interaction/tool
+lifetimes are unchanged (prototype interaction strength 4, lifetime 2). This domain lifetime
+is independent of authored footstep audio duration.
+
 ### Decyzja
 
 Hałas jest jawnym zdarzeniem rozgrywki posiadającym źródło, pozycję, siłę/zasięg i czas obowiązywania. Nie jest wyłącznie odtwarzanym klipem audio.
@@ -1065,7 +1071,7 @@ settings menus, route choice, Notes/atlas/help, interaction targeting and equipm
 and later inventory screens if separately activated. It does not activate deferred features.
 
 - Menus provide visible color-based initial focus without an added focus frame, predictable
-	Tab/Shift+Tab, arrow and WASD navigation (W/A previous, S/D next),
+	Tab/Shift+Tab, arrow and A/D navigation (A previous, D next; W/S do not navigate menus),
 	keyboard activation and Escape/back where cancellation is legal. Disabled or hidden controls
 	cannot trap focus; scrolling content and settings remain operable without a pointer. Reopening
 	or replacing a view restores valid focus without silently confirming a choice.
@@ -1394,6 +1400,15 @@ on each board or a particular reward total. No reward is averaged or randomized.
 Automatic collection on entry still precedes the one central Food cost. There is no Food
 cap or satiety change. Pinned ordinary versions 1-3 keep their original content and rewards;
 legacy `legacy.bush-food` still grants 10, and buried caches keep their existing interaction.
+
+**Accepted owner correction (2026-11-06):** In fresh ordinary version 6, berries are protected
+by a real blocking, manually clearable bush (`legacy.wall`) on the same cell. They cannot be
+collected by entering or interacting through the bush. Existing manual clearing or an axe cut
+must remove it first; entering the cleared cell then collects the same fixed +5 Food once.
+Cutting does not itself grant the reward. Existing work, tool, Food and noise costs apply;
+bare hands remain a legal alternative and no optional tool is required for the exit. The
+generator uses existing obstacle positions without increasing their count and keeps a reachable
+approach to every berry bush. Versions 1-5 retain their pinned layouts and earlier supply.
 
 ### 26.2. Current first-aid use
 
