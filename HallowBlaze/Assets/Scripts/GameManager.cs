@@ -79,6 +79,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     private FactDiscoveryRecorder factRecorder;
     private bool fieldNotesInputBlocked;
     private bool fieldNotesAfterDeath;
+    private bool restoreTerminalFocusAfterReading;
     private bool fieldNotesGameplayScene;
     private Vector2 intentViewport;
     private Camera intentLayoutCamera;
@@ -713,6 +714,11 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         return Rect.MinMaxRect(minimum.x, minimum.y, maximum.x, maximum.y);
     }
 
+    private void Update()
+    {
+        activeIntentLegend?.SampleInput(Input.GetKeyDown, Time.frameCount, IsGameplayInputEnabled);
+    }
+
     private void LateUpdate()
     {
         UpdateBoardVisibility();
@@ -798,6 +804,26 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         fieldNotes = fieldNotesOwner.AddComponent<FieldNotesPresenter>();
         fieldNotes.Bind(fieldNotesProfile, factKnowledge, MayOpenFieldNotes, SetFieldNotesInputBlocked,
             new Vector2(Screen.width, Screen.height));
+        fieldNotes.Opened += OpenKnowledgeAtlas;
+        fieldNotes.Closed += CloseKnowledgeAtlas;
+        fieldNotes.SelectionChanged += ShowAtlasFact;
+    }
+
+    private HallowBlaze.Presentation.Atlas.AtlasScreenController FindAtlas(bool create)
+    {
+        var atlas = FindAnyObjectByType<HallowBlaze.Presentation.Atlas.AtlasScreenController>();
+        if (atlas != null || !create) return atlas;
+        GameObject prefab = Resources.Load<GameObject>("Atlas/AtlasScreen");
+        if (prefab == null) throw new InvalidOperationException("Atlas screen prefab is required to read recorded knowledge.");
+        GameObject owner = Instantiate(prefab, transform);
+        return owner.GetComponent<HallowBlaze.Presentation.Atlas.AtlasScreenController>();
+    }
+
+    private void OpenKnowledgeAtlas() => FindAtlas(true).OpenReader();
+    private void CloseKnowledgeAtlas() => FindAtlas(false)?.CloseReader();
+    private void ShowAtlasFact(string factId)
+    {
+        if (fieldNotes.IsOpen) FindAtlas(false)?.ShowFact(factId);
     }
 
     private bool MayOpenFieldNotes()
@@ -815,7 +841,17 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     {
         fieldNotesInputBlocked = blocked;
         if (blocked)
+        {
+            restoreTerminalFocusAfterReading = terminalFocus != null && terminalFocus.isActiveAndEnabled;
+            if (restoreTerminalFocusAfterReading) terminalFocus.enabled = false;
             activeIntentLegend?.Hide();
+        }
+        else if (restoreTerminalFocusAfterReading)
+        {
+            restoreTerminalFocusAfterReading = false;
+            if (terminalFocus != null) terminalFocus.enabled = true;
+        }
+        if (victoryActions != null) victoryActions.SetActive(!blocked);
         if (!blocked) gameplayInputResumeFrame = Time.frameCount;
         UpdatePresentationBlocks();
     }
@@ -1067,6 +1103,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (session == null || session.ActiveRun == null)
             return;
 
+        fieldNotes?.ClearDiscoveryFeedback();
         CancelInvoke(nameof(HideLevelImage));
         RunState run = session.ActiveRun;
         if (run.Status == RunStatus.Active)
@@ -1117,6 +1154,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void OnRunStarted(RunState runState)
     {
+        restoreTerminalFocusAfterReading = false;
         if (terminalFocus != null) terminalFocus.enabled = false;
         ClearVictoryActions();
         fieldNotesAfterDeath = false;
@@ -1230,6 +1268,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             Debug.LogError("Run completion save failed: " + result.Type);
             return;
         }
+        fieldNotes?.ClearDiscoveryFeedback();
         CancelInvoke(nameof(HideLevelImage));
         routeChoices = NoRouteChoices;
         SetGameplayInputBlocked(true);
@@ -1336,6 +1375,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void DisposeActiveBoardRuntime()
     {
+        fieldNotes?.ClearDiscoveryFeedback();
         if (activeBoardPresenter != null)
             activeBoardPresenter.Dispose();
         activeBoardPresenter = null;

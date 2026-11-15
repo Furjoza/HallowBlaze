@@ -19,6 +19,47 @@ namespace HallowBlaze.Tests.PlayMode
 {
     public sealed class PlayModeInfrastructureTests
     {
+#if UNITY_EDITOR
+        private const string LiveReportKey = "HallowBlaze.LiveValidationReport";
+        private static UnityEditor.TestTools.TestRunner.Api.TestRunnerApi reportApi;
+
+        /// <summary>Arms one fresh Unity Test Framework XML report for the next live test run, surviving the PlayMode domain reload.</summary>
+        /// <param name="outputPath">Absolute XML path outside the Unity project; existing player storage is never used.</param>
+        public static void WriteLiveTestReport(string outputPath)
+        {
+            if (string.IsNullOrWhiteSpace(outputPath) || !Path.IsPathRooted(outputPath))
+                throw new ArgumentException("An absolute external report path is required.", nameof(outputPath));
+            string fullPath = Path.GetFullPath(outputPath);
+            string projectPath = Directory.GetParent(Application.dataPath).FullName + Path.DirectorySeparatorChar;
+            if (fullPath.StartsWith(projectPath, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Validation output must be outside the Unity project.", nameof(outputPath));
+            UnityEditor.SessionState.SetString(LiveReportKey, fullPath);
+            RestoreLiveReport();
+        }
+
+        [UnityEditor.InitializeOnLoadMethod]
+        private static void RestoreLiveReport()
+        {
+            string path = UnityEditor.SessionState.GetString(LiveReportKey, string.Empty);
+            if (string.IsNullOrEmpty(path)) return;
+            reportApi = ScriptableObject.CreateInstance<UnityEditor.TestTools.TestRunner.Api.TestRunnerApi>();
+            reportApi.RegisterCallbacks(new XmlReportCallbacks(path));
+        }
+
+        private sealed class XmlReportCallbacks : UnityEditor.TestTools.TestRunner.Api.ICallbacks
+        {
+            private readonly string path;
+            public XmlReportCallbacks(string path) { this.path = path; }
+            public void RunStarted(UnityEditor.TestTools.TestRunner.Api.ITestAdaptor testsToRun) { }
+            public void TestStarted(UnityEditor.TestTools.TestRunner.Api.ITestAdaptor test) { }
+            public void TestFinished(UnityEditor.TestTools.TestRunner.Api.ITestResultAdaptor result) { }
+            public void RunFinished(UnityEditor.TestTools.TestRunner.Api.ITestResultAdaptor result)
+            {
+                UnityEditor.TestTools.TestRunner.Api.TestRunnerApi.SaveResultToFile(result, path);
+                UnityEditor.SessionState.EraseString(LiveReportKey);
+            }
+        }
+#endif
         /// <summary>F owns interaction entry while idle E is not a picker-opening or command-suppression key.</summary>
         [Test]
         public void InteractionEntrySuppressesNormalCommandButIdleEDoesNot()

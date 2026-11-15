@@ -12,6 +12,7 @@ using HallowBlaze.Core.State;
 using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.Turns.Resolution;
 using HallowBlaze.Presentation.Runtime;
+using HallowBlaze.Presentation.Runtime.Interaction;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -675,7 +676,11 @@ namespace HallowBlaze.Tests.PlayMode
             LineRenderer[] lines = picker.GetComponentsInChildren<LineRenderer>();
             Assert.That(lines.Length, Is.EqualTo(2));
             Assert.That(picker.GetComponentsInChildren<TextMesh>().Select(text => text.text), Is.EqualTo(new[] { ">1", "2" }));
-            Assert.That(lines.All(line => line.startColor == Color.white && line.loop), Is.True);
+            Assert.That(lines.All(line => line.loop), Is.True);
+            Assert.That(lines[0].startColor, Is.EqualTo(InteractionPresenter.SelectionColor));
+            Assert.That(lines[0].endColor, Is.EqualTo(InteractionPresenter.SelectionColor));
+            Assert.That(lines[1].startColor, Is.EqualTo(Color.white));
+            Assert.That(picker.GetComponentsInChildren<TextMesh>().First().color, Is.EqualTo(InteractionPresenter.SelectionColor));
             Assert.That(lines[0].GetPosition(0), Is.Not.EqualTo(lines[1].GetPosition(0)));
             var owner = new GameObject("Interaction evidence camera");
             objects.Add(owner);
@@ -699,12 +704,14 @@ namespace HallowBlaze.Tests.PlayMode
                 {
                     Vector3 center = camera.WorldToViewportPoint(new Vector3(option.TargetPosition.X, option.TargetPosition.Y, 0));
                     int marked = 0;
+                    bool selected = option == picker.Options[picker.SelectedIndex];
                     for (int vertical = -80; vertical <= 80; vertical++)
                         for (int horizontal = -80; horizontal <= 80; horizontal++)
                         {
                             Color color = pixels.GetPixel(Mathf.RoundToInt(center.x * 512) + horizontal,
                                 Mathf.RoundToInt(center.y * 512) + vertical);
-                            if (color.r > 0.8f && color.g > 0.8f && color.b > 0.8f) marked++;
+                            if (selected ? color.g > 0.6f && color.b > 0.6f && color.g > color.r * 1.1f :
+                                color.r > 0.8f && color.g > 0.8f && color.b > 0.8f) marked++;
                         }
                     Assert.That(marked, Is.GreaterThan(100), "Visible numbered target " + option.TargetId);
                 }

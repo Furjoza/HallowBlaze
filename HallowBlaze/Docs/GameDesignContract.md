@@ -865,7 +865,7 @@ Samo „szybciej” jest mało interesujące. Hałas zamienia oszczędność cza
 
 Pierwsze zaobserwowanie konsekwencji może odkryć fakt, np. `AXE_CREATES_LOUD_NOISE` lub `PIT_TRAPS_SHAMBLER`.
 
-#### Accepted Field Notes Contract - M5.7
+#### Accepted Profile Knowledge Contract - M5.7, M7.23
 
 Mechanical knowledge belongs to the profile, not the reader or the current run. Only ordered
 presentation of an actual consequence emits a supported `FactObservation`: axe noise after its
@@ -876,14 +876,29 @@ one `FactDiscovery`; gameplay rules never require this knowledge to work.
 
 The profile checkpoint precedes discovery feedback. Failed writes retain pending discoveries for
 retry without a second discovery event. Existing profile schema v2 IDs remain authoritative and
-already known facts do not replay discovery feedback on load. Death and a new run preserve notes;
+already known facts do not replay discovery feedback on load. Death and a new run preserve knowledge;
 only explicit New Game replaces the profile. Missing definitions use a neutral placeholder and
 retain their saved IDs.
 
-Field Notes reads only recorded entries with working English text and distinct icons. It contains
+The shared atlas reads only recorded entries with working English text and distinct icons. It contains
 no unknown checklist, hidden rule identifiers, source-location hints, completion percentage,
 tutorial or stat bonus. Its own input block makes reading free without releasing pause or other
-modal ownership. Mechanical `FactDiscovery` is not M7.5 `ToolSourceSighted`; source-system labels
+modal ownership. The standalone Field Notes screen is removed by the owner's 2026-11-09 decision.
+The atlas is both the route-choice view and the free reader during a board or after a terminal outcome. Every
+known node and road is mouse/keyboard selectable; inspection fills the information panel without
+discovering topology, saving, spending resources or choosing travel. Only explicit legal outgoing
+route confirmation travels. Recorded observations are accessible in that same information panel.
+Unknown nodes, edges and facts never create selectable controls or hidden-definition text.
+During voluntary reading, terminal Restart/Menu controls relinquish focus and cannot receive
+pointer input over the reader. Closing restores their ownership and any already visible final
+atlas rather than hiding the retained map or starting another run.
+
+Discovery feedback belongs to the current board, not the profile's UI lifetime: acknowledgement
+or leaving the board clears its transient queue. This never erases the saved fact or replays its
+discovery event. Resource statistics are still deferred to M8.4; an unrecorded value is not zero,
+an average, a future loot guarantee or an inferred observation.
+
+Mechanical `FactDiscovery` is not M8.5 `ToolSourceSighted`; source-system labels
 describe provenance, not atlas locations. The authored registry and exact observation/text mapping
 are documented in [Testing](Testing.md#m57-field-notes).
 
@@ -1071,7 +1086,7 @@ settings menus, route choice, Notes/atlas/help, interaction targeting and equipm
 and later inventory screens if separately activated. It does not activate deferred features.
 
 - Menus provide visible color-based initial focus without an added focus frame, predictable
-	Tab/Shift+Tab, arrow and A/D navigation (A previous, D next; W/S do not navigate menus),
+	Tab/Shift+Tab, arrows and WASD navigation (W/A previous, S/D next; accepted 2026-11-09),
 	keyboard activation and Escape/back where cancellation is legal. Disabled or hidden controls
 	cannot trap focus; scrolling content and settings remain operable without a pointer. Reopening
 	or replacing a view restores valid focus without silently confirming a choice.
@@ -1081,6 +1096,13 @@ and later inventory screens if separately activated. It does not activate deferr
 	previous object, E selects the next, and Space confirms the selected legal action. Multiple
 	actions on one object remain explicitly keyboard-selectable. Space means Wait only in
 	normal board input; no single keypress may reach both contexts.
+- In interaction mode, A/D also select objects and W/S select their actions; the existing
+	left/right and up/down arrows, Q/E, Tab/Shift+Tab and confirmation aliases remain available.
+	The selected contextual label, target outline and target number share the authored menu
+	selection color, while numbering and diamond/square shapes remain non-color cues.
+- L toggles the enemy-intent legend and Home/End/Page Up/Page Down scroll it while visible.
+	These are informational edges without commands, costs or changes to a locked intent;
+	blocked input is not replayed later. Atlas access remains N or its book button.
 - In idle walking mode, outside all menus and interaction drafts, Q faces the player's sprite
 	left and E faces it right using horizontal mirroring, never a planar image rotation. This
 	2026-11-05 owner correction supersedes the earlier 90-degree placeholder rendering; proper

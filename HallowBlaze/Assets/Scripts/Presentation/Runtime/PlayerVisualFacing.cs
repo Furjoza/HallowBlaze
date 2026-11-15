@@ -48,7 +48,7 @@ namespace HallowBlaze.Presentation.Runtime
             sampledFrame = frame;
             if (!inputAllowed || !isActiveAndEnabled || visual == null) return false;
             if (keyDown(PcInputBindings.InteractionToggle) || keyDown(PcInputBindings.Space) ||
-                keyDown(PcInputBindings.Notes) || keyDown(PcInputBindings.Cancel)) return false;
+                keyDown(PcInputBindings.Notes) || keyDown(PcInputBindings.Cancel) || keyDown(PcInputBindings.Legend)) return false;
             foreach (KeyCode key in PcInputBindings.Movement.Keys) if (keyDown(key)) return false;
             bool left = keyDown(PcInputBindings.TurnLeft);
             bool right = keyDown(PcInputBindings.TurnRight);
