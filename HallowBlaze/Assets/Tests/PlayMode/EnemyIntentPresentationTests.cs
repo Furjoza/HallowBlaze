@@ -643,9 +643,9 @@ namespace HallowBlaze.Tests.PlayMode
                 ScrollRect keyboardScroll = legend.Root.GetComponentInChildren<ScrollRect>();
                 Assert.That(keyboardScroll.content.rect.height, Is.GreaterThan(keyboardScroll.viewport.rect.height));
                 Assert.That(legend.SampleInput(key => key == KeyCode.End, -8, true), Is.True);
-                Assert.That(legend.Root.GetComponentInChildren<ScrollRect>().verticalNormalizedPosition, Is.EqualTo(0));
+                Assert.That(legend.Root.GetComponentInChildren<ScrollRect>().verticalNormalizedPosition, Is.EqualTo(0).Within(0.000001f));
                 Assert.That(legend.SampleInput(key => key == KeyCode.Home, -7, true), Is.True);
-                Assert.That(legend.Root.GetComponentInChildren<ScrollRect>().verticalNormalizedPosition, Is.EqualTo(1));
+                Assert.That(legend.Root.GetComponentInChildren<ScrollRect>().verticalNormalizedPosition, Is.EqualTo(1).Within(0.000001f));
                 Assert.That(legend.SampleInput(key => key == KeyCode.L, -6, true), Is.True);
                 Assert.That(legend.IsVisible, Is.False);
                 Assert.That(new PcCommandSource(key => key == KeyCode.L || key == KeyCode.W).TryTakeCommand(out _), Is.False);

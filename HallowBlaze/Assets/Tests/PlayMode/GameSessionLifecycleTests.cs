@@ -1305,6 +1305,85 @@ namespace HallowBlaze.Tests.PlayMode
             yield return SceneManager.UnloadSceneAsync("Main");
         }
 
+        /// <summary>Production menu startup, presented exits, and checkpoint continuation render the actual atlas without implicitly selecting a route.</summary>
+        [UnityTest]
+        public IEnumerator MenuOpeningExitsShowTheActualAtlas([Values(false, true)] bool animations)
+        {
+            yield return SceneManager.LoadSceneAsync("Menu", LoadSceneMode.Single);
+            yield return null;
+            yield return null;
+            GameObject menu = GameObject.Find("MainMenuPanel");
+            Button start = menu.GetComponentsInChildren<Button>().Single(button => button.name == "StartBttn");
+            start.Select();
+            menu.GetComponent<KeyboardMenuFocus>().HandleKey(KeyCode.Return);
+            yield return null;
+            yield return null;
+            Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo("Main"));
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            AssertOpeningWarmUp(manager);
+            GameSession session = GetProperty<GameSession>(manager, "Session");
+            RunState run = session.ActiveRun;
+            for (int index = 0; index < 3; index++)
+            {
+                Assert.That(run.ActiveLeg.SegmentIndex, Is.EqualTo(index));
+                yield return PresentSegmentExit(manager, animations);
+                yield return null;
+                yield return null;
+                Component atlas = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
+                    .SingleOrDefault(component => component.GetType().FullName ==
+                        "HallowBlaze.Presentation.Atlas.AtlasScreenController");
+                Assert.That(atlas, Is.Not.Null);
+                Assert.That(GetProperty<bool>(atlas, "IsOpen"), Is.EqualTo(index == 2));
+                Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.EqualTo(index == 2));
+            }
+            Assert.That(run.ActiveLeg, Is.Null);
+            Assert.That(run.CompletedDayCount, Is.EqualTo(1));
+            Assert.That(run.CurrentDay, Is.EqualTo(1));
+            Assert.That(run.WorldNodeId, Is.EqualTo("forest.start"));
+            Component visibleAtlas = manager.GetComponentsInChildren<MonoBehaviour>().Single(component =>
+                component.GetType().FullName == "HallowBlaze.Presentation.Atlas.AtlasScreenController");
+            Assert.That(GetProperty<int>(visibleAtlas, "RouteButtonCount"), Is.EqualTo(2));
+            Assert.That(visibleAtlas.GetComponent<CanvasGroup>().interactable &&
+                visibleAtlas.GetComponent<CanvasGroup>().blocksRaycasts, Is.True);
+            Assert.That(UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject.transform.IsChildOf(visibleAtlas.transform), Is.True);
+            yield return new WaitForEndOfFrame();
+            Texture2D capture = ScreenCapture.CaptureScreenshotAsTexture();
+            try
+            {
+                Assert.That(capture.GetPixels32().Count(pixel =>
+                    Math.Abs(pixel.r - 218) < 6 && Math.Abs(pixel.g - 166) < 6 && Math.Abs(pixel.b - 67) < 6),
+                    Is.GreaterThan(100), "The selected route must be rendered on screen, not only enabled in an invisible canvas.");
+                File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-atlas-opening-" + animations + ".png"), capture.EncodeToPNG());
+            }
+            finally { UnityEngine.Object.DestroyImmediate(capture); }
+
+            Assert.That((bool)Invoke(manager, "ExitToMenu"), Is.True);
+            yield return SceneManager.LoadSceneAsync("Menu", LoadSceneMode.Single);
+            float deadline = Time.realtimeSinceStartup + 10;
+            while ((SceneManager.GetActiveScene().name != "Menu" || GameObject.Find("ContinueBttn") == null) &&
+                Time.realtimeSinceStartup < deadline)
+                yield return null;
+            yield return null;
+            Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo("Menu"));
+            Assert.That(GameObject.Find("ContinueBttn"), Is.Not.Null);
+            Button continueButton = GameObject.Find("ContinueBttn").GetComponent<Button>();
+            Assert.That(continueButton.IsInteractable(), Is.True);
+            continueButton.Select();
+            GameObject.Find("MainMenuPanel").GetComponent<KeyboardMenuFocus>().HandleKey(KeyCode.Return);
+            deadline = Time.realtimeSinceStartup + 10;
+            while (SceneManager.GetActiveScene().name != "Main" && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            yield return null;
+            Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo("Main"));
+            manager = (Component)GetStaticField(gameManagerType, "instance");
+            Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.True);
+            visibleAtlas = manager.GetComponentsInChildren<MonoBehaviour>().Single(component =>
+                component.GetType().FullName == "HallowBlaze.Presentation.Atlas.AtlasScreenController");
+            Assert.That(GetProperty<bool>(visibleAtlas, "IsOpen"), Is.True);
+            Assert.That(GetProperty<int>(visibleAtlas, "RouteButtonCount"), Is.EqualTo(2));
+            Assert.That(GetProperty<GameSession>(manager, "Session").ActiveRun.ActiveLeg, Is.Null);
+        }
+
         /// <summary>Every opening entry restores its pinned board and supplies without replaying Day or offering an early choice.</summary>
         [UnityTest]
         public IEnumerator EveryOpeningBoundaryContinuesWithoutRerollRefillOrEarlyChoice()
@@ -1356,6 +1435,18 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(store.LoadRun().Data.Food, Is.EqualTo(food));
                     Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(index == 2 ? 1 : 0));
                     Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.EqualTo(index == 2));
+                    Component atlas = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
+                        .SingleOrDefault(component => component.GetType().FullName ==
+                            "HallowBlaze.Presentation.Atlas.AtlasScreenController");
+                    Assert.That(atlas, Is.Not.Null, "The production scene must retain the atlas through every opening boundary.");
+                    Assert.That(GetProperty<bool>(atlas, "IsOpen"), Is.EqualTo(index == 2),
+                        "The atlas must actually become visible after the third opening board, not only enter route-choice state.");
+                    if (index == 2)
+                    {
+                        CanvasGroup atlasGroup = atlas.GetComponent<CanvasGroup>();
+                        Assert.That(atlasGroup.interactable && atlasGroup.blocksRaycasts && atlas.gameObject.activeInHierarchy, Is.True);
+                        Assert.That(GetProperty<int>(atlas, "RouteButtonCount"), Is.EqualTo(2));
+                    }
                 }
                 Assert.That(choicesPublished, Is.EqualTo(1));
                 Assert.That(GetProperty<GameSession>(manager, "Session").ActiveRun.TravelHistory, Has.Count.EqualTo(1));

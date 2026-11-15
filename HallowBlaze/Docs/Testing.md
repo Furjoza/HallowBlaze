@@ -1,5 +1,93 @@
 # HallowBlaze Testing
 
+## M7.26 Missing Opening Atlas Investigation
+
+The owner reported no atlas after the third opening board on 2026-11-11. PlayMode had ended
+before inspection, so the failed live state and its cause were not captured. This incident
+is not claimed fixed, and M7.17 remains Revise.
+
+The previous `EveryOpeningBoundaryContinuesWithoutRerollRefillOrEarlyChoice` test asserted
+route-choice state without checking the actual atlas. It now also requires a persistent
+production atlas, visibility only at the third boundary, an active/interactable canvas and
+two legal route buttons. The focused probe passed.
+
+`MenuOpeningExitsShowTheActualAtlas` starts through the production menu using keyboard
+activation, traverses all three generated boards through player commands and event replay,
+and verifies the actual atlas, two legal options, focus and no implicit new leg/day. A
+framebuffer check requires visible selected-route pixels and saves external screenshots as
+`%TEMP%/HB-atlas-opening-<False|True>.png`. The same test exits to the menu and resumes the
+arrived checkpoint through Continue, requiring the atlas and choices again. Both animation
+variants passed with fresh Unity XML at `%TEMP%/HB-atlas-opening-check-final2.xml`
+(2026-11-11 18:28:14Z-18:28:27Z, 2/2). Earlier extensions of the probe failed because its
+caller omitted the scene load after `ExitToMenu`; that test setup was corrected without
+weakening the visibility/Continue requirements.
+
+Read-only checkpoint inspection confirmed completed opening progress at `forest.start`,
+one completed day and no active leg. A smoke run using only an external temporary copy of
+the two save files also displayed the atlas, four known places, three roads, two choices
+and focus on the first route. No road was committed and the original save files were not
+used as test persistence. This supports Continue as a recovery probe, not a confirmed fix
+for the original missing view.
+
+The final owning-fixture run passed 42/42 with no failures, skips or inconclusive results;
+fresh XML at `%TEMP%/HB-atlas-opening-lifecycle.xml` records 2026-11-11
+18:30:58Z-18:32:21Z and all three atlas probes. Original profile/run SHA-256 fingerprints
+were unchanged after the isolated smoke. No production implementation changed. The known
+Unity-generated `SENTIS_ANALYTICS_ENABLED` token is handled under the repository exception;
+temporary runner build settings returned to baseline.
+
+Required next evidence is the failed live state or another deterministic reproducer.
+Leave PlayMode running on recurrence; inspect the active scene, atlas existence/canvas,
+route-choice state, selected object and fresh console before restarting or resetting data.
+Do not accept the incident solely because the automated probes are green.
+
+## M7.25 Route Focus And Destination Preview
+
+Owner smoke on 2026-11-11 reported working menu/Controls, opening, legend access, interaction
+selection, resource pickups and satisfactory existing audio. The current legend fits its
+panel, so absent scrolling is expected rather than a failure. The owner requested clearer
+route-button focus and a map-space destination cue because clue names did not make direction
+clear. M7.17 remains Revise for that retest and an explicit owner verdict; unreported individual
+medical, narrow-layout, terminal-reader and checkpoint cases are not claimed manually tested.
+
+Continue worked for an earlier active save. After Destination reached, Won finalization
+persists the profile and removes the ended run save, so Continue is correctly unavailable.
+This is independent of the number of discovered nodes/roads. Terminal Restart preserves the
+profile; New Game explicitly replaces it. No Continue/save change is part of M7.25.
+Route-resource quantities remain M8.3/M8.4, not a newly discovered pickup defect or fabricated
+atlas total. M7.24 miss audio and M8.5 source knowledge remain deferred.
+
+Route preview now pairs an amber selected option with dark text, bold weight, an outline and
+a non-color selection mark; alternatives use a dark background and light text. Pointer hover
+sets the same focus that Enter would confirm. The known directed road and its destination are
+highlighted, retaining the current-place cue; the map reveals the destination without travel.
+A separate destination frame uses a slow two-second opacity pulse only when atlas animations
+are enabled. With animations off it is fully visible and static. Neither mode scales text,
+controls or map nodes. Prior markers are removed on selection changes and lifecycle boundaries.
+
+The expanded existing route-order regression first failed on the prior implementation because
+the focused road left its destination unhighlighted. It now checks both input orderings,
+keyboard and pointer, exact active/inactive button states, correct destination, static/pulsed
+frame behavior, no draft travel and the unchanged explicitly committed edge ID. The existing
+layout test covers one/two/five alternatives at 1280x720 and 320x480, checks visible selected
+background pixels and saves external images as `%TEMP%/HB-M725-routes-<count>-<size>.png`.
+Focused atlas checks passed 4/4 with fresh Unity XML. Full graphics PlayMode on 2026-11-11
+executed 250 tests: 249 passed and the unchanged
+`EnemyIntentPresentationTests.Legend_MatchesSymbolsWithoutSubmittingCommands` failed on
+an exact ScrollRect endpoint assertion after End: expected 0, actual -1.18285186E-07.
+The isolated unchanged test reproduced the same result; no filters or assertions were
+changed in that initial attempt. The failed full report is external at
+`%TEMP%/tmp65b7572a.tmp` (Unity XML, 17:42:31Z-17:44:12Z). On 2026-11-11 the owner approved
+extending the closed scope to the legend test: Home and End still have to reach their
+respective endpoints, now within 1e-6 normalized-position tolerance. Actual overflow,
+key consumption and domain-state assertions remain. Production legend code and test
+filters are unchanged. The corrected focused test passed 1/1 with fresh XML. The final
+full graphics PlayMode rerun passed 250/250, with zero failures/skips/inconclusive and
+expected atlas/legend/terminal identities verified in fresh XML outside the project
+(`%TEMP%/tmp7d5bc663.tmp`, 2026-11-11 17:54:30Z-17:56:15Z). Independent review passed on
+2026-11-11 after inspecting the implementation, approved endpoint assertions and fresh reports.
+Automated rendering does not replace the owner's route-readability verdict.
+
 ## M7.23 Shared Atlas And Keyboard Follow-Up
 
 The owner accepted additional W/S menu navigation on 2026-11-09: W/A select the previous
