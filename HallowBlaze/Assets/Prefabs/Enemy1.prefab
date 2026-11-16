@@ -210,3 +210,4 @@ MonoBehaviour:
   enemyAttack1: {fileID: 8300000, guid: be5a9467f7f838440a8c09ae76016049, type: 3}
   enemyAttack2: {fileID: 8300000, guid: 823a8d3f353ec3c4ea704a6b2c21a753, type: 3}
   enemyAttack3: {fileID: 8300000, guid: 254762102f56f024bb58c086e93597d2, type: 3}
+  enemyMiss: {fileID: 8300000, guid: 0db8cac2749584a009540aa5671ee80d, type: 3}

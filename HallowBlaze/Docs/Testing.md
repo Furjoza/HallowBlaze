@@ -1,5 +1,28 @@
 # HallowBlaze Testing
 
+## M7.24 Executed Attack Miss Audio
+
+The production-prefab regression first failed because `Enemy.PresentAttack` only created
+an audio source for hits. Both existing enemy prefabs now reference the existing authored
+`scavengers_enemy1.aif` for misses, separately from the unchanged LightInjury hit clips.
+Only replay of a resolved attack requests the outcome-specific cue; no damage, mechanical
+noise, turn, RNG, save, animation-off audio policy or audio import settings changed.
+
+The extended `ProductionEnemyAttackReplaysAuthoredAnimation` checks both prefabs and both
+animation modes, separate hit/miss request counts, distinct clips with non-silent samples,
+mute before/during playback and re-enabling sound, cancellation before/during replay,
+synchronization, deactivation and disposal. The complete owning presentation fixture passed
+30/30. Batchmode full PlayMode executed 252 tests: 250 passed; the two unchanged
+`MenuOpeningExitsShowTheActualAtlas` variants cannot yield `WaitForEndOfFrame` in batchmode.
+The final full live graphics PlayMode passed 252/252, with zero failures/skips/inconclusive,
+including both actual-atlas variants and the production hit/miss/rest tests. The existing
+live report exporter recorded 2026-11-11 20:13:55Z-20:16:11Z. Reports remain outside the
+project under `%TEMP%/HB-M724-96b249d0e84b400098af8eaf61f09d06`; the final result is
+`live-playmode.xml`. Independent technical review passed on 2026-11-11.
+
+Actual owner listening is Not run. Automated sample/playback assertions are not a listening
+verdict and do not accept M7.8, M7.17 or the unresolved M7.26 incident.
+
 ## M7.26 Missing Opening Atlas Investigation
 
 The owner reported no atlas after the third opening board on 2026-11-11. PlayMode had ended
@@ -55,7 +78,7 @@ persists the profile and removes the ended run save, so Continue is correctly un
 This is independent of the number of discovered nodes/roads. Terminal Restart preserves the
 profile; New Game explicitly replaces it. No Continue/save change is part of M7.25.
 Route-resource quantities remain M8.3/M8.4, not a newly discovered pickup defect or fabricated
-atlas total. M7.24 miss audio and M8.5 source knowledge remain deferred.
+atlas total. At that checkpoint, M7.24 miss audio and M8.5 source knowledge remained deferred.
 
 Route preview now pairs an amber selected option with dark text, bold weight, an outline and
 a non-color selection mark; alternatives use a dark background and light text. Pointer hover

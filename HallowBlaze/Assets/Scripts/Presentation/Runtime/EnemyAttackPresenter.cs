@@ -11,7 +11,7 @@ namespace HallowBlaze.Presentation.Runtime
     /// <summary>Replays an already-resolved source cue across the runtime-to-artwork assembly boundary.</summary>
     public interface IEnemyAttackView
     {
-        /// <summary>Starts one swing and hit-only audio without gameplay effects.</summary>
+        /// <summary>Starts one swing and outcome-specific hit or miss audio without gameplay effects.</summary>
         /// <param name="animate">Whether to animate the source; audio follows its own settings.</param>
         /// <param name="hit">The immutable resolved outcome, not a view collision test.</param>
         /// <returns>Unscaled authored swing duration, or zero when no animation plays.</returns>

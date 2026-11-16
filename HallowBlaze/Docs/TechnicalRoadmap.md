@@ -6759,7 +6759,11 @@ menu contract after the owner's additional-alias decision.
 
 ## `M7.24` - Audible zombie attack miss
 
-**Status:** `Planned` - explicitly requested as later work by the owner on 2026-11-09.
+**Status:** `Active` - 2026-11-11. The owner authorized completing the remaining M7 work.
+Distinct presentation-owned miss audio is implemented with the existing authored enemy clip;
+focused graphics PlayMode passed 30/30 and final full live graphics PlayMode passed 252/252.
+Independent technical review passed. Owner listening remains pending; automated playback
+is not an audible acceptance verdict, so this card and the M7 human gates are not closed.
 **Priority:** P2.
 **Scope:** Add a recognizable miss cue to the actual executed zombie attack miss path,
 using approved/authored audio and the existing presentation-owned attack/audio lifetime.
@@ -6770,6 +6774,10 @@ commands cannot play it. Mute, interruption, recovery, deactivation and disposal
 duplicate or strand playback. Audio never changes damage, target/intent, turn costs or RNG.
 **Validation:** Focused hit/miss/cancellation/mute PlayMode checks with non-silent samples,
 both presentation modes and an owner listening verdict.
+**Closed write scope (2026-11-11):** Assets/Scripts/Enemy.cs;
+Assets/Scripts/Presentation/Runtime/EnemyAttackPresenter.cs; Assets/Prefabs/Enemy1.prefab;
+Assets/Prefabs/Enemy2.prefab; Assets/Tests/PlayMode/OrderedBoardPresentationTests.cs;
+Docs/Testing.md and this roadmap. Existing audio assets, imports and metadata are unchanged.
 **Non-goals:** New combat rules, mechanical noise, sprite redesign or save changes.
 **Save impact:** None.
 
@@ -6855,7 +6863,8 @@ M7.19 repairs the owner smoke before its repeat; future visual redesigns M7.20-M
 block testing the agreed interim presentation and do not waive the M7.17 owner verdict.
 M7.22 applies the owner's explicit berry, route-key and step-noise corrections before that retest.
 M7.23 applies the later shared-atlas and additional-key corrections before the same retest;
-M7.24 is explicitly deferred and is not implemented or accepted by this repair.
+M7.24 was explicitly deferred from that repair; the owner's 2026-11-11 continuation now
+authorizes its separate implementation, without waiving its listening verdict.
 M7.25 addresses route focus/destination readability raised during the 2026-11-11 retest;
 it does not convert positive smoke observations into an implicit M7.17 Accept verdict.
 M7.26 tracks the subsequent missing-atlas report; passing isolated probes does not close it.
