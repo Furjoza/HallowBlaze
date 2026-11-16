@@ -433,12 +433,61 @@ comprehension rate or human coverage of every variant; the original evidence rem
 
 ## M6.7 Visual Board Editor Contract
 
-This is the small-editor design contract, not an implemented tool. It implements the accepted
+This section records the small-editor design contract; M6.8a/b implement its initial
+landmark document/window subset, not test-play or publication. It follows the accepted
 [board/route direction](GameDesignContract.md#board-authoring-and-route-assignments---accepted-direction-2026-11-03)
-without adding a second board format, validator, resolver or world graph. M4.9/M6.6 have
+without duplicating validators, the resolver or world graph. M4.9/M6.6 have
 owner-recorded Proceed; M7 is closed with M7.21/M7.26 Deferred. None of those decisions or
 recruitment is reopened. The current Radio Tower template, assignment and Resources references
 remain read-only, including during future authoring exercises.
+
+### Segment Authoring Amendment - 2026-11-16
+
+The owner prefers exact segment assignments, not a pool per route. This extends the initial
+final-landmark-only delivery plan under the
+[accepted hierarchy and assignment amendment](GameDesignContract.md#segment-scoped-authoring---accepted-amendment-2026-11-16).
+It changes future M6.9/M6.10 scope, not the accepted M6.8 implementation, schemas or evidence.
+
+| Owner | Responsibility | Not its identity or responsibility |
+| --- | --- | --- |
+| Biome | Shared visual palette, allowed terrain/content types and accepted biome rules; several routes reference it | Not a route, map pool or per-run mutable board |
+| Directed route | Stable edge ID, display name, endpoints, biome reference and ordered stable segments | Display name, biome name and list position are not save keys |
+| Segment | Stable addressable position in that route; exact generation config or explicit authored assignment | A special board does not require a landmark node or a new day |
+| Board template | Versioned local grid/content and explicit variant, independent of where it is used | No copied route topology or shared mutable runtime state |
+| Assignment | Exact world/version/segment -> template/version/variant binding | No route-wide random pool or implicit publication on Save |
+
+A biome is resolved from the route and checked against the selected segment configuration and
+template catalog. M8.2 supplies the actual biome definitions; before that, use the explicitly
+supported prototype catalog, not invented biome assets or catalog entries. Several named routes
+can share that catalog/biome without sharing segment IDs. Cross-biome route transitions are
+outside this initial scope. The requirement for mechanically distinct slice biomes is unchanged.
+
+Both ordinary and landmark boards ultimately use the real blueprint/runtime/turn owners. An
+ordinary single-exit board must be authorable without fake landmark outcomes, and may occupy
+an intermediate segment or the final segment of a non-landmark route. A landmark retains its
+existing multi-outcome, final-inbound-landmark contract. A special ordinary encounter is just
+an authored segment using supported mechanics; it does not broaden the solver or add rules.
+The current `LandmarkPlacement` and `SelectLandmark` guards must not be weakened to implement it.
+
+The implementation is deliberately staged:
+
+1. M6.9a/b implement isolated local testing of the existing landmark format and preserve all
+  current storage, lifecycle, recovery and owner-usability gates.
+2. M6.9c is a documentation prerequisite: define the ordinary-board/assignment encoding,
+  exact reader/writer compatibility, exit semantics, palette resolution and any player-save
+  implications. Decide reuse versus an explicitly versioned extension from source evidence;
+  do not invent a second incompatible board engine or silently reinterpret landmark schema 1.
+  Freeze exact closed source/test paths before ordinary support becomes Ready.
+3. M6.9d implements that accepted contract in the existing document/window/local-test workflow.
+  Existing schema-1 files remain lossless; unknown future data remains non-transformable.
+4. M6.10 adds the common segment chooser, exact-version publication lookup and isolated travel
+  tests for both board kinds. No production campaign publication is included.
+
+Example, not new campaign data: two named routes in the same forest biome may each keep their
+normal generated segments, while one route's middle segment explicitly uses a bridge template
+and its final ordinary segment uses another template. No bridge mechanic, asset or actual route
+is created by this example. One template can serve compatible segments on both routes, each
+with an independent address/state. Names and artwork alone never establish compatibility.
 
 ### Editor Implementation Anchors
 
@@ -454,7 +503,9 @@ remain read-only, including during future authoring exercises.
 
 ### Editor Supported Data Matrix
 
-Version 1 authors only the schema-1 landmark subset below. The canvas is exactly **8x8**,
+The delivered M6.8 authors only the schema-1 landmark subset below. Ordinary-board support
+waits for M6.9c/d; the planned extension is not a claim that the current palette/codec accepts it.
+The canvas is exactly **8x8**,
 coordinates **0.0 through 7.7**, with X east/right and Y north/up. Display `x.y`, never `row.column`;
 JSON still stores separate integer `x` and `y`. Missing terrain is impassable void, not implicit
 floor. There are no width/height fields, resize, rotation or larger-board conversion.
@@ -487,7 +538,7 @@ undo history:
 | Document | Persisted identity / content | Not stored here |
 | --- | --- | --- |
 | Template | Existing schema-1 `templateId` + positive `templateVersion`, configuration, all variants and outcomes | World, route, node, day, assignment or run state. Entity IDs are board-local and may recur in another variant/board. |
-| Assignment | Existing schema-1 `worldDefinitionId`, `worldVersion`, `segmentId`, `templateId`, `templateVersion`, `variantId` | No new `assignmentId` or `edgeId` field. The composite `(worldDefinitionId, worldVersion, segmentId)` is the placement key; template/version/variant is its value. File names and chooser indices are not identity. |
+| Assignment | Existing landmark schema-1 `worldDefinitionId`, `worldVersion`, `segmentId`, `templateId`, `templateVersion`, `variantId`; ordinary encoding is defined by M6.9c before implementation | No new `assignmentId` or redundant `edgeId` field. The composite `(worldDefinitionId, worldVersion, segmentId)` is the placement key; template/version/variant is its value. Route names and biome labels come from world/catalog data, not copied assignment metadata. File names and chooser indices are not identity. |
 
 1. **Create:** New opens a blank 8x8 in-memory template with a user-confirmed new textual
   template/configuration identity and version 1, one `base` variant, empty entities/items and
@@ -514,8 +565,9 @@ undo history:
   to set a new template/configuration identity and clear assignment association before editing.
   Save As is not Fork and cannot overwrite a published template, the current Radio Tower files,
   world data or Resources references. Save never writes the other dirty document implicitly.
-6. **Assign:** Select an existing directed route by visible `from node -> to node`, edge ID,
-  then a segment from its ordered list displaying ordinal and stable ID. Select an exact saved
+6. **Assign:** Select an existing directed route by display name, `from node -> to node`, edge ID
+  and resolved biome/catalog, then a segment from its ordered list displaying ordinal and stable ID.
+  The chooser is grouped/filterable by biome without creating or editing routes. Select an exact saved
   template/version/variant. Saving this assignment draft does not activate it. An unsaved template
   must be saved explicitly first, or assignment save is cancelled; never persist a dangling reference.
 7. **Activate and test:** Explicitly review/activate the assignment in an isolated publication
@@ -563,27 +615,34 @@ document-wide errors stay document-wide. Do not invent a coordinate for an unkno
   initial threats, plus mandatory tool guarantees. Names alone do not create rewards or tools.
   Validation is neither a solver result nor proof of survival after every bad command.
 4. For an assignment, load the exact world/template versions, derive unique segment/edge
-  membership and invoke `DeserializePlacement`. Detect duplicate/conflicting placement keys
+  membership and validate against the resolved biome/content catalog. Use `DeserializePlacement`
+  for existing landmarks and the M6.9c/d ordinary adapter for ordinary boards; the latter is not
+  available in delivered M6.8. Detect duplicate/conflicting placement keys
   across the proposed catalog, missing artifacts/variants and generation-identity mismatches.
   No automatic repair, topology edit, configuration rewrite or ordinary-generator substitution.
 
-| Placement | v1 decision | Required execution evidence |
+| Placement | Planned support after the amendment | Required execution evidence |
 | --- | --- | --- |
-| Final segment, destination `landmark`, matching config/version | Supported data contract; runtime activation waits for M6.10a | Exact fixed variant checkpointed, then `CreateBoard(actualAddress)` and the real composer/travel path. No call to `SelectVariant` for new editor assignments. |
-| Final segment to a non-landmark destination | Unsupported; chooser explains why and refuses activation | Changing `placeKind` is a world/design change, not an editor workaround. |
-| Intermediate segment, including one on a road ending at a landmark | Unsupported; no authored intermediate-board claim | `LandmarkPlacement`, `RouteTravelService.SelectLandmark` and run landmark state are final-only. An ordinary template adapter would need a separate future contract; M6.10a does not weaken these guards. |
-| Missing/foreign segment, mismatched version/config or duplicate key | Invalid | Refuse before writing/activating anything. |
+| Final segment, destination `landmark`, matching config/version | Existing landmark data contract; activation waits for M6.10a | Exact fixed variant checkpointed, then `CreateBoard(actualAddress)` and the real composer/travel path. No call to `SelectVariant` for new editor assignments. |
+| Ordinary final segment to a non-landmark destination | Supported only after M6.9c/d and M6.10a | Single-exit blueprint through the ordinary adapter; final exit commits arrival/day/observations exactly once. Never change `placeKind` or invoke landmark selection. |
+| Ordinary intermediate segment, including on a route ending at a landmark | Supported only after M6.9c/d and M6.10a | Exit advances one segment through real scene reload without arrival/day/observation commit; exact next board and the same isolated root are retained. Landmark APIs remain final-only. |
+| Landmark template on an intermediate or non-landmark final segment | Unsupported | Refuse rather than reinterpret outcomes, suppress mandatory checks or weaken final-landmark guards. |
+| Missing/foreign segment, mismatched biome/catalog/version/config or duplicate key | Invalid | Refuse before writing/activating anything. |
 | Unassigned segment | Existing generation unchanged | Ordinary/legacy versions, RNG and intermediate/final arrival semantics remain owned by current travel. |
-| One template on two compatible final landmark segments | Supported after M6.10a, using two distinct composite placement keys | Separate full addresses, fresh state/tool allocation/links; mutation on one board cannot affect the other. Test with an isolated two-inbound-edge fixture, not production world edits. |
+| One template on two compatible segments of its board kind | Supported after the corresponding adapter and M6.10a, using distinct composite placement keys | Separate full addresses, fresh state/tool allocation/links; mutation on one board cannot affect the other. Include two named routes sharing one biome/catalog, ordinary intermediate/final cases and compatible final landmark cases in external fixtures. |
 
 The production world currently has only one inbound Radio Tower edge; it cannot demonstrate
-two independent placements by itself. The future fixture supplies two existing compatible
-edges to the chooser; the editor itself never creates, reorders or draws routes.
+all reuse cases by itself. External fixtures supply existing compatible routes/segments to the
+chooser; the editor itself never creates, reorders or draws routes. Compatibility is board-kind
+specific; an ordinary template is not a substitute for a final landmark's outcomes.
 
 ### Editor Publication And Version Policy
 
-Authoring schema stays **1**, independent of world version, template content version,
-configuration version and player run/profile schemas (**v5/v2**). New editor metadata belongs
+Existing landmark authoring schema stays **1**, independent of world version, template content
+version, configuration version and current player run/profile schemas (**v5/v2**). M6.9c must
+define ordinary encoding and prove whether these formats can remain unchanged; if not, require
+an explicit versioned extension/migration before code. No schema change is implemented here.
+New editor metadata belongs
 to Editor session/recovery state, not extra runtime JSON fields. A future schema change requires
 an explicit reader/writer migration contract and tests; do not silently bump schemas on Open.
 
@@ -600,7 +659,9 @@ template content version and a new matching generation publication identity; ret
 artifacts and mapping for saved legs. Incrementing only `templateVersion` cannot protect a leg
 that has not yet checkpointed `ActiveLandmark`. Registry lookup must retain `(world, segment,
 saved configuration ID/version) -> template/version/explicit variant`, and an existing saved
-landmark selection takes precedence over any new default. A conflicting or missing old mapping
+landmark selection takes precedence over any new default. The same exact-version lookup applies
+to authored ordinary segments after M6.9c/d, including already active and not-yet-visited segments;
+do not store an ordinary selection in `ActiveLandmark`. A conflicting or missing old mapping
 is a hard failure, never reroll or fallback. No segment reorder, save reset or schema migration
 is implicit in publication.
 
@@ -640,8 +701,9 @@ reflection-based production launcher or restore real files after temporarily ove
 
 Compose through the real blueprint adapter, `BoardRuntime`, controller/resolver, item/tool
 allocation, intents and presenters. Install pressure bindings before planning; a naked
-`Blueprint.CreateState()` is insufficient. Local testing uses a minimal isolated compatible
-final-landmark world; assigned testing uses the selected existing edge and its ordered segments.
+`Blueprint.CreateState()` is insufficient. M6.9a/b local testing uses a minimal isolated compatible
+final-landmark world. M6.9d adds an ordinary single-exit local fixture without landmark outcomes;
+assigned testing in M6.10 uses the selected existing edge, resolved biome/catalog and ordered segments.
 No hand-built second rules engine or replacement of normal travel completion is allowed.
 
 If Play Mode is already running, require Stop / Cancel before replacing it. Use the current
@@ -650,7 +712,8 @@ not session termination: dispose the previous board runtime/presenters while ret
 isolated root and immutable world/publication snapshot. The next bootstrap must revalidate that
 session's ownership/isolation before any store construction or board input. No outgoing scene
 callback may revoke the context needed by the next segment. Prove intermediate exit -> actual
-scene reload -> exact assigned final landmark, then full cleanup on test completion.
+scene reload -> exact next assigned/generated board, including an authored ordinary middle
+segment and the final landmark where applicable, then full cleanup on test completion.
 
 The expected domain reload when entering Play Mode restores the captured pending launch from
 Editor recovery before bootstrap. An unexpected scene switch, failed continuation, or assembly
@@ -686,17 +749,22 @@ by `A`. Mandatory exit 151 is at **3.6**, optional exit 146 at **6.5**, start 1 
 
 Open must retain all three variants and the placement's exact identities. The existing live
 Radio Tower still uses M6.6's pinned/random selection policy; the editor's fixed-variant policy
-does not rewrite it. Saving a fork changes no placement; selecting an earlier segment fails;
-selecting the final segment still cannot register new content without the loader prerequisite.
+does not rewrite it. Saving a fork changes no placement; assigning this landmark to an earlier
+segment still fails. Future ordinary boards use the M6.9c/d adapter instead; they do not relax
+this landmark restriction. Selecting a valid segment cannot register new content without the
+M6.10a loader prerequisite.
 This audit verifies the design against existing schema/source/JSON, not an implemented UI,
 new codec round-trip, live launch or a new solver run.
 
 Implementation is sequenced as **M6.8a document/codec -> M6.8b window -> M6.9a isolated-launch
-prerequisite -> M6.9b local test-play -> M6.10a final-only loader/publication prerequisite ->
+prerequisite -> M6.9b landmark local test-play -> M6.9c ordinary data contract ->
+M6.9d ordinary authoring/local test -> M6.10a segment loader/publication prerequisite ->
 M6.10b assignment UI/integrated acceptance**. The exact closed path lists, dependencies,
 acceptance criteria and required EditMode/PlayMode/manual checks live in the corresponding
 [roadmap cards](TechnicalRoadmap.md#m68---grid-painting-object-properties-and-validated-template-saves).
-No stage starts automatically on M6.7 closeout; M6.8a is the first implementation-ready stage.
+M6.8a/b are accepted. M6.9a is next for implementation after its normal preflight; this amendment
+starts no code stage. M6.9d/M6.10 cannot become Ready until M6.9c freezes their ordinary-format
+and closed-path prerequisites. The Lead implements/tests; owner exercises decide usability.
 
 ### M6.8a Document Backend
 

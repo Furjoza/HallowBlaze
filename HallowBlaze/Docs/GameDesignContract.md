@@ -1002,6 +1002,26 @@ Ochładzanie świata wizualizuje geograficzny postęp i pozwala dawkować reguł
 - Biom nie może być wyłącznie zestawem sprite'ów.
 - Pogoda jest dynamicznym stanem runu, a nie trwałą notatką atlasu, chyba że chodzi o cechę klimatu miejsca.
 
+### Biome, Route And Segment Hierarchy - Accepted 2026-11-16
+
+A biome is the shared definition of visual presentation, available terrain/content types and
+the accepted biome rules. Several distinct named routes may belong to one biome. Each route
+has a stable textual ID independent of its display name and owns its ordered stable segments;
+it references the biome rather than duplicating its palette and rules in every board.
+
+An authored board is assigned to a specific segment, not to a biome-wide or route-wide random
+pool. A route can therefore mix normally generated segments with individually authored ones,
+including a special situation in the middle of the journey. A special segment is not
+automatically a landmark, a new world node, a new mechanic or an extra day.
+
+Each segment resolves content and presentation against its route's biome and its own exact
+generation configuration. Do not infer the biome from the destination node or a route name.
+Cross-biome routes require separately specified transition rules; they are not introduced by
+the initial assignment tool. This hierarchy does not remove the accepted requirement for
+mechanically distinct slice biomes; the exact mechanics above remain Hypothesis. The current
+prototype catalog remains supported until M8.2 supplies explicit biome definitions. No new
+biome assets, terrain mechanics or campaign content are implemented by this documentation change.
+
 ## 16. Losowość, deterministyczność i generator
 
 ### Decyzja
@@ -1572,6 +1592,51 @@ play of an assigned segment through normal travel. Existing loader restrictions,
 final-segment-only landmark placement, must be identified and any necessary minimal extension
 scoped before the assignment card is Ready. This direction does not authorize a full world-graph
 editor, new routes/rules, or runtime changes in the current documentation task.
+
+#### Segment-Scoped Authoring - Accepted Amendment 2026-11-16
+
+This amendment extends the initial final-landmark-only editor plan, not the accepted M6.8
+implementation or its historical evidence. The owning hierarchy is biome -> named directed
+route -> ordered segment -> generated or explicitly assigned local board. A route has both a
+stable textual ID and a display name; renaming it does not change its identity or any saved
+segment. Several routes share one biome's terrain/presentation definitions.
+
+- The assignment target is one existing stable segment of a chosen route. The editor shows
+	the route name, edge ID, endpoints, biome and ordered segment IDs; a name or list index is
+	never a persistence key. Edge membership is derived from the existing world graph.
+- An assignment selects an exact versioned board template and variant. Neither a route pool
+	nor template/variant random selection is part of this workflow. Unassigned segments retain
+	their existing deterministic generation and published compatibility behavior.
+- Support ordinary single-exit boards as well as existing multi-outcome landmark boards.
+	An ordinary authored board may occupy an intermediate or final segment of a non-landmark
+	route; an intermediate segment of a route ending at a landmark is also eligible. Do not
+	fake landmark outcomes or change a destination's `placeKind` to load ordinary content.
+- The existing final landmark placement/selection/outcome contract remains separate and
+	final-only. The current Radio Tower content and pinned-first/random-variant policy do not
+	change. A special ordinary segment cannot invoke landmark completion as a shortcut.
+- Intermediate completion advances only the segment. Final completion alone commits the
+	day, arrival and route observations, regardless of whether the board was authored or
+	generated. Assignment does not add a day or change the route's ordered segment list.
+- One template may be assigned to several compatible segments; each receives a distinct full
+	board address and fresh mutable state, item/tool allocation and pressure bindings.
+- Compatibility checks use the resolved biome/content catalog and exact segment configuration,
+	not merely matching artwork. Keep the prototype catalog explicit before M8.2; do not pretend
+	that biome definitions or new palette content already exist.
+- Saving a template or assignment never publishes campaign content. Initial activation and
+	travel testing remain isolated. Published mappings must preserve exact old world/segment/
+	configuration/template versions, seeds and existing pinned selections, including a saved
+	leg before selection and a not-yet-visited segment. Missing old content fails safely rather
+	than rerolling, silently falling back or rewriting a save. Any required player-format change
+	needs its own versioned compatibility/migration contract before implementation.
+
+M6.9a/b still implement isolated testing of the existing landmark format. New M6.9c defines the
+ordinary-board data/compatibility contract and closed implementation paths; M6.9d implements
+that adapter and extends painting/local tests. M6.10 then delivers segment assignments and
+isolated travel for both supported board kinds. These remain separate gates, not permission
+to bypass `LandmarkPlacement` or broaden the existing solver's supported rules. M8.1 owns
+campaign route names/pacing; M8.2 owns the shared biome definitions and terrain/presentation
+compatibility. The owner performs the final practical usability acceptance, not implementation
+or technical diagnosis. No code, assets, save format or production publication changes here.
 
 #### Opening-length amendment - accepted 2026-11-03
 
