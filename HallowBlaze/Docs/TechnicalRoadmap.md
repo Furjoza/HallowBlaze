@@ -6656,8 +6656,13 @@ Restart uses the existing new-run policy. No schema, profile reset or replay arc
 
 ## `M7.20` - Redesign the manual Controls presentation
 
-**Status:** `Planned` - requested by the owner on 2026-11-05; future visual work, not a prerequisite
-for testing the centered, non-clipped interim Controls view.
+**Status:** `Active` - 2026-11-11. The owner authorized autonomous continuation and will
+review the visual result later. The three existing contexts now pair a stationary keyboard
+diagram with an independently scrollable, selectable binding list. Focused graphics/input
+checks passed 21/21 and final full live graphics PlayMode passed 252/252. Independent
+review found and corrected intercepted wheel/drag events; focused revalidation passed
+21/21 and final full live revalidation passed 252/252. Independent review recheck and
+technical acceptance passed; owner desktop/narrow inspection remains pending.
 **Priority:** P2.
 **Scope:** Revisit manual layout, diagram, context grouping, navigation and desktop/narrow
 readability as a coherent design. Agree the design before production asset/layout changes.
@@ -6665,6 +6670,16 @@ readability as a coherent design. Agree the design before production asset/layou
 **Acceptance criteria:** Runtime-derived bindings, complete reachable context lists, readable
 layout without clipping, mouse/keyboard parity and safe focus return in main and pause menus.
 **Validation:** Graphics PlayMode layout/context/lifecycle tests and owner desktop/narrow inspection.
+**Closed write scope (2026-11-11):**
+Assets/Scripts/Presentation/Runtime/KeyboardControlsView.cs;
+Assets/Tests/PlayMode/PauseMenuTests.cs; Docs/Testing.md and this roadmap. Reuse the existing
+main-menu rendered Controls regression without changing it. No new assets, bindings, scene,
+prefab, domain, save, package, project settings or agent-configuration changes.
+**Design:** Retain Walking, Interaction and Menus as the existing tabs and their runtime
+binding source. Keep the illustrated keys visible while the action list scrolls; pointer
+and keyboard selection highlight the corresponding keys and a marked action row. Desktop
+uses adjacent diagram/list columns; narrow layouts stack them. Reflow preserves row/key
+instances, keyboard focus and visibility instead of recreating controls on resize.
 
 ---
 

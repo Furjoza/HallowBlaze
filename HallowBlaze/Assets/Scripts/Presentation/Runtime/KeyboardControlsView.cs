@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace HallowBlaze.Presentation.Runtime
@@ -24,6 +25,7 @@ namespace HallowBlaze.Presentation.Runtime
         private Action closed;
         private Vector2 viewport;
         private Vector2 lastScreen;
+        private int selectedBinding;
 
         /// <summary>Gets the one open help view, or null; opening it never changes an input binding.</summary>
         public static KeyboardControlsView Current { get; private set; }
@@ -131,20 +133,55 @@ namespace HallowBlaze.Presentation.Runtime
             scroll.horizontal = false;
             scroll.movementType = ScrollRect.MovementType.Clamped;
             scroll.scrollSensitivity = 32;
-            diagram = RectAt("Keyboard diagram", content);
+            diagram = RectAt("Keyboard diagram", transform);
             descriptions = RectAt("Context bindings", content);
             SelectContext(PcInputContext.Walking);
         }
 
-        /// <summary>Changes only diagram highlights and runtime-derived labels, not the gameplay input context.</summary>
+        /// <summary>Changes only help context, resetting its binding selection and scroll without changing gameplay input.</summary>
         public void SelectContext(PcInputContext context)
         {
             Context = context;
             Hints = PcInputBindings.GetHints(context);
+            selectedBinding = 0;
+            foreach (GameObject row in hintRows) { row.SetActive(false); Destroy(row); }
+            hintRows.Clear();
+            for (int index = 0; index < Hints.Count; index++)
+            {
+                int binding = index;
+                Button row = ButtonAt("Binding " + Hints[index].Label, descriptions, () => SelectBinding(binding));
+                Text action = row.GetComponentInChildren<Text>();
+                action.name = "Binding action";
+                action.text = Hints[index].Label;
+                action.fontSize = 18;
+                action.alignment = TextAnchor.MiddleLeft;
+                var keys = new List<string>();
+                foreach (KeyCode key in Hints[index].Keys) keys.Add(KeyName(key));
+                TextAt("Binding keys", row.transform, string.Join(" / ", keys), 14, Accent);
+                RectTransform marker = RectAt("Selected binding", row.transform);
+                Image markerImage = marker.gameObject.AddComponent<Image>();
+                markerImage.color = Accent;
+                markerImage.raycastTarget = false;
+                marker.anchorMin = Vector2.zero;
+                marker.anchorMax = new Vector2(0, 1);
+                marker.offsetMin = new Vector2(0, 4);
+                marker.offsetMax = new Vector2(3, -4);
+                row.gameObject.AddComponent<ControlBindingFocus>().Selected = () => SelectBinding(binding);
+                ColorBlock colors = row.colors;
+                colors.normalColor = Color.white;
+                colors.highlightedColor = colors.selectedColor = new Color32(206, 225, 213, 255);
+                colors.fadeDuration = 0;
+                row.colors = colors;
+                row.GetComponent<Image>().color = Paper;
+                hintRows.Add(row.gameObject);
+            }
             if (viewport.x > 0) Resize(viewport);
+            ScrollRect scroll = scrollViewport.GetComponent<ScrollRect>();
+            scroll.StopMovement();
+            scroll.verticalNormalizedPosition = 1;
         }
 
-        /// <summary>Reflows fixed-size type and keyboard keys into a single scroll region at narrow widths, without clipping labels.</summary>
+        /// <summary>Reflows fixed-size type around a stationary diagram and independently scrollable binding list, preserving focus.</summary>
         public void Resize(Vector2 size)
         {
             if (size.x < 320 || size.y < 480) throw new ArgumentException("Controls requires at least 320 by 480 pixels.", nameof(size));
@@ -162,43 +199,39 @@ namespace HallowBlaze.Presentation.Runtime
                 modes[index].GetComponentInChildren<Text>().color = (int)Context == index ? Color.white : Ink;
                 modes[index].transform.Find("Selected context").gameObject.SetActive((int)Context == index);
             }
-            Place(scrollViewport, 16, 120, size.x - 32, size.y - 136);
             bool wide = size.x >= 960;
             float diagramWidth = wide ? 520 : Mathf.Min(600, size.x - 32);
-            Place(diagram, 0, 0, diagramWidth, 256);
+            Place(diagram, 16, 120, diagramWidth, 200);
             BuildKeyboard(diagramWidth);
             float descriptionWidth = wide ? size.x - diagramWidth - 64 : size.x - 32;
-            float descriptionTop = wide ? 0 : 272;
-            Place(descriptions, wide ? diagramWidth + 32 : 0, descriptionTop, descriptionWidth, 0);
-            foreach (GameObject row in hintRows) { row.SetActive(false); Destroy(row); }
-            hintRows.Clear();
+            float descriptionTop = wide ? 120 : 336;
+            Place(scrollViewport, wide ? diagramWidth + 48 : 16, descriptionTop, descriptionWidth, size.y - descriptionTop - 16);
+            Place(descriptions, 0, 0, descriptionWidth, 0);
             float height = 0;
-            foreach (PcInputBindings.ControlHint hint in Hints)
+            for (int index = 0; index < hintRows.Count; index++)
             {
-                RectTransform row = RectAt("Binding " + hint.Label, descriptions);
-                var keys = new List<string>();
-                foreach (KeyCode key in hint.Keys) keys.Add(KeyName(key));
-                Text keysText = TextAt("Binding keys", row, string.Join(" / ", keys), 16, Accent);
-                Text action = TextAt("Binding action", row, hint.Label, 18, Ink);
-                Place(keysText.rectTransform, 0, 0, descriptionWidth, 24);
+                RectTransform row = (RectTransform)hintRows[index].transform;
+                Text keysText = row.Find("Binding keys").GetComponent<Text>();
+                Text action = row.Find("Binding action").GetComponent<Text>();
+                float textWidth = descriptionWidth - 24;
+                Place(keysText.rectTransform, 12, 8, textWidth, 24);
                 float keysHeight = Mathf.Max(24, keysText.preferredHeight + 4);
-                Place(keysText.rectTransform, 0, 0, descriptionWidth, keysHeight);
-                Place(action.rectTransform, 0, keysHeight, descriptionWidth, 48);
+                Place(keysText.rectTransform, 12, 8, textWidth, keysHeight);
+                Place(action.rectTransform, 12, keysHeight + 8, textWidth, 48);
                 float actionHeight = Mathf.Max(26, action.preferredHeight + 4);
-                Place(action.rectTransform, 0, keysHeight, descriptionWidth, actionHeight);
-                float rowHeight = keysHeight + actionHeight + 16;
+                Place(action.rectTransform, 12, keysHeight + 8, textWidth, actionHeight);
+                float rowHeight = keysHeight + actionHeight + 20;
                 Place(row, 0, height, descriptionWidth, rowHeight);
-                height += rowHeight;
-                hintRows.Add(row.gameObject);
+                height += rowHeight + 4;
             }
             descriptions.sizeDelta = new Vector2(descriptionWidth, height);
-            Place(content, 0, 0, size.x - 32, Mathf.Max(256, descriptionTop + height));
+            Place(content, 0, 0, descriptionWidth, height);
+            HighlightKeys();
+            RevealSelectedBinding();
         }
 
         private void BuildKeyboard(float width)
         {
-            foreach (Transform child in diagram) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
-            keycaps.Clear();
             float unit = width / 13;
             Keycap(KeyCode.Escape, 0, 0, 1.6f, unit);
             Keycap(KeyCode.Tab, 0, 1, 2, unit);
@@ -221,21 +254,70 @@ namespace HallowBlaze.Presentation.Runtime
             Keycap(KeyCode.PageDown, 2, 5, 2, unit);
             Keycap(KeyCode.Home, 4, 5, 2, unit);
             Keycap(KeyCode.End, 6, 5, 2, unit);
+        }
+
+        private void SelectBinding(int index)
+        {
+            selectedBinding = index;
+            HighlightKeys();
+            RevealSelectedBinding();
+        }
+
+        private void RevealSelectedBinding()
+        {
+            GameObject focused = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+            int index = hintRows.IndexOf(focused);
+            if (index < 0 || viewport.x <= 0) return;
+            RectTransform row = (RectTransform)hintRows[index].transform;
+            float top = -row.anchoredPosition.y;
+            float bottom = top + row.rect.height;
+            float offset = content.anchoredPosition.y;
+            if (top < offset) offset = top;
+            else if (bottom > offset + scrollViewport.rect.height) offset = bottom - scrollViewport.rect.height;
+            scrollViewport.GetComponent<ScrollRect>().StopMovement();
+            content.anchoredPosition = new Vector2(0, Mathf.Clamp(offset, 0, Mathf.Max(0, content.rect.height - scrollViewport.rect.height)));
+        }
+
+        private void HighlightKeys()
+        {
+            for (int index = 0; index < hintRows.Count; index++)
+            {
+                hintRows[index].GetComponent<Image>().color = index == selectedBinding ? new Color32(206, 225, 213, 255) : Paper;
+                hintRows[index].transform.Find("Selected binding").gameObject.SetActive(index == selectedBinding);
+            }
+            foreach (Image cap in keycaps.Values)
+            {
+                cap.color = new Color32(206, 218, 212, 255);
+                cap.GetComponentInChildren<Text>().color = Ink;
+                cap.GetComponent<Outline>().effectColor = Ink;
+                cap.GetComponent<Outline>().effectDistance = new Vector2(1, -1);
+            }
             foreach (PcInputBindings.ControlHint hint in Hints)
                 foreach (KeyCode key in hint.Keys)
                     if (keycaps.TryGetValue(key, out Image cap))
                     {
+                        cap.color = new Color32(173, 207, 187, 255);
+                        cap.GetComponentInChildren<Text>().color = Ink;
+                    }
+            if (selectedBinding >= 0 && selectedBinding < Hints.Count)
+                foreach (KeyCode key in Hints[selectedBinding].Keys)
+                    if (keycaps.TryGetValue(key, out Image cap))
+                    {
                         cap.color = Accent;
                         cap.GetComponentInChildren<Text>().color = Color.white;
-                        cap.GetComponent<Outline>().effectColor = Ink;
                         cap.GetComponent<Outline>().effectDistance = new Vector2(2, -2);
                     }
         }
 
         private void Keycap(KeyCode key, float column, int row, float span, float unit)
         {
+            if (keycaps.TryGetValue(key, out Image existing))
+            {
+                Place((RectTransform)existing.transform, column * unit, row * 34, span * unit - 3, 30);
+                return;
+            }
             RectTransform rect = RectAt("Key " + key, diagram);
-            Place(rect, column * unit, row * 40, span * unit - 3, 34);
+            Place(rect, column * unit, row * 34, span * unit - 3, 30);
             Image image = rect.gameObject.AddComponent<Image>();
             image.color = new Color32(206, 218, 212, 255);
             rect.gameObject.AddComponent<Outline>().effectDistance = new Vector2(1, -1);
@@ -334,5 +416,13 @@ namespace HallowBlaze.Presentation.Runtime
             rect.anchoredPosition = new Vector2(left, -top);
             rect.sizeDelta = new Vector2(width, height);
         }
+    }
+
+    internal sealed class ControlBindingFocus : MonoBehaviour, ISelectHandler, IPointerEnterHandler
+    {
+        internal Action Selected { get; set; }
+
+        void ISelectHandler.OnSelect(BaseEventData eventData) => Selected?.Invoke();
+        void IPointerEnterHandler.OnPointerEnter(PointerEventData eventData) => GetComponent<Button>().Select();
     }
 }
