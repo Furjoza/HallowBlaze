@@ -1,5 +1,38 @@
 # HallowBlaze Testing
 
+## M7 Owner-Directed Closeout - 2026-11-12
+
+The owner instructed that M7.21 and M7.26 may wait and the rest should be finalized.
+The current roadmap records M7 as closed with those two explicit deferrals, not as an
+unconditional release PASS or a claim that all originally planned manual checks occurred.
+
+| Scope | Current decision | Retained limitation |
+| --- | --- | --- |
+| M7.8 and M7.17 | Done on existing technical evidence and owner-directed closeout | No new integrated manual smoke, actual OS-window resize, medical, portrait, terminal-reader or specific checkpoint verdict was supplied |
+| M7.20 Controls | Done; focused 21/21, final live PlayMode 252/252 and independent technical recheck PASS retained | Owner desktop/narrow inspection remains Not run |
+| M7.24 miss audio | Done; focused 30/30, live PlayMode 252/252 and independent technical review PASS retained | Actual owner listening remains Not run |
+| M7.21 directional art | Deferred, not implemented or accepted | Current horizontal mirroring remains unchanged |
+| M7.26 missing atlas | Deferred with unresolved P0 risk | No confirmed cause or repair; passing atlas probes do not close the incident |
+
+The unperformed manual checks are accepted limitations for this M7 closeout only. Dated
+evidence and pending/revise statements below describe their original checkpoints and are
+superseded only as acceptance status, not as observations. The unrecovered original
+corner-trap seed remains unrecovered. No human measurements or additional listening,
+visual or Unity-test results are invented by this decision.
+
+The accepted runtime candidate is unchanged from the reviewed Controls commit `e956a30`,
+which includes the earlier miss-audio commit `c688bbd`. Its final live report is
+`%TEMP%/HB-M720-reviewed-live.xml` (252/252, 2026-11-11 22:24:20Z-22:26:45Z).
+This documentation-only closeout requires structure, local-link, status/limitation and
+scope checks; Unity tests are not rerun for a documentation status change. The existing
+automatic SENTIS define difference is preserved and excluded from the documentation commit.
+
+Separate M4.9/M6.6 acceptance records are outside this change; consult their owning records
+for the current decisions. This M7 closeout adds no human measurements, starts no
+stones/authoring tools/M8/M10, changes no gameplay or save compatibility, and does not alter
+the failed-state evidence required when M7.26 is resumed. Independent closeout review passed
+on 2026-11-12.
+
 ## M7.20 Contextual Controls Layout
 
 The owner authorized autonomous continuation on 2026-11-11, with visual inspection later.
@@ -43,7 +76,8 @@ zero failures/skips/inconclusive and the expected Controls, actual-atlas and att
 `%TEMP%/HB-M720-reviewed-live.xml` records 2026-11-11 22:24:20Z-22:26:45Z. GameView focus
 was restored during that run without changing gameplay or assertions. Independent technical
 recheck passed on 2026-11-11. Owner desktop/narrow inspection is Not run. M7.8 and M7.17
-remain open.
+remained open at that checkpoint; the 2026-11-12 owner-directed closeout governs their
+current acceptance status without adding a manual result.
 
 ## M7.24 Executed Attack Miss Audio
 
@@ -66,13 +100,15 @@ project under `%TEMP%/HB-M724-96b249d0e84b400098af8eaf61f09d06`; the final resul
 `live-playmode.xml`. Independent technical review passed on 2026-11-11.
 
 Actual owner listening is Not run. Automated sample/playback assertions are not a listening
-verdict and do not accept M7.8, M7.17 or the unresolved M7.26 incident.
+verdict and did not accept M7.8, M7.17 or the unresolved M7.26 incident at that technical
+checkpoint. The 2026-11-12 closeout accepts the listening limitation; it does not fix M7.26.
 
 ## M7.26 Missing Opening Atlas Investigation
 
 The owner reported no atlas after the third opening board on 2026-11-11. PlayMode had ended
 before inspection, so the failed live state and its cause were not captured. This incident
-is not claimed fixed, and M7.17 remains Revise.
+is not claimed fixed. M7.17 was Revise at that checkpoint; on 2026-11-12 the owner deferred
+M7.26 and closed the remaining M7 scope with that unresolved risk explicitly retained.
 
 The previous `EveryOpeningBoundaryContinuesWithoutRerollRefillOrEarlyChoice` test asserted
 route-choice state without checking the actual atlas. It now also requires a persistent
@@ -115,7 +151,7 @@ Owner smoke on 2026-11-11 reported working menu/Controls, opening, legend access
 selection, resource pickups and satisfactory existing audio. The current legend fits its
 panel, so absent scrolling is expected rather than a failure. The owner requested clearer
 route-button focus and a map-space destination cue because clue names did not make direction
-clear. M7.17 remains Revise for that retest and an explicit owner verdict; unreported individual
+clear. M7.17 remained Revise at that checkpoint for the retest and an explicit owner verdict; unreported individual
 medical, narrow-layout, terminal-reader and checkpoint cases are not claimed manually tested.
 
 Continue worked for an earlier active save. After Destination reached, Won finalization
@@ -264,7 +300,8 @@ skip, graphics PlayMode passed 234/234, world/compatibility checks passed 26/26 
 opening series had zero invalid boards or fallbacks. Both 300-board runs produced
 `1007f917b3b838806727e6511b59d7891b017a2e2d6045508ea4e6577d72d141`.
 Independent review passed. Physical-key, audio and live-window owner acceptance
-remains M7.17; original M7.8/M4.9/M6.6 human gates remain open.
+remained M7.17 at that checkpoint; the original M7.8/M4.9/M6.6 human gates were then open.
+Later owner decisions in their owning records govern the current acceptance status.
 
 ## M7.10 Geographical Route Choices
 
@@ -331,7 +368,8 @@ The owner clarified that the lingering mechanical step-noise footprint, not the 
 was the original concern. Its requested lifetime remains unresolved and the domain rule is
 unchanged. The axe's stable source ID exists, but profile source discovery and atlas markers
 are still M8.5; the absent marker is recorded rather than represented by a cosmetic fake.
-These remain explicit follow-ups and M7.17 remains Revise pending owner decisions and retest.
+These were explicit follow-ups and M7.17 remained Revise at that checkpoint pending owner
+decisions and retest; the 2026-11-12 closeout governs its current acceptance status.
 
 ## M7.22 Clarified Berry, Input and Noise Rules
 
