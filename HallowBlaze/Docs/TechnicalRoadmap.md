@@ -4881,7 +4881,12 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 ## `M4.9` — Bramka czytelności intentów i hałasu
 
-**Status:** `Active` - preparation ready on 2026-10-15; human sessions and gate decision pending.
+**Status:** `Done` - owner-recorded `Proceed` on 2026-11-12 with a limited-sample exception.
+The owner accepts the available feedback from two external testers plus separate owner
+participation, judges symbol comprehension sufficient and waives further recruitment and
+missing protocol-specific measurements. The owner is not a third independent tester; no
+case scores or completed 5-8-person cohort are claimed. See the dated decision in
+[M4.9 validation](Validation/M4.9.md).
 **Priorytet:** P1  
 **Powiązany kontrakt:** bramka intentów z sekcji 22.
 
@@ -4907,7 +4912,7 @@ Final Unity `6000.3.21f1` gates passed: full EditMode **657/657** and graphics-e
 
 **Wymagany handoff:** Zanonimizowana tabela wyników, obserwacje i dokładna rekomendacja dalszego działania.
 
-**Preparation (2026-10-15):** [The M4.9 protocol](Validation/M4.9.md) preregisters 5-8 moderated sessions, separate first-contact/learned responses, counterbalanced forms, whole-phase prediction locking, error categories and explicit decision thresholds. A test-only fixture exports two forms of four Shambler cases, four Listener cases and a two-branch deliberate-lure choice using production composition/resolution/presenters, without production changes. Full graphics-enabled PlayMode **125/125** and final focused export **2/2** passed. Independent technical and protocol preparation reviews returned **PASS**, with scoring ambiguities resolved. Eighteen blind images, twenty moderator outcome images and empty response templates are external technical materials, not participant evidence. Formal participants **0**, locked responses **0**; the human gate remains **Pending**, not Proceed or Done. The owner requested direct Lead implementation without Developer delegation and retained independent review. M5 content is not authorized by this preparation.
+**Preparation (2026-10-15):** [The M4.9 protocol](Validation/M4.9.md) preregistered 5-8 moderated sessions, separate first-contact/learned responses, counterbalanced forms, whole-phase prediction locking, error categories and explicit decision thresholds. A test-only fixture exports two forms of four Shambler cases, four Listener cases and a two-branch deliberate-lure choice using production composition/resolution/presenters, without production changes. Full graphics-enabled PlayMode **125/125** and final focused export **2/2** passed. Independent technical and protocol preparation reviews returned **PASS**, with scoring ambiguities resolved. Eighteen blind images, twenty moderator outcome images and empty response templates are external technical materials, not participant evidence. At preparation, formal participants and locked responses were zero and the human gate was Pending. The owner requested direct Lead implementation without Developer delegation and retained independent review. Preparation alone did not authorize M5 content; the later owner acceptance above supplies the gate decision without rewriting this evidence.
 
 ### Bramka M4
 
@@ -5644,7 +5649,12 @@ No commit or push was performed.
 
 ## `M6.6` — Kuratorowane warianty i bramka landmarku
 
-**Status:** `Active` - technical preparation validated on 2026-10-21; human gate Pending
+**Status:** `Done` - owner-recorded `Proceed` on 2026-11-12 with a limited-sample exception.
+The owner accepts the available feedback from two external testers plus separate owner
+participation and waives further recruitment and missing protocol-specific comprehension
+measurements. No full v1 cohort, scored explanation majority or human coverage of every variant
+is claimed. Existing technical validation remains unchanged. See the dated decision in
+[M6.6 validation](Validation/M6.6.md).
 **Priorytet:** P1  
 **Powiązany kontrakt:** bramka landmarku z sekcji 22.
 
@@ -5681,11 +5691,12 @@ tests cover all variants/outcomes, failed selection/arrival/discovery retries an
 1280x720/320x640. Full EditMode passed 1237 tests with the existing Explicit skip; graphics
 PlayMode passed 188/188; focused production passed 7/7. See the
 [variant/cost matrix, evidence and frozen session protocol](Validation/M6.6.md).
-Isolated pinned saves and neutral previews are prepared, but the exporter is not a game launcher:
-interactive storage isolation must be checked before human sessions. Participants/sessions are
-0; no comprehension result or Proceed/Revise/Stop verdict is claimed. M6.6 and the M6 gate are
-not Done; 5-8 real moderated sessions remain required. M4.9 remains Pending, M8 is not started,
-and M9.7 stays Deferred. Run v5/profile v2, world identities and ordinary generation are unchanged.
+Isolated pinned saves and neutral previews were prepared, but the exporter is not a game launcher:
+interactive storage isolation must be checked before any future live session. At preparation,
+participants/sessions were zero and no comprehension result or gate verdict was claimed.
+The then-open M6.6/M4.9 human gates are superseded by their 2026-11-12 owner decisions, not by
+the automated evidence. This closure does not start M8 or accept M9.7. Run v5/profile v2,
+world identities and ordinary generation are unchanged.
 The owner separately authorized removing only Unity's generated analytics token and recording
 its narrow exception in AGENTS.md. No independent review, commit or push is claimed.
 
@@ -5705,6 +5716,8 @@ this documentation task does not start implementation. Plan the tool after the M
 before bulk handcrafted M8 content. It does not reopen M6 or block unrelated M8 work.
 The owner asked to leave the current Radio Tower board unchanged for now; no layout, reward,
 mechanic or readability redesign of that board is included here. M6.6's human gate remains open.
+This was the planning state on 2026-11-03; M6.6 later received owner-recorded Proceed on
+2026-11-12 under the limited-sample exception. The Radio Tower no-edit scope is unchanged.
 
 ---
 
@@ -7773,13 +7786,17 @@ O-002, O-003, O-004, O-005, O-006, O-007, O-008, and O-009 are resolved in `Game
 
 # Kolejka wykonawcza
 
+Dated Pending statements in the historical closeouts below retain their original evidence,
+not the current gate status. M4.9 and M6.6 are Done with owner-recorded Proceed on 2026-11-12;
+their limited-sample acceptance does not invent participant scores or activate another card.
+
 M0, M1, and M2 are complete; M3.1-M3.12 are `Done`. The M3.6 umbrella and M3.6.3 were accepted on 2026-10-08 with owner-confirmed PC smoke and final independent review. M3.9.14 and M3.9 were accepted for PoC by the owner on 2026-10-13 without a measured prediction claim; reduced M3.10's automated scenario gates are complete. M3.11 and all thirty-two children were accepted on 2026-10-14 with full EditMode `635/635`, production-focused PlayMode `39/39`, and owner-authorized combined-role self-review; [evidence](Validation/M3.11RouteAddress.md). M3.12 passed full EditMode `640/640` and graphics-enabled PlayMode `109/109` on 2026-10-14 and was accepted by explicit owner waiver of independent review after two native Reviewer invocations returned no response; no independent verdict is claimed. See its acceptance section above. The historical planning baseline was branch `feature/AddingBackpackPlan` at `87f135e8590b89d57ce84b225ce7d94fcf5e4e02`. M3.5 was implemented from the clean baseline `M3/TurnController` at `aec6486360cf6e8b789ac1b02fefe2ad0247079a`. M3.6.1 was implemented from the clean baseline `M3/RuntimeInputToPresentation` at `7083228c8889399299a2ad8cf957e0cd6cf9bcd8`. M3.6.2 was implemented from the clean baseline `M3/OrderedEventPresentation` at `36bfbdd145fb0e9350d849c3e64f7ebaea81e015`. M3.6.3 uses `M3/ProductionCutover` at `af030818d5de705968e26907139c435bc26ecd86`. Every new ticket still begins with its normal clean-worktree preflight.
 
 The next safe sequence is:
 
-1. complete active `M4.9` with 5-8 moderated human sessions using the independently reviewed preparation in `Docs/Validation/M4.9.md`; record locked responses and a justified Proceed/Revise/Stop decision before further content. Technical preparation passed, but zero participants is not a closed human gate. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. The owner then separately authorized solo M6.6: its technical preparation passed full EditMode 1237 tests plus the existing Explicit skip and graphics PlayMode 188/188, with self-review only. M6.6 remains Active until 5-8 real sessions and the landmark decision in `Docs/Validation/M6.6.md`; neither exception closes M4.9 or authorizes M8. Future cards use the current Lead implementation and Reviewer/self-review policy in `AGENTS.md`, without changing these historical review attributions;
-2. complete the `M7.8` integrated repair gate after M7.1-M7.7 were completed with independent review, compatible opening/checkpoint recovery, clean presentation boundaries, stable Notes controls, bounded footsteps, turn-scoped resource gains, versioned bounded entry safety and centered responsive board/resources (M7.6-M7.7 accepted 2026-10-30). The owner authorized proceeding before the outstanding M4.9/M6.6 human gates; those gates and the M7.8 owner visual/audio/live-resize verdict remain open and no human-test result is implied;
-3. implement the planned 2026-11-03 follow-ups `M7.9`-`M7.16` and `M7.18` in bounded dependency order, then close `M7.17` alongside original M7.8 owner obligations. Finalize F entry and contextual Q/E rotation/selection before Controls. Do not require a pre-repair M7.8 Accept to begin follow-ups or treat planning as code authorization. The expanded M7 gate precedes stones and further slice content; leave the current Radio Tower board unchanged;
+1. retain the accepted `M4.9` and `M6.6` Proceed decisions of 2026-11-12. The owner accepts two external testers plus separate owner participation and waives further recruitment and missing protocol-specific measurements; no completed 5-8-person cohort or inferred score is claimed. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. The owner then separately authorized solo M6.6: its technical preparation passed full EditMode 1237 tests plus the existing Explicit skip and graphics PlayMode 188/188, with self-review only. The later owner acceptance closes its human gate without changing those review attributions. No additional M4.9/M6.6 cohort is a remaining prerequisite. Future cards use the current Lead implementation and Reviewer/self-review policy in `AGENTS.md`;
+2. retain the separate 2026-11-12 owner-directed M7 closeout, including `M7.8` and `M7.17`. Existing technical evidence and the accepted manual-check limitations remain as recorded; no additional human-test result is implied by closing M4.9/M6.6;
+3. preserve the completed M7 repairs and the explicit `M7.21`/`M7.26` deferrals. Their risks and follow-up evidence requirements remain unchanged; leave the current Radio Tower board unchanged;
 4. after the expanded M7 gate and a Proceed verdict from `M4.9`, complete the bounded stone-lure extension `M5.8`-`M5.11`: accept detailed rules, validate atomic throw/supply behavior, add shared aiming, then obtain the human prototype verdict. No earlier human gate or production rollout is waived. Finalize `M6.7` before bulk handcrafted M8 content; the approved small-editor direction includes `M6.8`-`M6.10` grid editing, isolated test-play and explicit route-segment assignment. These wait for the detailed contract/repair gates and do not block unrelated slice work;
 5. complete the no-backpack vertical slice through `M8.8`, preserving its playtest requirements and earlier M4.9/M6.6/M7 gates, then make the explicit M10 verdict. The stone prototype does not automatically become a production or vertical-slice acceptance requirement;
 6. keep M10 deferred and last among planned milestones unless the owner explicitly changes that order; activate M9.7 only for an actual owner-approved bug-report workflow, independently of M10. Keep scent/wind `M9.8` last among optional ideas, not ahead of accepted work or an activated M10 because of its milestone number.
@@ -7856,9 +7873,12 @@ addressed durable selection, all outcome/tool-free solver paths, production retr
 coverage, desktop/portrait previews and isolated session boundaries are ready. Full EditMode
 passed 1237 tests with the existing Explicit skip; graphics PlayMode passed 188/188; production
 landmark cases passed 7/7. Review was self-review, not independent. The
-[protocol and actual matrix](Validation/M6.6.md) record zero participants and Pending human
-results. M6.6 remains Active; M4.9 is still Pending; no M6 acceptance or M8 authorization is
-claimed. No commit or push was performed.
+[protocol and actual matrix](Validation/M6.6.md) recorded zero participants and Pending human
+results at preparation; no human acceptance was claimed then. On 2026-11-12 the owner separately
+accepted M6.6 and M4.9 with Proceed using two external testers and separate owner participation,
+waiving further recruitment and unrecorded protocol measurements. No score or variant coverage
+is reconstructed. This closure authorizes no M8 implementation. No commit or push was performed
+as part of the original technical preparation.
 
 # Zasada aktualizacji roadmapy
 
