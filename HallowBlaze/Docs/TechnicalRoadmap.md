@@ -5723,77 +5723,247 @@ This was the planning state on 2026-11-03; M6.6 later received owner-recorded Pr
 
 ## `M6.7` - Visual board editor workflow and safe document contract
 
-**Status:** `Planned` - small-editor and route-assignment direction approved 2026-11-03; detailed scopes remain to be finalized.
+**Status:** `Done` - documentation contract validated and independently reviewed on 2026-11-12; no editor implementation started.
 **Priority:** P2 after the M7 repairs; consider before bulk handcrafted content.
 **Related contract:** Sections 9, 11, 14, 21 and 27.2 board/route assignments; existing M6.1 template schema and M6.5 solver contracts.
 **Rationale:** Grid painting can reduce repeated map-design work without maintaining scenes or editing coordinates by hand, provided it saves the same data the game loads.
 **Current behavior:** Handcrafted JSON templates, catalogs, validators and a bounded solver exist. The Radio Tower reference-rebuild menu is specialized asset plumbing, not general painting/inspection.
-**Expected outcome:** A finalized create -> paint -> inspect -> validate -> save -> assign to route segment -> test workflow and closed scopes for M6.8-M6.10.
-**Scope:** Specify supported dimensions/elements, blank/new/open/save-as, a side palette with click placement, property editing, validation and isolated test-play; drag-and-drop is optional. Separate a reusable board-template document from its placement assignment. Reuse current world/edge/segment, template/version/variant IDs and existing assignment schema; derive edge membership rather than duplicating topology. Define deterministic serialization, undo/redo, dirty/unsupported-field handling and separate explicit assignment/publication. Identify final-segment-only loader restrictions and scope any minimal compatibility extension before M6.10 Ready. Record exact paths and remaining design choices, not another open question about whether the owner wants a small editor.
+**Expected outcome:** The [M6.7 contract](BoardGeneration.md#m67-visual-board-editor-contract) defines create -> paint -> inspect -> validate -> save draft -> assign -> explicitly activate -> isolated travel-test, with closed implementation stages below.
+**Scope:** Two schema-1 documents; 8x8 x.y grid and the ten existing Radio Tower catalog definitions; click paint/erase, selection/properties/undo; strict non-destructive import and atomic validated saves; stable composite assignment keys; explicit final-landmark-only placement; immutable publication keys and isolated real-runtime testing. Drag-and-drop is optional. The initial activation target is a sandbox catalog, not production campaign references.
 **Non-goals:** Implementation in this card, a full world-graph editor, arbitrary scripts/triggers, automatic campaign publication, new mechanics, generator redesign, asset generation or edits to the current Radio Tower board.
-**Dependencies:** The expanded M7 gate before tool implementation and accepted M6.1/M6.5/travel-assignment foundations. The owner approved the direction; finalize the concrete contract before code. Authoring tools do not supply M6.6 human acceptance.
-**Allowed file area:** This roadmap and `Docs/BoardGeneration.md` for the workflow, supported-format matrix and exact follow-up scopes. No runtime or asset changes in this design card.
-**Acceptance criteria:** Existing templates and assignments open without destructive conversion or silent field loss. The same board can be assigned to two existing route segments with distinct assignment identities, no duplicated grid and independent runtime state. The route/ordered-segment chooser uses stable IDs and displays endpoints. Every runtime placement limitation has an explicit supported policy or scoped prerequisite; assignments are part of the initial tool, not a deferred world editor. Code cards have closed scopes and defined publication/save compatibility.
-**Test plan:** Documentation/schema/owner consistency review of a template and its existing assignment without modifying originals. Define template/assignment round-trip, edge membership, conflicts, unsupported placements, dirty-state and publication-safety cases; no Unity test for this documentation card.
-**Save and compatibility impact:** Drafts are not player saves. Published template/version/variant and entity/content IDs remain migration-sensitive; editing must not silently change pinned Continue layouts. Publication requires explicit version and assignment review.
-**Required evidence:** Workflow sketch, template-versus-assignment model, supported placement matrix, version/publication policy and closed M6.8-M6.10 scopes.
+**Dependencies:** The accepted M7 closeout, M6.1/M6.5 and travel contracts. M4.9/M6.6 are Done/Proceed under their recorded limited-sample exceptions; M7.21/M7.26 remain Deferred. No decision/recruitment is reopened.
+**Allowed file area:** Only `HallowBlaze/Docs/BoardGeneration.md` and `HallowBlaze/Docs/TechnicalRoadmap.md`, relative to Git root. Runtime, tests, assets, settings, packages and agent configuration are read-only.
+**Acceptance criteria:** Complete workflow/data/placement/version matrices; preserved existing identities/fields; actionable cell/field errors; explicit dirty/cancel/failure behavior; no campaign change on Save; two compatible final placements share a template but no mutable state; exact scopes/tests/dependencies for M6.8-M6.10. Intermediate and non-landmark placements are explicitly unsupported, not silently routed through Radio Tower.
+**Test plan:** Read-only schema/source/JSON walkthrough of the existing Radio Tower template, placement and world; Markdown structure/links, source-of-truth consistency, whitespace and two-file scope checks. No new Unity tests or editor smoke for a documentation-only card. Future round-trip/travel claims remain implementation gates, not M6.7 results.
+**Save and compatibility impact:** Authoring schema 1 and run/profile v5/v2 unchanged. No current Radio Tower data/reference or saved game is modified. Template-only version increments are insufficient for pre-selection saved legs; publication must retain configuration-addressed mappings or refuse activation.
+**Required evidence:** [Workflow, supported matrices, failure policy, versioning and reference walkthrough](BoardGeneration.md#m67-visual-board-editor-contract), plus validated closed stages below.
+
+**Baseline (2026-11-12):** Clean Git root `D:/Repos/HallowBlaze`, branch
+`M7/DeferredFollowUps`, HEAD `8d87b253586453f90d1ac1a51b39461a5e3553bc`.
+The owner explicitly requested a task branch; `M6/7/VisualBoardEditorContract` starts at that
+HEAD. No commit/push is authorized by this documentation task. The actual source confirms
+that template/placement writers and an isolated draft launcher are missing, and bootstrap is
+Radio-Tower-specific; the stages below do not present those as existing APIs.
+
+**Closeout (2026-11-12):** Workflow, supported-data/placement matrices, document failure and
+version policies, reference walkthrough and six closed implementation stages are complete.
+Schema/source/reference, Markdown links/structure and scope/integrity checks passed. Independent
+review found a scene-reload lifecycle contradiction; controlled travel reloads now retain the
+sandbox context, while termination revokes it, with explicit bootstrap/travel test gates.
+The corrected candidate received independent PASS. No Unity compile/test, live launch or UI
+result is claimed for this documentation card; the live Pipeline server was unreachable.
+The existing Radio Tower and all earlier owner decisions are unchanged. M6.8a is Ready below;
+M6.8-M6.10 implementation does not start automatically. No commit or push was performed.
 
 ---
 
 ## `M6.8` - Grid painting, object properties and validated template saves
 
-**Status:** `Planned` - implementation waits for the finalized M6.7 contract and repair gates.
+**Status:** `Planned` - M6.8a is the first ready-to-start stage after M6.7 acceptance; implementation requires a separate request.
 **Priority:** P2 after M6.7.
-**Related contract:** M6.7's accepted document contract and existing board/template/catalog validators.
+**Related contract:** [M6.7 data and lifecycle](BoardGeneration.md#editor-supported-data-matrix), existing schema-1 readers and authoritative validators.
 **Rationale:** Replace repetitive coordinate editing without creating a second format, rule system or validator.
 **Current behavior:** Authoring uses template files and specialized reference rebuilding, without a general visual editing window.
 **Expected outcome:** A Unity Editor window creates/opens supported drafts, paints/erases existing content, edits properties, supports undo/redo and saves valid JSON without scene editing.
-**Scope:** Start from a blank supported grid, with existing sprite previews, x.y coordinates and a side layer/content palette. Select a palette item then click to place/erase; drag-and-drop is optional and uses the same validation. Add start/exit/entity placement and a property inspector for supported items, tools, enemies, plates, gates and links. Use stable IDs, a draft document, shared cell/field diagnostics, structured deterministic saves, dirty indicators and explicit save/save-as. Confirm authored-file replacement; preserve supported fields and refuse destructive conversions. Exposed controls support keyboard and pointer under section 18.1.
+**Scope:** M6.8a document/serialization/save contract first, then M6.8b painting/inspection. Use the exact ten-entry palette, all variants/outcomes and 8x8 bounds; no ordinary-only one-exit format. New blank drafts may be incomplete in memory, but only validated schema-1 drafts are saved. Reuse `LandmarkTemplateJson.Deserialize` and existing validator/composer catalogs; the new writer is Editor-only and emits that same schema.
 **Non-goals:** New rules, arbitrary scripts/triggers, automatic publishing/repair, a parallel validator, art production, world-topology editing or current Radio Tower edits. Route assignments belong to M6.10, not to painting grid data.
-**Dependencies:** Finalized `M6.7` contract, supported schema and exact paths. Split draft/codec and window implementation before Ready if they exceed one bounded iteration.
-**Allowed file area:** Exact Editor-only authoring components, necessary existing reusable codec boundaries, focused EditMode tests/disposable fixtures and authoring instructions enumerated in M6.7. No production-template, scene/prefab, package, settings or runtime-assembly changes are implicit. New metadata is Unity-generated.
-**Acceptance criteria:** Open/save/open preserves all supported fields/IDs. Painting, erase and undo/redo produce the expected document. Invalid start/exit, duplicate IDs, occupancy and broken links yield actionable diagnostics, not partial publication. Cancel/failed save preserves the old file; dirty close/reopen is explicit. Keyboard and pointer selection match the saved grid; Editor code is excluded from Player builds.
-**Test plan:** Focused document/codec/identity/validation/undo/save-failure EditMode tests; real Editor painting/reopening and keyboard/narrow-window smoke on a disposable map. Round-trip existing supported templates without changing originals and verify Player-build exclusion.
-**Save and compatibility impact:** No player schema or automatic republishing. Save-as creates an authored draft, not an activated campaign board; existing published identities stay untouched.
-**Required evidence:** Draft round-trip, exact tests, supported-field preservation, invalid-map/save-failure checks, Editor-only boundary and owner authoring smoke.
+**Dependencies:** M6.7 acceptance; no M6.9/M6.10 runtime prerequisite is needed for M6.8a. The accepted M7 closeout satisfies the repair gate without reopening its deferrals.
+**Allowed file area:** The closed stage lists below, plus this card and `Docs/BoardGeneration.md`. New `.meta` companions and new-folder metadata must be Unity-generated; existing metadata stays unchanged. All following stage paths are Unity-project-relative. No wildcard permission to edit runtime, GameData, scenes, prefabs, packages or settings.
+**Save and compatibility impact:** No player schema or publishing. Save As retains IDs; Fork explicitly creates a new unpublished identity. Unsupported files stay read-only without destructive conversion.
+
+### M6.8a - Document, deterministic writer and safe saves
+
+**Status:** `Ready` - contract/scopes fixed by M6.7; implementation awaits a separate request.
+
+**Closed writes:** New `Assets/Editor/BoardAuthoring/HallowBlaze.Editor.BoardAuthoring.asmdef`
+(`includePlatforms: Editor`, references only existing Core/Presentation assemblies and the
+installed Newtonsoft library), `BoardTemplateDocument.cs`, `BoardAuthoringJson.cs`,
+`BoardAuthoringValidation.cs`, `BoardDocumentStore.cs` in that directory;
+`Assets/Tests/EditMode/BoardAuthoringDocumentTests.cs` and
+`Assets/Tests/EditMode/HallowBlaze.Tests.EditMode.asmdef` (add only the Editor assembly reference);
+the two authoring documents. Test JSON/files are created in external disposable storage, not
+new production fixtures. The existing runtime reader/validators and catalog are read-only.
+
+**Acceptance:** Separate saved path/fingerprint/dirty/undo state; full structured template and
+placement serialization preserving optional absence/null and every variant/ID/field; no editor
+metadata in JSON; deterministic bytes; strict reader round-trip; protected-target refusal and
+atomic, fingerprint-checked save. Unknown fields/schema/content never become lossy editable data.
+Preparing the placement codec is not assignment UI or activation.
+
+**Required checks:** Focused EditMode `BoardAuthoringDocumentTests`: all Radio Tower variants
+round-trip through temporary copies; absent/empty pressure arrays and absent/null source/tool
+fields; duplicate/miscased/unknown/future-schema rejection; invalid starts/exits/IDs/occupancy/
+item bindings/links and mandatory guarantees; deterministic save and no RNG consumption;
+cancel, permission/disk-full/replacement fault injection, concurrent external edits and dirty
+navigation. Check all original asset hashes unchanged and Editor-only assembly/Player exclusion.
+No real player save directory or published-file overwrite is permitted.
+
+### M6.8b - Window, paint, inspect and undo
+
+**Dependencies:** M6.8a passed/reviewed. **Closed writes:**
+`Assets/Editor/BoardAuthoring/BoardAuthoringWindow.cs`, `BoardGridView.cs`,
+`BoardPropertyPanel.cs`; existing M6.8a document/validation files only for UI integration;
+`Assets/Tests/EditMode/BoardAuthoringWindowTests.cs`; the two authoring documents.
+
+**Acceptance:** New/Open/Save/Save As/Fork, 0.0-7.7 canvas, layer/content palette and previews,
+click place/erase/select, properties, variant selection, actionable diagnostics and undo/redo.
+One gesture is one undo unit; selection is free; deletion cannot silently orphan or cascade
+bindings. Keyboard/pointer actions have equivalent results under contract section 18.1.
+
+**Required checks:** Focused EditMode `BoardAuthoringWindowTests` for coordinate orientation,
+per-layer occupancy, ID preservation, atomic dependent deletion, undo-to-clean/redo-to-dirty,
+all-variant save and failed-open retention. Actual Editor keyboard/pointer/narrow-window smoke
+on an external disposable draft; reopen without hand-editing JSON. No Play Mode or publication
+is required for M6.8 acceptance. Drag-and-drop is optional, not a blocker or extra stage.
 
 ---
 
 ## `M6.9` - Isolated board test-play and authoring acceptance
 
-**Status:** `Planned` - implementation waits for the finalized M6.7 contract and repair gates.
+**Status:** `Planned` - M6.8 precedes the separately scoped M6.9a launch prerequisite.
 **Priority:** P2 after M6.8, before bulk map authoring if adopted.
 **Related contract:** M6.7 publishing/isolation boundary, normal command/intent rules and existing solver contracts.
 **Rationale:** Authors need to try real commands, costs and enemies without replacing a campaign or risking real profile data.
-**Current behavior:** Developer template validation/solver tooling exists, but not an integrated draft -> isolated play -> return-to-edit workflow.
+**Current behavior:** `BlueprintBoardRuntimeComposer` is reusable; `PersistenceRootOverride` is only an internal test hook. The serialized world, Radio Tower-specific bootstrap and PlayerPrefs high score are not isolated by that hook. There is no supported snapshot launcher.
 **Expected outcome:** The owner can build, validate, test, revise and reopen a map and decide whether this tool is worth adopting.
-**Scope:** Validate a draft snapshot, launch it through existing runtime composition with isolated run/profile storage, then return to the unchanged draft. Use the existing bounded solver only for supported rules, with explicit unsupported/limit results. Require deliberate action before replacing play mode; never launch a second Editor on this project. Conduct one representative local-board authoring exercise; M6.10 owns route assignment, its explicit publication action and end-to-end travel validation.
+**Scope:** M6.9a supplies an explicit Editor-only bootstrap/sandbox seam; M6.9b adds snapshot launch, safe return and bounded solver integration. Real runtime, one Editor and external temporary storage only. M6.10 owns route chooser/publication/integrated travel acceptance.
 **Non-goals:** A second resolver/AI, general solvability claims, automatic campaign publication, real player-data writes, remote sharing/telemetry, pinned-content rewrites or changes to current Radio Tower content.
-**Dependencies:** `M6.7` and `M6.8`; accepted isolation/composition APIs. A missing launch boundary requires a separately scoped minimal prerequisite, not a hidden runtime refactor.
-**Allowed file area:** Exact Editor test-launch/validation adapters, focused EditMode/PlayMode tests, isolated fixtures/temp storage and authoring instructions before Ready. Production templates/references and player storage are excluded.
-**Acceptance criteria:** Test-play matches the draft snapshot and uses real turns/effects/intents. Failure/stop/restart preserves the draft and real player data. Solver limits/unsupported rules cannot be reported as solved. The owner completes create -> test -> revise -> reopen without hand-editing JSON and gives Accept/Revise/Defer. Tool acceptance neither publishes a board nor accepts its balance.
-**Test plan:** Snapshot/runtime parity, invalid-launch refusal, storage isolation, return-to-edit and solver-result tests; focused Editor/PlayMode smoke plus actual owner authoring. Check for unintended scene/campaign/profile writes.
-**Save and compatibility impact:** Test saves are isolated and reset independently. No player schema/Continue change; later publication pins new content versions explicitly.
-**Required evidence:** Exact tests, isolation/draft-preservation proof, supported solver limits, reproducible authoring workflow and owner verdict.
+**Allowed file area:** Only the closed stages below, their Unity-generated new metadata and the two authoring documents. No scene/Resources/prefab/production-template changes or real storage access.
+**Save and compatibility impact:** Existing run v5/profile v2 DTOs in isolated storage; no migration/reset or change to normal launch defaults. Missing isolation refuses launch before stores or gameplay objects exist.
+
+### M6.9a - Explicit isolated-launch prerequisite
+
+**Dependencies:** M6.8a/b passed/reviewed. **Closed writes:**
+`Assets/Scripts/Presentation/Runtime/BoardAuthoringTestContext.cs` (Editor-conditional context);
+`Assets/Scripts/GameManager.cs` (consume/clear context before stores/world/bootstrap and
+sandbox/suppress high-score persistence); `Assets/Scripts/SoundManager.cs` (sandbox/suppress
+audio-preference writes while the authoring context is active); `Assets/Scripts/BoardManager.cs`
+(compose the supplied validated landmark snapshot with existing views/tool allocation);
+`Assets/Tests/PlayMode/BoardAuthoringIsolationTests.cs`; the two authoring documents.
+No new gameplay branch in resolver/AI, reflection-based launcher or assembly/package change.
+The supplied snapshot does not alter the production Radio Tower random-variant policy.
+
+**Acceptance:** Explicit world/address/template/variant input and unique external save root;
+real blueprint composition with pressure bindings before intents; no ordinary fallback for a
+bad authored snapshot; no real profile/run/PlayerPrefs writes. Context is Editor-only,
+single-owner and revoked on sandbox end/error/unexpected reload. Controlled travel scene
+reloads retain the isolated root and immutable world/publication context, rechecked before the
+next bootstrap; only the previous board runtime is released. Normal launch without context is unchanged.
+
+**Required checks:** Graphics PlayMode `BoardAuthoringIsolationTests`: invalid/no-root launch
+refused before I/O; exact snapshot/state/view/initial-intent parity; accepted/rejected command
+costs, push/gate/tool/food effects and terminal outcomes through actual runtime; isolated profile,
+run, Continue and high score; compose/save failure and allocator rollback; exit/death/stop/reload
+termination cleanup followed by a normal-launch default check; expected Play Mode entry-domain
+reload restores the pending launch before bootstrap. A controlled gameplay-scene reload retains
+the same isolated root/context across real bootstrap, with no stale outgoing-scene revocation.
+Use injected sentinels/fake roots, never the
+real player's directory. Check Player builds exclude the context and Editor-only API references.
+
+### M6.9b - Test action, recovery and solver results
+
+**Dependencies:** M6.9a passed/reviewed. **Closed writes:**
+`Assets/Editor/BoardAuthoring/BoardTestPlayLauncher.cs`, `BoardDraftRecovery.cs`,
+`BoardSolverAdapter.cs`, `BoardAuthoringWindow.cs`; M6.8a document adapter only for recovery;
+`Assets/Tests/EditMode/BoardAuthoringTestPlayTests.cs`,
+`Assets/Tests/PlayMode/BoardAuthoringIsolationTests.cs`; the two authoring documents.
+
+**Acceptance:** Immutable validated snapshot; visible seed/variant/resources/equipment; Stop /
+Cancel for existing Play Mode; preserve dirty draft, selection and undo across domain reload;
+restore prior scene setup without saving sandbox mutations. Resolve pre-existing dirty scenes
+explicitly or cancel. Reset/retest touches only the sandbox. The owner completes create ->
+paint -> save -> local test -> revise -> reopen and records Accept/Revise/Defer; this is tool
+usability acceptance, not board balance, publication or a new M6.6 human gate.
+
+**Required checks:** Focused EditMode `BoardAuthoringTestPlayTests` and the PlayMode isolation
+fixture cover snapshot immutability, failed launch, stop/reload/recovery, repeat launch and no
+project writes. Solver tests assert existing supported rules and exact `Solved`, exhausted
+`NoSolution`, state/depth/time-limit and invalid/unsupported handling; a found path is executed
+on independent real owners with requested outcome assertions. Use unchanged 50k/32/10s defaults;
+do not add Listener/shovel/cache/pit simulation, command export or portable replay. Actual local
+authoring exercise is required before M6.9 Done, not claimed by automated tests.
 
 ---
 
 ## `M6.10` - Board-template assignments to existing route segments
 
-**Status:** `Planned` - initial small-editor scope approved 2026-11-03; finalize M6.7 details before code.
+**Status:** `Planned` - final-landmark-only policy fixed by M6.7; M6.10a is a separate loader/publication prerequisite, not implicit permission to edit runtime now.
 **Priority:** P2 with the initial editor, before bulk handcrafted route content.
 **Related contract:** Section 27.2 board/route assignment direction and existing route, template and pinned-selection contracts.
 **Rationale:** A local board and its place in a journey are different data. Explicit placements let an author reuse a template and control which board appears along a route without copying grids or editing campaign JSON by hand.
-**Current behavior:** Existing assignments bind world/version and stable segment ID to template/version/variant; the Radio Tower example is a final-segment placement. General editor route selection and its supported-placement limits are not yet implemented.
+**Current behavior:** `DeserializePlacement` derives edge membership but accepts only a final inbound landmark segment with matching generation config/version. GameManager/BoardManager recognize only Radio Tower, whose unpinned selections use M6.6 RNG. Saving another placement cannot activate it. The production world has one inbound landmark edge, so reuse-at-two-addresses needs an isolated fixture.
 **Expected outcome:** The initial editor can assign a validated board template to a chosen segment of an existing directed route and test that placement through real travel using isolated data.
-**Scope:** Use an existing-route chooser displaying endpoint nodes and direction, its ordered stable segments, and separate template/version/variant selection. Reuse the current placement codec/catalog abstraction; do not add redundant edge fields where membership is already derivable. Support create/edit/remove assignment drafts, undo/redo, conflict diagnostics and explicit reviewed publication, separate from template save. Validate world/version/edge membership, missing templates/variants, duplicate/conflicting placements and supported intermediate/final-segment rules. Identify and separately scope any minimal loader extension required by M6.7; the editor cannot promise intermediate placements while routing every board through a final-only landmark API. Keep unassigned segments on their existing generator path. Test one template on two segment addresses with independent state.
-**Non-goals:** A graph-drawing tool, creating/reordering world edges or segments, random board pools, day/arrival-rule changes, automatic publication on grid save, edits to current Radio Tower content/assignment or a second runtime resolver.
-**Dependencies:** Finalized `M6.7` contract, `M6.8` draft UI/codec and `M6.9` isolated launch; any explicitly scoped placement-loader prerequisite. This card does not block M7 repairs or unrelated M8 work.
-**Allowed file area:** Exact Editor assignment UI/document/validation adapters, existing placement loader/catalog/publication boundaries only where enumerated, isolated sample world/assignment/template fixtures and focused tests, plus authoring documentation. Enumerate before Ready. No blanket production world/template, scene, package or settings writes; existing published fixtures remain read-only.
-**Acceptance criteria:** Select existing route -> segment -> template/version/variant, save/reopen the assignment and validate that isolated travel loads that exact board at that segment. Intermediate exits still only advance segments; final exits retain ordinary arrival/day semantics. Invalid/conflicting/unsupported assignments cannot partially publish. One template used twice produces independent board state. Save-as of a board never changes assignments; cancel/failure/undo preserves prior files. A deliberate publication action has a bounded affected-reference diff and an explicit version/compatibility policy; existing committed saves keep their pinned selection.
-**Test plan:** Assignment round-trip, membership/version/variant/conflict and save-failure EditMode tests; keyboard/pointer editor smoke and graphics PlayMode assigned/unassigned travel at representative intermediate/final positions allowed by the accepted policy. Verify fresh-versus-pinned Continue, independent reused-board state and isolated storage. Owner exercise: create -> paint -> save -> assign -> travel-test -> revise, followed by an explicit editor Accept/Revise verdict.
-**Save and compatibility impact:** Reuse existing stable content/placement IDs where possible. No automatic run migration, profile change, reroll or segment reorder. New publication versions/loader support must preserve saved addresses and selected templates; any required schema change is explicit and tested, not inferred from Editor UI state.
-**Required evidence:** Template/assignment model, exact supported placement policy and diffs, round-trip/travel/isolation results, pinned-save evidence and dated integrated authoring verdict.
+**Scope:** Final compatible landmark placements only. M6.10a supplies a small index over the existing placement/template documents and exact-version loader lookup; M6.10b supplies route/ordered-segment UI, reversible assignment drafts and explicit sandbox activation. The catalog is not a new graph, template schema, random pool or player save format.
+**Non-goals:** Graph drawing, creating/reordering world nodes/edges/segments, authored intermediate/non-landmark boards, new rules, Radio Tower edits, automatic publishing, production-content integration or another runtime resolver.
+**Dependencies:** M6.8 and M6.9 accepted before M6.10a; M6.10a accepted before M6.10b. No reopening of M7 or M4.9/M6.6.
+**Allowed file area:** The closed stages below, their Unity-generated new metadata and the two authoring documents. Existing template/placement/world/Resources assets remain read-only. External fixture worlds contain two already-defined compatible inbound edges; the editor does not create them.
+**Save and compatibility impact:** Schema-1 composite placement keys, full saved addresses and v5 pinned selection records remain authoritative. No run/profile schema change. Real campaign activation stays disabled in this initial editor; later content publication needs its own explicit production-path scope and compatibility proof, not a broader grant under this card.
+
+### M6.10a - Final-only catalog/loader and publication prerequisite
+
+**Closed writes:** New `Assets/Scripts/Core/Generation/Landmarks/LandmarkPublicationCatalog.cs`
+(index and validation over existing schema-1 readers, not a new document format),
+`Assets/Scripts/Presentation/Runtime/BoardAuthoringTestContext.cs`,
+`Assets/Scripts/GameManager.cs`, `Assets/Scripts/BoardManager.cs` (exact snapshot/catalog
+selection and views through the existing composer);
+`Assets/Tests/EditMode/BoardAuthoringPublicationTests.cs`,
+`Assets/Tests/PlayMode/BoardAuthoringTravelTests.cs`; the two authoring documents.
+`LandmarkPlacement`, `BoardAddressFactory`, `RouteTravelService`, run DTOs, resolvers and existing Radio Tower
+data/Resources references are read-only. No package/assembly/topology change is implicit.
+
+**Acceptance:** Resolve by world/segment/saved generation configuration and then exact
+template/version/variant, retaining all old mappings. New editor assignments checkpoint the
+explicit selected variant through existing `SelectLandmark`, never call random selection.
+Existing Radio Tower uses its unchanged pinned-first/M6.6 policy. A missing/conflicting archived
+mapping refuses startup/publication; unassigned boards retain their ordinary/legacy path.
+Preflight the whole immutable catalog before activation; no partial writes/active references.
+Keep final-segment and landmark-destination restrictions; intermediate support is not part of
+this prerequisite and cannot be smuggled in as a loader fix.
+Retain each sandbox's exact world/publication snapshot in Editor recovery context. An incompatible
+world/configuration publication requires a new context/root; refuse replacement of an active
+context, rather than changing `BoardAddressFactory` or adding permissive generation drift.
+General real-campaign upgrades remain a separate compatibility/content-publication task.
+
+**Required checks:** EditMode `BoardAuthoringPublicationTests`: composite-key conflicts,
+world/template/configuration/variant mismatch, missing archived versions, append-only version
+updates and atomic activation/removal/failure. Graphics PlayMode `BoardAuthoringTravelTests`:
+one template on two compatible final segments has distinct addresses and independent state,
+tool instances/charges and pressure links; ordinary intermediate exits do not arrive/increment
+day; intermediate exit -> actual gameplay-scene reload -> exact assigned final landmark keeps
+the same sandbox root/publication and selected variant, followed by complete session cleanup;
+final exits checkpoint outcome/arrival once; save failures retry without double rewards.
+Continue of a retained sandbox after another publication is checked both with `ActiveLandmark` already pinned and before
+selection, including a later not-yet-visited segment on the saved active leg; layout, IDs, seed,
+variant, resources, tool allocator and day remain unchanged. Incompatible same-context
+activation is refused. Missing old content fails rather than rerolls. Fresh isolated contexts
+use the new reviewed mapping. All storage and fixtures are
+external/disposable; do not rewrite or inspect real player saves to prove compatibility.
+
+### M6.10b - Assignment UI and integrated authoring acceptance
+
+**Dependencies:** M6.10a passed/reviewed. **Closed writes:**
+`Assets/Editor/BoardAuthoring/BoardAssignmentDocument.cs`, `BoardRouteAssignmentPanel.cs`,
+`BoardPublicationController.cs`, `BoardAuthoringWindow.cs`, `BoardTestPlayLauncher.cs`;
+M6.8a document store/JSON/validation adapters for assignment handling;
+`Assets/Tests/EditMode/BoardAuthoringAssignmentTests.cs`,
+`Assets/Tests/PlayMode/BoardAuthoringTravelTests.cs`; the two authoring documents.
+
+**Acceptance:** Show source/destination nodes, directed edge ID and ordered segment IDs;
+disabled unsupported positions explain the restriction. Create/edit/remove/undo/save/reopen a
+schema-1 assignment independently of the grid. No redundant edge/assignment-ID field. One
+template can serve two placement keys; Save As/fork never silently updates either. The explicit
+activation preview lists every affected reference/version and writes only the isolated catalog;
+cancel/failure leaves the old catalog and documents intact. Campaign activation is visibly
+unavailable, not silently redirected to production. Normal travel loads exactly the selected
+template/variant at the selected supported segment.
+
+**Required checks:** Focused EditMode `BoardAuthoringAssignmentTests` for stable membership,
+endpoints/order, two-key reuse, deterministic round-trip, independent dirty/undo state, dangling
+reference/conflict/unsupported refusal and save/activation faults. Reuse graphics PlayMode
+travel/isolation checks from M6.10a. Owner keyboard/pointer exercise on disposable data:
+create -> paint -> validate -> save -> assign -> explicit sandbox activation -> travel-test ->
+revise -> reopen, then dated Accept/Revise. This completes the small-editor workflow, not bulk
+map production, campaign publication or acceptance of board balance.
 
 ---
 

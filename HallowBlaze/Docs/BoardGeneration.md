@@ -426,7 +426,274 @@ states (428, 428 and 248 respectively), not survival under arbitrary mistakes/re
 
 The [M6.6 protocol and evidence](Validation/M6.6.md) contain the exact seed vector, paths,
 costs, model limits and isolated session preparation. Technical tests passed; participants and
-sessions are zero. M6.6 remains Active and the human landmark gate Pending, not accepted.
+sessions were zero at preparation. On 2026-11-12 the owner recorded Done/Proceed for M6.6
+using two external testers and separate owner participation, with the missing protocol-specific
+measurements and further recruitment waived. This limited-sample acceptance is not a measured
+comprehension rate or human coverage of every variant; the original evidence remains unchanged.
+
+## M6.7 Visual Board Editor Contract
+
+This is the small-editor design contract, not an implemented tool. It implements the accepted
+[board/route direction](GameDesignContract.md#board-authoring-and-route-assignments---accepted-direction-2026-11-03)
+without adding a second board format, validator, resolver or world graph. M4.9/M6.6 have
+owner-recorded Proceed; M7 is closed with M7.21/M7.26 Deferred. None of those decisions or
+recruitment is reopened. The current Radio Tower template, assignment and Resources references
+remain read-only, including during future authoring exercises.
+
+### Editor Implementation Anchors
+
+| Existing owner | Verified boundary and consequence |
+| --- | --- |
+| [LandmarkTemplateJson](../Assets/Scripts/Core/Generation/Landmarks/LandmarkTemplateJson.cs) | Strict schema-1 template and placement readers; no writer exists. Reject unknown/duplicate/miscased fields, coercion and unknown schemas. A deterministic writer/document adapter is M6.8a work, not an existing capability. |
+| [LandmarkTemplate and LandmarkBoard](../Assets/Scripts/Core/Generation/Landmarks/LandmarkTemplate.cs) | Fixed 8x8 blueprint, named variants, at least two distinct exit outcomes and at least one mandatory outcome. Construction checks structure, links and mandatory tool guarantees; it does not run every budget/topology check. |
+| [BoardValidator](../Assets/Scripts/Core/Generation/Validation/BoardValidator.cs) and [PlateGateValidator](../Assets/Scripts/Core/Board/State/PlateGateLayout.cs) | Reuse catalog/occupancy/start/exit/budget/opening checks and exact pressure-link rules. `LandmarkBoard.Validate` suppresses only static `UnreachableExit` for explicitly optional exits. |
+| [LandmarkPlacement](../Assets/Scripts/Core/Generation/Landmarks/LandmarkPlacement.cs) | Requires the final segment of an existing directed edge whose destination has `placeKind: landmark`, matching configuration ID/version and a known variant. `EdgeId` is derived from segment membership. |
+| [GameManager](../Assets/Scripts/GameManager.cs), [BoardManager](../Assets/Scripts/BoardManager.cs) and [RadioTowerLandmark](../Assets/Scripts/Presentation/Runtime/RadioTowerLandmark.cs) | Bootstrap and views currently recognize only the named Radio Tower configuration/Resources asset. Placement JSON alone does not register another template. New content needs the explicitly bounded M6.9a/M6.10a adapters below. |
+| [BlueprintBoardRuntimeComposer](../Assets/Scripts/Presentation/Runtime/BlueprintBoardRuntimeComposer.cs) | Existing shared runtime seam checks full request identity, exact entity/view parity, catalog and plate/gate bindings before planning. It is not an isolated game launcher. |
+| [BoardAddressFactory](../Assets/Scripts/Core/Session/BoardAddressFactory.cs) and [RouteTravelService](../Assets/Scripts/Core/Session/RouteTravelService.cs) | Saved legs retain segment configurations; compatibility upgrades are explicitly named, not a generic authored-publication registry. Landmark selection/completion is final-segment-only. Do not bypass either guard. |
+
+### Editor Supported Data Matrix
+
+Version 1 authors only the schema-1 landmark subset below. The canvas is exactly **8x8**,
+coordinates **0.0 through 7.7**, with X east/right and Y north/up. Display `x.y`, never `row.column`;
+JSON still stores separate integer `x` and `y`. Missing terrain is impassable void, not implicit
+floor. There are no width/height fields, resize, rotation or larger-board conversion.
+
+The authoritative initial palette is exactly `RadioTowerLandmark.CreateCatalog()`; its ten
+definitions are reused, not cloned into new gameplay definitions. Existing sprite/prefab previews
+are read-only and identified by content ID, never by sprite names or Unity InstanceID.
+
+| Layer / data | Editable v1 entries | Constraints / excluded behavior |
+| --- | --- | --- |
+| Terrain | `legacy.floor`, `ordinary.exit-terrain`, `landmark.plate`, `landmark.gate` | Exit is terrain, not a decorative Exit prefab. Plate/gate is one terrain occupant, not an overlay on a second floor entity. |
+| Actor | `legacy.player`, `ordinary.shambler.10` | Exactly one player per variant. Enemy damage/cadence comes from the existing catalog; no per-instance rule or intent editing. |
+| Obstacle | `legacy.wall`, `landmark.boulder` | Existing manual/axe clearing and single-boulder pushing; no wall HP, custom work/noise or physics settings. |
+| Item | `axe.basic`, `landmark.radio-tower.rations` | Require `BoardItemSpawn` metadata. Rations restore the catalog's 20 Food; axe charges come from `ToolContentCatalog`, not an invented JSON field. |
+| Item properties | `instanceId`, `entityId`, `itemDefinitionId`, `resourceFamilyId`, nullable/absent `sourceId`, `initiallyObservable` | Families are `tools`/`food`. Fixed sources are only `source.radio-tower.axe` and `source.radio-tower.rations`, bound to their existing definitions; `sourceId: null` permits an untracked spawn. A source is not the run-allocated tool instance ID. |
+| Pressure links | `terrainId`, `linkId`, `occupants: Actors/Boulders/ActorsOrBoulders`; gate `rule: All/Any` | Use existing plate/gate definitions and validator. No arbitrary trigger, latch, script or reward callback. |
+| Template properties | Every configuration field in the schema table above; all variants, entities, item bindings and outcomes | Preserve all variants, not only the selected tab. Outcomes expose ID/name, terrain exit ID, optional flag and existing tool/guarantee fields. No outcome reward field exists. |
+| Not supported | Listeners, damage-20 enemies, shovel, caches/pits, medical/ordinary supply catalogs, custom sources/content, arbitrary board dimensions | Their existence elsewhere in the game does not imply support by this template catalog, composer or solver. Refuse editable import; do not replace them with a supported element. |
+
+One entity per layer/cell does not mean one entity total per cell: floor plus player, item or
+obstacle is meaningful. Blocking starts, missing terrain and illegal links still fail the owning
+validators. The UI must not invent a stricter all-layers occupancy rule or allow a second actor
+because the sprites appear separate.
+
+### Editor Document Lifecycle
+
+Keep two independent documents, each with its own path, saved fingerprint, dirty marker and
+undo history:
+
+| Document | Persisted identity / content | Not stored here |
+| --- | --- | --- |
+| Template | Existing schema-1 `templateId` + positive `templateVersion`, configuration, all variants and outcomes | World, route, node, day, assignment or run state. Entity IDs are board-local and may recur in another variant/board. |
+| Assignment | Existing schema-1 `worldDefinitionId`, `worldVersion`, `segmentId`, `templateId`, `templateVersion`, `variantId` | No new `assignmentId` or `edgeId` field. The composite `(worldDefinitionId, worldVersion, segmentId)` is the placement key; template/version/variant is its value. File names and chooser indices are not identity. |
+
+1. **Create:** New opens a blank 8x8 in-memory template with a user-confirmed new textual
+  template/configuration identity and version 1, one `base` variant, empty entities/items and
+  empty outcomes. It is deliberately incomplete, with visible missing-start/outcome errors;
+  no Radio Tower layout or assignment is copied or activated. New/Open/Close first resolves
+  each dirty document with Save / Discard / Cancel. Failed Save cancels the navigation.
+2. **Paint:** Choose a layer/content swatch and click a cell to place; choose erase and click
+  to remove on the active layer only. Select mode and keyboard cell navigation inspect without
+  painting. Inspector edits coordinates, stable IDs and supported properties. New entities get
+  a document-local unused positive ID; move/property edits preserve it. Existing IDs are never
+  renumbered. Start placement moves the existing start when present, rather than duplicating it.
+3. **Inspect and undo:** Display every occupied layer, selected `x.y`, entity/content ID and
+  linked item/plate/gate/outcome fields. Variant selection is not a mutation. Each place, erase,
+  move or property commit is one undo unit; deleting referenced data explicitly lists dependent
+  bindings/outcomes and requires an undoable confirmed removal or cancellation. No silent cascade
+  or relinking. Undo/redo restores IDs, bindings and dirty state relative to the saved fingerprint.
+  Drag-and-drop is optional and must use the same operations; it is not a separate feature gate.
+4. **Check:** Run the validation sequence below for every variant. Invalid intermediate edits
+  remain editable/undoable in memory. Save is disabled until schema and authoritative board
+  validation pass; a blank document cannot masquerade as a runtime-loadable draft. Closing an
+  invalid dirty draft offers Discard / Cancel, not a pretend successful Save.
+5. **Save draft:** Save writes only that document. Save As changes the destination, not IDs or
+  assignments. An unchanged protected published example opens read-only; use an explicit Fork
+  to set a new template/configuration identity and clear assignment association before editing.
+  Save As is not Fork and cannot overwrite a published template, the current Radio Tower files,
+  world data or Resources references. Save never writes the other dirty document implicitly.
+6. **Assign:** Select an existing directed route by visible `from node -> to node`, edge ID,
+  then a segment from its ordered list displaying ordinal and stable ID. Select an exact saved
+  template/version/variant. Saving this assignment draft does not activate it. An unsaved template
+  must be saved explicitly first, or assignment save is cancelled; never persist a dangling reference.
+7. **Activate and test:** Explicitly review/activate the assignment in an isolated publication
+  catalog and travel-test its snapshot. A local template test may be run before assignment.
+  Campaign activation is a separate compatibility gate, never a side effect of Save or Test.
+
+Opening is transactional: parse/validate a candidate before replacing the current document.
+On malformed JSON, newer schema, unknown/duplicate fields, unsupported content or failed read,
+keep the current document and original bytes; show a read-only diagnostic view of the rejected
+file. Disable transforming Save and Save As for that file, rather than dropping unknown data.
+Known optional-field absence versus explicit null is retained, including omitted `plates`/`gates`
+and nullable source/tool fields. Preserve every known root/configuration/outcome/variant field,
+including hidden variants and list entries not currently selected. No single-variant projection.
+
+The writer uses structured JSON, fixed schema-field order and ordinal variant/outcome/content/
+family/instance ordering; entity and terrain bindings use numeric ID order. Retain optional-field
+presence and exact typed values; whitespace/member ordering need not match the original. Repeated
+saves of equivalent documents must be byte-identical UTF-8, without consuming RNG. Decode the
+candidate again with the existing reader and compare the full document before replacing a file.
+Check the target's saved content fingerprint immediately before replacement; external changes
+require Reload / Save As / Cancel, never last-writer-wins. Stage to a sibling temporary file,
+flush, validate, then atomically replace/move on the same volume. Cancellation, permissions,
+disk-full or replacement failure leaves the previous target, in-memory data, dirty state and
+undo history intact; report the exact path/cause and allow retry. No direct truncate-and-write.
+
+### Editor Validation And Placement Policy
+
+Diagnostics contain severity, original validator code/message, template/version/variant and
+JSON field path or entity ID with `x.y` where known. Clicking a row selects that cell/property;
+document-wide errors stay document-wide. Do not invent a coordinate for an unknown-field error.
+
+1. Use strict `LandmarkTemplateJson` decoding with the external palette catalog, retaining raw
+  field paths. Collect editable structural diagnostics through the existing `BoardValidator`
+  entity/item overload before constructing a valid immutable template. If structure fails, do
+  not run downstream rules against a partially constructed board.
+2. Construct `LandmarkTemplate` and each addressed `LandmarkBoard`; use `PlateGateValidator`
+  and `LandmarkBoard.Validate(catalog)`. Do not treat ordinary optional-exit `UnreachableExit`
+  as a landmark failure, or suppress any other error. Check all variants, not just the active tab.
+3. The owning checks cover exactly one start, executable terrain exits, distinct outcome exit
+  IDs present in every variant, bounds/layer occupancy/entity IDs, item instance/entity/family/
+  source bindings, allowed content, plate/gate terrain and link membership, budgets/topology/
+  initial threats, plus mandatory tool guarantees. Names alone do not create rewards or tools.
+  Validation is neither a solver result nor proof of survival after every bad command.
+4. For an assignment, load the exact world/template versions, derive unique segment/edge
+  membership and invoke `DeserializePlacement`. Detect duplicate/conflicting placement keys
+  across the proposed catalog, missing artifacts/variants and generation-identity mismatches.
+  No automatic repair, topology edit, configuration rewrite or ordinary-generator substitution.
+
+| Placement | v1 decision | Required execution evidence |
+| --- | --- | --- |
+| Final segment, destination `landmark`, matching config/version | Supported data contract; runtime activation waits for M6.10a | Exact fixed variant checkpointed, then `CreateBoard(actualAddress)` and the real composer/travel path. No call to `SelectVariant` for new editor assignments. |
+| Final segment to a non-landmark destination | Unsupported; chooser explains why and refuses activation | Changing `placeKind` is a world/design change, not an editor workaround. |
+| Intermediate segment, including one on a road ending at a landmark | Unsupported; no authored intermediate-board claim | `LandmarkPlacement`, `RouteTravelService.SelectLandmark` and run landmark state are final-only. An ordinary template adapter would need a separate future contract; M6.10a does not weaken these guards. |
+| Missing/foreign segment, mismatched version/config or duplicate key | Invalid | Refuse before writing/activating anything. |
+| Unassigned segment | Existing generation unchanged | Ordinary/legacy versions, RNG and intermediate/final arrival semantics remain owned by current travel. |
+| One template on two compatible final landmark segments | Supported after M6.10a, using two distinct composite placement keys | Separate full addresses, fresh state/tool allocation/links; mutation on one board cannot affect the other. Test with an isolated two-inbound-edge fixture, not production world edits. |
+
+The production world currently has only one inbound Radio Tower edge; it cannot demonstrate
+two independent placements by itself. The future fixture supplies two existing compatible
+edges to the chooser; the editor itself never creates, reorders or draws routes.
+
+### Editor Publication And Version Policy
+
+Authoring schema stays **1**, independent of world version, template content version,
+configuration version and player run/profile schemas (**v5/v2**). New editor metadata belongs
+to Editor session/recovery state, not extra runtime JSON fields. A future schema change requires
+an explicit reader/writer migration contract and tests; do not silently bump schemas on Open.
+
+Draft files live at user-selected non-published locations. An activation action displays the
+target world/version, route endpoints/edge/ordered segment, template/version/variant, every
+affected file/reference and validation result. It stages an immutable catalog candidate and
+swaps its active pointer only after all referenced documents validate. Multi-file failure
+activates nothing; retry is explicit. Draft assignment removal/undo changes no active catalog.
+Active removal/replacement requires the same publication review and retention rules.
+
+Published template/configuration identity pairs are immutable: layout, variants, outcome names,
+item/source IDs and rewards cannot change beneath an existing key. A revised layout gets a new
+template content version and a new matching generation publication identity; retain the old
+artifacts and mapping for saved legs. Incrementing only `templateVersion` cannot protect a leg
+that has not yet checkpointed `ActiveLandmark`. Registry lookup must retain `(world, segment,
+saved configuration ID/version) -> template/version/explicit variant`, and an existing saved
+landmark selection takes precedence over any new default. A conflicting or missing old mapping
+is a hard failure, never reroll or fallback. No segment reorder, save reset or schema migration
+is implicit in publication.
+
+**Initial activation target is the isolated authoring catalog only.** Campaign activation must
+refuse until M6.10a demonstrates append-only old-version lookup and `BoardAddressFactory`
+compatibility for every affected saved leg, including an unvisited later segment of an active
+leg and the pre-landmark-selection checkpoint. The current Radio Tower publication always
+remains outside this tool's write targets. No production manifest/world/Resources file is
+authorized by M6.8-M6.10; enabling real campaign content is a later explicitly scoped content
+publication using those same tested rules, not a hidden checkbox or approval inferred from
+the absence of a local save file. Never inspect/rewrite real saves to make activation succeed.
+
+For v1, retain the sandbox's complete world/publication snapshot in its Editor recovery context
+and resume that sandbox against the same snapshot. A newer incompatible configuration/world
+requires a separate sandbox context/root; it cannot replace an active context's publication.
+M6.10a must demonstrate safe refusal of that replacement, not extend the named compatibility
+exceptions in `BoardAddressFactory`. A future real-campaign upgrade across those boundaries
+requires a separately authorized compatibility prerequisite; it is not hidden in this loader.
+
+### Editor Isolated Test-Play
+
+Test captures a validated immutable copy of all template/assignment data and explicit variant,
+world, full address, seed, rules and starting Health/Food/equipment. Show the selected inputs;
+never use a cosmetic RNG stream or reroll a variant. Preserve the live document, selection,
+dirty fingerprint and undo history in Editor-owned recovery state before domain reload/play.
+Editing later cannot mutate the running snapshot; runtime pushes/pickups never modify the draft.
+
+M6.9a must add the missing launch boundary before M6.9b presents a Test button. The existing
+`GameManager.PersistenceRootOverride` is an internal test hook, not a supported launcher; it
+does not override the serialized world, fixed Radio Tower loader or `PlayerPrefs.HighScore`.
+Use an explicit Editor-only launch context, injected **before** bootstrap/store construction,
+with a unique external temporary root and an isolated world/publication snapshot. Route all
+profile/run operations through that root and suppress or sandbox PlayerPrefs/high-score writes;
+test mode must not update real audio/settings preferences either. Do not read/copy the real
+profile or offer real Continue. Refuse launch unless isolation is established. Do not use a
+reflection-based production launcher or restore real files after temporarily overwriting them.
+
+Compose through the real blueprint adapter, `BoardRuntime`, controller/resolver, item/tool
+allocation, intents and presenters. Install pressure bindings before planning; a naked
+`Blueprint.CreateState()` is insufficient. Local testing uses a minimal isolated compatible
+final-landmark world; assigned testing uses the selected existing edge and its ordered segments.
+No hand-built second rules engine or replacement of normal travel completion is allowed.
+
+If Play Mode is already running, require Stop / Cancel before replacing it. Use the current
+Editor only. A controlled gameplay-scene reload between sandbox route segments is a continuation,
+not session termination: dispose the previous board runtime/presenters while retaining the same
+isolated root and immutable world/publication snapshot. The next bootstrap must revalidate that
+session's ownership/isolation before any store construction or board input. No outgoing scene
+callback may revoke the context needed by the next segment. Prove intermediate exit -> actual
+scene reload -> exact assigned final landmark, then full cleanup on test completion.
+
+The expected domain reload when entering Play Mode restores the captured pending launch from
+Editor recovery before bootstrap. An unexpected scene switch, failed continuation, or assembly
+reload during a running test terminates the sandbox rather than silently resuming it. On test
+exit, launch/runtime failure, death, starvation or Stop, dispose the sandbox runtime, revoke
+the launch context, restore prior Editor scene setup without saving test mutations, and reopen
+the exact document/recovery state. Restore normal time/input gates; an interrupted cleanup
+leaves a recoverable draft and a clearly identified temporary sandbox, never a stale context
+that could redirect a later normal Continue. Reset/retest affects only that sandbox. No generated
+test scene, world, profile or screenshot may leak into project data.
+
+The optional solver command is separate from Test and invokes the existing bounded
+[M6.5 solver](#m65-bounded-landmark-solver) with equivalent snapshot/run/retained intents.
+Supported scope is Move/Wait, Food, food pickup, boulders, plates/gates, wood/manual clearing,
+axe/use/pickup/exchange and current catalog Shambler rules. Listener, shovel, pits, caches,
+arbitrary effects and unmapped content are explicitly unsupported. Keep the existing default
+50,000-state / 32-command / 10,000-ms budgets. Report `Solved`, exhausted modeled `NoSolution`,
+`StateLimit`, `DepthLimit`, `TimeLimit` and invalid/unsupported input distinctly. A solution must
+execute on fresh real owners and reach the requested outcome; no limit result, static validation
+or shortest-path witness proves general solvability, human readability or balance.
+
+### Editor Reference Walkthrough And Delivery Gates
+
+The read-only M6.7 audit uses the existing
+[Radio Tower template](../Assets/GameData/Landmarks/radio-tower-template.json),
+[assignment](../Assets/GameData/Landmarks/radio-tower-placement.json) and
+[world](../Assets/GameData/World/prototype-world.json): `world-1/1`,
+`road.ridge-radio-tower`, `forest.ridge -> landmark.radio-tower`, segment 5 of 5
+`segment.ridge-radio-tower.arrival`, configuration `landmark.radio-tower.board/1`,
+template `landmark.radio-tower/1`, explicit assignment variant `base`. Each of `base`,
+`east-guard`, `north-push` contains 29 entities, two item bindings, plate 127 and gate 136 linked
+by `A`. Mandatory exit 151 is at **3.6**, optional exit 146 at **6.5**, start 1 at **1.1**.
+
+Open must retain all three variants and the placement's exact identities. The existing live
+Radio Tower still uses M6.6's pinned/random selection policy; the editor's fixed-variant policy
+does not rewrite it. Saving a fork changes no placement; selecting an earlier segment fails;
+selecting the final segment still cannot register new content without the loader prerequisite.
+This audit verifies the design against existing schema/source/JSON, not an implemented UI,
+new codec round-trip, live launch or a new solver run.
+
+Implementation is sequenced as **M6.8a document/codec -> M6.8b window -> M6.9a isolated-launch
+prerequisite -> M6.9b local test-play -> M6.10a final-only loader/publication prerequisite ->
+M6.10b assignment UI/integrated acceptance**. The exact closed path lists, dependencies,
+acceptance criteria and required EditMode/PlayMode/manual checks live in the corresponding
+[roadmap cards](TechnicalRoadmap.md#m68---grid-painting-object-properties-and-validated-template-saves).
+No stage starts automatically on M6.7 closeout; M6.8a is the first implementation-ready stage.
 
 ## Generic items and initial supply
 
