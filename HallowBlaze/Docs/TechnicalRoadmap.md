@@ -5759,11 +5759,11 @@ M6.8-M6.10 implementation does not start automatically. No commit or push was pe
 
 ## `M6.8` - Grid painting, object properties and validated template saves
 
-**Status:** `Planned` - M6.8a is the first ready-to-start stage after M6.7 acceptance; implementation requires a separate request.
+**Status:** `Active` - M6.8a is Done on 2026-11-13; M6.8b is Ready but remains unimplemented.
 **Priority:** P2 after M6.7.
 **Related contract:** [M6.7 data and lifecycle](BoardGeneration.md#editor-supported-data-matrix), existing schema-1 readers and authoritative validators.
 **Rationale:** Replace repetitive coordinate editing without creating a second format, rule system or validator.
-**Current behavior:** Authoring uses template files and specialized reference rebuilding, without a general visual editing window.
+**Current behavior:** Template authoring still has no general visual editing window. M6.8a adds the Editor-only document/codec/store backend; M6.8b owns painting and property UI.
 **Expected outcome:** A Unity Editor window creates/opens supported drafts, paints/erases existing content, edits properties, supports undo/redo and saves valid JSON without scene editing.
 **Scope:** M6.8a document/serialization/save contract first, then M6.8b painting/inspection. Use the exact ten-entry palette, all variants/outcomes and 8x8 bounds; no ordinary-only one-exit format. New blank drafts may be incomplete in memory, but only validated schema-1 drafts are saved. Reuse `LandmarkTemplateJson.Deserialize` and existing validator/composer catalogs; the new writer is Editor-only and emits that same schema.
 **Non-goals:** New rules, arbitrary scripts/triggers, automatic publishing/repair, a parallel validator, art production, world-topology editing or current Radio Tower edits. Route assignments belong to M6.10, not to painting grid data.
@@ -5773,7 +5773,7 @@ M6.8-M6.10 implementation does not start automatically. No commit or push was pe
 
 ### M6.8a - Document, deterministic writer and safe saves
 
-**Status:** `Ready` - contract/scopes fixed by M6.7; implementation awaits a separate request.
+**Status:** `Done` - implemented, validated and independently reviewed on 2026-11-13.
 
 **Closed writes:** New `Assets/Editor/BoardAuthoring/HallowBlaze.Editor.BoardAuthoring.asmdef`
 (`includePlatforms: Editor`, references only existing Core/Presentation assemblies and the
@@ -5798,7 +5798,37 @@ cancel, permission/disk-full/replacement fault injection, concurrent external ed
 navigation. Check all original asset hashes unchanged and Editor-only assembly/Player exclusion.
 No real player save directory or published-file overwrite is permitted.
 
+**Progress (2026-11-13):** The owner accepted the existing two-document M6.7 changes as the
+baseline and explicitly authorized commit/push. They were committed as
+`8b8dda295d7ef203d232ae152caf65e7f51a4d09` on `M6/7/VisualBoardEditorContract`; this stage starts
+from that clean HEAD on `M6/8a/BoardDocumentAndSafeSaves`, Git root `D:/Repos/HallowBlaze`.
+The Lead implemented only the closed M6.8a paths and Unity-generated new metadata. The backend
+preserves all variants/fields/optional presence, detached snapshots and undo/redo, delegates
+validation to unchanged runtime owners and fences durable atomic draft writes outside project
+and player data. Save As needs explicit overwrite consent plus a previewed fingerprint.
+The current decoder's first construction error is surfaced directly; full per-variant semantic
+reports follow successful construction, not a duplicated raw schema/catalog parser. See the
+[implemented backend boundary](BoardGeneration.md#m68a-document-backend). No UI, activation,
+test-play or runtime/API/data changes are included. Focused Unity 6000.3.21f1 EditMode validation
+passed 58/58 authoring cases and 179/179 with the neighboring template/validator fixtures,
+including I/O/cancel/concurrency faults and Player-compilation exclusion.
+Independent review found Windows device-path alias bypass and a constructor-context/JSON-path
+confusion. Both were corrected with focused regressions: device/extended paths are refused
+before I/O, and constructor diagnostics use actual entity/variant paths without guessed layers.
+Re-review identified the additional SUBST/drive-letter alias boundary. Windows root/publication
+comparisons now use the shared physical volume identity; SUBST/network/ambiguous mappings
+are refused. Two real temporary-drive regressions verify protection and exact cleanup in
+`finally`. Review also identified unverified case-insensitive non-Windows path semantics;
+the store now refuses platforms other than Windows Editor before I/O and uses handle-resolved
+Volume GUID identities for existing Windows files/parents. Platform/case-alias regressions
+passed. The corrected candidate received independent Reviewer PASS; final scope, metadata,
+read-only asset and whitespace checks passed. File storage is Windows Editor-only, with
+unsupported platforms and ambiguous mappings refused before I/O. No UI, play mode or campaign
+publication result is claimed. M6.8b is the next Ready stage and does not start automatically.
+
 ### M6.8b - Window, paint, inspect and undo
+
+**Status:** `Ready` - M6.8a accepted; implementation awaits a separate request.
 
 **Dependencies:** M6.8a passed/reviewed. **Closed writes:**
 `Assets/Editor/BoardAuthoring/BoardAuthoringWindow.cs`, `BoardGridView.cs`,
