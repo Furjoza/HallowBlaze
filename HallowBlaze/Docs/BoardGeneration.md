@@ -654,7 +654,7 @@ immutable pool publication and a retained per-leg exact selection under the 2026
 they do not relax old-version retention, atomic activation or player-save protection.
 
 Existing landmark authoring schema stays **1**, independent of world version, template content
-version, configuration version and current player run/profile schemas (**v5/v2**). M6.9c must
+version, configuration version and current player run/profile schemas (**v6/v2**). M6.9c must
 define ordinary encoding and prove whether these formats can remain unchanged; if not, require
 an explicit versioned extension/migration before code. No schema change is implemented here.
 New editor metadata belongs
@@ -1024,6 +1024,70 @@ unknown/generated cases, plus native wide/narrow update/undo checks without chan
 Exact source/test paths are frozen for each implementation ticket, not granted by this plan.
 Weights, adaptive odds, no-repeat rules, production publication, balance simulation and the
 separate Check board fix require their own scope.
+
+### M6.10a - Immutable Pool Publications And Run Schema 6
+
+The pure [publication reader/archive](../Assets/Scripts/Core/Generation/BoardPoolPublication.cs)
+accepts an exact world JSON, a schema-1 route manifest and detached schema-2 shared-board JSONs,
+using the existing prototype authoring catalog. It does not read a directory or activate content.
+All candidates must pass the owning template, variant, catalog and segment/configuration checks,
+not just the candidate selected by a particular seed. Identical duplicate template files are
+idempotent; conflicting payloads under the same template/version or repeated entry tuples fail.
+
+The manifest has exactly these root fields: `schemaVersion` (1), `publicationId`,
+`publicationVersion`, `worldDefinitionId`, `worldVersion`, `edgeId` and `sources`. Each source
+has `segmentId`, `generationConfigurationId`, `generationVersion`, `poolId`, `poolVersion` and
+`entries`; each entry has `templateId`, `templateVersion` and `variantId`. A fixed source requires
+`poolId: null`, `poolVersion: 0` and exactly one entry. A named pool requires a positive version
+and at least one distinct entry. An absent source retains the supported existing ordinary
+generator; an empty configured source or an unsupported unassigned configuration fails preflight.
+This shared-board manifest does not relax strict schema-1 landmark placement or replace Radio Tower.
+
+Canonical entry order is ordinal template ID, numeric template version, ordinal variant ID.
+Sources are normalized by segment ID. SHA-256 hashes use canonical JSON object-property order
+and retain semantically significant array order; the publication hash covers the exact world,
+normalized manifest and referenced exact template hashes. Pool hashes include their identity,
+version and canonical tuples with exact template hashes. Formatting, file order, duplicate
+identical files and candidate UI order therefore cannot change selection or publication identity.
+
+Selection policy `hallowblaze.segment-pool.v1/1` creates a fresh existing PCG32 addressed stream
+from the root seed. `RandomStreamProvider.StreamId` length-frames, in order: policy ID, policy
+version, run ID, leg ID (the traversal identity), edge ID, invariant-culture day, segment ID,
+publication ID/version/hash and pool ID/version (`fixed`/0 for fixed sources). Existing
+`NextInt(0, count)` uses rejection sampling for equal probability without modulo bias. A singleton
+selects index zero. Generation, cosmetic and other gameplay stream cursors are never advanced.
+
+[RouteBoardPlan](../Assets/Scripts/Core/State/RouteBoardPlan.cs) retains publication/world/policy
+provenance and all selected exact template, variant, hash and source-pool values in segment order.
+The optional selector on [RouteTravelService](../Assets/Scripts/Core/Session/RouteTravelService.cs)
+pins this whole plan in the same checkpoint as the newly allocated leg, before any board can be
+composed. Failed validation or save rolls back both; retry repeats the same traversal identity
+and choices. Default callers remain unchanged and do not select pools.
+
+Run schema 6 adds required nullable `boardSelectionPlan`; its strict DTO/mapper preserve all
+previous travel, equipment, landmark and RNG data. Readers for schemas 1-5 retain their original
+meaning and import no plan, including for unvisited segments. Null remains valid for generated
+or legacy travel; a missing field or malformed non-null plan is not repaired. The plan survives
+intro, progress and isolated save/Continue, then clears with leg completion/reset. Profile schema
+2 is unchanged. No mid-board state or ordinary `ActiveLandmark` record is introduced.
+
+The append-only in-memory `BoardPoolPublication.Archive` registers only fully preflighted
+immutable publications and validates every identity/hash pair before mutation. It keeps old
+versions when a new pool is registered; resolution uses the saved publication/version/hash and
+refuses missing archives without a generator/newer-version fallback. Each authored resolution
+creates detached board state using the current full address. Session `BoardAddressFactory`
+remains the seed/address authority; callers must obtain and validate the request there.
+The caller must retain and supply the exact archived world/manifest/template artifacts. No
+filesystem publication writer, automatic library registration, production activation, current
+launcher opt-in or persistent post-Stop Editor Continue is supplied by this foundation.
+
+**Validation (2026-11-22):** The new pool/state/persistence/archive fixture passed 38/38, including
+full preflight refusals, deterministic order/RNG isolation, old/new round-trip, actual failed
+filesystem checkpoint/retry, retained unvisited choice after a newer pool publication and atomic
+archive refusal. Final combined pool/DTO/storage/travel/landmark verification passed 192/192
+with no skipped tests or unexpected error diagnostics. Independent Reviewer PASS found no
+material issues; a frozen golden selection-policy vector remains a non-blocking coverage gap.
+These are isolated domain tests, not a new pool-UI or actual pooled gameplay acceptance claim.
 
 ### Editor Reference Walkthrough And Delivery Gates
 

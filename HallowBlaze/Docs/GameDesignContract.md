@@ -1730,11 +1730,29 @@ authoring editor; it does not implement pools, change rewards or declare a board
 
 M6.10a owns the pool/selection/publication and save-compatibility prerequisite; M6.10b owns explicit
 membership editing and deterministic sandbox travel; M6.10c owns the resource panel and aggregation
-checks. All remain Planned until exact implementation scopes and required compatibility decisions
-are ready. Campaign activation, production content, weights, automatic balancing, route topology
-editing and repair of the separate Check board TimeLimit report are outside this documentation
-task. The owner's successful three-map Play route exercise on 2026-11-22 is evidence for the
+checks. M6.10a was authorized on 2026-11-22 with the bounded implementation contract below;
+M6.10b/c remain Planned. Campaign activation, production content, weights, automatic balancing,
+route topology editing and repair of the separate Check board TimeLimit report remain outside
+this task. The owner's successful three-map Play route exercise on 2026-11-22 is evidence for the
 delivered fixed-assignment workflow, not evidence that pools or resource summaries already work.
+
+**M6.10a implementation contract (2026-11-22):** Route publication schema 1 binds exact shared
+template/version/variant entries to stable world/edge/segment/configuration identities. Fixed
+sources have one entry; missing sources retain the existing supported generator. Preflight is
+complete before registration/selection. An append-only archive rejects changed payloads under
+retained publication, template or pool identity/version keys and resolves the exact saved version.
+Its pure in-memory index is not a production filesystem publisher or an Editor activation path.
+
+Selection policy `hallowblaze.segment-pool.v1`, version 1, sorts candidate tuples ordinally by
+template ID, then numerically by template version, then ordinally by variant ID. It uses a fresh
+addressed PCG32 stream and the existing unbiased `NextInt(0, count)` mapping, never a shared RNG
+cursor. Run schema 6 stores the full immutable `boardSelectionPlan` with the newly accepted leg
+before composition; profile remains schema 2. The field is required but may be null for generated
+or legacy travel. V1-v5 readers never retrofit a plan onto an old active or unvisited segment.
+Failed selection/checkpoint restores the previous leg boundary; successful progress retains the
+plan and completion/reset clears it. Missing exact archived content fails rather than rerolling.
+The current Editor launcher and production callers do not opt into this new selector; pool UI,
+persisted sandbox publication files and integrated pool travel remain M6.10b.
 
 #### Opening-length amendment - accepted 2026-11-03
 

@@ -211,6 +211,19 @@ namespace HallowBlaze.Core.State
             return leg;
         }
 
+        /// <summary>Pins all authored choices before a new Pending leg is checkpointed; existing/consumed plans cannot be replaced.</summary>
+        /// <exception cref="InvalidOperationException">Travel is absent, terminal, already pinned or has begun rendering.</exception>
+        /// <exception cref="ArgumentException">The plan belongs to another run, seed or retained segment publication.</exception>
+        public void PinBoardPlan(RouteBoardPlan plan)
+        {
+            EnsureActive();
+            if (ActiveLeg == null || ActiveLeg.IntroState != DayIntroState.Pending || ActiveLeg.BoardPlan != null)
+                throw new InvalidOperationException("Only a new unpinned Pending leg can receive a board plan.");
+            if (plan == null) throw new ArgumentNullException(nameof(plan));
+            if (plan.RunId != RunId || plan.RunSeed != RunSeed) throw new ArgumentException("The board plan belongs to another run.");
+            ActiveLeg = ActiveLeg.WithBoardPlan(plan);
+        }
+
         /// <summary>Consumes a matching intro once; Session must save Consumed before rendering.</summary>
         /// <returns>True only for Pending -> Consumed; stale, repeated or terminal input is effect-free.</returns>
         public bool TryConsumeIntro(string legId)
@@ -283,6 +296,8 @@ namespace HallowBlaze.Core.State
                 throw new ArgumentException("Active leg does not match checkpoint, day or sequence.");
             if (traversalSequence != sequence + (activeLeg == null ? 0 : 1))
                 throw new ArgumentException("Sequence would reuse or skip a traversal identity.");
+            if (activeLeg?.BoardPlan != null && (activeLeg.BoardPlan.RunId != RunId || activeLeg.BoardPlan.RunSeed != RunSeed))
+                throw new ArgumentException("The restored board plan belongs to another run.");
             CompletedDayCount = completedDayCount;
             WorldNodeId = checkpointNodeId;
             TraversalSequence = traversalSequence;

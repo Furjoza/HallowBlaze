@@ -40,7 +40,7 @@ namespace HallowBlaze.Core.Persistence.Mapping
             return run;
         }
 
-        private static void CopyEquipment(RunStateV4Dto source, RunStateV4Dto target)
+        internal static void CopyEquipment(RunStateV4Dto source, RunStateV4Dto target)
         {
             target.RunId = source.RunId; target.RunSeed = source.RunSeed; target.CompletedDayCount = source.CompletedDayCount;
             target.ReachedCheckpointNodeId = source.ReachedCheckpointNodeId; target.TraversalSequence = source.TraversalSequence;

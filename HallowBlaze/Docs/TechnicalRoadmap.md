@@ -6266,7 +6266,7 @@ exercise. Technical completion belongs to the Lead; usability acceptance belongs
 
 ## `M6.10` - Board-template assignments to existing route segments
 
-**Status:** `Active` - the limited route-sandbox increment below is technically Done with independent review PASS on 2026-11-20 and owner-reported travel acceptance on 2026-11-22. Remaining M6.10a/b are replanned for explicit segment pools; M6.10c adds resource-balance tooling. All three future stages remain Planned.
+**Status:** `Active` - the limited route-sandbox increment below is technically Done with independent review PASS on 2026-11-20 and owner-reported travel acceptance on 2026-11-22. M6.10a's domain publication/save foundation is technically Done with independent review PASS on 2026-11-22; pool UI/travel M6.10b and resource panel M6.10c remain Planned.
 **Priority:** P2 with the initial editor, before bulk handcrafted route content.
 **Related contract:** Section 27.2 segment-authoring amendment, section 15 biome hierarchy and existing route, template and pinned-selection contracts.
 **Rationale:** A local board and its place in a journey are different data. Explicit placements let an author reuse a template and control which board appears along a route without copying grids or editing campaign JSON by hand.
@@ -6358,10 +6358,16 @@ final-exit -> automatic Play exit -> editor-recovery test; this is a non-blockin
 Play route worked well. Preserve the separate unresolved seed-7/Shambler10 Check board TimeLimit
 report; no automated rerun, solver correction or pool implementation is inferred from this result.
 
+**Subsequent stage (2026-11-22):** M6.10a is now technically Done under the separate contract below.
+The Planned references in the dated planning/increment results above describe those earlier
+deliveries; they are not the current status of the new branch.
+
 ### M6.10a - Segment catalog/loader and publication prerequisite
 
-**Status:** `Planned` - replanned 2026-11-22 for segment pools, deterministic selection and saved
-selection compatibility. No source/DTO implementation is authorized by this status.
+**Status:** `Done` - technical foundation validated and independently reviewed on 2026-11-22.
+Implementation was authorized by the owner after commit/push of the delivered editor and pool
+plan, on `M6/10a/SegmentMapPools` from `b3e868b1287c655af3849660d2a57175908b54f5`.
+No pool UI, resource panel, production activation or owner pooled-travel acceptance is claimed.
 **Dependencies:** Delivered M6.9e shared authoring, the completed one-route sandbox and the
 2026-11-22 contract amendment. Freeze exact runtime/persistence/test paths and the format,
 algorithm, pinning transaction and old-save policy before Ready; owner approval is required for
@@ -6396,6 +6402,46 @@ shared template readers and authoring context. Freeze exact owning Core selectio
 persistence paths, context/bootstrap integrations and focused tests before implementation. The
 previous broad ordinary/landmark adapter plan is not permission to rewrite working M6.9e code.
 
+**Implementation contract (2026-11-22):** Add a pure, immutable route publication containing
+exact shared-board snapshots and fixed or pooled segment sources. Pool schema 1 entries carry
+exact template/version/variant tuples; identities and their canonical content hashes are immutable.
+Validate every entry before selecting. A dedicated PCG32 addressed stream uses canonical tuple
+order and the run seed/run/leg/traversal/edge/segment/publication identity under selection policy
+`hallowblaze.segment-pool.v1/1`; it never advances an existing run/generation/cosmetic stream.
+Persist exact selections, pool/publication identities and content hashes in an immutable plan on
+the active leg. `RouteTravelService.StartRoute` accepts an optional publication selector and
+checkpoints the leg and whole plan together, rolling both back on failure. The default path
+remains unchanged and never enables pools in production or the current Editor launcher.
+
+Run JSON schema 6 adds a required nullable selection-plan field; profile remains schema 2.
+Readers retain v1-v5 semantics and migrate them to no plan, never retroactively choosing content
+for an already-started old leg. The plan survives intro/progress/Continue and clears on completion
+or reset. Missing or changed archived publications/content fail exact resolution. Do not promise
+mid-board persistence or extend the ephemeral Editor sandbox to post-Stop Continue.
+
+**Closed writes (Git-root-relative):**
+`HallowBlaze/Assets/Scripts/Core/Generation/BoardPoolPublication.cs`,
+`HallowBlaze/Assets/Scripts/Core/State/RouteBoardPlan.cs`,
+`HallowBlaze/Assets/Scripts/Core/State/ActiveRouteLegState.cs`,
+`HallowBlaze/Assets/Scripts/Core/State/RunState.cs`,
+`HallowBlaze/Assets/Scripts/Core/Persistence/Dto/RunStateV5Dto.cs`,
+`HallowBlaze/Assets/Scripts/Core/Persistence/Dto/RunStateV6Dto.cs`,
+`HallowBlaze/Assets/Scripts/Core/Persistence/Mapping/RunStateV5Mapper.cs`,
+`HallowBlaze/Assets/Scripts/Core/Persistence/Mapping/RunStateV6Mapper.cs`,
+`HallowBlaze/Assets/Scripts/Core/Persistence/PersistenceJsonSerializer.cs`,
+`HallowBlaze/Assets/Scripts/Core/Session/RouteTravelService.cs`,
+`HallowBlaze/Assets/Tests/EditMode/BoardPoolPublicationTests.cs`,
+`HallowBlaze/Assets/Tests/EditMode/PersistenceDtoTests.cs`,
+`HallowBlaze/Assets/Tests/EditMode/PersistenceStorageTests.cs`,
+`HallowBlaze/Assets/Tests/EditMode/LandmarkProgressTests.cs`,
+`HallowBlaze/Docs/GameDesignContract.md`, `HallowBlaze/Docs/BoardGeneration.md`, and this roadmap.
+Only new source/test files receive Unity-generated metadata. Existing `.meta`, assemblies,
+packages, settings, scenes, Editor UI/launcher, source map library and production assets remain
+outside scope. The owner's existing `AGENTS.md` edit and exact SENTIS-token difference are
+preserved baseline; parent `Boards/` is not inspected, staged or modified.
+The two existing storage/landmark fixtures are scoped only to writer-version expectations and
+removing the new field when constructing old-schema fixtures; their behavior assertions stay intact.
+
 **Required checks:** Equal-probability index mapping and canonical order on fixed reproducible
 inputs; zero/one/many entries; repeated seeds; changed file/UI ordering; unchanged unrelated RNG;
 duplicate/missing/foreign/config/version/variant/catalog refusal; old fixed/generated/landmark
@@ -6403,6 +6449,21 @@ round-trip; new plan round-trip and corrupt/missing content; append-only publica
 leg checkpoint/retry with no new choices. In isolated tests, publish a newer pool after starting
 a leg and prove Continue retains every active/unvisited choice, seed, address, resources, tools
 and day. These are correctness tests, not a benchmark or permission to modify real player saves.
+
+**Implementation (2026-11-22):** The pure reader creates detached schema-1 route publications,
+canonical exact tuple ordering and content hashes. Its append-only in-memory archive validates
+publication/template/pool identity-version immutability before registration and resolves only
+the exact retained publication. It does not discover or write archived files. `RouteBoardPlan`
+is immutable; schema 6 persists it with the leg at the optional `StartRoute` selector boundary.
+Old schemas, default generated travel, strict landmarks and the current launcher remain separate.
+See [the concrete format/algorithm](BoardGeneration.md#m610a---immutable-pool-publications-and-run-schema-6).
+
+**Acceptance (2026-11-22):** Final focused pool/DTO/filesystem/route-leg/landmark verification
+passed 192/192 with no skipped tests or unexpected error diagnostics. Filesystem comparison
+against the authorized baseline, scoped diff, documentation links and diagnostics passed.
+Independent Reviewer PASS found no material issues. The selection-policy tests do not yet pin
+a golden output vector; this is a non-blocking coverage limit, not a claim of algorithm drift.
+M6.10b/c remain Planned and the separate Check board report is untouched.
 
 ### M6.10b - Assignment UI and integrated authoring acceptance
 
