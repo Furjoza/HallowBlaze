@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Security.Cryptography;
@@ -8,9 +9,12 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using Microsoft.Win32.SafeHandles;
+using HallowBlaze.Core.Generation;
 using HallowBlaze.Core.Generation.Landmarks;
 using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.World;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 
 namespace HallowBlaze.Editor.BoardAuthoring
@@ -52,6 +56,25 @@ namespace HallowBlaze.Editor.BoardAuthoring
         public bool Succeeded => Status == BoardDocumentSaveStatus.Saved;
     }
 
+    /// <summary>Identifies one named saved board and an optional independently saved exact route assignment.</summary>
+    public sealed class BoardSavedDraft
+    {
+        internal BoardSavedDraft(string path, string templateId, int version, BoardAssignment assignment = null, string assignmentPath = null)
+        { Path = path; TemplateId = templateId; TemplateVersion = version; Assignment = assignment; AssignmentPath = assignmentPath; }
+        /// <summary>Gets the author-selected file name without changing the stable template identity.</summary>
+        public string Name => System.IO.Path.GetFileNameWithoutExtension(Path);
+        /// <summary>Gets the template file under the selected external draft root.</summary>
+        public string Path { get; }
+        /// <summary>Gets the stable template identifier checked when opening an assignment.</summary>
+        public string TemplateId { get; }
+        /// <summary>Gets the saved template's exact content version.</summary>
+        public int TemplateVersion { get; }
+        /// <summary>Gets the validated route/segment/variant binding, or null for an unassigned board.</summary>
+        public BoardAssignment Assignment { get; }
+        /// <summary>Gets the separate binding file, or null for an unassigned board.</summary>
+        public string AssignmentPath { get; }
+    }
+
     /// <summary>Saves only external authoring drafts; never publishes, writes into the project or accesses player saves.</summary>
     public sealed class BoardDocumentStore
     {
@@ -59,6 +82,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
         private static readonly StringComparison PathComparison = Path.DirectorySeparatorChar == '\\'
             ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         private readonly string draftRoot;
+        private readonly string draftDirectory;
         private readonly string projectRoot;
         private readonly string playerRoot;
         private readonly HashSet<string> publishedPaths;
@@ -77,6 +101,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
             if (!IsSupportedPlatform(Application.platform))
                 throw new PlatformNotSupportedException("Authoring file storage currently requires Windows Editor filesystem identity support.");
             string selectedRoot = FullPath(draftRoot);
+            draftDirectory = selectedRoot;
             this.draftRoot = PhysicalIdentity(selectedRoot);
             this.projectRoot = PhysicalIdentity(FullPath(projectRoot));
             playerRoot = PhysicalIdentity(FullPath(Application.persistentDataPath));
@@ -113,12 +138,92 @@ namespace HallowBlaze.Editor.BoardAuthoring
             return document;
         }
 
+        /// <summary>Opens an independent shared assignment with exact version validation and normal protected-file bookkeeping.</summary>
+        public BoardTemplateDocument OpenAssignment(string path, WorldDefinition world, LandmarkTemplate template)
+        {
+            string full = ReadablePath(path);
+            byte[] bytes = File.ReadAllBytes(full);
+            var document = BoardTemplateDocument.ReadAssignment(Decode(bytes), world, template);
+            document.MarkSaved(full, Fingerprint(bytes), IsPublished(full));
+            return document;
+        }
+
         /// <summary>Captures current target bytes for an explicit Save As overwrite preview; never grants overwrite consent by itself.</summary>
         /// <returns>A SHA-256 fingerprint, or null when the selected file does not exist.</returns>
         public string CaptureFingerprint(string path)
         {
             string full = ReadablePath(path);
             return File.Exists(full) ? Fingerprint(File.ReadAllBytes(full)) : null;
+        }
+
+        /// <summary>Resolves a readable board name to a single JSON file inside the selected draft root; IDs are unchanged.</summary>
+        /// <exception cref="ArgumentException">The name is empty, too long or contains a path or invalid filename characters.</exception>
+        public string NamedBoardPath(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name) || name.Length > 80 || name != name.Trim() || name.EndsWith(".", StringComparison.Ordinal) ||
+                name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name == "." || name == "..")
+                throw new ArgumentException("Choose a board name of 1-80 characters without a path or trailing dot/space.", nameof(name));
+            string path = Path.Combine(draftDirectory, name + ".json");
+            EnsureWritable(path);
+            return path;
+        }
+
+        /// <summary>Resolves a separate binding filename scoped to this board name and exact world/segment/variant target.</summary>
+        public string NamedAssignmentPath(string name, BoardAssignment assignment)
+        {
+            if (assignment == null) throw new ArgumentNullException(nameof(assignment));
+            string boardPath = NamedBoardPath(name);
+            string key = new JArray(assignment.WorldId, assignment.WorldVersion, assignment.EdgeId, assignment.SegmentId, assignment.VariantId).ToString(Formatting.None);
+            string suffix = Fingerprint(Utf8.GetBytes(key)).Substring(0, 24);
+            return Path.Combine(Path.GetDirectoryName(boardPath), name + "." + suffix + ".assignment.json");
+        }
+
+        /// <summary>Lists valid named boards and their separate bindings for the selected world without following subdirectories or publishing data.</summary>
+        /// <param name="diagnostics">Files that could not be read or validated; invalid data is never silently rewritten.</param>
+        public IReadOnlyList<BoardSavedDraft> ListBoards(WorldDefinition world, BoardValidationCatalog catalog, out IReadOnlyList<string> diagnostics)
+        {
+            if (world == null) throw new ArgumentNullException(nameof(world));
+            if (catalog == null) throw new ArgumentNullException(nameof(catalog));
+            var errors = new List<string>();
+            var templates = new List<BoardSavedDraft>();
+            var bindings = new List<string>();
+            foreach (string path in Directory.GetFiles(ReadablePath(draftDirectory), "*.json", SearchOption.TopDirectoryOnly))
+            {
+                try
+                {
+                    string json = Decode(File.ReadAllBytes(ReadablePath(path)));
+                    JObject data = JObject.Parse(json);
+                    if (data["variants"] != null)
+                    {
+                        var template = OpenTemplate(path, catalog);
+                        if (template.Diagnostics.Count > 0) throw new InvalidDataException(template.Diagnostics[0].Message);
+                        templates.Add(new BoardSavedDraft(path, (string)data["templateId"], (int)data["templateVersion"]));
+                    }
+                    else if (data["segmentId"] != null && data["templateId"] != null) bindings.Add(path);
+                }
+                catch (Exception exception) { errors.Add(Path.GetFileName(path) + ": " + exception.Message); }
+            }
+            var saved = new List<BoardSavedDraft>();
+            foreach (var template in templates.OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                int count = saved.Count;
+                foreach (string path in bindings)
+                {
+                    try
+                    {
+                        JObject identity = JObject.Parse(Decode(File.ReadAllBytes(ReadablePath(path))));
+                        if ((string)identity["templateId"] != template.TemplateId || (int?)identity["templateVersion"] != template.TemplateVersion) continue;
+                        var layout = BoardTemplateJson.ReadCompatible(OpenTemplate(template.Path, catalog).ToJson(), catalog);
+                        var binding = OpenAssignment(path, world, layout);
+                        var assignment = BoardAssignment.Read(binding.ToJson(), world, layout);
+                        saved.Add(new BoardSavedDraft(template.Path, template.TemplateId, template.TemplateVersion, assignment, path));
+                    }
+                    catch (Exception exception) { errors.Add(Path.GetFileName(path) + ": " + exception.Message); }
+                }
+                if (saved.Count == count) saved.Add(template);
+            }
+            diagnostics = errors.AsReadOnly();
+            return saved.AsReadOnly();
         }
 
         /// <summary>Validates, durably stages, rechecks external changes, then atomically installs one draft file.</summary>

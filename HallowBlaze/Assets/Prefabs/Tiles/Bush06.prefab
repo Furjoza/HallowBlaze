@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 61254623133853230}
   - component: {fileID: 114341773149631166}
   m_Layer: 8
-  m_Name: Wall6
+  m_Name: Bush06
   m_TagString: InnerWall
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

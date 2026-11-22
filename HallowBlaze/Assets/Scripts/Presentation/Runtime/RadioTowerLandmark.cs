@@ -18,7 +18,7 @@ namespace HallowBlaze.Presentation.Runtime
         public const string ConfigurationId = "landmark.radio-tower.board";
         /// <summary>Identifies the fixed optional axe source independently of its run-allocated instance.</summary>
         public const string AxeSourceId = "source.radio-tower.axe";
-        /// <summary>Identifies the concrete ration definition collected by the shared automatic food effect.</summary>
+        /// <summary>Retains the published ration ID for raspberries worth five Food, matching the same fruit on ordinary boards.</summary>
         public const string RationsId = "landmark.radio-tower.rations";
 
         [SerializeField] private TextAsset template;
@@ -69,7 +69,7 @@ namespace HallowBlaze.Presentation.Runtime
                 new BoardEntityTraits(true, true, false)));
             content.Add(new BoardEntityDefinition(BoardLayer.Actor, EntityKind.Enemy, OrdinaryBoardContent.Enemy10Id));
             content.Add(new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, "axe.basic"));
-            content.Add(new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, RationsId, BoardEntityTraits.Default, 20));
+            content.Add(new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, RationsId, BoardEntityTraits.Default, OrdinaryBoardContent.RaspberryFoodReward));
             return new BoardValidationCatalog(content,
                 new Dictionary<string, string> { { "axe.basic", "tools" }, { RationsId, "food" } },
                 new Dictionary<string, string> { { AxeSourceId, "axe.basic" }, { "source.radio-tower.rations", RationsId } },

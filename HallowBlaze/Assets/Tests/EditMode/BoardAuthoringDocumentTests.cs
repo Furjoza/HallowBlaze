@@ -323,7 +323,7 @@ namespace HallowBlaze.Tests.EditMode
             switch (invalid)
             {
                 case "case": source["TemplateId"] = source["templateId"]; source.Remove("templateId"); break;
-                case "schema": source["schemaVersion"] = 2; break;
+                case "schema": source["schemaVersion"] = 3; break;
                 case "dimensions": source["width"] = 12; break;
                 case "listener": source["variants"][0]["entities"][1]["contentId"] = "enemy.listener"; break;
                 case "float": source["variants"][0]["entities"][0]["id"] = 1.0; break;

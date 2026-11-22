@@ -375,6 +375,10 @@ namespace HallowBlaze.Presentation.Atlas
         {
             if (gameManager == null || gameManager.Session == null || worldDefinitionJson == null)
                 return false;
+#if UNITY_EDITOR
+            if (gameManager.IsAuthoringSession && gameManager.AuthoringWorld == null)
+                return false;
+#endif
             if (worldMapService != null && ReferenceEquals(boundSession, gameManager.Session))
                 return true;
 
@@ -382,6 +386,9 @@ namespace HallowBlaze.Presentation.Atlas
             {
                 boundSession = gameManager.Session;
                 worldMapService = new WorldMapService(
+#if UNITY_EDITOR
+                    gameManager.IsAuthoringSession ? gameManager.AuthoringWorld :
+#endif
                     WorldDefinitionJson.Deserialize(worldDefinitionJson.text),
                     boundSession,
                     new FileSystemSaveStore(GameManager.GetPersistenceRoot()));

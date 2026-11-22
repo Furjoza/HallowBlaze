@@ -27,15 +27,17 @@ namespace HallowBlaze.Editor.BoardAuthoring
         {
             "legacy.floor", "ordinary.exit-terrain", "landmark.plate", "landmark.gate",
             "legacy.player", "ordinary.shambler.10", "legacy.wall", "landmark.boulder",
-            "axe.basic", "landmark.radio-tower.rations"
+            "axe.basic", "landmark.radio-tower.rations", "ordinary.shambler.20", "legacy.food", "legacy.soda",
+            "legacy.bush-food", "ordinary.berries", "ordinary.carrot", "legacy.aid"
         };
         private static readonly Dictionary<string, Sprite> Previews = new Dictionary<string, Sprite>();
         private GridPosition inputCell;
         private int inputVersion;
         private int appliedInputVersion;
 
-        /// <summary>Gets the exact supported catalog palette, not arbitrary content discovered from art.</summary>
-        public static IReadOnlyList<string> Palette { get; } = Array.AsReadOnly(PaletteIds);
+        /// <summary>Gets one visible brush per supported content type; retained duplicate fruit IDs remain selectable for recovery.</summary>
+        public static IReadOnlyList<string> Palette { get; } = Array.AsReadOnly(PaletteIds
+            .Where(id => id != "legacy.bush-food" && id != "landmark.radio-tower.rations").ToArray());
         /// <summary>Gets or sets the active occupancy layer; other layers at a cell are never erased implicitly.</summary>
         public BoardLayer Layer { get; set; } = BoardLayer.Terrain;
         /// <summary>Gets or sets whether the next cell activation selects, paints or erases.</summary>
@@ -109,19 +111,30 @@ namespace HallowBlaze.Editor.BoardAuthoring
             { Message = "Selected content belongs to " + LayerOf(contentId) + ", not the active " + layer + " layer."; return false; }
             JObject existing = EntityAt(variant, layer, cell);
             if (mode == BoardPaintMode.Erase && existing == null) return false;
-            if (mode == BoardPaintMode.Paint && !snapshot["configuration"]["allowedContentIds"].Values<string>().Contains(contentId))
-            { Message = "Enable " + contentId + " in Configuration / Allowed Content before painting."; return false; }
             if (mode == BoardPaintMode.Paint && (string)existing?["contentId"] == contentId) return false;
             JToken[] references = existing == null ? Array.Empty<JToken>() : References(snapshot, variant, (int)existing["id"]);
             JToken[] textReferences = references.OfType<JObject>().SelectMany(binding =>
                 binding["linkId"] != null ? TextReferences(snapshot, variant, "linkId", (string)binding["linkId"]) :
                 binding["instanceId"] != null ? TextReferences(snapshot, variant, "instanceId", (string)binding["instanceId"]) : Array.Empty<JToken>())
                 .Where(reference => !references.Any(removed => reference.Ancestors().Contains(removed))).Distinct().ToArray();
-            string notice = "Removed data:\n" + string.Join("\n", references.Select(reference => reference.Path));
+            JToken[] authoredReferences = references.Where(reference => !IsDefaultSharedExit(snapshot, reference)).ToArray();
+            string notice = "Removed data:\n" + string.Join("\n", authoredReferences.Select(reference => reference.Path));
             if (textReferences.Length > 0) notice += "\nAffected retained references (repair may be required):\n" + string.Join("\n", textReferences.Select(reference => reference.Path));
-            if ((references.Length > 0 || textReferences.Length > 0) && (confirmRemoval == null || !confirmRemoval(notice))) return false;
+            if ((authoredReferences.Length > 0 || textReferences.Length > 0) && (confirmRemoval == null || !confirmRemoval(notice))) return false;
             document.Edit(data =>
             {
+                if (mode == BoardPaintMode.Paint)
+                {
+                    var allowed = (JArray)data["configuration"]["allowedContentIds"];
+                    if (!allowed.Values<string>().Contains(contentId)) allowed.Add(contentId);
+                    if (layer == BoardLayer.Item)
+                    {
+                        string family = contentId == "axe.basic" ? "tools" : contentId == "legacy.aid" ? "medical" : "food";
+                        var budgets = (JArray)data["configuration"]["resourceBudgets"];
+                        if (!budgets.OfType<JObject>().Any(budget => (string)budget["resourceFamilyId"] == family))
+                            budgets.Add(new JObject { ["resourceFamilyId"] = family, ["itemCount"] = new JObject { ["minimum"] = 0, ["maximum"] = 64 } });
+                    }
+                }
                 JObject target = Variant(data, variantId);
                 var entities = (JArray)target["entities"];
                 JObject old = EntityAt(target, layer, cell);
@@ -138,11 +151,18 @@ namespace HallowBlaze.Editor.BoardAuthoring
                     if (start != null) { start["x"] = cell.X; start["y"] = cell.Y; return; }
                 }
                 entities.Add(new JObject { ["id"] = identifier, ["layer"] = layer.ToString(), ["contentId"] = contentId, ["x"] = cell.X, ["y"] = cell.Y });
+                if ((int)data["schemaVersion"] == 2 && contentId == "ordinary.exit-terrain")
+                {
+                    var outcomes = (JArray)data["outcomes"];
+                    if (!outcomes.OfType<JObject>().Any(outcome => (int)outcome["exitEntityId"] == identifier))
+                        outcomes.Add(new JObject { ["id"] = "exit." + identifier, ["name"] = "Exit", ["exitEntityId"] = identifier,
+                            ["optional"] = outcomes.Count > 0 });
+                }
                 if (layer == BoardLayer.Item)
                     ((JArray)target["items"]).Add(new JObject
                     {
                         ["instanceId"] = NextItemId(target, identifier), ["entityId"] = identifier,
-                        ["itemDefinitionId"] = contentId, ["resourceFamilyId"] = contentId == "axe.basic" ? "tools" : "food",
+                        ["itemDefinitionId"] = contentId, ["resourceFamilyId"] = contentId == "axe.basic" ? "tools" : contentId == "legacy.aid" ? "medical" : "food",
                         ["initiallyObservable"] = true
                     });
                 if (contentId == "landmark.plate" || contentId == "landmark.gate")
@@ -157,26 +177,18 @@ namespace HallowBlaze.Editor.BoardAuthoring
             return true;
         }
 
+        private static bool IsDefaultSharedExit(JObject data, JToken reference)
+        {
+            if ((int)data["schemaVersion"] != 2 || reference.Parent != data["outcomes"] || !(reference is JObject outcome)) return false;
+            return outcome.Count == 4 && (string)outcome["id"] == "exit." + (int)outcome["exitEntityId"] &&
+                (string)outcome["name"] == "Exit" && outcome["optional"]?.Type == JTokenType.Boolean;
+        }
+
         /// <summary>Returns the existing read-only content sprite; missing art is not substituted with a different gameplay definition.</summary>
         public static Sprite Preview(string contentId)
         {
             if (Previews.TryGetValue(contentId, out Sprite cached)) return cached;
-            string path;
-            switch (contentId)
-            {
-                case "legacy.player": path = "Assets/Prefabs/Player.prefab"; break;
-                case "ordinary.shambler.10": path = "Assets/Prefabs/Enemy1.prefab"; break;
-                case "legacy.floor": path = "Assets/Prefabs/Tiles/Floor1.prefab"; break;
-                case "legacy.wall": path = "Assets/Prefabs/Tiles/Wall1.prefab"; break;
-                case "ordinary.exit-terrain": path = "Assets/Prefabs/Tiles/Exit.prefab"; break;
-                case "landmark.boulder": path = "Assets/Prefabs/Tiles/Boulder.prefab"; break;
-                case "landmark.plate": path = "Assets/Prefabs/Tiles/PressurePlate.prefab"; break;
-                case "landmark.gate": path = "Assets/Prefabs/Tiles/Gate.prefab"; break;
-                case "axe.basic": path = "Assets/Prefabs/Tiles/LandmarkAxe.prefab"; break;
-                case "landmark.radio-tower.rations": path = "Assets/Prefabs/Tiles/Food.prefab"; break;
-                default: return null;
-            }
-            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            GameObject prefab = Prefab(contentId);
             Sprite sprite = prefab == null ? null : prefab.GetComponentInChildren<SpriteRenderer>(true)?.sprite;
             if (sprite == null && prefab != null)
             {
@@ -190,6 +202,36 @@ namespace HallowBlaze.Editor.BoardAuthoring
             }
             Previews[contentId] = sprite;
             return sprite;
+        }
+
+        /// <summary>Uses the actual source prefab name; there is no display-name translation table.</summary>
+        public static string ContentName(string contentId) => Prefab(contentId)?.name ?? contentId;
+
+        private static GameObject Prefab(string contentId)
+        {
+            string path;
+            switch (contentId)
+            {
+                case "legacy.player": path = "Assets/Prefabs/Player.prefab"; break;
+                case "ordinary.shambler.10": path = "Assets/Prefabs/Shambler10.prefab"; break;
+                case "ordinary.shambler.20": path = "Assets/Prefabs/Shambler20.prefab"; break;
+                case "legacy.floor": path = "Assets/Prefabs/Tiles/Floor1.prefab"; break;
+                case "legacy.wall": path = "Assets/Prefabs/Tiles/Bush01.prefab"; break;
+                case "ordinary.exit-terrain": path = "Assets/Prefabs/Tiles/Exit.prefab"; break;
+                case "landmark.boulder": path = "Assets/Prefabs/Tiles/Boulder.prefab"; break;
+                case "landmark.plate": path = "Assets/Prefabs/Tiles/PressurePlate.prefab"; break;
+                case "landmark.gate": path = "Assets/Prefabs/Tiles/Gate.prefab"; break;
+                case "axe.basic": path = "Assets/Prefabs/Tiles/Axe.prefab"; break;
+                case "landmark.radio-tower.rations":
+                case "legacy.food": path = "Assets/Prefabs/Tiles/Raspberries.prefab"; break;
+                case "legacy.soda": path = "Assets/Prefabs/Tiles/Soda.prefab"; break;
+                case "legacy.bush-food":
+                case "ordinary.berries": path = "Assets/Prefabs/Tiles/Blueberries.prefab"; break;
+                case "ordinary.carrot": path = "Assets/Prefabs/Tiles/Carrot.prefab"; break;
+                case "legacy.aid": path = "Assets/Prefabs/Tiles/AidKit.prefab"; break;
+                default: return null;
+            }
+            return AssetDatabase.LoadAssetAtPath<GameObject>(path);
         }
 
         /// <summary>Draws all occupancy layers and handles equivalent pointer/keyboard gestures only while this canvas has focus.</summary>
@@ -308,9 +350,10 @@ namespace HallowBlaze.Editor.BoardAuthoring
 
         internal static BoardLayer LayerOf(string contentId)
         {
-            if (contentId == "legacy.player" || contentId == "ordinary.shambler.10") return BoardLayer.Actor;
+            if (contentId == "legacy.player" || contentId == "ordinary.shambler.10" || contentId == "ordinary.shambler.20") return BoardLayer.Actor;
             if (contentId == "legacy.wall" || contentId == "landmark.boulder") return BoardLayer.Obstacle;
-            if (contentId == "axe.basic" || contentId == "landmark.radio-tower.rations") return BoardLayer.Item;
+            if (contentId == "axe.basic" || contentId == "landmark.radio-tower.rations" || contentId == "legacy.food" || contentId == "legacy.soda" ||
+                contentId == "legacy.bush-food" || contentId == "ordinary.berries" || contentId == "ordinary.carrot" || contentId == "legacy.aid") return BoardLayer.Item;
             return BoardLayer.Terrain;
         }
 

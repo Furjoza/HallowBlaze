@@ -77,6 +77,7 @@ namespace HallowBlaze.Core.Generation.Landmarks
     {
         internal LandmarkBoard(LandmarkTemplate template, LandmarkVariant variant, BoardBlueprint blueprint)
         {
+            IsShared = template.IsShared;
             TemplateId = template.Id;
             TemplateVersion = template.Version;
             VariantId = variant.Id;
@@ -101,6 +102,9 @@ namespace HallowBlaze.Core.Generation.Landmarks
         /// <summary>Gets the named exit outcomes belonging to this exact selected template.</summary>
         public IReadOnlyList<LandmarkOutcomeDefinition> Outcomes { get; }
 
+        /// <summary>Gets whether this is a shared authored snapshot, independent of generator budgets and landmark placement.</summary>
+        public bool IsShared { get; }
+
         /// <summary>Reconstructs independent board state with derived plate/gate walkability and no gameplay events.</summary>
         public BoardState CreateState()
         {
@@ -110,9 +114,9 @@ namespace HallowBlaze.Core.Generation.Landmarks
         }
 
         /// <summary>
-        /// Applies ordinary catalog, budget, opening and topology checks while allowing an explicitly optional exit
-        /// behind interactive obstacles/gates. Mandatory exits still need a static tool-free fallback.
-        /// This is not a dynamic solvability proof; intended sequences and the M6.5 solver validate optional routes.
+        /// Checks structural/catalog rules. Legacy landmarks retain generator checks and a static mandatory fallback;
+        /// shared authoring ignores generator budgets and static reachability because interactions can open a path.
+        /// Shared Test must separately prove a solution using the actual starting inputs and real turn controller.
         /// </summary>
         public BoardValidationReport Validate(BoardValidationCatalog catalog)
         {
@@ -124,7 +128,12 @@ namespace HallowBlaze.Core.Generation.Landmarks
                         if (entity.Id.Equals(outcome.ExitEntityId)) optional.Add(entity.Position);
             var errors = new List<BoardValidationError>();
             foreach (BoardValidationError error in ordinary.Errors)
+            {
+                if (IsShared && (error.Code.EndsWith("Budget", StringComparison.Ordinal) || error.Code == "UnbrokenPerimeter" ||
+                    error.Code == "UnbudgetedResource" || error.Code == "EntryEscapeHorizon" || error.Code == "UnguardedBerries" ||
+                    error.Code == "UnsafeEnemyStart" || error.Code == "UnreachableExit")) continue;
                 if (error.Code != "UnreachableExit" || !error.Position.HasValue || !optional.Contains(error.Position.Value)) errors.Add(error);
+            }
             return new BoardValidationReport(Blueprint.Address, Blueprint.Config, errors, ordinary.Metrics);
         }
     }
@@ -138,7 +147,12 @@ namespace HallowBlaze.Core.Generation.Landmarks
         /// <remarks>Structural validation uses a local diagnostic address only. Gameplay construction always requires the actual BoardAddress.</remarks>
         public LandmarkTemplate(string id, int version, BoardGenerationConfig config,
             IEnumerable<LandmarkVariant> variants, IEnumerable<LandmarkOutcomeDefinition> outcomes)
+            : this(id, version, config, variants, outcomes, false) { }
+
+        internal LandmarkTemplate(string id, int version, BoardGenerationConfig config,
+            IEnumerable<LandmarkVariant> variants, IEnumerable<LandmarkOutcomeDefinition> outcomes, bool shared)
         {
+            IsShared = shared;
             GenerationContract.RequireId(id, nameof(id));
             if (version <= 0) throw new ArgumentOutOfRangeException(nameof(version));
             Id = id;
@@ -156,8 +170,9 @@ namespace HallowBlaze.Core.Generation.Landmarks
                 orderedOutcomes.Add(outcome.Id, outcome);
                 mandatory |= !outcome.IsOptional;
             }
-            if (orderedOutcomes.Count < 2 || !mandatory)
-                throw new ArgumentException("Landmark " + id + " requires at least two named outcomes and a mandatory goal.", nameof(outcomes));
+            if (orderedOutcomes.Count < (shared ? 1 : 2) || !shared && !mandatory)
+                throw new ArgumentException((shared ? "Board " + id + " requires at least one exit." :
+                    "Landmark " + id + " requires at least two named outcomes and a mandatory goal."), nameof(outcomes));
             Outcomes = new List<LandmarkOutcomeDefinition>(orderedOutcomes.Values).AsReadOnly();
             foreach (LandmarkVariant variant in variants)
             {
@@ -178,6 +193,8 @@ namespace HallowBlaze.Core.Generation.Landmarks
         public int Version { get; }
         /// <summary>Gets explicit shared board targets and allowed content; ordinary generation is not invoked.</summary>
         public BoardGenerationConfig Config { get; }
+        /// <summary>Gets whether the shared-board decoder, rather than schema-1 landmark policy, owns this layout.</summary>
+        public bool IsShared { get; }
         /// <summary>Gets permitted variant keys in ordinal order; random variant selection belongs to a later task.</summary>
         public IReadOnlyList<string> VariantIds { get; }
         /// <summary>Gets named goal declarations in ordinal order, not earned results or solution sequences.</summary>
@@ -191,8 +208,16 @@ namespace HallowBlaze.Core.Generation.Landmarks
             GenerationContract.RequireId(variantId, nameof(variantId));
             if (!variants.TryGetValue(variantId, out LandmarkVariant variant))
                 throw new ArgumentException("Unknown variant " + variantId + " in landmark " + Id + ".", nameof(variantId));
-            return new LandmarkBoard(this, variant, new BoardBlueprint(address, Config, variant.Entities, variant.Items));
+            BoardGenerationConfig config = Config;
+            if (IsShared && address != null && (address.GenerationConfigurationId != Config.Id || address.GenerationVersion != Config.Version))
+                config = new BoardGenerationConfig(address.GenerationConfigurationId, address.GenerationVersion, Config.PathLength,
+                    Config.BranchPoints, Config.ObstacleCount, Config.EnemyCount, Config.MaximumConcurrentThreats,
+                    Config.MinimumSafeStartMoves, Config.AllowedContentIds, Config.ResourceBudgets);
+            return new LandmarkBoard(this, variant, new BoardBlueprint(address, config, variant.Entities, variant.Items));
         }
+
+        /// <summary>Creates an explicit shared snapshot for authoring assignments without rewriting this legacy publication.</summary>
+        public BoardTemplate AsShared() => new BoardTemplate(new LandmarkTemplate(Id, Version, Config, variants.Values, Outcomes, true));
 
         private void ValidateVariant(LandmarkVariant variant)
         {

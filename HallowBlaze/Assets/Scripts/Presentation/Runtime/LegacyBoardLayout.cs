@@ -258,9 +258,9 @@ namespace HallowBlaze.Presentation.Runtime
                     new EntityKind("exit"),
                     "legacy.exit",
                     new BoardEntityTraits(false, true, false)),
-                Mapped(LegacyBoardContentKind.Food, BoardLayer.Item, EntityKind.Item, "legacy.food", automaticFoodReward: 10),
+                Mapped(LegacyBoardContentKind.Food, BoardLayer.Item, EntityKind.Item, "legacy.food", automaticFoodReward: OrdinaryBoardContent.RaspberryFoodReward),
                 Mapped(LegacyBoardContentKind.Soda, BoardLayer.Item, EntityKind.Item, "legacy.soda", automaticFoodReward: 20),
-                Mapped(LegacyBoardContentKind.BushFood, BoardLayer.Item, EntityKind.Item, "legacy.bush-food", automaticFoodReward: 10),
+                Mapped(LegacyBoardContentKind.BushFood, BoardLayer.Item, EntityKind.Item, "legacy.bush-food", automaticFoodReward: OrdinaryBoardContent.BlueberryFoodReward),
                 Mapped(
                     LegacyBoardContentKind.BuriedFood,
                     BoardLayer.Item,

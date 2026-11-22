@@ -132,7 +132,7 @@ namespace HallowBlaze.Core.Generation.Landmarks
             if (run == null) throw new ArgumentNullException(nameof(run));
             if (enemies == null) throw new ArgumentNullException(nameof(enemies));
             this.playerId = playerId;
-            var actions = new List<IInteractionAction> { new CollectInteractionAction(), new BoulderPushAction() };
+            var actions = new List<IInteractionAction> { new CollectInteractionAction(), new BoulderPushAction(), new FirstAidInteractionAction() };
             if (clearingRules != null) actions.Add(new ClearObstacleAction(clearingRules, false));
             interactions = new InteractionQuery(actions);
             tools = clearingRules == null ? new ToolUseQuery() : new ToolUseQuery(new[]
@@ -180,7 +180,7 @@ namespace HallowBlaze.Core.Generation.Landmarks
                 if (entity.Definition.Layer != BoardLayer.Item) continue;
                 if (!board.TryGetGroundTool(entity.Id, out GroundToolState ground))
                 {
-                    if (entity.Definition.AutomaticFoodReward <= 0)
+                    if (entity.Definition.AutomaticFoodReward <= 0 && entity.Definition.ContentId != FirstAidInteractionAction.ContentId)
                         throw new NotSupportedException("Every non-food item requires a concrete axe binding.");
                     continue;
                 }

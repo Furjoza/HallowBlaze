@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using HallowBlaze.Core.Generation.Landmarks;
+using HallowBlaze.Core.Generation;
 using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.World;
 using Newtonsoft.Json.Linq;
@@ -24,6 +25,8 @@ namespace HallowBlaze.Editor.BoardAuthoring
     {
         private JObject content;
         private string savedContent;
+        private JObject diagnosticContent;
+        private IReadOnlyList<BoardAuthoringDiagnostic> cachedDiagnostics;
         private readonly Stack<JObject> undo = new Stack<JObject>();
         private readonly Stack<JObject> redo = new Stack<JObject>();
         private readonly Func<JObject, IReadOnlyList<BoardAuthoringDiagnostic>> validate;
@@ -53,7 +56,18 @@ namespace HallowBlaze.Editor.BoardAuthoring
         /// <summary>Gets whether an undone edit can be reapplied without allocating replacement IDs.</summary>
         public bool CanRedo => !IsReadOnly && redo.Count > 0;
         /// <summary>Gets current blocking diagnostics; invalid intermediate edits remain in the draft.</summary>
-        public IReadOnlyList<BoardAuthoringDiagnostic> Diagnostics => validate(content);
+        public IReadOnlyList<BoardAuthoringDiagnostic> Diagnostics
+        {
+            get
+            {
+                if (!ReferenceEquals(diagnosticContent, content))
+                {
+                    cachedDiagnostics = validate(content);
+                    diagnosticContent = content;
+                }
+                return cachedDiagnostics;
+            }
+        }
 
         /// <summary>Creates an intentionally incomplete, unsaved 8x8 draft; missing start/outcomes block saves.</summary>
         public static BoardTemplateDocument NewTemplate(string templateId, string configurationId, BoardValidationCatalog catalog)
@@ -78,6 +92,17 @@ namespace HallowBlaze.Editor.BoardAuthoring
             return Template(data, catalog);
         }
 
+        /// <summary>Creates an unfinished shared board; painting an exit supplies its default completion without a fake landmark.</summary>
+        public static BoardTemplateDocument NewBoard(string templateId, string configurationId, BoardValidationCatalog catalog)
+        {
+            JObject data = NewTemplate(templateId, configurationId, catalog).Snapshot();
+            data["schemaVersion"] = 2;
+            return Template(data, catalog);
+        }
+
+        /// <summary>Creates an independent editable shared snapshot, retaining the exact generated entities and bindings.</summary>
+        public static BoardTemplateDocument FromSnapshot(JObject snapshot, BoardValidationCatalog catalog) => Template(snapshot, catalog);
+
         /// <summary>Opens all supported fields/variants into detached memory; invalid input throws without replacing another document.</summary>
         public static BoardTemplateDocument ReadTemplate(string json, BoardValidationCatalog catalog)
         {
@@ -92,6 +117,17 @@ namespace HallowBlaze.Editor.BoardAuthoring
             return new BoardTemplateDocument(BoardAuthoringJson.ReadPlacement(json, world, template), true,
                 data => BoardAuthoringValidation.Placement(data, world, template),
                 data => BoardAuthoringJson.WritePlacement(data, world, template));
+        }
+
+        /// <summary>Creates a separate shared assignment draft validated against exact immutable world/template publications.</summary>
+        public static BoardTemplateDocument ReadAssignment(string json, WorldDefinition world, LandmarkTemplate template)
+        {
+            BoardAssignment.Read(json, world, template);
+            return new BoardTemplateDocument(JObject.Parse(json), true, data =>
+            {
+                try { BoardAssignment.Read(data.ToString(), world, template); return Array.Empty<BoardAuthoringDiagnostic>(); }
+                catch (Exception exception) { return new[] { new BoardAuthoringDiagnostic("Assignment", exception.Message) }; }
+            }, data => BoardAssignment.Read(data.ToString(), world, template).ToJson());
         }
 
         /// <summary>Returns a complete detached copy; callers cannot mutate a document by retaining a JSON reference.</summary>

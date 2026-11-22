@@ -433,6 +433,11 @@ comprehension rate or human coverage of every variant; the original evidence rem
 
 ## M6.7 Visual Board Editor Contract
 
+The initial design and delivery history below are retained for compatibility evidence. The
+owner-approved [M6.9e shared workflow](#m69e-unified-board-authoring) supersedes their pending
+ordinary-format/assignment prerequisites and landmark-only limitations for the isolated Editor.
+It does not publish new campaign content or change the existing schema-1 Radio Tower policy.
+
 This section records the small-editor design contract; M6.8a/b implement its initial
 landmark document/window subset, not test-play or publication. It follows the accepted
 [board/route direction](GameDesignContract.md#board-authoring-and-route-assignments---accepted-direction-2026-11-03)
@@ -443,10 +448,13 @@ remain read-only, including during future authoring exercises.
 
 ### Segment Authoring Amendment - 2026-11-16
 
-The owner prefers exact segment assignments, not a pool per route. This extends the initial
+The owner chose exact segment assignments rather than a pool per route for the first workflow. This extends the initial
 final-landmark-only delivery plan under the
 [accepted hierarchy and assignment amendment](GameDesignContract.md#segment-scoped-authoring---accepted-amendment-2026-11-16).
 It changes future M6.9/M6.10 scope, not the accepted M6.8 implementation, schemas or evidence.
+The [2026-11-22 amendment](GameDesignContract.md#segment-map-pools-and-resource-balance---accepted-amendment-2026-11-22)
+extends future segment sources to explicit pools; the initial exact-assignment evidence below
+is retained and route-wide pools remain excluded.
 
 | Owner | Responsibility | Not its identity or responsibility |
 | --- | --- | --- |
@@ -490,6 +498,9 @@ is created by this example. One template can serve compatible segments on both r
 with an independent address/state. Names and artwork alone never establish compatibility.
 
 ### Editor Implementation Anchors
+
+This table records the initial schema-1 implementation boundaries. The versioned shared-board
+extension is specified in M6.9e below; schema-1 rules in this table remain unchanged.
 
 | Existing owner | Verified boundary and consequence |
 | --- | --- |
@@ -638,6 +649,10 @@ specific; an ordinary template is not a substitute for a final landmark's outcom
 
 ### Editor Publication And Version Policy
 
+The baseline below describes exact assignments. Future segment pools extend the lookup to an
+immutable pool publication and a retained per-leg exact selection under the 2026-11-22 amendment;
+they do not relax old-version retention, atomic activation or player-save protection.
+
 Existing landmark authoring schema stays **1**, independent of world version, template content
 version, configuration version and current player run/profile schemas (**v5/v2**). M6.9c must
 define ordinary encoding and prove whether these formats can remain unchanged; if not, require
@@ -682,6 +697,10 @@ exceptions in `BoardAddressFactory`. A future real-campaign upgrade across those
 requires a separately authorized compatibility prerequisite; it is not hidden in this loader.
 
 ### Editor Isolated Test-Play
+
+The baseline below uses an explicitly selected variant. Planned pool tests instead capture the
+seed-selected exact entry for every pooled segment before Start, retaining that same plan across
+reloads; they do not reroll variants or alter the delivered fixed-assignment workflow.
 
 Test captures a validated immutable copy of all template/assignment data and explicit variant,
 world, full address, seed, rules and starting Health/Food/equipment. Show the selected inputs;
@@ -735,6 +754,277 @@ arbitrary effects and unmapped content are explicitly unsupported. Keep the exis
 execute on fresh real owners and reach the requested outcome; no limit result, static validation
 or shortest-path witness proves general solvability, human readability or balance.
 
+### M6.9a Isolated Runtime Boundary
+
+Implementation accepted with independent Reviewer PASS on 2026-11-16. `BoardAuthoringTestContext` is entirely Editor-conditional
+and captures a validated immutable world/template/variant plus starting run inputs. It reserves
+a fresh marked directory under the external Windows temporary root, refuses existing/protected/
+reparse paths and checks ownership before bootstrap. Local snapshots construct a minimal world
+using the existing strict world reader; they never replace published assets or use the player's
+profile. A pending launch survives expected Play Mode entry; an already running context cannot
+be recovered after an assembly reload.
+
+GameManager claims this context before stores/bootstrap, uses its world and isolated run/profile,
+checkpoints the exact variant without selection RNG and passes the addressed snapshot through
+the existing BoardManager/blueprint composer. Plate/gate bindings, tool allocation, intents,
+costs and events remain owned by normal runtime code. Controlled travel reloads retain the same
+context/root/publication; terminal cleanup revokes ownership immediately and releases the board
+after the current command finishes presentation. A retained sandbox manager cannot open normal
+storage after cancellation. High score and audio changes remain temporary; a later normal
+bootstrap restores audio defaults without writing preferences.
+
+The owner explicitly approved the minimal AtlasScreenController integration after the local-world
+test exposed its separate production-world loader. The atlas now uses the same sandbox world/root
+or refuses an ended authoring session; normal atlas behavior/appearance is unchanged. The launcher,
+document/scene recovery UI and owner usability exercise still belong to M6.9b, not this boundary.
+
+### M6.9b Local Test Workflow
+
+The Board Editor now exposes a separate Test action and bounded Solver action for the existing
+landmark schema. Test captures the validated JSON and explicit variant, seed, positive Health/Food
+and optional basic axe. Saving the draft is not required. A pending/running test owns one immutable
+snapshot; editing controls, keyboard shortcuts and deferred draft mutations are blocked until recovery.
+Stop cancels only the launcher-owned sandbox. A fresh Test reserves a new external temporary root.
+If unrelated Play Mode is running, the owner must choose Stop or Cancel; Test can be retried only
+after Edit Mode returns. Compilation/import and a second pending launcher are refused.
+
+Dirty scenes require an explicit successful save or cancellation; choosing not to save does not
+authorize losing those changes. Unnamed scenes containing objects and unnamed additive setups are
+refused. The launcher temporarily selects Main as the Play Mode start scene without saving it, then
+restores the previous multi-scene setup, active scene and prior Play Mode start scene. Recovery keeps
+the dirty document, saved fingerprint, both undo stacks, selected variant/cell, brush and local inputs
+across domain reload. Failed entry, Stop and runtime revocation preserve recovery until it succeeds.
+Recovery also refuses to close any scene made dirty after a pending/failed launch; Stop offers a
+save/cancel decision before retrying, and scene setup is checked again after that decision. A missing
+draft folder does not block in-memory recovery or restoration of the prior Play Mode start scene:
+the document/history remain editable, with a diagnostic and the option to choose another safe folder.
+Temporary sandbox saves remain outside the project and player profile; no test publishes assets.
+
+Solver uses the same explicit snapshot/inputs but does not enter Play Mode or create saves. The existing
+50,000-state / 32-command / 10-second defaults are unchanged. Results distinguish Solved, exhausted
+NoSolution, StateLimit, DepthLimit, TimeLimit, Invalid and Unsupported. A found path is executed on fresh
+board/run/enemy owners through the production controller and must emit the exact requested exit before
+Solved is reported; a mismatch is ReplayFailed. No new mechanics or portable command/replay format are
+introduced. The Editor assembly references only the three owner-approved existing Session/Turns modules.
+
+Technical validation resumed on 2026-11-18: 94/94 focused graphics EditMode tests (58 document,
+21 window, 15 launcher/solver including actual Edit/Play/Edit, multi-scene recovery and all review
+regressions) and 16/16 graphics PlayMode isolation tests passed. The existing unexpected-window-close
+test now waits for recovery with a bounded 10-second deadline instead of 30 runner iterations, without
+weakening its assertions. The initial dirty-scene/folder findings and the follow-up empty unnamed
+additive-scene finding are corrected. Independent Reviewer PASS on 2026-11-18 confirmed all findings
+closed, with no new material defects.
+M6.9b remains Active until the
+owner performs create -> paint -> save -> local test -> revise -> reopen and records Accept/Revise/Defer.
+This is not ordinary-board support or permission to start M6.9c/d ahead of their dependency gates.
+
+Owner exercise feedback on 2026-11-18 exposed a usability gap: a new draft containing floor,
+one player and one exit cannot enter Test because the current landmark reader requires at least
+two named outcomes and a mandatory goal. This is a format/workflow limitation, not evidence that
+the pictured layout is unplayable. The shared-board/generate-then-edit direction requires its own
+accepted data/compatibility amendment; neither weakening landmark validation nor adding a fake
+second outcome is part of the layout correction. The exercise is not accepted or complete.
+
+The same exercise requested a taller inspector and centered workspace. The local UI correction
+matches the Cell/Board/Outcomes viewport to the canvas height and centers the bounded palette,
+canvas and inspector group. Narrow windows retain the stacked layout. Live Pipeline validation
+passed 21/21 existing window tests, including viewport/centering assertions and native captures
+at 640, 1280 and 1600 GUI-point widths; no gameplay scene or Play Mode was opened. The owner's
+unsaved document and undo history were checked against an external recovery copy and preserved.
+Independent Reviewer PASS on 2026-11-18 covers this UI correction only; the earlier 94/16 results
+above precede it. The single-exit workflow issue remains open; no format change or owner acceptance
+is implied by the layout result.
+
+### M6.9e Unified Board Authoring
+
+The owner approved this consolidated correction on 2026-11-18. Its current technical delivery
+replaces the earlier landmark-only exercise, not the published campaign. The owner confirmed
+the delivered editor's usability on 2026-11-19; that acceptance was recorded on 2026-11-20 and
+remains separate from automated validation and independent code review. Two automated input
+sequence tests were resolved in the bounded 2026-11-20 follow-up: both now wait for their own
+window's queued actions rather than an unrelated `delayCall` marker, and both passed without
+production behavior changes. This is focused technical evidence, not a rerun of every earlier
+check; multi-board travel and campaign publication are not accepted by the usability verdict.
+
+**Data and compatibility.** New and generated drafts use shared board schema 2 through
+[BoardTemplateJson](../Assets/Scripts/Core/Generation/BoardTemplateJson.cs). It reuses the strict
+field/content decoder, blueprint, state, bindings and production turn resolver; there is no second
+game engine. A single player and a single exit are supported without a fake second outcome.
+Shared exits may all be optional; only schema 1 requires a mandatory outcome. Painting unrelated
+content preserves the authored optional flags.
+Schema-1 Open remains lossless and keeps its strict landmark guarantees. Explicit Fork creates a
+detached schema-2 draft; it never rewrites the source publication or exposes an undo path back to
+its legacy policy. Unknown/duplicate fields and schemas are still rejected. Player run/profile
+schemas remain v5/v2, and existing Radio Tower selection, Resources references and save identities
+are unchanged.
+
+**Painting and generation.** Supported brushes declare their content and necessary resource/exit
+metadata in the same undoable document edit. Default generated exit bindings can be erased without
+a confirmation dialog; custom authored references still require consent. Previews and labels use
+actual source assets, not a display-name translation table. Bush01-Bush08, Shambler10/Shambler20,
+Berries and Axe are source renames with preserved GUIDs; stable gameplay content IDs are unchanged.
+[BoardGenerationAdapter](../Assets/Editor/BoardAuthoring/BoardGenerationAdapter.cs) calls the real
+`BoardGenerationPipeline.GenerateOrdinary` with explicit seed, day/preset and reproducible authoring
+address, then copies the accepted blueprint into an editable snapshot. Production generator
+validation stays strict. Regenerate prepares its candidate before asking Save/Discard/Cancel and
+cannot silently replace the current draft or undo history. Save/reopen and Test use the edited
+snapshot, never a generator reroll.
+
+The owner-approved species correction on 2026-11-19 names the original fruit sources
+`Blueberries` and `Raspberries`, with their complete metadata/GUIDs and sprites preserved.
+The palette exposes one brush per species; old duplicate IDs remain supported for reading,
+painting recovery and existing assignments. Blueberries grant 10 Food and raspberries 5 Food
+everywhere, including the retained legacy and Radio Tower IDs. This deliberately changes future
+collections after Continue, not already accumulated Food. Save schemas, stable IDs and layout
+versions are unchanged; there is no display-name alias dictionary.
+
+**Playability.** Shared structural/catalog/binding validation does not apply generator budget,
+perimeter, opening-safety or static-reachability targets to a manual layout. Test must instead prove
+one actual exit with the selected starting health, food and tool. It first replays direct paths
+through a fresh production controller, then uses the existing bounded solver (50,000 states per
+goal, 128-command depth and one 10-second board-wide search budget). Any declared shared exit may
+prove success, regardless of painting order or its legacy optional flag. An interaction-dependent
+path is valid; a limit remains incomplete evidence, never `NoSolution`. A found sequence must replay
+successfully before Test launches. The separate targeted Solver action retains its existing
+50,000-state/32-command/10-second defaults and distinct diagnostic results.
+
+The owner-approved 2026-11-19 UI separates `Check board` from `Play selected variant`.
+Check validates document data and runs that same playability check for the selected variant,
+seed, starting Health/Food and axe, without entering Play Mode, changing the draft/history or
+writing saves. Its visible result distinguishes a verified exit, invalid data, no solution and
+incomplete search limits. Changing the board, variant or any of those starting inputs makes the
+previous result `Out of date`; a new check is required to display current evidence. Play retains
+the existing launcher checks, including fresh shared-board playability verification before
+entering the isolated game; a displayed previous success never bypasses those checks. The
+separate `Solver Outcome` action still targets one exact exit without starting a game. The
+toolbar refresh action only validates data in all variants; it is not a playability proof.
+Deferred window commands execute once on `EditorApplication.update` and unsubscribe before
+execution, rather than depending on `delayCall` delivery. Closing/disabling the window or
+replacing its document still invalidates pending actions before they can change retained data.
+
+**Exact assignments.** [BoardAssignment](../Assets/Scripts/Core/Generation/BoardAssignment.cs) schema
+2 stores world ID/version, edge ID, stable segment ID, generation configuration ID/version and exact
+template ID/version/variant. Edge/configuration fields are checked against the source world, not
+used to invent another graph; mismatches and stale bindings fail rather than rerolling. The panel
+shows route/endpoints/ID, ordered segment, biome and world, including final segments of landmark
+destinations. Compatibility is explicitly limited to the existing prototype catalog and its three
+supported biome keys until M8.2. A template and its assignment are separate external drafts; Save
+does not publish either to the campaign. The sandbox retains the target's full real address with
+fresh state per use, never a fake `ActiveLandmark`. Intermediate completion advances one segment;
+ordinary final completion commits one arrival/day; a final goal landmark completes normal goal
+arrival without inventing a legacy story outcome. The existing schema-1 placement path is unchanged.
+
+**Isolation and recovery.** M6.9a/b ownership, marked external roots, dirty-scene fences, exact
+Edit/Play/Edit snapshot/history recovery and production-storage refusal still apply. Recovery also
+retains the assignment selection and generation inputs. The Editor context remains excluded from
+compiled Player scripts. Native wide/narrow window smoke includes the active assignment controls,
+painting, keyboard undo/redo and save/reopen. Technical checks and the recorded 2026-11-19 owner
+acceptance are separate evidence; the same usability exercise does not need to be repeated.
+
+The 2026-11-19 Test correction accepts one clean unnamed scene even when it contains a camera.
+Unity restores that scene through the normal Play Mode round trip; the launcher must not recreate
+an empty scene in its place if native restoration is unavailable. Dirty scene save/cancel checks
+and refusal of unnamed additive setups remain in force. A SessionState Play-observed marker
+survives domain reload, and the lifetime check resumes guarded recovery directly in Edit Mode.
+
+### M6.10 Route Sandbox Increment
+
+The owner authorized this next increment on 2026-11-20, after accepting the editor and resolving
+the two bounded input-test failures. Implementation is separate from that recorded usability
+verdict. The exact source scope and gates are in the
+[route-sandbox roadmap increment](TechnicalRoadmap.md#m610-increment---one-immutable-route-sandbox).
+
+The implemented `Play route` command captures saved shared-board assignments for the selected existing
+route, previews their exact ordered segment/template/version/variant mapping, then starts at the
+route's beginning only after explicit confirmation and full preflight. Unassigned ordinary
+segments keep their generator; assigned middle/final segments use the immutable captured boards.
+Conflicts, missing content and unsupported unassigned configurations refuse activation before a
+new sandbox root exists. Scene reloads retain one publication/root and normal segment/day rules;
+editing library files cannot alter an active test. The selected board and assignment must be
+saved and unchanged; the preview also freezes starting inputs. Cancel leaves the draft, scenes
+and context untouched. Identical board copies are allowed, but multiple saved bindings for one
+segment or conflicting contents with one template/version are refused.
+
+Final arrival ends the one-route context and triggers the same draft/scene recovery as Stop;
+only its fenced diagnostic root remains. Focused EditMode 20/20 and PlayMode 15/15 passed on
+2026-11-20, including real Play-domain recovery, actual three-board travel and the existing
+single-board/legacy paths. Player compilation passed with the Editor context absent. Independent
+review passed with no material findings; technical delivery is complete as of 2026-11-20, without
+claiming a new owner usability verdict. No campaign publication,
+player-save change, route editing or persistent resume after Stop is part of this increment.
+
+**Owner travel acceptance (2026-11-22):** The owner created the first three maps, used Play route
+and reported that the journey worked well. This accepts that delivered fixed-assignment travel
+exercise, without claiming new automated results, pool behavior or board-balance acceptance.
+The separate seed-7/Shambler10 Check board TimeLimit report remains unresolved; the successful
+journey does not turn incomplete solver evidence into a proof.
+
+### Segment Pools And Resource Panel Plan - 2026-11-22
+
+This documentation-only revision follows the
+[accepted pool and resource amendment](GameDesignContract.md#segment-map-pools-and-resource-balance---accepted-amendment-2026-11-22).
+It replans remaining M6.10a/b work and adds M6.10c; none of these features is implemented by
+changing the plan. The completed one-route increment above retains exact assignments and its
+duplicate-binding refusal until pool support is implemented and validated.
+
+**Pool definition and selection.** One segment has at most one authored source: a fixed exact
+assignment or an explicit, nonempty versioned pool of distinct template/version/variant tuples.
+Each entry has equal probability, regardless of its file name, board size or resource count.
+One entry is fixed; no authored source means the existing generator. An empty configured pool,
+missing entry, duplicate tuple or conflicting publication blocks activation rather than removing
+the entry, changing probabilities or falling back to generation. Multiple old assignment files
+remain conflicts, not implicit pool membership. Shared-board pools do not alter strict legacy
+landmark/Radio Tower selection or create new routes, days or mechanics.
+
+Before accepting a new leg, freeze its pool publication, order entries canonically and derive
+one choice per pooled segment from the stable seed/run/leg/traversal/segment identities under
+a versioned selection policy. Persist that full plan with the leg before runtime composition.
+Retries, scene reload and Continue reuse it, including not-yet-visited segments. Generation and
+cosmetic RNG streams remain unchanged. Later membership/content edits create new publications
+for future legs, not new choices for an existing leg. Pin exact old selections and retain their
+artifacts; missing archives fail safely. M6.10a must specify actual DTOs, algorithm and compatible
+old-save handling before code, without hiding ordinary choices in `ActiveLandmark`.
+
+**Authoring workflow.** M6.10b adds an explicit segment source selector, pool membership list,
+exact candidate/variant editing, independent dirty/undo/save/reopen behavior and activation
+preview. Preview shows the full candidate set, equal probabilities and the seed-selected entry
+for each segment; Start uses that same captured selection plan. A preview can be cancelled or
+repeated without consuming randomness. Fixed assignments stay available. The UI reuses the
+current board library, route chooser, launcher and recovery boundaries rather than a second
+grid editor. Saving a board alone never adds it to a pool or changes an active publication.
+
+**Resource balance panel.** M6.10c supplies a compact side panel, with an accessible stacked
+layout in narrow windows, for board/variant, selected pool and entire selected route. Use the
+actual reward definitions and item/tool bindings, including current and retained content IDs;
+count each spawn once. Display item counts and Food yield, nominal Health restoration and tool
+instances/initial charges separately by tool definition. Keep starting Food/Health/equipment
+separate from map supply. Conditional rewards, unknown definitions and stale/invalid drafts
+are marked explicitly; this is not a solver, reachability guarantee or automatic balance score.
+
+For a pool, show per-candidate supply and minimum/arithmetic-mean/maximum for one draw. For a
+route, sum one draw's values per segment; never sum all alternatives into playable supply.
+For example, a segment with equally likely Food yields 10 and 30 has min/mean/max 10/20/30;
+adding a fixed segment with Food 5 produces route estimates 15/25/35, not 45. These are gross
+authored amounts, not net gain after movement/action costs; healing reports nominal restoration,
+not assumed effective healing at a particular Health. Extrema for different resources need not
+occur in one combination. Reusing a template on two segments counts two independent placements;
+duplicate files are not additional pool entries or extra resources.
+
+Unassigned generated segments require the exact seed/address/configuration snapshot for concrete
+totals. Without one, show those segments as unknown and the rest as a partial authored subtotal.
+Do not silently omit them or invent generator averages. A frozen seed preview may show exact
+selected-route supply separately from the pool estimates. Edits, undo/redo, variant switches and
+membership changes refresh the panel without Play Mode, solver calls, RNG changes or writes.
+
+**Delivery gates.** M6.10a: canonical deterministic choice, equal-probability mapping, publication
+preflight, atomic pinning and old/new isolated-save compatibility. M6.10b: explicit membership
+round-trip/undo and seeded multi-board travel without rerolls or active-context replacement.
+M6.10c: catalog-grounded counts, hand-calculated pool/route aggregates, repeated-placement and
+unknown/generated cases, plus native wide/narrow update/undo checks without changing the draft.
+Exact source/test paths are frozen for each implementation ticket, not granted by this plan.
+Weights, adaptive odds, no-repeat rules, production publication, balance simulation and the
+separate Check board fix require their own scope.
+
 ### Editor Reference Walkthrough And Delivery Gates
 
 The read-only M6.7 audit uses the existing
@@ -762,8 +1052,8 @@ M6.9d ordinary authoring/local test -> M6.10a segment loader/publication prerequ
 M6.10b assignment UI/integrated acceptance**. The exact closed path lists, dependencies,
 acceptance criteria and required EditMode/PlayMode/manual checks live in the corresponding
 [roadmap cards](TechnicalRoadmap.md#m68---grid-painting-object-properties-and-validated-template-saves).
-M6.8a/b are accepted. M6.9a is next for implementation after its normal preflight; this amendment
-starts no code stage. M6.9d/M6.10 cannot become Ready until M6.9c freezes their ordinary-format
+M6.8a/b and M6.9a are accepted. M6.9b is technically implemented and remains Active for review
+and the owner's usability decision. M6.9d/M6.10 cannot become Ready until M6.9c freezes their ordinary-format
 and closed-path prerequisites. The Lead implements/tests; owner exercises decide usability.
 
 ### M6.8a Document Backend
@@ -867,6 +1157,8 @@ Alt+Up/Down selects one and Alt+Delete requests its confirmed removal. Toolbar c
 pointer gestures and inspector-context changes commit pending delayed fields before executing.
 All icon buttons have tooltips. Narrow windows stack
 the palette/canvas/inspector in a scrollable layout instead of overlapping them.
+The working group is horizontally centered with a bounded width; the scrollable inspector
+uses at least the canvas height rather than a fixed short strip, including in wide windows.
 Deferred actions use the originating window/document's scheduler. Disabling/closing that
 window cancels its queued actions, and replacing its document invalidates old callbacks before
 they can mutate a retained snapshot or refresh an already detached native view.

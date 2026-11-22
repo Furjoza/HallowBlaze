@@ -371,12 +371,12 @@ namespace HallowBlaze.Tests.PlayMode
                 layout.Add(View(fixture, LegacyBoardContentKind.Floor, horizontal, "Assets/Prefabs/Tiles/Floor1.prefab"));
             layout.Add(View(fixture, LegacyBoardContentKind.Player, 0, "Assets/Prefabs/Player.prefab"));
             layout.Add(View(fixture, LegacyBoardContentKind.Exit, 2, "Assets/Prefabs/Tiles/Exit.prefab"));
-            LegacyBoardView generic = View(fixture, LegacyBoardContentKind.Tool, 1, "Assets/Prefabs/Tiles/Food.prefab");
+            LegacyBoardView generic = View(fixture, LegacyBoardContentKind.Tool, 1, "Assets/Prefabs/Tiles/Raspberries.prefab");
             fixture.ToolView = generic.View;
             layout.Add(new LegacyBoardView(generic.View, LegacyBoardContentKind.Tool, generic.Position, tool: tool, sourceId: "source.shovel.camp"));
             if (secondTool)
             {
-                LegacyBoardView additional = View(fixture, LegacyBoardContentKind.Tool, 0, "Assets/Prefabs/Tiles/Food.prefab");
+                LegacyBoardView additional = View(fixture, LegacyBoardContentKind.Tool, 0, "Assets/Prefabs/Tiles/Raspberries.prefab");
                 layout.Add(new LegacyBoardView(additional.View, LegacyBoardContentKind.Tool, additional.Position,
                     tool: fixture.Run.CreateToolInstance(ToolContentCatalog.Load()["shovel.basic"]), sourceId: "source.shovel.second"));
             }

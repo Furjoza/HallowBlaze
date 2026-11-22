@@ -19,13 +19,23 @@ namespace HallowBlaze.Presentation.Runtime
         public const string Enemy10Id = "ordinary.shambler.10";
         /// <summary>Identifies the current 20 HP Shambler variant independently of prefab identity.</summary>
         public const string Enemy20Id = "ordinary.shambler.20";
-        /// <summary>Identifies berries worth five Food; version 6 protects them with a clearable blocking bush.</summary>
+        /// <summary>Identifies blueberries worth ten Food; version 6 protects them with a clearable blocking bush.</summary>
         public const string BerryFoodId = "ordinary.berries";
+        /// <summary>Grants ten Food for blueberries under both current and retained legacy content IDs, independent of map placement.</summary>
+        public const int BlueberryFoodReward = 10;
+        /// <summary>Grants five Food for raspberries, including the retained Radio Tower ration ID.</summary>
+        public const int RaspberryFoodReward = 5;
         /// <summary>Identifies a visible carrot worth exactly fifteen Food, separate from legacy buried caches.</summary>
         public const string CarrotFoodId = "ordinary.carrot";
 
         /// <summary>Creates detached authoritative definitions; automatic food rewards remain compatibility effects only.</summary>
         public static BoardValidationCatalog CreateCatalog()
+            => CreateCatalog(false);
+
+        /// <summary>Combines existing generated-board and puzzle content for shared authoring; production generation retains its original catalog.</summary>
+        public static BoardValidationCatalog CreateAuthoringCatalog() => CreateCatalog(true);
+
+        private static BoardValidationCatalog CreateCatalog(bool authoring)
         {
             var definitions = new List<BoardEntityDefinition>();
             foreach (LegacyBoardContentKind kind in new[] { LegacyBoardContentKind.Player, LegacyBoardContentKind.Floor,
@@ -40,14 +50,31 @@ namespace HallowBlaze.Presentation.Runtime
             definitions.Add(new BoardEntityDefinition(BoardLayer.Actor, EntityKind.Enemy, Enemy10Id));
             definitions.Add(new BoardEntityDefinition(BoardLayer.Actor, EntityKind.Enemy, Enemy20Id));
             definitions.Add(new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, BerryFoodId,
-                BoardEntityTraits.Default, automaticFoodReward: 5));
+                BoardEntityTraits.Default, automaticFoodReward: BlueberryFoodReward));
             definitions.Add(new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, CarrotFoodId,
                 BoardEntityTraits.Default, automaticFoodReward: 15));
+            if (authoring)
+            {
+                definitions.Add(BoulderPushAction.Definition);
+                definitions.Add(PlateGateValidator.PlateContent);
+                definitions.Add(PlateGateValidator.GateContent);
+                definitions.Add(new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, "axe.basic"));
+                definitions.Add(new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, RadioTowerLandmark.RationsId,
+                    BoardEntityTraits.Default, RaspberryFoodReward));
+            }
+            var families = new Dictionary<string, string> { { "legacy.food", "food" }, { "legacy.soda", "food" },
+                { "legacy.bush-food", "food" }, { BerryFoodId, "food" }, { CarrotFoodId, "food" },
+                { FirstAidInteractionAction.ContentId, "medical" } };
+            var sources = new Dictionary<string, string>();
+            if (authoring)
+            {
+                families.Add("axe.basic", "tools");
+                families.Add(RadioTowerLandmark.RationsId, "food");
+                sources.Add(RadioTowerLandmark.AxeSourceId, "axe.basic");
+                sources.Add("source.radio-tower.rations", RadioTowerLandmark.RationsId);
+            }
             return new BoardValidationCatalog(definitions,
-                new Dictionary<string, string> { { "legacy.food", "food" }, { "legacy.soda", "food" },
-                    { "legacy.bush-food", "food" }, { BerryFoodId, "food" }, { CarrotFoodId, "food" },
-                    { FirstAidInteractionAction.ContentId, "medical" } },
-                new Dictionary<string, string>(), new Dictionary<string, ShamblerDefinition>
+                families, sources, new Dictionary<string, ShamblerDefinition>
                 {
                     { Enemy10Id, new ShamblerDefinition(10) }, { Enemy20Id, new ShamblerDefinition(20) }
                 });

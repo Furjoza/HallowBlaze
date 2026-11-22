@@ -38,7 +38,7 @@ namespace HallowBlaze.Tests.PlayMode
             Directory.CreateDirectory(outputRoot);
             tile = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1);
             playerSprite = ReadSprite("Assets/Prefabs/Player.prefab");
-            enemySprite = ReadSprite("Assets/Prefabs/Enemy1.prefab");
+            enemySprite = ReadSprite("Assets/Prefabs/Shambler10.prefab");
         }
 
         /// <summary>Marks a package usable only after both forms pass, then releases the sole owned sprite.</summary>

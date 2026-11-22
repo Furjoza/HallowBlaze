@@ -1,6 +1,8 @@
 {
     "name": "HallowBlaze.Tests.PlayMode",
     "rootNamespace": "HallowBlaze.Tests.PlayMode",
+    "overrideReferences": true,
+    "precompiledReferences": ["nunit.framework.dll", "Newtonsoft.Json.dll"],
     "references": [
         "HallowBlaze.Core.State",
         "HallowBlaze.Core.Session",

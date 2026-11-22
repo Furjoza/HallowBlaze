@@ -134,14 +134,16 @@ namespace HallowBlaze.Editor.BoardAuthoring
 
         /// <summary>Draws the selected cell, board configuration and outcome properties; returns true only for a committed document edit.</summary>
         /// <param name="refresh">Refreshes the host's diagnostics and dirty state after an asynchronously committed inspector action.</param>
-        public bool Draw(BoardTemplateDocument document, string variantId, BoardGridView grid, Func<string, bool> confirm, Action refresh = null)
+        /// <param name="viewportHeight">Scrollable inspector height in GUI points, clamped to at least 200; the host can match its board canvas.</param>
+        public bool Draw(BoardTemplateDocument document, string variantId, BoardGridView grid, Func<string, bool> confirm, Action refresh = null,
+            float viewportHeight = 200)
         {
             deferredRefresh = refresh;
             bool changed = false;
             int nextTab = GUILayout.Toolbar(tab, new[] { "Cell", "Board", "Outcomes" });
             RecordControl("Tabs");
             if (nextTab != tab) Defer(() => { tab = nextTab; scroll = Vector2.zero; });
-            scroll = EditorGUILayout.BeginScrollView(scroll, GUILayout.MinHeight(200));
+            scroll = EditorGUILayout.BeginScrollView(scroll, GUILayout.Height(Mathf.Max(200, viewportHeight)));
             if (!string.IsNullOrEmpty(SelectedFieldPath)) EditorGUILayout.LabelField(SelectedFieldPath, EditorStyles.wordWrappedMiniLabel);
             using (new EditorGUI.DisabledScope(document == null))
             {

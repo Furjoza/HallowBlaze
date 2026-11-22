@@ -283,7 +283,7 @@ namespace HallowBlaze.Tests.PlayMode
             GameObject soda = CreateObject("Ordinary soda prefab", 0, 0);
             soda.tag = "Soda";
             SetField(manager, "groundFoodTiles", new[] { food, soda });
-            SetField(manager, "bushFoodTiles", AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Food2.prefab"));
+            SetField(manager, "bushFoodTiles", AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Blueberries.prefab"));
             SetField(manager, "buriedFoodTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Carrot.prefab") });
             SetField(manager, "aidTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/AidKit.prefab") });
             var enemies = new List<GameObject>();
@@ -330,7 +330,7 @@ namespace HallowBlaze.Tests.PlayMode
                     }
                     Assert.That(item, Is.Not.Null, foodId);
                     GameObject itemView = runtime.Views[item.Id];
-                    string prefab = foodId == OrdinaryBoardContent.BerryFoodId ? "Food2" : "Carrot";
+                    string prefab = foodId == OrdinaryBoardContent.BerryFoodId ? "Blueberries" : "Carrot";
                     Assert.That(itemView.GetComponent<SpriteRenderer>().sprite,
                         Is.SameAs(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/" + prefab + ".prefab").GetComponent<SpriteRenderer>().sprite));
                     if (foodId == OrdinaryBoardContent.BerryFoodId && version < 6)
@@ -406,7 +406,7 @@ namespace HallowBlaze.Tests.PlayMode
                         Task<CommandSubmission> pending = presenter.Coordinator.SubmitAsync(new MoveCommand(step));
                         while (!pending.IsCompleted) yield return null;
                         Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
-                        int reward = foodId == OrdinaryBoardContent.BerryFoodId ? 5 : 15;
+                        int reward = foodId == OrdinaryBoardContent.BerryFoodId ? 10 : 15;
                         Assert.That(runtime.RunState.Food, Is.EqualTo(beforePickup + reward - 1));
                         Assert.That(foodText.text, Is.EqualTo("Food: " + (beforePickup + reward - 1) + " +" + reward));
                         Assert.That(itemView.activeSelf, Is.False);
@@ -1699,9 +1699,9 @@ namespace HallowBlaze.Tests.PlayMode
             SetField(board, "rows", 8);
             SetField(board, "floorTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Floor1.prefab") });
             SetField(board, "outerWallTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/OuterWall1.prefab") });
-            SetField(board, "wallTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Wall1.prefab") });
-            SetField(board, "groundFoodTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Food.prefab") });
-            SetField(board, "enemyTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Enemy1.prefab") });
+            SetField(board, "wallTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Bush01.prefab") });
+            SetField(board, "groundFoodTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Raspberries.prefab") });
+            SetField(board, "enemyTiles", new[] { AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Shambler10.prefab") });
             SetField(board, "exit", AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Exit.prefab"));
             GameObject player = GameObject.FindGameObjectWithTag("Player");
             SpriteRenderer playerRenderer = player.GetComponent<SpriteRenderer>();
