@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using HallowBlaze.Core.Generation;
 using HallowBlaze.Core.Generation.Landmarks;
 using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.World;
@@ -27,7 +28,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
         /// <summary>Decodes all variants without dropping absent/null optional fields; unsupported data throws before a document is replaced.</summary>
         public static JObject ReadTemplate(string json, BoardValidationCatalog catalog)
         {
-            LandmarkTemplateJson.Deserialize(json, catalog);
+            BoardTemplateJson.ReadCompatible(json, catalog);
             return Parse(json);
         }
 
@@ -42,7 +43,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
         public static string WriteTemplate(JObject document, BoardValidationCatalog catalog)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
-            LandmarkTemplateJson.Deserialize(document.ToString(Formatting.None), catalog);
+            BoardTemplateJson.ReadCompatible(document.ToString(Formatting.None), catalog);
             string json = Format(document);
             VerifyRoundTrip(document, ReadTemplate(json, catalog));
             return json;
@@ -105,7 +106,12 @@ namespace HallowBlaze.Editor.BoardAuthoring
         private static void VerifyRoundTrip(JObject original, JObject decoded)
         {
             if (!JToken.DeepEquals(Canonical(original, string.Empty), Canonical(decoded, string.Empty)))
-                throw new JsonSerializationException("Authoring JSON round-trip changed document data.");
+            {
+                JToken changed = original.Descendants().FirstOrDefault(token => token is JValue &&
+                    !JToken.DeepEquals(token, decoded.SelectToken(token.Path, false)));
+                throw new JsonSerializationException("Authoring JSON round-trip changed document data at " + changed?.Path +
+                    ": " + changed + " -> " + (changed == null ? "<structure>" : decoded.SelectToken(changed.Path, false)?.ToString()));
+            }
         }
     }
 }

@@ -214,7 +214,7 @@ namespace HallowBlaze.Tests.PlayMode
                     horizontal, vertical, "Assets/Prefabs/Tiles/Floor1.prefab"));
             layout.Add(View(fixture, LegacyBoardContentKind.Player, 0, 1, "Assets/Prefabs/Player.prefab"));
             layout.Add(View(fixture, LegacyBoardContentKind.Exit, 4, 2, "Assets/Prefabs/Tiles/Exit.prefab"));
-            if (enemy) layout.Add(View(fixture, LegacyBoardContentKind.Enemy, 2, 1, "Assets/Prefabs/Enemy1.prefab"));
+            if (enemy) layout.Add(View(fixture, LegacyBoardContentKind.Enemy, 2, 1, "Assets/Prefabs/Shambler10.prefab"));
             if (cache)
             {
                 LegacyBoardView marker = View(fixture, LegacyBoardContentKind.BuriedFood, 1, 1, "Assets/Prefabs/Tiles/Carrot.prefab");

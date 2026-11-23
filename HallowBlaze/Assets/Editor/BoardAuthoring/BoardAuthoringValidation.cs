@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using HallowBlaze.Core.Board.Primitives;
+using HallowBlaze.Core.Generation;
 using HallowBlaze.Core.Generation.Landmarks;
 using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.State;
@@ -53,7 +54,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
             try
             {
                 if (data == null) throw new ArgumentNullException(nameof(data));
-                LandmarkTemplate template = LandmarkTemplateJson.Deserialize(data.ToString(Formatting.None), catalog);
+                LandmarkTemplate template = BoardTemplateJson.ReadCompatible(data.ToString(Formatting.None), catalog);
                 foreach (string variantId in template.VariantIds)
                 {
                     var address = new BoardAddress("authoring", "authoring", "authoring", "authoring", 1,

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using HallowBlaze.Core.Generation.Landmarks;
+using HallowBlaze.Core.Generation;
 using HallowBlaze.Core.Generation.Validation;
 using HallowBlaze.Core.World;
 using Newtonsoft.Json.Linq;
@@ -23,6 +25,8 @@ namespace HallowBlaze.Editor.BoardAuthoring
     {
         private JObject content;
         private string savedContent;
+        private JObject diagnosticContent;
+        private IReadOnlyList<BoardAuthoringDiagnostic> cachedDiagnostics;
         private readonly Stack<JObject> undo = new Stack<JObject>();
         private readonly Stack<JObject> redo = new Stack<JObject>();
         private readonly Func<JObject, IReadOnlyList<BoardAuthoringDiagnostic>> validate;
@@ -52,7 +56,18 @@ namespace HallowBlaze.Editor.BoardAuthoring
         /// <summary>Gets whether an undone edit can be reapplied without allocating replacement IDs.</summary>
         public bool CanRedo => !IsReadOnly && redo.Count > 0;
         /// <summary>Gets current blocking diagnostics; invalid intermediate edits remain in the draft.</summary>
-        public IReadOnlyList<BoardAuthoringDiagnostic> Diagnostics => validate(content);
+        public IReadOnlyList<BoardAuthoringDiagnostic> Diagnostics
+        {
+            get
+            {
+                if (!ReferenceEquals(diagnosticContent, content))
+                {
+                    cachedDiagnostics = validate(content);
+                    diagnosticContent = content;
+                }
+                return cachedDiagnostics;
+            }
+        }
 
         /// <summary>Creates an intentionally incomplete, unsaved 8x8 draft; missing start/outcomes block saves.</summary>
         public static BoardTemplateDocument NewTemplate(string templateId, string configurationId, BoardValidationCatalog catalog)
@@ -77,6 +92,17 @@ namespace HallowBlaze.Editor.BoardAuthoring
             return Template(data, catalog);
         }
 
+        /// <summary>Creates an unfinished shared board; painting an exit supplies its default completion without a fake landmark.</summary>
+        public static BoardTemplateDocument NewBoard(string templateId, string configurationId, BoardValidationCatalog catalog)
+        {
+            JObject data = NewTemplate(templateId, configurationId, catalog).Snapshot();
+            data["schemaVersion"] = 2;
+            return Template(data, catalog);
+        }
+
+        /// <summary>Creates an independent editable shared snapshot, retaining the exact generated entities and bindings.</summary>
+        public static BoardTemplateDocument FromSnapshot(JObject snapshot, BoardValidationCatalog catalog) => Template(snapshot, catalog);
+
         /// <summary>Opens all supported fields/variants into detached memory; invalid input throws without replacing another document.</summary>
         public static BoardTemplateDocument ReadTemplate(string json, BoardValidationCatalog catalog)
         {
@@ -93,8 +119,39 @@ namespace HallowBlaze.Editor.BoardAuthoring
                 data => BoardAuthoringJson.WritePlacement(data, world, template));
         }
 
+        /// <summary>Creates a separate shared assignment draft validated against exact immutable world/template publications.</summary>
+        public static BoardTemplateDocument ReadAssignment(string json, WorldDefinition world, LandmarkTemplate template)
+        {
+            BoardAssignment.Read(json, world, template);
+            return new BoardTemplateDocument(JObject.Parse(json), true, data =>
+            {
+                try { BoardAssignment.Read(data.ToString(), world, template); return Array.Empty<BoardAuthoringDiagnostic>(); }
+                catch (Exception exception) { return new[] { new BoardAuthoringDiagnostic("Assignment", exception.Message) }; }
+            }, data => BoardAssignment.Read(data.ToString(), world, template).ToJson());
+        }
+
         /// <summary>Returns a complete detached copy; callers cannot mutate a document by retaining a JSON reference.</summary>
         public JObject Snapshot() => (JObject)content.DeepClone();
+
+        internal JObject CaptureEditorState() => new JObject
+        {
+            ["content"] = content.DeepClone(), ["savedContent"] = savedContent, ["path"] = SourcePath,
+            ["fingerprint"] = FileFingerprint, ["readOnly"] = IsReadOnly,
+            ["undo"] = new JArray(undo.Reverse().Select(snapshot => snapshot.DeepClone())),
+            ["redo"] = new JArray(redo.Reverse().Select(snapshot => snapshot.DeepClone()))
+        };
+
+        internal static BoardTemplateDocument RestoreEditorState(JObject state, BoardValidationCatalog catalog)
+        {
+            var document = Template((JObject)state["content"], catalog);
+            document.savedContent = (string)state["savedContent"];
+            document.SourcePath = (string)state["path"];
+            document.FileFingerprint = (string)state["fingerprint"];
+            document.IsReadOnly = (bool)state["readOnly"];
+            foreach (JObject snapshot in state["undo"]) document.undo.Push((JObject)snapshot.DeepClone());
+            foreach (JObject snapshot in state["redo"]) document.redo.Push((JObject)snapshot.DeepClone());
+            return document;
+        }
 
         /// <summary>Applies one undoable edit atomically in memory; rejected callbacks leave data/history unchanged.</summary>
         public void Edit(Action<JObject> edit)

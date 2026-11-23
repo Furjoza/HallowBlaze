@@ -46,6 +46,7 @@ namespace HallowBlaze.Tests.EditMode
             JObject json = JObject.Parse(PersistenceJsonSerializer.SerializeRun(run));
             json["schemaVersion"] = 4;
             json.Remove("activeLandmark"); json.Remove("completedLandmarks");
+            json.Remove("boardSelectionPlan");
             RunState restored = PersistenceJsonSerializer.DeserializeRun(json.ToString());
             Assert.That(restored.Food, Is.EqualTo(run.Food));
             Assert.That(BoardAddressFactory.CreateFromState(restored), Is.EqualTo(BoardAddressFactory.CreateFromState(run)));

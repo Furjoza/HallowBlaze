@@ -20,11 +20,18 @@ namespace HallowBlaze.Core.Generation.Landmarks
         /// <exception cref="ArgumentException">An ID, layout, goal or mandatory guarantee is invalid.</exception>
         /// <exception cref="JsonException">JSON structure, scalar types, schema or referenced content is invalid.</exception>
         public static LandmarkTemplate Deserialize(string json, BoardValidationCatalog catalog)
+            => ReadTemplate(json, catalog, false);
+
+        internal static LandmarkTemplate ReadTemplate(string json, BoardValidationCatalog catalog, bool shared)
         {
             if (catalog == null) throw new ArgumentNullException(nameof(catalog));
             JObject root = Document(json);
             Fields(root, "schemaVersion", "templateId", "templateVersion", "configuration", "variants", "outcomes");
-            Schema(root);
+            if (shared)
+            {
+                if (Integer(root["schemaVersion"]) != 2) throw Error(root, "Unsupported shared board schema.");
+            }
+            else Schema(root);
             string id = Text(root, "templateId");
             JObject config = Object(root["configuration"]);
             Fields(config, "id", "version", "pathLength", "branchPoints", "obstacleCount", "enemyCount",
@@ -115,7 +122,7 @@ namespace HallowBlaze.Core.Generation.Landmarks
                     }
                 variants.Add(new LandmarkVariant(Text(row, "id"), entities, items, plates, gates));
             }
-            return new LandmarkTemplate(id, Integer(root["templateVersion"]), targets, variants, outcomes);
+            return new LandmarkTemplate(id, Integer(root["templateVersion"]), targets, variants, outcomes, shared);
         }
 
         /// <summary>Loads one explicit segment assignment against published world/template identities; no node-ID or day-number routing is inferred.</summary>

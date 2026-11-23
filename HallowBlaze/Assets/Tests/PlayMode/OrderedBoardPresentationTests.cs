@@ -271,7 +271,7 @@ namespace HallowBlaze.Tests.PlayMode
             soundType.GetField("efxSource").SetValue(sounds, effects);
             try
             {
-                foreach (string prefab in new[] { "Enemy1", "Enemy2" })
+                foreach (string prefab in new[] { "Shambler10", "Shambler20" })
                     foreach (bool animations in new[] { true, false })
                         foreach (bool hit in new[] { true, false })
                         {
@@ -393,7 +393,7 @@ namespace HallowBlaze.Tests.PlayMode
                             layout.Add(View(LegacyBoardContentKind.Floor, horizontal, vertical));
                     layout.Add(View(LegacyBoardContentKind.Player, scenario == "conditional" ? 0 : 1, 1));
                     layout.Add(View(LegacyBoardContentKind.Exit, 0, 2));
-                    layout.Add(View(LegacyBoardContentKind.Enemy, 2, 1, "Assets/Prefabs/Enemy1.prefab"));
+                    layout.Add(View(LegacyBoardContentKind.Enemy, 2, 1, "Assets/Prefabs/Shambler10.prefab"));
                     BoardRuntime runtime = LegacyBoardRuntimeComposer.Compose(request, run, new GridBounds(0, 0, 2, 2), layout);
                     runtimes.Add(runtime);
                     var sink = new TestSinks { ActiveRequest = request };

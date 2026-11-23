@@ -206,6 +206,16 @@ public class BoardManager : MonoBehaviour
         if (runState == null)
             throw new ArgumentNullException(nameof(runState));
         ReleaseCurrentBoard();
+#if UNITY_EDITOR
+        if (BoardAuthoringTestContext.IsRequested)
+        {
+            BoardAuthoringTestContext context = BoardAuthoringTestContext.Active ??
+                throw new InvalidOperationException("The authoring context must be claimed before board setup.");
+            LandmarkBoard snapshot = context.CreateBoard(request, runState);
+            if (snapshot != null)
+                return SetupOrdinaryScene(request, runState, playerView, snapshot, RadioTowerLandmark.Load());
+        }
+#endif
         if (request.Address?.GenerationConfigurationId == RadioTowerLandmark.ConfigurationId)
         {
             LandmarkRecord selection = runState.ActiveLandmark;
@@ -353,7 +363,8 @@ public class BoardManager : MonoBehaviour
         if (columns != 8 || rows != 8 || playerView == null ||
             !BoardOutcomeIdentityGuard.ValidateRequest(request, runState, out _))
             throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, "ordinary:bounds-player-or-identity");
-        BoardValidationCatalog catalog = landmark == null ? OrdinaryBoardContent.CreateCatalog() : RadioTowerLandmark.CreateCatalog();
+        BoardValidationCatalog catalog = landmark == null ? OrdinaryBoardContent.CreateCatalog() :
+            landmark.IsShared ? OrdinaryBoardContent.CreateAuthoringCatalog() : RadioTowerLandmark.CreateCatalog();
         BoardGenerationConfig config = landmark?.Blueprint.Config ?? OrdinaryBoardContent.CreateConfiguration(request.Address);
         BoardGenerationResult generation = landmark == null && config.Version >= 2 && config.Version <= BoardGenerationPipeline.OrdinaryConfigurationVersion
             ? BoardGenerationPipeline.GenerateOrdinary(new BoardGenerationRequest(request.Address, config, catalog, request.RunSeed)) : null;
@@ -484,7 +495,7 @@ public class BoardManager : MonoBehaviour
             RequirePrefabs(aidTiles, nameof(aidTiles));
             return aidTiles[cosmeticRandom.NextInt(0, aidTiles.Length)];
         }
-        if (definition.ContentId == OrdinaryBoardContent.BerryFoodId)
+        if (definition.ContentId == OrdinaryBoardContent.BerryFoodId || definition.ContentId == "legacy.bush-food")
         {
             if (bushFoodTiles == null)
                 throw new BoardRuntimeCompositionException(BoardRuntimeDiagnosticCode.InvalidInput, "prefab:berries");

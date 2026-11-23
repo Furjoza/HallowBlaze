@@ -1002,6 +1002,30 @@ Ochładzanie świata wizualizuje geograficzny postęp i pozwala dawkować reguł
 - Biom nie może być wyłącznie zestawem sprite'ów.
 - Pogoda jest dynamicznym stanem runu, a nie trwałą notatką atlasu, chyba że chodzi o cechę klimatu miejsca.
 
+### Biome, Route And Segment Hierarchy - Accepted 2026-11-16
+
+A biome is the shared definition of visual presentation, available terrain/content types and
+the accepted biome rules. Several distinct named routes may belong to one biome. Each route
+has a stable textual ID independent of its display name and owns its ordered stable segments;
+it references the biome rather than duplicating its palette and rules in every board.
+
+An authored board is assigned to a specific segment, not to a biome-wide or route-wide random
+pool. A route can therefore mix normally generated segments with individually authored ones,
+including a special situation in the middle of the journey. A special segment is not
+automatically a landmark, a new world node, a new mechanic or an extra day.
+
+Each segment resolves content and presentation against its route's biome and its own exact
+generation configuration. Do not infer the biome from the destination node or a route name.
+Cross-biome routes require separately specified transition rules; they are not introduced by
+the initial assignment tool. This hierarchy does not remove the accepted requirement for
+mechanically distinct slice biomes; the exact mechanics above remain Hypothesis. The current
+prototype catalog remains supported until M8.2 supplies explicit biome definitions. No new
+biome assets, terrain mechanics or campaign content are implemented by this documentation change.
+
+The accepted 2026-11-22 segment-pool amendment in section 27.2 extends a segment's authored
+content source to a finite pool. It does not introduce route-wide or biome-wide pools or change
+this hierarchy.
+
 ## 16. Losowość, deterministyczność i generator
 
 ### Decyzja
@@ -1436,12 +1460,13 @@ Wskazówki tras w MVP nie są decyzją otwartą: MUSZĄ być prawdziwe w odniesi
 
 For the pre-M9 game, different visible food types grant different authored, fixed amounts.
 The generator may choose an item type and position, but never rolls its reward or adjusts it
-to meet an average. M7.15 publishes `ordinary.board.v1/4` with this table:
+to meet an average. The owner-approved species correction on 2026-11-19 supersedes the
+earlier M7.15 reward values, including legacy content and the Radio Tower:
 
 | Definition ID | Existing artwork | Food gained once, before the action cost |
 | --- | --- | --- |
-| `ordinary.berries` | Berry bush (`Food2`) | 5 |
-| `legacy.food` | Food ration (`Food`) | 10 |
+| `ordinary.berries`, `legacy.bush-food` | Blueberries | 10 |
+| `legacy.food`, `landmark.radio-tower.rations` | Raspberries | 5 |
 | `ordinary.carrot` | Carrot | 15 |
 | `legacy.soda` | Soda | 20 |
 
@@ -1449,13 +1474,16 @@ All four share the existing Food item-count budget: 2-5 on a normal board, or 3-
 2-3 and 1-2 on the three opening boards. The count budget does not guarantee each type
 on each board or a particular reward total. No reward is averaged or randomized.
 Automatic collection on entry still precedes the one central Food cost. There is no Food
-cap or satiety change. Pinned ordinary versions 1-3 keep their original content and rewards;
-legacy `legacy.bush-food` still grants 10, and buried caches keep their existing interaction.
+cap or satiety change. Fruit reward depends on species, never on route or landmark placement.
+The correction deliberately applies when existing content is reconstructed after Continue;
+already collected Food totals are not retroactively recalculated. Stable textual content IDs,
+save DTO versions, layouts and seeds remain unchanged; buried caches retain their interaction.
 
 **Accepted owner correction (2026-11-06):** In fresh ordinary version 6, berries are protected
 by a real blocking, manually clearable bush (`legacy.wall`) on the same cell. They cannot be
 collected by entering or interacting through the bush. Existing manual clearing or an axe cut
-must remove it first; entering the cleared cell then collects the same fixed +5 Food once.
+must remove it first; entering the cleared cell then collects the fixed blueberry reward once
+(+10 Food after the accepted 2026-11-19 correction).
 Cutting does not itself grant the reward. Existing work, tool, Food and noise costs apply;
 bare hands remain a legal alternative and no optional tool is required for the exit. The
 generator uses existing obstacle positions without increasing their count and keeps a reachable
@@ -1572,6 +1600,159 @@ play of an assigned segment through normal travel. Existing loader restrictions,
 final-segment-only landmark placement, must be identified and any necessary minimal extension
 scoped before the assignment card is Ready. This direction does not authorize a full world-graph
 editor, new routes/rules, or runtime changes in the current documentation task.
+
+#### Segment-Scoped Authoring - Accepted Amendment 2026-11-16
+
+This amendment extends the initial final-landmark-only editor plan, not the accepted M6.8
+implementation or its historical evidence. The owning hierarchy is biome -> named directed
+route -> ordered segment -> generated or explicitly assigned local board. A route has both a
+stable textual ID and a display name; renaming it does not change its identity or any saved
+segment. Several routes share one biome's terrain/presentation definitions.
+
+- The assignment target is one existing stable segment of a chosen route. The editor shows
+	the route name, edge ID, endpoints, biome and ordered segment IDs; a name or list index is
+	never a persistence key. Edge membership is derived from the existing world graph.
+- An assignment selects an exact versioned board template and variant. Neither a route pool
+	nor template/variant random selection is part of this workflow. Unassigned segments retain
+	their existing deterministic generation and published compatibility behavior.
+- Support ordinary single-exit boards as well as existing multi-outcome landmark boards.
+	An ordinary authored board may occupy an intermediate or final segment of a non-landmark
+	route; an intermediate segment of a route ending at a landmark is also eligible. Do not
+	fake landmark outcomes or change a destination's `placeKind` to load ordinary content.
+- The existing final landmark placement/selection/outcome contract remains separate and
+	final-only. The current Radio Tower content and pinned-first/random-variant policy do not
+	change. A special ordinary segment cannot invoke landmark completion as a shortcut.
+- Intermediate completion advances only the segment. Final completion alone commits the
+	day, arrival and route observations, regardless of whether the board was authored or
+	generated. Assignment does not add a day or change the route's ordered segment list.
+- One template may be assigned to several compatible segments; each receives a distinct full
+	board address and fresh mutable state, item/tool allocation and pressure bindings.
+- Compatibility checks use the resolved biome/content catalog and exact segment configuration,
+	not merely matching artwork. Keep the prototype catalog explicit before M8.2; do not pretend
+	that biome definitions or new palette content already exist.
+- Saving a template or assignment never publishes campaign content. Initial activation and
+	travel testing remain isolated. Published mappings must preserve exact old world/segment/
+	configuration/template versions, seeds and existing pinned selections, including a saved
+	leg before selection and a not-yet-visited segment. Missing old content fails safely rather
+	than rerolling, silently falling back or rewriting a save. Any required player-format change
+	needs its own versioned compatibility/migration contract before implementation.
+
+M6.9a/b still implement isolated testing of the existing landmark format. New M6.9c defines the
+ordinary-board data/compatibility contract and closed implementation paths; M6.9d implements
+that adapter and extends painting/local tests. M6.10 then delivers segment assignments and
+isolated travel for both supported board kinds. These remain separate gates, not permission
+to bypass `LandmarkPlacement` or broaden the existing solver's supported rules. M8.1 owns
+campaign route names/pacing; M8.2 owns the shared biome definitions and terrain/presentation
+compatibility. The owner performs the final practical usability acceptance, not implementation
+or technical diagnosis. No code, assets, save format or production publication changes here.
+
+#### Unified Board Authoring - Accepted Amendment 2026-11-18
+
+The owner explicitly approved a common authoring workflow after the first Editor exercise.
+This supersedes the earlier split delivery prerequisites for the scope consolidated in M6.9e.
+A landmark is a place's world role, not a different local rules engine or a mandatory two-exit
+document type. One local board model supports an empty draft, a production-generated snapshot,
+manual edits and one or more exit results. A board with one player start, an executable exit and
+a realizable way to reach an exit is acceptable without generator-specific obstacle, resource,
+perimeter or branch targets. Structural and gameplay validity remain mandatory; bounded solver
+limits must be reported as incomplete evidence rather than unsolvability. With several exits,
+one executable solution is sufficient; painting order must not choose which exit is acceptable.
+
+Supported palette content can be painted directly; the Editor maintains its declaration and
+binding metadata atomically with undo. Generation reuses the production pipeline and its own
+strict preset checks, then captures an independent editable snapshot. Local Test uses the exact
+edited snapshot, never a reroll. An assignment binds any compatible shared template/version/variant
+to a concrete route segment or the final inbound segment of a specific landmark. The same board
+may be used at several locations with independent runtime state. A landmark's existing story or
+completion policy must not be inferred merely from the number of exits in its board.
+
+Existing schema-1 Radio Tower content, pinned selections, normal generation and player-save
+compatibility remain unchanged. New shared authoring data is explicitly versioned and initially
+activated only in the isolated authoring sandbox. Misleading project-owned asset/prefab names
+should be corrected at the asset source with GUID/reference preservation, not hidden behind a
+new translation/alias dictionary. Stable persisted content identifiers are a separate compatibility
+contract and are not rewritten just to rename a prefab. M6.9e owns this consolidated correction;
+the owner need not accept the incomplete landmark-only workflow before it can be implemented.
+
+#### Segment Map Pools And Resource Balance - Accepted Amendment 2026-11-22
+
+The owner approved planning pools of maps for each existing stable route segment, with equal
+entry probabilities and a seed-dependent choice retained for the started journey. This supersedes
+the earlier prohibition on template/variant random selection only for this future segment-pool
+workflow. Delivered exact assignments and the one-route sandbox remain unchanged until separately
+authorized implementation. This amendment also requires a fast resource-balance panel in the
+authoring editor; it does not implement pools, change rewards or declare a board balanced.
+
+- A segment may use its existing generator, one exact assignment, or one explicitly published
+	pool of compatible shared boards. A pool entry is an exact template ID/content version/variant
+	tuple. Each distinct tuple has equal probability; duplicate tuples are invalid, not extra
+	lottery tickets. A single-entry pool is a fixed choice. An absent authored binding retains
+	existing generation; a configured empty, missing or invalid pool is an error, never fallback.
+- Pools are segment-scoped, not route-wide or biome-wide. The same template may participate at
+	several compatible segments, with independent full addresses and mutable board/tool/link state.
+	Every entry must pass the owning schema, catalog, biome and segment-configuration checks before
+	activation, including entries not selected by the current seed. Strict schema-1 landmark
+	placement and Radio Tower's existing pinned-first/random-variant policy remain separate.
+- A versioned, deterministic selection policy uses stable run/leg/traversal and segment identity,
+	the run seed and the immutable pool publication. Canonical entry order makes directory order,
+	UI sorting and file names irrelevant. Selection randomness is isolated from board generation,
+	cosmetic RNG and accepted-command randomness; no weights, no-repeat policy or adaptive odds
+	are included in the first pool implementation.
+- Capture the publication and select each pooled segment when accepting a new route leg. Persist
+	the complete per-leg selection plan atomically with that leg before any selected board is
+	composed. A failed checkpoint publishes no usable new plan; retry preserves the same choices.
+	Scene reload, Continue and later pool edits must not reroll active or unvisited segments in that
+	leg. A later traversal may select again under its own stable traversal identity; a different
+	seed is not guaranteed to choose a different entry.
+- Retain pool/publication and exact selected content versions for old saves. Missing archived
+	content is a controlled failure, not reroll or substitution. Existing fixed assignments and
+	generator-backed saved legs retain their prior meaning; no ordinary choice is stored in
+	`ActiveLandmark`. Before implementation, freeze versioned DTOs, selection algorithm and the
+	migration/refusal policy for old active and unvisited segments. No player reset is authorized.
+	New saved boards or multiple old assignment files never silently become a pool: membership
+	and publication are explicit. Intermediate/final segment and day semantics stay unchanged.
+- The editor offers a compact side panel for the current board/variant, the selected segment's
+	pool and the selected route. It reports counts by resource/content and actual authored Food,
+	nominal Health restoration, and tool instances/initial charges by tool definition. Reuse the
+	authoritative reward definitions and bindings; do not infer values from sprites or count an
+	entity and its item/source metadata twice. Starting resources/equipment are shown separately.
+- Show each candidate and the pool's minimum, arithmetic mean and maximum per resource for one
+	selection. Route estimates sum those segment values, counting one candidate per segment, not
+	every map in every pool. Label total library stock separately if shown. Per-resource extrema
+	need not describe one simultaneously realizable resource bundle. Full authored totals are not
+	proof of reachability, actual collected rewards, effective healing or net supply after actions.
+- Generated segments contribute exact supply only from a concrete seed/address/configuration
+	snapshot. Otherwise mark them unknown and label any displayed aggregate as a partial authored
+	subtotal, never a complete route total or zero. Unknown/missing definitions and conditional
+	rewards are explicit, not guessed. The panel updates after edits, undo/redo, variant and pool
+	changes; stale/invalid values are marked and cannot masquerade as current results. It reads
+	detached data without Play Mode, solver execution, RNG consumption, publication or save writes.
+
+M6.10a owns the pool/selection/publication and save-compatibility prerequisite; M6.10b owns explicit
+membership editing and deterministic sandbox travel; M6.10c owns the resource panel and aggregation
+checks. M6.10a was authorized on 2026-11-22 with the bounded implementation contract below;
+M6.10b/c remain Planned. Campaign activation, production content, weights, automatic balancing,
+route topology editing and repair of the separate Check board TimeLimit report remain outside
+this task. The owner's successful three-map Play route exercise on 2026-11-22 is evidence for the
+delivered fixed-assignment workflow, not evidence that pools or resource summaries already work.
+
+**M6.10a implementation contract (2026-11-22):** Route publication schema 1 binds exact shared
+template/version/variant entries to stable world/edge/segment/configuration identities. Fixed
+sources have one entry; missing sources retain the existing supported generator. Preflight is
+complete before registration/selection. An append-only archive rejects changed payloads under
+retained publication, template or pool identity/version keys and resolves the exact saved version.
+Its pure in-memory index is not a production filesystem publisher or an Editor activation path.
+
+Selection policy `hallowblaze.segment-pool.v1`, version 1, sorts candidate tuples ordinally by
+template ID, then numerically by template version, then ordinally by variant ID. It uses a fresh
+addressed PCG32 stream and the existing unbiased `NextInt(0, count)` mapping, never a shared RNG
+cursor. Run schema 6 stores the full immutable `boardSelectionPlan` with the newly accepted leg
+before composition; profile remains schema 2. The field is required but may be null for generated
+or legacy travel. V1-v5 readers never retrofit a plan onto an old active or unvisited segment.
+Failed selection/checkpoint restores the previous leg boundary; successful progress retains the
+plan and completion/reset clears it. Missing exact archived content fails rather than rerolling.
+The current Editor launcher and production callers do not opt into this new selector; pool UI,
+persisted sandbox publication files and integrated pool travel remain M6.10b.
 
 #### Opening-length amendment - accepted 2026-11-03
 

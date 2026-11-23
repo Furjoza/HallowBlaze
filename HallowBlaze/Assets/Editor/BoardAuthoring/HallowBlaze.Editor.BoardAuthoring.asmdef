@@ -12,6 +12,9 @@
         "HallowBlaze.Core.Generation",
         "HallowBlaze.Core.State",
         "HallowBlaze.Core.World",
+        "HallowBlaze.Core.Session",
+        "HallowBlaze.Core.Turns.Contracts",
+        "HallowBlaze.Core.Turns.Resolution",
         "HallowBlaze.Core.Board.Primitives",
         "HallowBlaze.Core.Board.State",
         "HallowBlaze.Presentation.Runtime"

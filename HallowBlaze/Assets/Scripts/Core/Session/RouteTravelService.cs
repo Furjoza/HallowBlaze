@@ -14,22 +14,28 @@ namespace HallowBlaze.Core.Session
         private readonly GameSession session;
         private readonly WorldDefinition world;
         private readonly ISaveStore saveStore;
+        private readonly Func<string, int, ActiveRouteLegState, RouteBoardPlan> selectBoards;
 
         /// <summary>Creates one travel owner using the session's run and authored segment catalogue.</summary>
         /// <param name="session">The owner of the active run and profile.</param>
         /// <param name="world">The immutable world used to resolve roads and stable segments.</param>
         /// <param name="saveStore">The store that must commit a boundary before presentation proceeds.</param>
-        public RouteTravelService(GameSession session, WorldDefinition world, ISaveStore saveStore)
+        /// <param name="selectBoards">Optional immutable publication selector; null preserves existing generated/legacy travel without new selections.</param>
+        public RouteTravelService(GameSession session, WorldDefinition world, ISaveStore saveStore,
+            Func<string, int, ActiveRouteLegState, RouteBoardPlan> selectBoards = null)
         {
             this.session = session ?? throw new ArgumentNullException(nameof(session));
             this.world = world ?? throw new ArgumentNullException(nameof(world));
             this.saveStore = saveStore ?? throw new ArgumentNullException(nameof(saveStore));
+            this.selectBoards = selectBoards;
         }
 
         /// <summary>
         /// Starts and checkpoints a Pending leg without changing discovery, history, or the reached node.
         /// A failed save restores the previous boundary so a retry cannot allocate another traversal.
         /// Imported legacy-RNG runs retain legacy v1 generation on roads upgraded to ordinary versions 1-6.
+        /// An explicit selector pins every authored choice in the same checkpoint before any board is composed;
+        /// selection/validation exceptions also roll the new leg back, without enabling pools for default callers.
         /// </summary>
         /// <param name="edgeId">An authored outgoing road from the reached checkpoint.</param>
         /// <returns>The durable checkpoint result; failure never authorizes board input.</returns>
@@ -55,10 +61,24 @@ namespace HallowBlaze.Core.Session
                         preserveLegacy ? "legacy.board.v1" : segment.GenerationConfigurationId,
                         preserveLegacy ? 1 : segment.GenerationVersion);
                 }));
-            SaveStoreResult result = saveStore.SaveRun(run);
-            if (result.IsFailure)
+            try
+            {
+                if (selectBoards != null)
+                {
+                    RouteBoardPlan plan = selectBoards(run.RunId, run.RunSeed, run.ActiveLeg) ?? throw new InvalidOperationException("The publication did not provide a complete selection plan.");
+                    if (plan.WorldId != world.WorldDefinitionId || plan.WorldVersion != world.Version)
+                        throw new InvalidOperationException("The selection plan belongs to another world publication.");
+                    run.PinBoardPlan(plan);
+                }
+                SaveStoreResult result = saveStore.SaveRun(run);
+                if (result.IsFailure) run.RestoreTravelState(completedDays, checkpoint, sequence, history, null);
+                return result;
+            }
+            catch
+            {
                 run.RestoreTravelState(completedDays, checkpoint, sequence, history, null);
-            return result;
+                throw;
+            }
         }
 
         /// <summary>

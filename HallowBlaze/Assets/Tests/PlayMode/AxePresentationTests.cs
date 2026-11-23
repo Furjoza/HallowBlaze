@@ -362,9 +362,9 @@ namespace HallowBlaze.Tests.PlayMode
             for (int vertical = 0; vertical < 3; vertical++)
                 layout.Add(View(fixture, LegacyBoardContentKind.Floor, horizontal, vertical, "Assets/Prefabs/Tiles/Floor1.prefab"));
             layout.Add(View(fixture, LegacyBoardContentKind.Player, 0, 1, "Assets/Prefabs/Player.prefab"));
-            layout.Add(View(fixture, LegacyBoardContentKind.Listener, 4, 1, "Assets/Prefabs/Enemy1.prefab"));
+            layout.Add(View(fixture, LegacyBoardContentKind.Listener, 4, 1, "Assets/Prefabs/Shambler10.prefab"));
             layout.Add(View(fixture, LegacyBoardContentKind.Exit, 4, 2, "Assets/Prefabs/Tiles/Exit.prefab"));
-            GameObject wall = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Wall1.prefab"));
+            GameObject wall = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Bush01.prefab"));
             wall.transform.position = new Vector3(1, 1, 0);
             foreach (Collider2D collider in wall.GetComponents<Collider2D>()) collider.enabled = false;
             fixture.Objects.Add(wall);

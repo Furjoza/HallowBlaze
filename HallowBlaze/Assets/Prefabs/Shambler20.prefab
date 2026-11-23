@@ -15,7 +15,7 @@ GameObject:
   - component: {fileID: 61109043140056128}
   - component: {fileID: 114591754643871744}
   m_Layer: 8
-  m_Name: Enemy2
+  m_Name: Shambler20
   m_TagString: Enemy
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

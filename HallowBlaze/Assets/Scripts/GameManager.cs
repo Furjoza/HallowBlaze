@@ -99,6 +99,14 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     private IReadOnlyList<WorldMapExitOption> routeChoices = NoRouteChoices;
     private bool terminalActionRequested;
     private Action<string> sceneLoader = SceneManager.LoadScene;
+#if UNITY_EDITOR
+    private BoardAuthoringTestContext authoringContext;
+    [SerializeField, HideInInspector] private bool authoringLaunchRequired;
+    private bool authoringSceneEntered;
+    internal bool IsAuthoringSession => authoringLaunchRequired;
+    internal WorldDefinition AuthoringWorld => authoringContext != null && !authoringContext.IsDisposed
+        ? authoringContext.World : null;
+#endif
 
     public GameSession Session
     {
@@ -323,6 +331,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         pendingChosenEdgeId = null;
         SetGameplayInputBlocked(true);
         SetRouteChoices(NoRouteChoices);
+    #if UNITY_EDITOR
+        authoringContext?.ExpectSceneReload(SceneManager.GetActiveScene().name);
+    #endif
         sceneLoader(SceneManager.GetActiveScene().name);
         return true;
     }
@@ -366,6 +377,26 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         instance = this;
         DontDestroyOnLoad(gameObject);
         boardScript = GetComponent<BoardManager>();
+#if UNITY_EDITOR
+        authoringLaunchRequired = BoardAuthoringTestContext.IsRequested;
+        if (authoringLaunchRequired)
+        {
+            try
+            {
+                authoringContext = BoardAuthoringTestContext.Claim(this, PersistenceJsonSerializer.DeserializeTravelRun);
+                session = new GameSession(new ProfileState("authoring-profile", authoringContext.World.WorldDefinitionId,
+                    authoringContext.World.Version));
+            }
+            catch (Exception exception)
+            {
+                enabled = false;
+                gameplayInputBlocked = true;
+                Debug.LogError("Authoring launch refused: " + exception.Message);
+            }
+            return;
+        }
+#endif
+    SoundManager.instance?.ReleaseAuthoringPreferences();
         session = new GameSession(new ProfileState("default-profile", "world-1", 1));
     }
 
@@ -413,6 +444,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void OnDestroy()
     {
+#if UNITY_EDITOR
+        authoringContext?.End(this);
+#endif
         DisposeFieldNotes();
         DisposeActiveBoardRuntime();
         ReleaseBoardCamera();
@@ -424,6 +458,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     {
         if (scene.buildIndex != 1)
         {
+#if UNITY_EDITOR
+            if (authoringLaunchRequired) EndAuthoringTest();
+#endif
             ClearVictoryActions();
             fieldNotesGameplayScene = false;
             fieldNotes?.SetAvailable(false);
@@ -434,6 +471,39 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
         fieldNotesGameplayScene = true;
         BlockBoardStartup();
+#if UNITY_EDITOR
+        if (authoringLaunchRequired)
+        {
+            try
+            {
+                if (authoringContext == null || authoringContext.IsDisposed)
+                    throw new InvalidOperationException("The authoring context is no longer available.");
+                authoringContext.EnterScene(scene.name, !authoringSceneEntered);
+                bool initial = !authoringSceneEntered;
+                authoringSceneEntered = true;
+                EnsurePersistence();
+                if (initial)
+                {
+                    SaveStoreResult<RunState> saved = saveStore.LoadRun();
+                    if (saved.Type == SaveStoreResultType.Missing)
+                    {
+                        SaveStoreResult created = saveStore.ResetGame(session.Profile, authoringContext.CreateInitialRun());
+                        if (created.IsFailure) throw new InvalidOperationException("Authoring initial checkpoint failed: " + created.Type);
+                    }
+                    SaveStoreResult<RunState> continued = lifecycle.ContinueRun();
+                    if (continued.IsFailure) throw new InvalidOperationException("Authoring Continue failed: " + continued.Type);
+                }
+                if (!TryEnterCurrentWorldNode()) throw new InvalidOperationException("Authoring world entry failed.");
+                InitGame();
+            }
+            catch (Exception exception)
+            {
+                EndAuthoringTest();
+                Debug.LogError("Authoring bootstrap failed: " + exception.Message);
+            }
+            return;
+        }
+#endif
         EnsurePersistence();
         if (requestedLaunchMode == RunLaunchMode.NewGame)
         {
@@ -530,12 +600,28 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
                 SaveStoreResult introResult = worldMap.Travel.ConsumeIntro(out showIntro);
                 if (introResult.IsFailure)
                 {
+#if UNITY_EDITOR
+                    if (authoringLaunchRequired) EndAuthoringTest();
+#endif
                     Debug.LogError("Day intro checkpoint failed: " + introResult.Type);
                     return;
                 }
             }
             BoardRequest request = BoardRequest.CreateFromRun(run, worldDefinition);
-            if (request.Address?.GenerationConfigurationId == RadioTowerLandmark.ConfigurationId)
+#if UNITY_EDITOR
+            LandmarkRecord authoringSelection = authoringContext?.GetSelection(request);
+            if (authoringSelection != null)
+            {
+                SaveStoreResult selected = worldMap.Travel.SelectLandmark(request, authoringSelection);
+                if (selected.IsFailure) throw new InvalidOperationException("Authoring selection checkpoint failed: " + selected.Type);
+            }
+            else
+#endif
+            if (request.Address?.GenerationConfigurationId == RadioTowerLandmark.ConfigurationId
+#if UNITY_EDITOR
+                && authoringContext?.IsSharedBoard(request) != true
+#endif
+                )
             {
                 var placement = RadioTowerLandmark.Load().CreatePlacement(worldDefinition);
                 var selected = run.ActiveLandmark ?? placement.SelectVariant(request.Address, run.RunSeed);
@@ -570,6 +656,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         catch (Exception exception)
         {
             DisposeActiveBoardRuntime();
+#if UNITY_EDITOR
+            if (authoringLaunchRequired) EndAuthoringTest();
+#endif
             CancelInvoke(nameof(HideLevelImage));
             SetGameplayInputBlocked(true);
             Debug.LogError("Board startup failed: " + exception.Message);
@@ -874,6 +963,10 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void ReportPresentationDiagnostic(PresentationDiagnostic diagnostic)
     {
+#if UNITY_EDITOR
+        if (authoringLaunchRequired && diagnostic.Code != PresentationDiagnosticCode.Canceled)
+            EndAuthoringTest();
+#endif
         if (diagnostic.Code != PresentationDiagnosticCode.Canceled)
             Debug.LogError("Board presentation failed: " + diagnostic.Code + " at event " +
                 diagnostic.EventIndex + " (" + diagnostic.EventType + "): " + diagnostic.Error);
@@ -984,6 +1077,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     private LandmarkRecord ResolveLandmarkExit(ExitReachedEvent reached)
     {
         var authored = boardScript?.ActiveLandmark;
+        if (authored?.IsShared == true) return null;
         if (authored == null || activeBoardRuntime == null || !activeBoardRuntime.Controller.IsTerminal ||
             !reached.PlayerId.Equals(activeBoardRuntime.PlayerId) ||
             !activeBoardRuntime.BoardState.TryGetEntity(reached.ExitId, out var exitEntity) ||
@@ -1045,6 +1139,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
                         boardOutcomeHandled = true;
                         pendingBoardOutcome = null;
                         UpdatePresentationBlocks();
+#if UNITY_EDITOR
+                        authoringContext?.ExpectSceneReload(SceneManager.GetActiveScene().name);
+#endif
                         sceneLoader(SceneManager.GetActiveScene().name);
                         return true;
                     }
@@ -1062,6 +1159,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
                 }
                 if (!BeginRouteChoice())
                     return false;
+#if UNITY_EDITOR
+                if (authoringLaunchRequired) EndAuthoringTest();
+#endif
                 break;
 
             case BoardOutcomeType.PlayerDied:
@@ -1142,10 +1242,20 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             menuButton.SetActive(true);
         if (restartButton != null)
             terminalFocus = KeyboardMenuFocus.Attach(restartButton.transform.parent.gameObject, restartButton);
+    #if UNITY_EDITOR
+        if (authoringLaunchRequired) EndAuthoringTest();
+    #endif
     }
 
     private int ManageScore(int score)
     {
+#if UNITY_EDITOR
+        if (authoringLaunchRequired)
+        {
+            if (authoringContext != null) authoringContext.HighScore = Math.Max(score, authoringContext.HighScore);
+            return authoringContext?.HighScore ?? 0;
+        }
+#endif
         if (score > PlayerPrefs.GetInt("HighScore", 0))
             PlayerPrefs.SetInt("HighScore", score);
 
@@ -1195,6 +1305,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             SetRouteChoices(NoRouteChoices);
     }
 
+    /// <summary>Starts normal run state; authoring sessions must retest through their isolated launcher instead.</summary>
     public void StartNewRun()
     {
         TryStartNewRun();
@@ -1202,6 +1313,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private bool TryStartNewRun()
     {
+#if UNITY_EDITOR
+        if (authoringLaunchRequired) return false;
+#endif
         if (!enabled)
             enabled = true;
 
@@ -1241,6 +1355,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             Debug.LogError("Run abandon failed: " + result.Type);
     }
 
+    /// <summary>Detaches the persisted run; an authoring session also revokes its sandbox without opening normal storage.</summary>
+    /// <returns>Whether the lifecycle accepted the exit; persistence failures remain retryable.</returns>
     public bool ExitToMenu()
     {
         EnsurePersistence();
@@ -1248,6 +1364,9 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (result.IsFailure)
             Debug.LogError("Exit save failed: " + result.Type);
 
+    #if UNITY_EDITOR
+        if (result.IsSuccess && authoringLaunchRequired) EndAuthoringTest();
+    #endif
         return result.IsSuccess;
     }
 
@@ -1321,10 +1440,17 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             actions[index].SetActive(true);
         }
         if (restartButton != null) terminalFocus = KeyboardMenuFocus.Attach(bar.gameObject, restartButton);
+    #if UNITY_EDITOR
+        if (authoringLaunchRequired) EndAuthoringTest();
+    #endif
     }
 
+    /// <summary>Restarts normal gameplay after a terminal result; it never turns an authoring session into a normal run.</summary>
     public void RestartGame()
     {
+#if UNITY_EDITOR
+        if (authoringLaunchRequired) return;
+#endif
         if (!TryBeginTerminalAction())
             return;
 
@@ -1402,10 +1528,18 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     private void EnsurePersistence()
     {
+#if UNITY_EDITOR
+        if (authoringLaunchRequired && (authoringContext == null || authoringContext.IsDisposed))
+            throw new InvalidOperationException("Authoring persistence is unavailable; normal storage is forbidden.");
+#endif
         if (lifecycle != null)
             return;
 
-        saveStore = new FileSystemSaveStore(GetPersistenceRoot());
+        saveStore = new FileSystemSaveStore(
+    #if UNITY_EDITOR
+            authoringContext != null ? authoringContext.SaveRoot :
+    #endif
+            GetPersistenceRoot());
         SaveStoreResult<ProfileState> profileResult = saveStore.LoadProfile();
         ProfileState profile = profileResult.IsSuccess
             ? profileResult.Data
@@ -1477,7 +1611,11 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (worldMap != null)
             return true;
 
-        if (worldDefinitionJson == null)
+        if (worldDefinitionJson == null
+    #if UNITY_EDITOR
+            && authoringContext == null
+    #endif
+            )
         {
             Debug.LogError("World definition JSON is not assigned on GameManager.");
             return false;
@@ -1485,7 +1623,11 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
         try
         {
-            worldDefinition = WorldDefinitionJson.Deserialize(worldDefinitionJson.text);
+            worldDefinition =
+#if UNITY_EDITOR
+                authoringContext != null ? authoringContext.World :
+#endif
+                WorldDefinitionJson.Deserialize(worldDefinitionJson.text);
             worldMap = new WorldMapService(
                 worldDefinition,
                 session,
@@ -1570,8 +1712,36 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
 
     internal static string GetPersistenceRoot()
     {
+#if UNITY_EDITOR
+        if (instance != null && instance.authoringLaunchRequired)
+            return (instance.authoringContext ?? throw new InvalidOperationException("Authoring storage is fenced.")).RetainedSaveRoot;
+        if (BoardAuthoringTestContext.IsRequested)
+            return (BoardAuthoringTestContext.Active ?? throw new InvalidOperationException("Unclaimed authoring persistence.")).SaveRoot;
+#endif
         return string.IsNullOrEmpty(PersistenceRootOverride)
             ? PersistencePathProvider.GetSaveRoot()
             : PersistenceRootOverride;
     }
+
+#if UNITY_EDITOR
+    private void EndAuthoringTest()
+    {
+        authoringContext?.End(this);
+        CancelInvoke(nameof(HideLevelImage));
+        SetGameplayInputBlocked(true);
+        if (activeBoardPresenter != null && activeBoardPresenter.Coordinator.Gate.State != PresentationGateState.Idle)
+            StartCoroutine(ReleaseAuthoringBoardAfterCommand(activeBoardRuntime, activeBoardPresenter));
+        else
+            DisposeActiveBoardRuntime();
+        Time.timeScale = 1f;
+    }
+
+    private System.Collections.IEnumerator ReleaseAuthoringBoardAfterCommand(BoardRuntime runtime, BoardEventPresenter presenter)
+    {
+        while (ReferenceEquals(activeBoardRuntime, runtime) && !runtime.IsDisposed &&
+            presenter.Coordinator.Gate.State != PresentationGateState.Idle)
+            yield return null;
+        if (ReferenceEquals(activeBoardRuntime, runtime)) DisposeActiveBoardRuntime();
+    }
+#endif
 }

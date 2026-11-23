@@ -44,7 +44,7 @@ namespace HallowBlaze.Core.State
         /// <exception cref="ArgumentException">Identity, progress or intro fields contradict each other.</exception>
         public ActiveRouteLegState(string legId, string edgeId, string fromNodeId, string toNodeId,
             IEnumerable<RouteSegmentState> segments, int dayNumber, int segmentIndex = 0,
-            int completedSegmentCount = 0, DayIntroState introState = DayIntroState.Pending)
+            int completedSegmentCount = 0, DayIntroState introState = DayIntroState.Pending, RouteBoardPlan boardPlan = null)
         {
             TravelHistoryEntry.RequireId(legId, nameof(legId));
             TravelHistoryEntry.RequireId(edgeId, nameof(edgeId));
@@ -61,6 +61,16 @@ namespace HallowBlaze.Core.State
                 completedSegmentCount != segmentIndex || !Enum.IsDefined(typeof(DayIntroState), introState) ||
                 (introState == DayIntroState.Pending && segmentIndex != 0))
                 throw new ArgumentException("Invalid active-leg progress, day or intro state.");
+            if (boardPlan != null)
+            {
+                if (boardPlan.LegId != legId || boardPlan.EdgeId != edgeId) throw new ArgumentException("The board plan belongs to another leg.");
+                foreach (RouteBoardSelection selected in boardPlan.Selections)
+                {
+                    RouteSegmentState segment = copy.Find(candidate => candidate.SegmentId == selected.SegmentId);
+                    if (segment == null || segment.GenerationConfigurationId != selected.ConfigurationId || segment.GenerationVersion != selected.ConfigurationVersion)
+                        throw new ArgumentException("The board plan does not match the retained segment configurations.");
+                }
+            }
             LegId = legId;
             EdgeId = edgeId;
             FromNodeId = fromNodeId;
@@ -70,6 +80,7 @@ namespace HallowBlaze.Core.State
             SegmentIndex = segmentIndex;
             CompletedSegmentCount = completedSegmentCount;
             IntroState = introState;
+            BoardPlan = boardPlan;
         }
         /// <summary>Gets the unique run-local traversal identity.</summary>
         public string LegId { get; }
@@ -89,11 +100,16 @@ namespace HallowBlaze.Core.State
         public int CompletedSegmentCount { get; }
         /// <summary>Gets durable intro consumption.</summary>
         public DayIntroState IntroState { get; }
+        /// <summary>Gets the frozen authored choices for this whole leg, or null for older/generated-only travel.</summary>
+        public RouteBoardPlan BoardPlan { get; }
         /// <summary>Gets the current stable segment.</summary>
         public RouteSegmentState CurrentSegment => Segments[SegmentIndex];
         /// <summary>Gets whether the current segment is final.</summary>
         public bool IsFinalSegment => SegmentIndex == Segments.Count - 1;
         internal ActiveRouteLegState WithProgress(int index, DayIntroState intro) =>
-            new ActiveRouteLegState(LegId, EdgeId, FromNodeId, ToNodeId, Segments, DayNumber, index, index, intro);
+            new ActiveRouteLegState(LegId, EdgeId, FromNodeId, ToNodeId, Segments, DayNumber, index, index, intro, BoardPlan);
+
+        internal ActiveRouteLegState WithBoardPlan(RouteBoardPlan plan) =>
+            new ActiveRouteLegState(LegId, EdgeId, FromNodeId, ToNodeId, Segments, DayNumber, SegmentIndex, CompletedSegmentCount, IntroState, plan);
     }
 }

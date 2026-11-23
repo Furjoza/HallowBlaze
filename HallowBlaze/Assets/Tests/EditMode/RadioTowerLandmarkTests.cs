@@ -126,9 +126,9 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(scenario.Controller.Resolve(new MoveCommand(Direction.East)).Accepted, Is.False);
         }
 
-        /// <summary>Both resource routes push a boulder, open a linked gate, clear wood and collect one stable concrete ration through the same resolver.</summary>
-        [TestCase(false, 108)]
-        [TestCase(true, 109)]
+        /// <summary>Both resource routes use the same resolver and collect one five-Food raspberry under the retained ration ID.</summary>
+        [TestCase(false, 93)]
+        [TestCase(true, 94)]
         public void SupplyRoutesHaveDistinctMeasuredCosts(bool useAxe, int finalFood)
         {
             var scenario = new Scenario();
@@ -312,11 +312,11 @@ namespace HallowBlaze.Tests.EditMode
                             handle ? new Color32(188, 137, 82, 255) : new Color32(0, 0, 0, 0));
                     }
                 texture.Apply();
-                File.WriteAllBytes("Assets/Sprites/LandmarkAxe.png", texture.EncodeToPNG());
+                File.WriteAllBytes("Assets/Sprites/Axe.png", texture.EncodeToPNG());
             }
             finally { UnityEngine.Object.DestroyImmediate(texture); }
-            AssetDatabase.ImportAsset("Assets/Sprites/LandmarkAxe.png", ImportAssetOptions.ForceSynchronousImport);
-            var importer = (TextureImporter)AssetImporter.GetAtPath("Assets/Sprites/LandmarkAxe.png");
+            AssetDatabase.ImportAsset("Assets/Sprites/Axe.png", ImportAssetOptions.ForceSynchronousImport);
+            var importer = (TextureImporter)AssetImporter.GetAtPath("Assets/Sprites/Axe.png");
             importer.textureType = TextureImporterType.Sprite;
             importer.spriteImportMode = SpriteImportMode.Single;
             importer.spritePixelsPerUnit = 32;
@@ -324,13 +324,13 @@ namespace HallowBlaze.Tests.EditMode
             importer.mipmapEnabled = false;
             importer.alphaIsTransparency = true;
             importer.SaveAndReimport();
-            var axe = new GameObject("Landmark axe");
+            var axe = new GameObject("Axe");
             try
             {
                 SpriteRenderer renderer = axe.AddComponent<SpriteRenderer>();
-                renderer.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Sprites/LandmarkAxe.png");
+                renderer.sprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Sprites/Axe.png");
                 renderer.sortingLayerName = "Units";
-                PrefabUtility.SaveAsPrefabAsset(axe, "Assets/Prefabs/Tiles/LandmarkAxe.prefab");
+                PrefabUtility.SaveAsPrefabAsset(axe, "Assets/Prefabs/Tiles/Axe.prefab");
             }
             finally { UnityEngine.Object.DestroyImmediate(axe); }
             const string path = folder + "/RadioTowerLandmark.asset";
@@ -342,7 +342,7 @@ namespace HallowBlaze.Tests.EditMode
             serialized.FindProperty("boulder").objectReferenceValue = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Boulder.prefab");
             serialized.FindProperty("plate").objectReferenceValue = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/PressurePlate.prefab");
             serialized.FindProperty("gate").objectReferenceValue = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Gate.prefab");
-            serialized.FindProperty("axe").objectReferenceValue = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/LandmarkAxe.prefab");
+            serialized.FindProperty("axe").objectReferenceValue = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Tiles/Axe.prefab");
             serialized.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(asset);
             AssetDatabase.SaveAssets();

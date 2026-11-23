@@ -5,7 +5,7 @@ namespace HallowBlaze.Core.Persistence.Dto
 {
     /// <summary>Adds authored selections and completed outcomes to the frozen equipment/travel boundary.</summary>
     [JsonObject(MemberSerialization.OptIn)]
-    public sealed class RunStateV5Dto : RunStateV4Dto
+    public class RunStateV5Dto : RunStateV4Dto
     {
         /// <summary>Gets the landmark-aware run schema; profile schema is unchanged.</summary>
         public new const int CurrentSchemaVersion = 5;
