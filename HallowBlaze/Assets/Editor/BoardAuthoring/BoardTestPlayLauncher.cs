@@ -35,6 +35,8 @@ namespace HallowBlaze.Editor.BoardAuthoring
         private readonly string[] templates;
         private readonly string[] assignments;
         private readonly string preview;
+        private string poolJson;
+        private Dictionary<(string, int, string), string> poolLabels;
 
         private BoardRouteTestSnapshot(string worldJson, string edgeId, string[] templates, string[] assignments, string preview)
         { this.worldJson = worldJson; this.edgeId = edgeId; this.templates = templates; this.assignments = assignments; this.preview = preview; }
@@ -89,10 +91,47 @@ namespace HallowBlaze.Editor.BoardAuthoring
         }
 
         internal string Describe(BoardTestPlaySettings settings) => preview + "\n\nSeed " + settings.Seed + " | Health " + settings.Health +
-            " | Food " + settings.Food + " | Axe " + (settings.EquipAxe ? "Yes" : "No");
+            " | Food " + settings.Food + " | Axe " + (settings.EquipAxe ? "Yes" : "No") + DescribePool(settings);
 
-        internal BoardAuthoringTestContext Prepare(BoardTestPlaySettings settings) => BoardAuthoringTestContext.PrepareRoute(worldJson, edgeId,
-            templates, assignments, settings.Seed, settings.Health, settings.Food, settings.EquipAxe, BoardAuthoringTestContext.CreateSaveRootPath());
+        internal BoardAuthoringTestContext Prepare(BoardTestPlaySettings settings) => poolJson == null
+            ? BoardAuthoringTestContext.PrepareRoute(worldJson, edgeId, templates, assignments, settings.Seed, settings.Health, settings.Food, settings.EquipAxe, BoardAuthoringTestContext.CreateSaveRootPath())
+            : BoardAuthoringTestContext.PreparePoolRoute(worldJson, poolJson, templates, settings.Seed, settings.Health, settings.Food, settings.EquipAxe, BoardAuthoringTestContext.CreateSaveRootPath());
+
+        internal static BoardRouteTestSnapshot CapturePool(BoardPoolAuthoring authoring, BoardDocumentStore store)
+        {
+            var publication = authoring.CaptureSaved(store, out string[] templates);
+            JObject data = JObject.Parse(publication.ToJson());
+            var labels = new Dictionary<(string, int, string), string>();
+            foreach (JObject entry in data["sources"].SelectMany(source => source["entries"]))
+            {
+                string id = (string)entry["templateId"];
+                int version = (int)entry["templateVersion"];
+                string variant = (string)entry["variantId"];
+                labels[(id, version, variant)] = authoring.DescribeEntry(id, version, variant).text + " [" + id + "/" + version + " | " + variant + "]";
+            }
+            return new BoardRouteTestSnapshot(authoring.WorldJson, (string)data["edgeId"], templates, Array.Empty<string>(),
+                publication.Id + "/" + publication.Version + "\n" + publication.ContentHash) { poolJson = publication.ToJson(), poolLabels = labels };
+        }
+
+        private string DescribePool(BoardTestPlaySettings settings)
+        {
+            if (poolJson == null) return "";
+            var run = BoardAuthoringTestContext.PreviewPoolRoute(worldJson, poolJson, templates, settings.Seed, settings.Health, settings.Food, settings.EquipAxe);
+            JObject manifest = JObject.Parse(poolJson);
+            return "\n" + run.ActiveLeg.EdgeId + " | " + run.ActiveLeg.FromNodeId + " > " + run.ActiveLeg.ToNodeId + "\n" +
+                string.Join("\n\n", run.ActiveLeg.Segments.Select((segment, index) =>
+                {
+                    JObject source = BoardPoolAuthoring.Source(manifest, segment.SegmentId);
+                    var choice = run.ActiveLeg.BoardPlan.Selections.FirstOrDefault(selection => selection.SegmentId == segment.SegmentId);
+                    string header = (index + 1) + "/" + run.ActiveLeg.Segments.Count + " | " + segment.SegmentId + "\n";
+                    if (source == null) return header + "Generated | " + segment.GenerationConfigurationId + "/" + segment.GenerationVersion;
+                    var entries = (JArray)source["entries"];
+                    return header + (source["poolId"].Type == JTokenType.Null ? "Fixed" : "Pool " + (string)source["poolId"] + "/" + (int)source["poolVersion"]) +
+                        " | " + (100m / entries.Count).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "% each\n" +
+                        string.Join("\n", entries.Select(entry => poolLabels[((string)entry["templateId"], (int)entry["templateVersion"], (string)entry["variantId"])])) +
+                        "\nSelected: " + poolLabels[(choice.TemplateId, choice.TemplateVersion, choice.VariantId)];
+                }));
+        }
     }
 
     /// <summary>Owns a single Editor test and restores its original scene setup/draft after Play Mode ends.</summary>
@@ -140,13 +179,18 @@ namespace HallowBlaze.Editor.BoardAuthoring
             Func<string, bool> confirmPreview, Func<bool> stopExisting, Func<bool> resolveDirtyScenes, Action enterPlay = null)
             => TryLaunchCore(window, settings, stopExisting, resolveDirtyScenes, enterPlay, confirmPreview ?? (_ => false));
 
+        /// <summary>Previews all exact candidates and starts the same saved pool plan using the existing scene/draft recovery boundary.</summary>
+        public static bool TryLaunchPoolRoute(BoardAuthoringWindow window, BoardTestPlaySettings settings,
+            Func<string, bool> confirmPreview, Func<bool> stopExisting, Func<bool> resolveDirtyScenes, Action enterPlay = null)
+            => TryLaunchCore(window, settings, stopExisting, resolveDirtyScenes, enterPlay, confirmPreview ?? (_ => false), true);
+
         private static bool TryLaunchCore(BoardAuthoringWindow window, BoardTestPlaySettings settings,
-            Func<bool> stopExisting, Func<bool> resolveDirtyScenes, Action enterPlay, Func<string, bool> confirmRoute)
+            Func<bool> stopExisting, Func<bool> resolveDirtyScenes, Action enterPlay, Func<string, bool> confirmRoute, bool poolRoute = false)
         {
             bool preparedHere = false;
             try
             {
-                if (window == null || window.Document == null || settings == null)
+                if (window == null || !poolRoute && window.Document == null || settings == null)
                     throw new InvalidOperationException("A board document and starting inputs are required.");
                 if (HasRecovery) throw new InvalidOperationException("A test or recovery already owns the Editor.");
                 if (EditorApplication.isCompiling || EditorApplication.isUpdating)
@@ -157,14 +201,14 @@ namespace HallowBlaze.Editor.BoardAuthoring
                     LastMessage = "Play Mode is already running.";
                     return false;
                 }
-                string json = window.Document.ToJson();
+                string json = poolRoute ? null : window.Document.ToJson();
                 if (settings.Health < 1 || settings.Food < 1)
                     throw new InvalidOperationException("Starting health and food must be positive.");
                 settings = new BoardTestPlaySettings { Seed = settings.Seed, Health = settings.Health, Food = settings.Food, EquipAxe = settings.EquipAxe };
                 BoardRouteTestSnapshot route = null;
                 if (confirmRoute != null)
                 {
-                    route = window.CaptureRouteTest();
+                    route = poolRoute ? window.CapturePoolRouteTest() : window.CaptureRouteTest();
                     string beforePreview = window.CaptureTestRecovery();
                     if (!confirmRoute(route.Describe(settings))) { LastMessage = "Route preview cancelled."; return false; }
                     if (window.CaptureTestRecovery() != beforePreview)

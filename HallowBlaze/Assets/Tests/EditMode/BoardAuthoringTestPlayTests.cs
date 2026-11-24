@@ -20,6 +20,111 @@ namespace HallowBlaze.Tests.EditMode
     /// <summary>Exercises Editor recovery, explicit local inputs, bounded search and the actual Edit/Play/Edit boundary.</summary>
     public sealed class BoardAuthoringTestPlayTests
     {
+        /// <summary>Dirty sources, stale manifest bytes and missing/changed exact artifacts fail before preview and do not create a sandbox.</summary>
+        [TestCase("dirty")]
+        [TestCase("external")]
+        [TestCase("missing")]
+        [TestCase("content")]
+        [TestCase("version")]
+        [TestCase("variant")]
+        public void PoolPreviewRefusesStaleOrMissingSavedArtifacts(string fault)
+        {
+            WithWindow(window =>
+            {
+                string root = (string)typeof(BoardAuthoringWindow).GetField("draftRoot", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(window);
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                var board = BoardTemplateDocument.ReadTemplate(UnifiedBoardAuthoringTests.Minimal().ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+                string boardPath = store.NamedBoardPath("Candidate");
+                Assert.That(store.Save(board, boardPath).Succeeded, Is.True);
+                window.Pools.Create(store, window.Assignment.WorldJson, "road.shelter-warm-up", "refusal.route");
+                string segment = window.Assignment.World.Edges.Single(edge => edge.EdgeId == "road.shelter-warm-up").Segments[1].SegmentId;
+                window.Pools.SetSource(segment, "pool");
+                window.Pools.AddEntry(segment, "draft.shared", 1, "base");
+                string path = Path.Combine(root, "route.pool.json");
+                Assert.That(window.Pools.Save(store, path).Succeeded, Is.True);
+                if (fault == "dirty") window.Pools.Document.Edit(data => data["publicationVersion"] = 2);
+                if (fault == "external") File.AppendAllText(path, " ");
+                if (fault == "missing") File.Delete(boardPath);
+                if (fault == "content" || fault == "version" || fault == "variant")
+                {
+                    JObject changed = board.Snapshot();
+                    if (fault == "content") changed["outcomes"][0]["name"] = "Externally changed content";
+                    if (fault == "version") changed["templateVersion"] = 2;
+                    if (fault == "variant") changed["variants"][0]["id"] = "replacement";
+                    File.WriteAllText(boardPath, changed.ToString());
+                }
+                bool previewed = false;
+                Assert.That(BoardTestPlayLauncher.TryLaunchPoolRoute(window, new BoardTestPlaySettings(), _ => { previewed = true; return true; },
+                    () => false, () => true, () => Assert.Fail("Invalid publications cannot start.")), Is.False);
+                Assert.That(previewed, Is.False);
+                Assert.That(BoardTestPlayLauncher.LastMessage, Is.Not.Empty);
+                Assert.That(BoardAuthoringTestContext.IsRequested || BoardTestPlayLauncher.HasRecovery, Is.False);
+            });
+        }
+
+        /// <summary>Pool Cancel is inert; Start freezes the shown candidates and Stop restores independent grid and membership history.</summary>
+        [Test]
+        public void PoolPreviewCancelStartAndStopRecoverIndependentDocuments()
+        {
+            WithWindow(window =>
+            {
+                string root = (string)typeof(BoardAuthoringWindow).GetField("draftRoot", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(window);
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                var first = BoardTemplateDocument.ReadTemplate(UnifiedBoardAuthoringTests.Minimal().ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+                JObject secondJson = first.Snapshot();
+                secondJson["templateId"] = "draft.alternative";
+                var second = BoardTemplateDocument.ReadTemplate(secondJson.ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+                string[] separatedVariants = { "north/guard", "north\\guard", "north-guard" };
+                first.Edit(data =>
+                {
+                    var variants = (JArray)data["variants"];
+                    foreach (string id in separatedVariants)
+                    {
+                        var variant = (JObject)variants[0].DeepClone();
+                        variant["id"] = id;
+                        variants.Add(variant);
+                    }
+                });
+                Assert.That(store.Save(first, store.NamedBoardPath("First clearing")).Succeeded, Is.True);
+                Assert.That(store.Save(second, store.NamedBoardPath("Second clearing")).Succeeded, Is.True);
+                window.Pools.Create(store, window.Assignment.WorldJson, "road.shelter-warm-up", "preview.pool-route");
+                var edge = window.Assignment.World.Edges.Single(candidate => candidate.EdgeId == "road.shelter-warm-up");
+                window.Pools.SetSource(edge.Segments[1].SegmentId, "pool");
+                window.Pools.AddEntry(edge.Segments[1].SegmentId, "draft.shared", 1, "base");
+                window.Pools.AddEntry(edge.Segments[1].SegmentId, "draft.alternative", 1, "base");
+                foreach (string variant in separatedVariants)
+                    window.Pools.AddEntry(edge.Segments[1].SegmentId, "draft.shared", 1, variant);
+                Assert.That(window.Pools.Save(store, Path.Combine(root, "opening.pool.json")).Succeeded, Is.True);
+                var capture = typeof(BoardAuthoringWindow).GetMethod("CaptureTestRecovery", BindingFlags.Instance | BindingFlags.NonPublic);
+                string before = (string)capture.Invoke(window, null);
+                var settings = new BoardTestPlaySettings { Seed = 7, Food = 999, Health = 88, EquipAxe = true };
+                Assert.That(BoardTestPlayLauncher.TryLaunchPoolRoute(window, settings, preview =>
+                {
+                    Assert.That(preview, Does.Contain("20% each").And.Contain("First clearing | v1 | base [draft.shared/1 | base]")
+                        .And.Contain("Second clearing | v1 | base [draft.alternative/1 | base]"));
+                    foreach (string variant in separatedVariants)
+                        Assert.That(preview, Does.Contain("First clearing | v1 | north-guard [draft.shared/1 | " + variant + "]"));
+                    string selected = preview.Split('\n').Single(line => line.StartsWith("Selected: ", StringComparison.Ordinal)).Substring("Selected: ".Length);
+                    Assert.That(preview.Split('\n'), Does.Contain(selected), "Selected must retain the exact variant shown in the candidate details.");
+                    return false;
+                }, () => false, () => true, () => Assert.Fail("Cancel must not enter Play Mode.")), Is.False);
+                Assert.That((string)capture.Invoke(window, null), Is.EqualTo(before));
+                Assert.That(BoardAuthoringTestContext.IsRequested || BoardTestPlayLauncher.HasRecovery, Is.False);
+                Assert.That(BoardTestPlayLauncher.TryLaunchPoolRoute(window, settings, _ =>
+                {
+                    File.WriteAllText(first.SourcePath, "{}");
+                    settings.Seed = 999;
+                    return true;
+                }, () => false, () => true, () => { }), Is.True, BoardTestPlayLauncher.LastMessage);
+                Assert.That(BoardAuthoringTestContext.Active.CreateInitialRun().RunSeed, Is.EqualTo(7));
+                Assert.That(BoardAuthoringTestContext.Active.CreateInitialRun().ActiveLeg.BoardPlan.Selections, Has.Count.EqualTo(1));
+                BoardTestPlayLauncher.Stop();
+                Assert.That(BoardTestPlayLauncher.HasRecovery, Is.False, BoardTestPlayLauncher.LastMessage);
+                Assert.That((string)capture.Invoke(window, null), Is.EqualTo(before));
+                Assert.That(window.Pools.Document.CanUndo, Is.True);
+            });
+        }
+
         /// <summary>Recovery retains independent undo/redo owners and the exact inspected cell without saving the draft.</summary>
         [Test]
         public void RecoveryPreservesDirtyStateSelectionAndIndependentUndoRedo()
@@ -270,7 +375,13 @@ namespace HallowBlaze.Tests.EditMode
 
         /// <summary>The captured route survives real Play entry and Stop restores named board, history, selection and multi-scene setup.</summary>
         [UnityTest]
-        public IEnumerator RouteActualPlayAndStopRecoverSavedBoardAndScenes()
+        public IEnumerator RouteActualPlayAndStopRecoverSavedBoardAndScenes() => ExerciseRouteRecovery(false);
+
+        /// <summary>Pool artifacts and independent membership history survive actual Edit/Play/Edit and the existing multi-scene restoration.</summary>
+        [UnityTest]
+        public IEnumerator PoolActualPlayAndStopRecoverMembershipAndScenes() => ExerciseRouteRecovery(true);
+
+        private IEnumerator ExerciseRouteRecovery(bool pooled)
         {
             const string expectedKey = "HallowBlaze.Tests.RouteRoundTripExpected";
             string root = Path.Combine(Path.GetTempPath(), "HB-RouteRoundTrip-" + Guid.NewGuid().ToString("N"));
@@ -290,6 +401,14 @@ namespace HallowBlaze.Tests.EditMode
             var template = BoardTemplateJson.ReadCompatible(window.Document.ToJson(), OrdinaryBoardContent.CreateAuthoringCatalog());
             window.Assignment.Select(new BoardAssignment(window.Assignment.World, edge.Segments[1].SegmentId, template, "base"));
             Assert.That(window.TrySaveNamed("Round Trip Middle"), Is.True, window.LastError);
+            if (pooled)
+            {
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                window.Pools.Create(store, window.Assignment.WorldJson, edge.EdgeId, "actual.pool-route");
+                window.Pools.SetSource(edge.Segments[1].SegmentId, "pool");
+                window.Pools.AddEntry(edge.Segments[1].SegmentId, template.Id, template.Version, "base");
+                Assert.That(window.Pools.Save(store, Path.Combine(root, "actual.pool.json")).Succeeded, Is.True);
+            }
             window.Grid.ChooseContent("landmark.boulder");
             window.Grid.Select(new GridPosition(3, 6));
             SessionState.SetString(expectedKey, new JObject
@@ -297,8 +416,11 @@ namespace HallowBlaze.Tests.EditMode
                 ["window"] = (string)typeof(BoardAuthoringWindow).GetMethod("CaptureTestRecovery", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(window, null),
                 ["root"] = root
             }.ToString());
-            Assert.That(BoardTestPlayLauncher.TryLaunchRoute(window, new BoardTestPlaySettings { Seed = 975, Food = 43, Health = 89, EquipAxe = true },
-                _ => true, () => false, () => true, () => { }), Is.True, BoardTestPlayLauncher.LastMessage);
+            var settings = new BoardTestPlaySettings { Seed = 975, Food = 43, Health = 89, EquipAxe = true };
+            bool launched = pooled
+                ? BoardTestPlayLauncher.TryLaunchPoolRoute(window, settings, _ => true, () => false, () => true, () => { })
+                : BoardTestPlayLauncher.TryLaunchRoute(window, settings, _ => true, () => false, () => true, () => { });
+            Assert.That(launched, Is.True, BoardTestPlayLauncher.LastMessage);
             yield return new EnterPlayMode();
             yield return null;
             yield return null;
@@ -316,6 +438,11 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(runtime.RunState.ActiveLeg.SegmentIndex, Is.Zero);
             Assert.That(runtime.Request.Address.EdgeId, Is.EqualTo("road.shelter-warm-up"));
             Assert.That(context.IsSharedBoard(runtime.Request), Is.False, "The saved middle assignment must not replace the generated entry.");
+            if (runtime.RunState.ActiveLeg.BoardPlan != null)
+            {
+                Assert.That(runtime.RunState.ActiveLeg.BoardPlan.Selections, Has.Count.EqualTo(1));
+                Assert.That(File.Exists(Path.Combine(context.SaveRoot, "pool-publication.json")), Is.True);
+            }
             yield return new ExitPlayMode();
             double deadline = EditorApplication.timeSinceStartup + 10;
             while (BoardTestPlayLauncher.HasRecovery && EditorApplication.timeSinceStartup < deadline) yield return null;

@@ -28,6 +28,8 @@ namespace HallowBlaze.Presentation.Runtime
         private readonly LandmarkPlacement placement;
         private readonly BoardAssignment assignment;
         private readonly Dictionary<string, BoardAssignment> routeAssignments;
+        private readonly BoardPoolPublication poolPublication;
+        private readonly RouteBoardPlan poolPlan;
         private readonly Func<string, RunState> readRun;
         private object owner;
         private string expectedScene;
@@ -53,7 +55,12 @@ namespace HallowBlaze.Presentation.Runtime
             public bool Assigned;
             public string RouteEdgeId;
             public RouteEntry[] RouteEntries;
+            public string PoolJson;
+            public string[] PoolTemplates;
         }
+
+        [Serializable]
+        private sealed class PoolRouteIdentity { public string edgeId; }
 
         [Serializable]
         private sealed class RouteEntry
@@ -115,6 +122,13 @@ namespace HallowBlaze.Presentation.Runtime
             this.readRun = readRun;
             if (!data.Local && readRun == null) throw new ArgumentNullException(nameof(readRun));
             World = WorldDefinitionJson.Deserialize(data.WorldJson);
+            if (!string.IsNullOrEmpty(data.PoolJson))
+            {
+                poolPublication = BoardPoolPublication.Read(data.WorldJson, data.PoolJson, data.PoolTemplates, OrdinaryBoardContent.CreateAuthoringCatalog());
+                poolPlan = ReadInitialRun().ActiveLeg.BoardPlan;
+                Template = data.PoolTemplates.Length == 0 ? null : BoardTemplateJson.ReadCompatible(data.PoolTemplates[0], OrdinaryBoardContent.CreateAuthoringCatalog());
+                return;
+            }
             if (!string.IsNullOrEmpty(data.RouteEdgeId))
             {
                 routeAssignments = ValidateRoute();
@@ -273,6 +287,35 @@ namespace HallowBlaze.Presentation.Runtime
             return Publish(new BoardAuthoringTestContext(data, null));
         }
 
+        /// <summary>Builds the exact seeded pool plan without reserving a root, publishing a context or consuming shared RNG.</summary>
+        /// <returns>A detached Pending run whose stable sandbox identity is derived from the immutable publication hash.</returns>
+        public static RunState PreviewPoolRoute(string worldJson, string publicationJson, string[] templateJsons,
+            int seed, int health, int food, bool equipAxe)
+            => new BoardAuthoringTestContext(PoolData(worldJson, publicationJson, templateJsons, seed, health, food, equipAxe), null).ReadInitialRun();
+
+        /// <summary>Starts the same full preflighted plan shown by PreviewPoolRoute, retaining exact artifacts in a fresh isolated diagnostic root.</summary>
+        /// <param name="saveRoot">A new owned temporary root; it never authorizes post-Stop resume or player-store access.</param>
+        public static BoardAuthoringTestContext PreparePoolRoute(string worldJson, string publicationJson, string[] templateJsons,
+            int seed, int health, int food, bool equipAxe, string saveRoot)
+        {
+            if (IsRequested) throw new InvalidOperationException("An authoring launch already owns the Editor context.");
+            ValidateRoot(saveRoot, false, null);
+            LaunchData data = PoolData(worldJson, publicationJson, templateJsons, seed, health, food, equipAxe);
+            data.Root = Path.GetFullPath(saveRoot);
+            data.Token = Guid.NewGuid().ToString("N");
+            return Publish(new BoardAuthoringTestContext(data, null));
+        }
+
+        private static LaunchData PoolData(string worldJson, string publicationJson, string[] templateJsons, int seed, int health, int food, bool equipAxe)
+        {
+            if (health < 1 || food < 1) throw new ArgumentException("Starting resources must be positive.");
+            string[] templates = templateJsons?.ToArray() ?? throw new ArgumentNullException(nameof(templateJsons));
+            var publication = BoardPoolPublication.Read(worldJson, publicationJson, templates, OrdinaryBoardContent.CreateAuthoringCatalog());
+            return new LaunchData { Local = true, WorldJson = worldJson, PoolJson = publication.ToJson(), PoolTemplates = templates,
+                RouteEdgeId = JsonUtility.FromJson<PoolRouteIdentity>(publication.ToJson()).edgeId,
+                RunId = "authoring-pool-" + publication.ContentHash.Substring(0, 24), Seed = seed, Health = health, Food = food, EquipAxe = equipAxe };
+        }
+
         private Dictionary<string, BoardAssignment> ValidateRoute()
         {
             if (!data.Local || data.RouteEntries == null || data.RouteEntries.Length == 0 || data.Health < 1 || data.Food < 1)
@@ -312,7 +355,9 @@ namespace HallowBlaze.Presentation.Runtime
         }
 
         /// <summary>Gets whether this addressed board uses a shared assignment, not a persisted legacy landmark selection.</summary>
-        public bool IsSharedBoard(BoardRequest request) => routeAssignments != null
+        public bool IsSharedBoard(BoardRequest request) => poolPlan != null
+            ? request?.Address?.EdgeId == data.RouteEdgeId && poolPlan.Selections.Any(selection => selection.SegmentId == request.Address.SegmentId)
+            : routeAssignments != null
             ? request?.Address?.EdgeId == data.RouteEdgeId && routeAssignments.ContainsKey(request.Address.SegmentId)
             : assignment != null && request?.Address?.SegmentId == data.SegmentId;
 
@@ -323,6 +368,13 @@ namespace HallowBlaze.Presentation.Runtime
             using (var marker = new StreamWriter(new FileStream(Path.Combine(data.Root, MarkerName), FileMode.CreateNew, FileAccess.Write, FileShare.None)))
                 marker.Write(data.Token);
             ValidateRoot(data.Root, true, data.Token);
+            if (candidate.poolPublication != null)
+            {
+                File.WriteAllText(Path.Combine(data.Root, "pool-publication.json"), data.PoolJson);
+                File.WriteAllText(Path.Combine(data.Root, "pool-world.json"), data.WorldJson);
+                for (int index = 0; index < data.PoolTemplates.Length; index++)
+                    File.WriteAllText(Path.Combine(data.Root, "pool-template-" + index + ".json"), data.PoolTemplates[index]);
+            }
             current = candidate;
             SessionState.SetString(StateKey, JsonUtility.ToJson(data));
             return candidate;
@@ -372,6 +424,7 @@ namespace HallowBlaze.Presentation.Runtime
             foreach (RouteSegmentDefinition segment in edge.Segments)
                 segments.Add(new RouteSegmentState(segment.SegmentId, segment.GenerationConfigurationId, segment.GenerationVersion));
             run.StartLeg(edge.EdgeId, edge.FromNodeId, edge.ToNodeId, segments);
+            if (poolPublication != null) run.PinBoardPlan(poolPublication.Select(run.RunId, run.RunSeed, run.ActiveLeg));
             if (data.Assigned)
             {
                 if (run.ActiveLeg.CurrentSegment.SegmentId != data.SegmentId) run.TryConsumeIntro(run.ActiveLeg.LegId);
@@ -387,6 +440,7 @@ namespace HallowBlaze.Presentation.Runtime
         {
             RequireActive();
             if (request?.Address == null) throw new ArgumentException("An addressed authoring board is required.");
+            if (poolPublication != null) { ValidateRouteAddress(request.Address); return null; }
             if (routeAssignments != null) { ValidateRouteAddress(request.Address); return null; }
             if (assignment != null) return null;
             if (request.Address.SegmentId != placement.SegmentId)
@@ -403,6 +457,12 @@ namespace HallowBlaze.Presentation.Runtime
         public LandmarkBoard CreateBoard(BoardRequest request, RunState run)
         {
             RequireActive();
+            if (poolPublication != null)
+            {
+                if (!BoardAddressFactory.Create(run, World).Equals(request?.Address))
+                    throw new ArgumentException("Pool request does not match the current full run address.");
+                return poolPublication.Resolve(run, request.Address);
+            }
             if (routeAssignments != null)
             {
                 ValidateRouteAddress(request?.Address);

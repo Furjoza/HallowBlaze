@@ -1089,6 +1089,89 @@ with no skipped tests or unexpected error diagnostics. Independent Reviewer PASS
 material issues; a frozen golden selection-policy vector remains a non-blocking coverage gap.
 These are isolated domain tests, not a new pool-UI or actual pooled gameplay acceptance claim.
 
+### M6.10b - Explicit Route Sources In The Board Editor
+
+The existing Board Editor now has a separate **Route Sources** foldout. Choose an external
+board library, create a publication with an explicit existing route and stable publication ID,
+then select its segment and **Generated**, **Fixed** or **Pool** mode. A new publication starts
+with explicit generated defaults; it does not infer pool membership from saved maps or multiple
+old assignment files. Existing fixed-assignment Check/Play/Play route operations remain separate.
+
+Fixed sources hold one exact saved template/version/variant. Pool sources expose compatible
+exact saved candidates by their saved board filenames, version and variant. Technical IDs remain
+in tooltips and preview details, not as the primary map label. The candidate popup is flat;
+displayed slashes must not become Unity submenu separators. Membership and preview use the
+same captured display names. Refresh or reopen an existing pool to refresh library names;
+renaming a file does not change tuple identity, publication hash or seeded choice.
+Pool sources include add/remove commands, entry counts and equal probabilities. Selecting
+Fixed from a multi-entry pool clears that candidate set into an invalid empty fixed draft,
+rather than choosing an arbitrary winner; undo restores the old set. Empty configured sources,
+duplicates, missing versions/variants and incompatible candidates block Save/Start. Refresh
+updates available maps but refuses changed content under an existing template/version key.
+Saving/forking a board alone never changes membership. Pool undo/redo and dirty state are
+independent of the grid; keyboard undo/redo and Save target the panel last clicked.
+The pool also has its own Save As command and Ctrl+Shift+S route, so a conflicted or relocated
+draft can be retained in a new guarded file without discarding its history.
+
+The pool's Save/Open icons operate on its own document through the same guarded atomic store
+and file fingerprints as board drafts. Source edits allocate a new publication/pool version
+relative to the last saved checkpoint, including after undo into older history. The authoring
+file is an Editor-only envelope with `authoringSchemaVersion: 2`, a `publication` containing
+the unchanged domain schema-1 manifest, exact `worldJson` and `templateJsons` snapshots.
+Its `poolVersions` ledger retains the highest saved version even after a source is removed;
+recreating a pool after Generated/Save/Open cannot reuse an earlier identity/version. The reader
+also accepts the initial envelope schema 1 and explicit raw manifests.
+Reopen retains these artifacts instead of rebinding same-version references to current files.
+Raw domain manifests may be imported explicitly against the chosen current library. Save and
+activation recheck live library availability/content; external drift is reported, not substituted.
+Refresh tracks live availability separately and never erases old snapshot evidence when a map
+is missing, including after a failed save. A changed same-version map cannot be admitted by
+removing and later restoring its file.
+
+The panel's Play icon previews the route, publication/version/hash, all generated/fixed/pool
+sources, every candidate and its equal probability, the seed-selected exact choices and starting
+resources/equipment. Cancel does not write, publish or change either document. Start uses those
+captured strings and cloned inputs. A stable sandbox run ID derived from the publication hash
+keeps identical publication/seed previews repeatable under the existing run-addressed policy;
+normal production run IDs and RNG are unchanged.
+
+The Editor-only context pins the entire plan in its initial run before bootstrap's checkpoint
+and any board composition. Generated entry and pooled middle/final boards use real gameplay
+reloads, one fenced save root and exact full addresses. The root also retains the captured
+world/manifest/templates for diagnostics. Final arrival revokes the context; Stop restores
+scene setup plus both draft histories and never grants persistent post-Stop resume. Player
+schemas remain run 6/profile 2, with no new production activation or legacy landmark records.
+
+**Technical evidence (2026-11-23):** Native source-mode/add/keyboard undo/redo checks passed at
+1280 and 640 pixels. Pool Cancel/Start/Stop and actual Edit/Play/Edit recovery passed. Real
+generated -> pooled -> pooled travel passed, including an injected intermediate checkpoint
+failure and retry without reroll or a second command cost, exact saved choices, independent
+board state, retained tool charges and one final day commit. Adjacent fixed/shared/legacy
+regressions and actual Player compilation/exclusion passed. Before the display-only naming
+correction below, aggregate
+verification passed 195 EditMode cases with zero failures and two explicitly skipped existing
+camera/Untitled prerequisites; sandbox PlayMode passed 33/33. Independent Reviewer PASS closed
+the retained-artifact, recreated-pool-version and Save As findings. Native Ctrl+Shift+S dialog
+coverage and Save As with nonempty membership remain non-blocking test gaps; transaction,
+conflict and replacement-root recovery are tested through the same window save API.
+**Owner feedback (2026-11-23):** The owner reported that generated-entry and pooled middle/final
+travel appeared to work and recognized that repeated runs with the same test seed retain the
+same choices. The remaining reported issue was the candidate list showing generated technical
+IDs instead of saved map names. This label correction does not change IDs, membership or RNG;
+it is a display-only correction, not a new full acceptance claim.
+The naming correction passed focused EditMode verification 3/3: filename/rename identity,
+native 1280/640 controls and immutable preview/Cancel/Start/Stop recovery. Preview retains exact
+variant IDs even when separators produce the same flat popup label. Independent Reviewer PASS
+closed that separator-collision finding; the earlier gameplay gates were not rerun for this
+display-only change.
+
+**Owner acceptance (2026-11-24):** The owner confirmed that the corrected map names make sense
+and the result looks sensible. Together with the earlier reported generated/pooled route
+exercise, this closes M6.10b's new pool-workflow usability gate. This is not a fresh automated
+run, a claim that every manual scenario was exercised, balance acceptance or production
+activation. The closeout changes documentation only.
+Resource aggregation M6.10c and the separate Check board TimeLimit stay open.
+
 ### Editor Reference Walkthrough And Delivery Gates
 
 The read-only M6.7 audit uses the existing

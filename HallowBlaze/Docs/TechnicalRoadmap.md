@@ -6266,7 +6266,7 @@ exercise. Technical completion belongs to the Lead; usability acceptance belongs
 
 ## `M6.10` - Board-template assignments to existing route segments
 
-**Status:** `Active` - the limited route-sandbox increment below is technically Done with independent review PASS on 2026-11-20 and owner-reported travel acceptance on 2026-11-22. M6.10a's domain publication/save foundation is technically Done with independent review PASS on 2026-11-22; pool UI/travel M6.10b and resource panel M6.10c remain Planned.
+**Status:** `Active` - the limited route-sandbox increment below is technically Done with independent review PASS on 2026-11-20 and owner-reported travel acceptance on 2026-11-22. M6.10a's domain foundation is Done; M6.10b pool authoring/travel is Done with independent review PASS on 2026-11-23 and owner usability acceptance on 2026-11-24. Resource panel M6.10c remains Planned.
 **Priority:** P2 with the initial editor, before bulk handcrafted route content.
 **Related contract:** Section 27.2 segment-authoring amendment, section 15 biome hierarchy and existing route, template and pinned-selection contracts.
 **Rationale:** A local board and its place in a journey are different data. Explicit placements let an author reuse a template and control which board appears along a route without copying grids or editing campaign JSON by hand.
@@ -6467,10 +6467,39 @@ M6.10b/c remain Planned and the separate Check board report is untouched.
 
 ### M6.10b - Assignment UI and integrated authoring acceptance
 
-**Status:** `Planned` - replanned 2026-11-22 for explicit segment pool editing and seeded travel.
+**Status:** `Done` - owner usability accepted on 2026-11-24 after confirming the corrected
+map names, following the reported generated/pooled route exercise. Technical delivery and
+independent review passed on 2026-11-23. Implementation was authorized on 2026-11-23 after
+commit/push of M6.10a as `748622d679512b7c4d251c702b65383f6815e0f2`;
+branch `M6/10b/SegmentPoolAuthoring`.
 **Dependencies:** M6.10a passed/reviewed, including schema/selection/save contracts and exact
 child scope. Reuse the current library, assignment panel, window, launcher and context; freeze
 exact file/test paths before Ready rather than creating another grid editor by default.
+
+**Closed writes (project-relative, 2026-11-23):**
+`Assets/Editor/BoardAuthoring/BoardTemplateDocument.cs`,
+`Assets/Editor/BoardAuthoring/BoardDocumentStore.cs`,
+`Assets/Editor/BoardAuthoring/BoardPoolAuthoring.cs` (if an owning helper is needed, with Unity-generated metadata),
+`Assets/Editor/BoardAuthoring/BoardAssignmentPanel.cs`,
+`Assets/Editor/BoardAuthoring/BoardAuthoringWindow.cs`,
+`Assets/Editor/BoardAuthoring/BoardTestPlayLauncher.cs`,
+`Assets/Scripts/Presentation/Runtime/BoardAuthoringTestContext.cs`,
+`Assets/Tests/EditMode/UnifiedBoardAuthoringTests.cs`,
+`Assets/Tests/EditMode/BoardAuthoringWindowTests.cs`,
+`Assets/Tests/EditMode/BoardAuthoringTestPlayTests.cs`,
+`Assets/Tests/PlayMode/BoardAuthoringIsolationTests.cs`,
+`Docs/BoardGeneration.md` and this roadmap. No Core policy/DTO changes, campaign activation,
+resource panel, solver correction, scene, prefab, package, settings or existing metadata writes.
+The owner's existing `AGENTS.md` change remains authorized baseline; parent `Boards/` is not
+inspected or modified. External authoring tests use disposable temporary roots only.
+
+**Authoring file contract:** Save a route manifest inside an Editor-only envelope with
+`authoringSchemaVersion: 2`, exact `publication`, `worldJson`, `templateJsons` and a retained
+`poolVersions` high-water ledger. Initial envelope schema 1 remains readable. The domain
+publication schema remains 1. Reopen retains those exact artifacts; live library drift must
+fail activation instead of silently changing a same-version reference. Raw schema-1 manifests
+may be explicitly imported against the current library, then saved as an envelope. Sandbox
+roots retain the captured artifacts for diagnostics only; Stop never grants persistent resume.
 
 **Acceptance:** Show stable route/segment identities, names, endpoints and resolved catalog,
 with explicit source modes: generated, fixed assignment, pool. Add/remove compatible exact
@@ -6496,6 +6525,49 @@ rejected-command costs, unchanged day before final arrival, one final commit and
 without reroll. Retain fixed-assignment/shared/strict Radio Tower regressions and old/new save
 fixtures from M6.10a. The owner exercises the new pool workflow only; do not repeat already
 accepted fixed-assignment usability as if it were still missing or claim balance acceptance.
+
+**Implementation (2026-11-23):** The existing window exposes independent Route Sources with
+generated/fixed/pool modes, explicit exact entries, compatible candidates and equal odds.
+The shared document/store own undo/redo, external conflicts, guarded atomic save and an
+Editor-only snapshot envelope. Reopen retains exact world/templates; live drift blocks Save
+or activation. Refresh never forgets missing artifact evidence; pool version history survives
+source removal and Save/Open. Separate Save As preserves drafts after conflicts or a changed
+root. A captured seeded preview starts that same immutable plan through the existing
+launcher/context; scene and independent draft recovery remain shared with fixed-assignment
+tests. Stable sandbox identity makes repeated publication/seed previews deterministic without
+changing production IDs or the Core policy. No production campaign opt-in or post-Stop resume.
+
+**Technical acceptance (2026-11-23):** Final focused EditMode verification passed 195 cases with
+zero failures; two existing camera/Untitled-scene prerequisite cases were explicitly skipped,
+not counted as PASS. Complete sandbox PlayMode passed 33/33, and actual Player compilation
+confirmed the Editor context is absent. Native wide/narrow controls, pool draft/conflict/reopen,
+real Edit/Play/Edit and generated/pooled/final travel with checkpoint failure/retry passed.
+Independent Reviewer PASS closed the artifact-forgetting, recreated-pool-version and missing
+Save As findings with regression tests. Save As tests cover the transaction through the window
+API but not the native Ctrl+Shift+S dialog and use an empty source set; these are non-blocking
+coverage limits. Scope, owner-baseline integrity and documentation checks passed.
+At that checkpoint, owner acceptance was pending only for the new pool workflow, not the
+already accepted fixed three-map exercise. M6.10c is not started and the separate Check board
+issue is untouched.
+
+**Owner feedback and bounded correction (2026-11-23):** The owner reported that generated-entry
+and pooled middle/final travel appeared to work, with same-seed repetition understood. The
+remaining usability report is the Pool chooser showing generated template IDs rather than
+saved board names. The correction displays filenames/version/variant in the chooser, members
+and preview, retains exact IDs in tooltips/details and removes accidental slash-delimited Unity
+submenus. Write scope is the existing pool helper and launcher, their three existing EditMode
+fixtures and these two owning documents. No user maps, identities, DTOs, RNG or runtime changes.
+Focused label/rename/seed-identity, preview/Cancel/Start and native 1280/640 checks passed 3/3;
+preview details retain exact variants even when flat labels collide on slash/backslash/hyphen.
+Independent Reviewer PASS closed that variant-detail finding. The earlier gameplay gates were
+not rerun for this display correction. This feedback is not a claim that every manual
+acceptance scenario was exercised.
+
+**Owner acceptance (2026-11-24):** The owner confirmed that the corrected map names make sense
+and the result looks sensible. Together with the earlier reported generated/pooled route
+exercise, this closes the new pool-workflow usability gate. It does not claim a fresh automated
+run, every manual scenario, balance acceptance or production activation. M6.10c remains Planned;
+the separate Check board TimeLimit is unresolved. This closeout changes documentation only.
 
 ### M6.10c - Resource balance panel for boards, segment pools and routes
 
@@ -8544,7 +8616,7 @@ The next safe sequence is:
 1. retain the accepted `M4.9` and `M6.6` Proceed decisions of 2026-11-12. The owner accepts two external testers plus separate owner participation and waives further recruitment and missing protocol-specific measurements; no completed 5-8-person cohort or inferred score is claimed. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. The owner then separately authorized solo M6.6: its technical preparation passed full EditMode 1237 tests plus the existing Explicit skip and graphics PlayMode 188/188, with self-review only. The later owner acceptance closes its human gate without changing those review attributions. No additional M4.9/M6.6 cohort is a remaining prerequisite. Future cards use the current Lead implementation and Reviewer/self-review policy in `AGENTS.md`;
 2. retain the separate 2026-11-12 owner-directed M7 closeout, including `M7.8` and `M7.17`. Existing technical evidence and the accepted manual-check limitations remain as recorded; no additional human-test result is implied by closing M4.9/M6.6;
 3. preserve the completed M7 repairs and the explicit `M7.21`/`M7.26` deferrals. Their risks and follow-up evidence requirements remain unchanged; leave the current Radio Tower board unchanged;
-4. after the expanded M7 gate and a Proceed verdict from `M4.9`, complete the bounded stone-lure extension `M5.8`-`M5.11`: accept detailed rules, validate atomic throw/supply behavior, add shared aiming, then obtain the human prototype verdict. No earlier human gate or production rollout is waived. `M6.7` and `M6.8a/b` are Done. For the owner's editor priority, preserve delivered `M6.9e` shared authoring and the technically completed one-route sandbox, with owner-reported three-map travel acceptance on 2026-11-22. Historical `M6.9c/d` are consolidated scope, not duplicate implementation prerequisites. Remaining `M6.10a` freezes explicit segment pools, equal-probability deterministic choice and old-save pinning; `M6.10b` delivers pool editing/preview/travel; `M6.10c` adds live board/pool/route resource summaries. Those stages remain Planned until their contracts and exact scopes are ready; no code starts from this documentation change. The hierarchy stays biome -> named routes -> stable segments -> generated, fixed or pooled authored content, never a route-wide pool. Preserve strict legacy landmark guards, isolation and the unresolved Check board TimeLimit as separate work. Complete practical editor tooling before bulk handcrafted M8 content; unrelated slice work is not blocked;
+4. after the expanded M7 gate and a Proceed verdict from `M4.9`, complete the bounded stone-lure extension `M5.8`-`M5.11`: accept detailed rules, validate atomic throw/supply behavior, add shared aiming, then obtain the human prototype verdict. No earlier human gate or production rollout is waived. `M6.7` and `M6.8a/b` are Done. For the owner's editor priority, preserve delivered `M6.9e` shared authoring and the technically completed one-route sandbox, with owner-reported three-map travel acceptance on 2026-11-22. Historical `M6.9c/d` are consolidated scope, not duplicate implementation prerequisites. `M6.10a` is Done with explicit segment pools, equal-probability deterministic choice and old-save pinning; `M6.10b` pool editing/preview/travel is Done with owner usability acceptance on 2026-11-24. `M6.10c` live board/pool/route resource summaries remain Planned; its contract and exact scope must be ready before implementation, and no code starts from this documentation change. The hierarchy stays biome -> named routes -> stable segments -> generated, fixed or pooled authored content, never a route-wide pool. Preserve strict legacy landmark guards, isolation and the unresolved Check board TimeLimit as separate work. Complete practical editor tooling before bulk handcrafted M8 content; unrelated slice work is not blocked;
 5. complete the no-backpack vertical slice through `M8.8`, preserving its playtest requirements and earlier M4.9/M6.6/M7 gates, then make the explicit M10 verdict. The stone prototype does not automatically become a production or vertical-slice acceptance requirement;
 6. keep M10 deferred and last among planned milestones unless the owner explicitly changes that order; activate M9.7 only for an actual owner-approved bug-report workflow, independently of M10. Keep scent/wind `M9.8` last among optional ideas, not ahead of accepted work or an activated M10 because of its milestone number.
 

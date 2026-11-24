@@ -503,7 +503,13 @@ namespace HallowBlaze.Tests.PlayMode
 
         /// <summary>Normal commands traverse generated entry and exact captured middle/final boards with one root and one final day commit.</summary>
         [UnityTest]
-        public IEnumerator RouteSandboxTravelsGeneratedEntryAndCapturedMiddleAndFinal()
+        public IEnumerator RouteSandboxTravelsGeneratedEntryAndCapturedMiddleAndFinal() => ExerciseRoute(false);
+
+        /// <summary>Normal commands retain the seeded full plan across generated entry, two pooled segments and final arrival.</summary>
+        [UnityTest]
+        public IEnumerator PoolSandboxTravelsGeneratedEntryAndPooledMiddleAndFinal() => ExerciseRoute(true);
+
+        private IEnumerator ExerciseRoute(bool pooled)
         {
             string worldJson = File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json"));
             var world = WorldDefinitionJson.Deserialize(worldJson);
@@ -521,7 +527,27 @@ namespace HallowBlaze.Tests.PlayMode
             var assignments = templates.Select((json, index) => new HallowBlaze.Core.Generation.BoardAssignment(world,
                 edge.Segments[index + 1].SegmentId, HallowBlaze.Core.Generation.BoardTemplateJson.ReadCompatible(json,
                     OrdinaryBoardContent.CreateAuthoringCatalog()), "base").ToJson()).ToArray();
-            var context = BoardAuthoringTestContext.PrepareRoute(worldJson, edge.EdgeId, templates, assignments, 64, 100, 100, false, root);
+            BoardAuthoringTestContext context;
+            if (pooled)
+            {
+                var entries = new Newtonsoft.Json.Linq.JArray(new Newtonsoft.Json.Linq.JObject
+                    { ["templateId"] = "route.middle", ["templateVersion"] = 1, ["variantId"] = "base" },
+                    new Newtonsoft.Json.Linq.JObject { ["templateId"] = "route.final", ["templateVersion"] = 1, ["variantId"] = "base" });
+                var manifest = new Newtonsoft.Json.Linq.JObject
+                {
+                    ["schemaVersion"] = 1, ["publicationId"] = "play.pool-route", ["publicationVersion"] = 1,
+                    ["worldDefinitionId"] = world.WorldDefinitionId, ["worldVersion"] = world.Version, ["edgeId"] = edge.EdgeId,
+                    ["sources"] = new Newtonsoft.Json.Linq.JArray(edge.Segments.Skip(1).Select(segment => new Newtonsoft.Json.Linq.JObject
+                    {
+                        ["segmentId"] = segment.SegmentId, ["generationConfigurationId"] = segment.GenerationConfigurationId,
+                        ["generationVersion"] = segment.GenerationVersion, ["poolId"] = "play.shared-pool", ["poolVersion"] = 1,
+                        ["entries"] = entries.DeepClone()
+                    }))
+                };
+                context = BoardAuthoringTestContext.PreparePoolRoute(worldJson, manifest.ToString(), templates, 64, 100, 100, true, root);
+            }
+            else context = BoardAuthoringTestContext.PrepareRoute(worldJson, edge.EdgeId, templates, assignments, 64, 100, 100, false, root);
+            RouteBoardPlan pinned = context.CreateInitialRun().ActiveLeg.BoardPlan;
             templates[0] = assignments[0] = "{}";
             int reloads = 0;
             UnityEngine.Events.UnityAction<Scene, LoadSceneMode> loaded = (scene, mode) => { if (scene.name == "Main") reloads++; };
@@ -549,14 +575,29 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(addresses.Add(runtime.Request.Address), Is.True);
                     Assert.That(run.CompletedDayCount, Is.Zero);
                     Assert.That(run.ActiveLandmark, Is.Null);
+                    if (pooled)
+                    {
+                        Assert.That(run.ActiveLeg.BoardPlan.PublicationHash, Is.EqualTo(pinned.PublicationHash));
+                        Assert.That(run.ActiveLeg.BoardPlan.Selections.Select(selection => selection.TemplateId), Is.EqualTo(pinned.Selections.Select(selection => selection.TemplateId)));
+                        Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(3));
+                        Assert.That(run.ToolInstanceSequence, Is.EqualTo(1));
+                        var durable = new FileSystemSaveStore(root).LoadRun();
+                        Assert.That(durable.IsSuccess, Is.True);
+                        Assert.That(durable.Data.ActiveLeg.BoardPlan.Selections.Select(selection => selection.TemplateId), Is.EqualTo(pinned.Selections.Select(selection => selection.TemplateId)));
+                        Assert.That(BoardAddressFactory.Create(durable.Data, world), Is.EqualTo(runtime.Request.Address));
+                    }
                     Assert.That(context.SaveRoot, Is.EqualTo(root));
                     Assert.That(context.IsSharedBoard(runtime.Request), Is.EqualTo(index > 0));
                     if (previous != null)
                     {
                         Assert.That(previous.IsDisposed, Is.True);
                         Assert.That(board, Is.Not.SameAs(previousBoard));
+                        string selected = pooled ? pinned.Selections.Single(selection => selection.SegmentId == edge.Segments[index].SegmentId).TemplateId :
+                            index == 1 ? "route.middle" : "route.final";
                         Assert.That(runtime.BoardState.GetEntities().Single(entity => entity.Definition.ContentId == "landmark.boulder").Position,
-                            Is.EqualTo(index == 1 ? new GridPosition(3, 3) : new GridPosition(4, 4)));
+                            Is.EqualTo(selected == "route.middle" ? new GridPosition(3, 3) : new GridPosition(4, 4)));
+                        if (pooled && index == 1)
+                            Assert.That(board.TryRemove(new HallowBlaze.Core.Board.Primitives.EntityId(74)), Is.True);
                     }
                     BoardEventPresenter presenter = Property<BoardEventPresenter>(manager, "ActiveBoardPresenter");
                     presenter.AnimationsEnabled = false;
@@ -570,11 +611,35 @@ namespace HallowBlaze.Tests.PlayMode
                     int foodBeforeExit = run.Food;
                     int healthBeforeExit = run.Health;
                     Direction[] path = ExitPath(runtime).ToArray();
+                    bool failCheckpoint = pooled && index == 1;
+                    string checkpointPath = Path.Combine(root, "run.json");
+                    string retainedPath = Path.Combine(root, "test-retained-run.json");
+                    if (failCheckpoint)
+                    {
+                        File.Move(checkpointPath, retainedPath);
+                        Directory.CreateDirectory(checkpointPath);
+                        LogAssert.Expect(LogType.Error, "Segment checkpoint failed: IoError");
+                    }
                     foreach (Direction direction in path)
                     {
                         var pending = presenter.Coordinator.SubmitAsync(new MoveCommand(direction));
                         while (!pending.IsCompleted) yield return null;
-                        Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented), "Segment " + index + ": " + pending.Result.Diagnostic?.Error);
+                        if (!failCheckpoint || !runtime.Controller.IsTerminal)
+                            Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented), "Segment " + index + ": " + pending.Result.Diagnostic?.Error);
+                    }
+                    if (failCheckpoint)
+                    {
+                        Assert.That(run.ActiveLeg.SegmentIndex, Is.EqualTo(1));
+                        Assert.That(run.CompletedDayCount, Is.Zero);
+                        Assert.That(run.ActiveLeg.BoardPlan.PublicationHash, Is.EqualTo(pinned.PublicationHash));
+                        object pendingOutcome = managerType.GetField("pendingBoardOutcome", Fields).GetValue(manager);
+                        Assert.That(pendingOutcome, Is.Not.Null);
+                        Directory.Delete(checkpointPath);
+                        File.Move(retainedPath, checkpointPath);
+                        int chargedFood = run.Food;
+                        Assert.That((bool)managerType.GetMethod("HandleBoardOutcome", Fields).Invoke(manager, new[] { pendingOutcome }), Is.True);
+                        Assert.That(run.Food, Is.EqualTo(chargedFood), "Retrying the boundary must not charge another move.");
+                        Assert.That(run.ActiveLeg.BoardPlan.Selections.Select(selection => selection.TemplateId), Is.EqualTo(pinned.Selections.Select(selection => selection.TemplateId)));
                     }
                     if (index > 0)
                     {
