@@ -29,6 +29,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
         [SerializeField] private BoardTestPlaySettings testSettings = new BoardTestPlaySettings();
         [SerializeField] private int generationDay = 1;
         [SerializeField] private BoardAssignmentPanel assignmentPanel = new BoardAssignmentPanel();
+        [SerializeField] private BoardPoolAuthoring poolAuthoring = new BoardPoolAuthoring();
         [SerializeField] private string boardName = "";
         [SerializeField] private string savedAssignmentPath = "";
         [SerializeField] private string savedAssignmentFingerprint = "";
@@ -74,6 +75,8 @@ namespace HallowBlaze.Editor.BoardAuthoring
         public string SelectedVariant => variantId;
         /// <summary>Gets the explicit optional sandbox target, independent of the board document's mutable layout.</summary>
         public BoardAssignmentPanel Assignment => assignmentPanel;
+        /// <summary>Gets route-source membership and its independent save/undo state; grid edits never implicitly change it.</summary>
+        public BoardPoolAuthoring Pools => poolAuthoring;
         /// <summary>Gets the last operation error without discarding the currently edited document.</summary>
         public string LastError => error;
         /// <summary>Gets the last playability result only while the board, variant and starting inputs still match its evidence.</summary>
@@ -125,7 +128,8 @@ namespace HallowBlaze.Editor.BoardAuthoring
             {
                 ["id"] = recoveryId, ["state"] = editorState, ["root"] = draftRoot, ["variant"] = variantId,
                 ["details"] = CaptureDetails(), ["assignment"] = JsonUtility.ToJson(assignmentPanel), ["savedDetails"] = savedDetails,
-                ["assignmentPath"] = savedAssignmentPath, ["assignmentFingerprint"] = savedAssignmentFingerprint, ["bindingPending"] = bindingSavePending
+                ["assignmentPath"] = savedAssignmentPath, ["assignmentFingerprint"] = savedAssignmentFingerprint, ["bindingPending"] = bindingSavePending,
+                ["pools"] = poolAuthoring.Capture()
             }.ToString(Formatting.None));
             ScheduleRecovery();
         }
@@ -145,7 +149,8 @@ namespace HallowBlaze.Editor.BoardAuthoring
             recovered.recoveryId = (string)state["id"];
             recovered.draftRoot = (string)state["root"];
             if (!string.IsNullOrEmpty(recovered.draftRoot)) recovered.TryConfigureRoot(recovered.draftRoot);
-            recovered.document = BoardTemplateDocument.RestoreEditorState(JObject.Parse((string)state["state"]), OrdinaryBoardContent.CreateAuthoringCatalog());
+            recovered.document = string.IsNullOrEmpty((string)state["state"]) ? null :
+                BoardTemplateDocument.RestoreEditorState(JObject.Parse((string)state["state"]), OrdinaryBoardContent.CreateAuthoringCatalog());
             recovered.variantId = (string)state["variant"];
             if (state["details"] is JObject details) recovered.boardName = (string)details["name"];
             if (state["assignment"] != null) recovered.assignmentPanel = JsonUtility.FromJson<BoardAssignmentPanel>((string)state["assignment"]);
@@ -153,19 +158,20 @@ namespace HallowBlaze.Editor.BoardAuthoring
             recovered.savedAssignmentPath = (string)state["assignmentPath"] ?? "";
             recovered.savedAssignmentFingerprint = (string)state["assignmentFingerprint"] ?? "";
             recovered.bindingSavePending = (bool?)state["bindingPending"] ?? false;
+            recovered.poolAuthoring = BoardPoolAuthoring.Restore((string)state["pools"]);
             recovered.error = "Close did not save or discard the draft. The document was retained.";
             recovered.RefreshDocument();
             recovered.Show();
             SessionState.EraseString(PendingRecovery);
         }
 
-        private bool WantsToQuit() => ResolveDirty(AskDecision, SaveFromDialog);
+        private bool WantsToQuit() => ResolveAllDirty(AskDecision, SaveAllDrafts);
         private void OnQuitting() => quitting = true;
 
         /// <summary>Resolves the native Editor dirty-window save action; failed saves keep the draft dirty and recoverable.</summary>
         public override void SaveChanges()
         {
-            if (SaveFromDialog()) { allowClose = true; base.SaveChanges(); }
+            if (SaveAllDrafts()) { allowClose = true; base.SaveChanges(); }
         }
 
         /// <summary>Records an explicit native Discard decision; no file or campaign data is changed.</summary>
@@ -374,16 +380,16 @@ namespace HallowBlaze.Editor.BoardAuthoring
         /// <summary>Allows close/navigation only after a successful save or explicit discard, never a failed save.</summary>
         public bool ResolveDirty(Func<BoardDocumentDecision> decide, Func<bool> save = null)
         {
-            if (!HasPendingChanges()) return true;
+            if (!HasBoardChanges()) return true;
             if (decide == null) return false;
             BoardDocumentDecision decision = decide();
-            return decision == BoardDocumentDecision.Discard || decision == BoardDocumentDecision.Save && save != null && save() && !HasPendingChanges();
+            return decision == BoardDocumentDecision.Discard || decision == BoardDocumentDecision.Save && save != null && save() && !HasBoardChanges();
         }
 
         /// <summary>Discards only this window's in-memory draft after an explicit owner decision; useful for controlled test cleanup.</summary>
         public void CloseAfterDecision(BoardDocumentDecision decision, Func<bool> save = null)
         {
-            if (!ResolveDirty(() => decision, save)) return;
+            if (!ResolveAllDirty(() => decision, save)) return;
             allowClose = true;
             hasUnsavedChanges = false;
             Close();
@@ -393,6 +399,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
         {
             guiOrigin = GUIUtility.GUIToScreenPoint(Vector2.zero);
             Event input = Event.current;
+            poolAuthoring.ObservePointer(input);
             if (!BoardTestPlayLauncher.HasRecovery)
             {
             if (input.type == EventType.KeyDown && identityPanel && (input.keyCode == KeyCode.Return || input.keyCode == KeyCode.KeypadEnter || input.keyCode == KeyCode.Escape))
@@ -418,7 +425,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
                     input.Use();
                 }
                 bool saveAs = input.shift;
-                Action command = input.keyCode == KeyCode.S ? (Action)(() => SaveFromDialog(saveAs)) :
+                Action command = input.keyCode == KeyCode.S ? (poolAuthoring.KeyboardFocus ? (Action)(() => SavePoolDialog(saveAs)) : () => SaveFromDialog(saveAs)) :
                     input.keyCode == KeyCode.O ? OpenFromDialog : input.keyCode == KeyCode.N ? (Action)(() => ShowIdentity(false)) :
                     input.keyCode == KeyCode.D ? () => ShowIdentity(true) : null;
                 if (command != null)
@@ -427,14 +434,15 @@ namespace HallowBlaze.Editor.BoardAuthoring
                     Defer(command);
                 }
             }
-            if (document != null && input.type == EventType.KeyDown && (input.control || input.command) && !EditorGUIUtility.editingTextField)
+            if ((document != null || poolAuthoring.Document != null) && input.type == EventType.KeyDown && (input.control || input.command) && !EditorGUIUtility.editingTextField)
             {
                 bool undo = input.keyCode == KeyCode.Z && !input.shift;
                 bool redo = input.keyCode == KeyCode.Y || input.keyCode == KeyCode.Z && input.shift;
                 if (undo || redo)
                 {
                     input.Use();
-                    Defer(() => { if (undo) document.Undo(); else document.Redo(); });
+                    BoardTemplateDocument owner = poolAuthoring.KeyboardFocus ? poolAuthoring.Document : document;
+                    Defer(() => { if (undo) owner?.Undo(); else owner?.Redo(); });
                 }
             }
             }
@@ -452,6 +460,9 @@ namespace HallowBlaze.Editor.BoardAuthoring
             if (!string.IsNullOrEmpty(error)) EditorGUILayout.HelpBox(error, MessageType.Warning);
             if (BoardTestPlayLauncher.HasRecovery && !string.IsNullOrEmpty(BoardTestPlayLauncher.LastMessage))
                 EditorGUILayout.HelpBox(BoardTestPlayLauncher.LastMessage, MessageType.Warning);
+            using (new EditorGUI.DisabledScope(BoardTestPlayLauncher.HasRecovery))
+                poolAuthoring.Draw(store, assignmentPanel.WorldJson, guiOrigin, Defer, ResolvePoolNavigation,
+                    () => SavePoolDialog(), () => SavePoolDialog(true), OpenPoolDialog, LaunchPoolRouteTest);
             if (document != null)
             {
                 using (new EditorGUI.DisabledScope(BoardTestPlayLauncher.HasRecovery))
@@ -695,7 +706,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
             error = BoardTestPlayLauncher.LastMessage;
         }
 
-        private bool CanPlayRoute => store != null && document != null && diagnostics.Count == 0 && !HasPendingChanges() &&
+        private bool CanPlayRoute => store != null && document != null && diagnostics.Count == 0 && !HasBoardChanges() &&
             !string.IsNullOrEmpty(document.SourcePath) && assignmentPanel.Enabled && !string.IsNullOrEmpty(savedAssignmentPath);
 
         private void LaunchRouteTest()
@@ -719,16 +730,87 @@ namespace HallowBlaze.Editor.BoardAuthoring
                 assignmentPanel.Create(template, variantId), document.SourcePath);
         }
 
+        internal BoardRouteTestSnapshot CapturePoolRouteTest() => BoardRouteTestSnapshot.CapturePool(poolAuthoring, store);
+
+        private void LaunchPoolRouteTest()
+        {
+            BoardTestPlayLauncher.TryLaunchPoolRoute(this, testSettings,
+                preview => EditorUtility.DisplayDialog("Play route sources", preview, "Start", "Cancel"),
+                () => false, UnityEditor.SceneManagement.EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo);
+            error = BoardTestPlayLauncher.LastMessage;
+        }
+
+        private bool ResolvePoolNavigation()
+        {
+            if (poolAuthoring.Document == null || !poolAuthoring.Document.IsDirty) return true;
+            int choice = EditorUtility.DisplayDialogComplex("Unsaved Route Sources", "Save route sources before replacing them?", "Save", "Cancel", "Discard");
+            return choice == 2 || choice == 0 && SavePoolDialog();
+        }
+
+        private void OpenPoolDialog()
+        {
+            if (!EnsureStore()) return;
+            string path = EditorUtility.OpenFilePanel("Open Route Sources", draftRoot, "json");
+            if (!string.IsNullOrEmpty(path) && ResolvePoolNavigation()) poolAuthoring.Open(store, path, assignmentPanel.WorldJson);
+        }
+
+        /// <summary>Saves the independent pool draft to its current or explicit Save As path; conflicts and failures preserve membership and history.</summary>
+        /// <param name="path">Null saves the owned file; a different explicit path performs Save As within the selected guarded root.</param>
+        /// <param name="confirmOverwrite">Explicit consent for replacing an existing different target.</param>
+        /// <param name="fingerprint">The previewed exact target bytes required with overwrite consent.</param>
+        public bool TrySavePool(string path = null, bool confirmOverwrite = false, string fingerprint = null)
+        {
+            try
+            {
+                if (store == null) throw new InvalidOperationException("Choose an external draft folder first.");
+                var result = poolAuthoring.Save(store, path, confirmOverwrite, fingerprint);
+                error = result.Message;
+                RefreshDocument();
+                return result.Succeeded;
+            }
+            catch (Exception exception) { error = exception.Message; return false; }
+        }
+
+        private bool SavePoolDialog(bool saveAs = false)
+        {
+            if (!EnsureStore() || poolAuthoring.Document == null) return false;
+            string path = poolAuthoring.Document.SourcePath;
+            bool overwrite = false;
+            string fingerprint = null;
+            if (saveAs || string.IsNullOrEmpty(path))
+            {
+                path = EditorUtility.SaveFilePanel("Save Route Sources", draftRoot, "route.pool", "json");
+                if (string.IsNullOrEmpty(path)) return false;
+                fingerprint = store.CaptureFingerprint(path);
+                overwrite = fingerprint != null;
+                if (overwrite && !EditorUtility.DisplayDialog("Replace Route Sources", path, "Replace", "Cancel")) return false;
+            }
+            return TrySavePool(path, overwrite, fingerprint);
+        }
+
+        private bool SaveAllDrafts() => (!HasBoardChanges() || SaveFromDialog()) &&
+            (poolAuthoring.Document == null || !poolAuthoring.Document.IsDirty || SavePoolDialog());
+
+        private bool ResolveAllDirty(Func<BoardDocumentDecision> decide, Func<bool> save)
+        {
+            if (!HasPendingChanges()) return true;
+            if (decide == null) return false;
+            BoardDocumentDecision decision = decide();
+            return decision == BoardDocumentDecision.Discard || decision == BoardDocumentDecision.Save && save != null && save() && !HasPendingChanges();
+        }
+
         internal string CaptureTestRecovery()
         {
             Remember();
             return new JObject
             {
-                ["id"] = recoveryId, ["draft"] = BoardDraftRecovery.Capture(document, variantId, Grid, draftRoot),
+                ["id"] = recoveryId, ["draft"] = document == null ? null : BoardDraftRecovery.Capture(document, variantId, Grid, draftRoot),
+                ["root"] = draftRoot,
                 ["seed"] = testSettings.Seed, ["health"] = testSettings.Health, ["food"] = testSettings.Food,
                 ["axe"] = testSettings.EquipAxe, ["assignment"] = JsonUtility.ToJson(assignmentPanel), ["generationDay"] = generationDay,
                 ["boardName"] = boardName, ["assignmentPath"] = savedAssignmentPath, ["assignmentFingerprint"] = savedAssignmentFingerprint,
-                ["savedDetails"] = savedDetails, ["bindingPending"] = bindingSavePending
+                ["savedDetails"] = savedDetails, ["bindingPending"] = bindingSavePending,
+                ["pools"] = poolAuthoring.Capture()
             }.ToString(Formatting.None);
         }
 
@@ -738,7 +820,9 @@ namespace HallowBlaze.Editor.BoardAuthoring
             var window = Resources.FindObjectsOfTypeAll<BoardAuthoringWindow>().FirstOrDefault(candidate => candidate.recoveryId == (string)state["id"])
                 ?? CreateInstance<BoardAuthoringWindow>();
             window.recoveryId = (string)state["id"];
-            window.document = BoardDraftRecovery.Restore((string)state["draft"], window.Grid, out window.variantId, out string root);
+            string root = (string)state["root"];
+            window.document = state["draft"]?.Type == JTokenType.String
+                ? BoardDraftRecovery.Restore((string)state["draft"], window.Grid, out window.variantId, out root) : null;
             window.store = null;
             window.draftRoot = "";
             if (!string.IsNullOrEmpty(root))
@@ -755,6 +839,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
             window.savedAssignmentFingerprint = (string)state["assignmentFingerprint"] ?? "";
             window.savedDetails = (string)state["savedDetails"] ?? "";
             window.bindingSavePending = (bool?)state["bindingPending"] ?? false;
+            window.poolAuthoring = BoardPoolAuthoring.Restore((string)state["pools"]);
             window.RefreshDocument();
             window.Show();
             return window;
@@ -972,6 +1057,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
         private void DeferCore(Action action, bool duringTest)
         {
             BoardTemplateDocument expectedDocument = document;
+            BoardTemplateDocument expectedPool = poolAuthoring.Document;
             int expectedEpoch = callbackEpoch;
             EditorApplication.CallbackFunction callback = null;
             callback = () =>
@@ -979,8 +1065,10 @@ namespace HallowBlaze.Editor.BoardAuthoring
                 EditorApplication.update -= callback;
                 pendingCallbacks.Remove(callback);
                 if (this == null || !callbacksActive || expectedEpoch != callbackEpoch || !ReferenceEquals(expectedDocument, document)) return;
+                if (!ReferenceEquals(expectedPool, poolAuthoring.Document)) return;
                 if (BoardTestPlayLauncher.HasRecovery && !duringTest) return;
-                action();
+                try { action(); }
+                catch (Exception exception) { error = exception.Message; }
                 if (this != null && callbacksActive && expectedEpoch == callbackEpoch) RefreshDocument();
             };
             pendingCallbacks.Add(callback);
@@ -1009,7 +1097,11 @@ namespace HallowBlaze.Editor.BoardAuthoring
             Repaint();
         }
 
-        private void Remember() => editorState = document?.CaptureEditorState().ToString(Formatting.None) ?? "";
+        private void Remember()
+        {
+            editorState = document?.CaptureEditorState().ToString(Formatting.None) ?? "";
+            poolAuthoring.Remember();
+        }
 
         private JObject CaptureDetails() => new JObject
         {
@@ -1020,7 +1112,9 @@ namespace HallowBlaze.Editor.BoardAuthoring
             ["variant"] = assignmentPanel.Enabled ? variantId : ""
         };
 
-        private bool HasPendingChanges() => document != null && !document.IsReadOnly && (document.IsDirty || bindingSavePending ||
+        private bool HasPendingChanges() => HasBoardChanges() || poolAuthoring.Document?.IsDirty == true;
+
+        private bool HasBoardChanges() => document != null && !document.IsReadOnly && (document.IsDirty || bindingSavePending ||
             !string.IsNullOrEmpty(savedDetails) && savedDetails != CaptureDetails().ToString(Formatting.None));
     }
 }

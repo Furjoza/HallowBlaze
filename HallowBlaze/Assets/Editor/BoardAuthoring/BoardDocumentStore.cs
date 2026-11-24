@@ -148,6 +148,32 @@ namespace HallowBlaze.Editor.BoardAuthoring
             return document;
         }
 
+        /// <summary>Opens a separately saved route-source manifest through the same physical path and conflict guards as boards.</summary>
+        public BoardTemplateDocument OpenPool(string path, string worldJson, IEnumerable<string> templateJsons, BoardValidationCatalog catalog)
+        {
+            string full = ReadablePath(path);
+            byte[] bytes = File.ReadAllBytes(full);
+            string json = Decode(bytes);
+            JObject file = JObject.Parse(json, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
+            if (file["authoringSchemaVersion"] != null)
+            {
+                int schema = file["authoringSchemaVersion"].Type == JTokenType.Integer ? (int)file["authoringSchemaVersion"] : 0;
+                if (schema != 1 && schema != 2 || file.Properties().Count() != (schema == 1 ? 4 : 5) || schema == 2 && !(file["poolVersions"] is JObject) ||
+                    !(file["publication"] is JObject) || file["worldJson"]?.Type != JTokenType.String || !(file["templateJsons"] is JArray templates) ||
+                    templates.Any(template => template.Type != JTokenType.String))
+                    throw new InvalidDataException("Invalid or unsupported route-source archive envelope.");
+                if (!JToken.DeepEquals(JObject.Parse((string)file["worldJson"]), JObject.Parse(worldJson)))
+                    throw new InvalidDataException("Choose the exact captured world before opening this route publication.");
+                worldJson = (string)file["worldJson"];
+                templateJsons = templates.Values<string>().ToArray();
+                json = file["publication"].ToString();
+            }
+            var document = BoardTemplateDocument.ReadPool(json, worldJson, templateJsons, catalog);
+            document.RetainPoolVersions(file["poolVersions"] as JObject);
+            document.MarkSaved(full, Fingerprint(bytes), IsPublished(full));
+            return document;
+        }
+
         /// <summary>Captures current target bytes for an explicit Save As overwrite preview; never grants overwrite consent by itself.</summary>
         /// <returns>A SHA-256 fingerprint, or null when the selected file does not exist.</returns>
         public string CaptureFingerprint(string path)
@@ -253,7 +279,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
                     return Result(BoardDocumentSaveStatus.Conflict, target, "Target changed or disappeared; Reload, Save As or Cancel.");
                 if (document.Diagnostics.Count > 0)
                     return Result(BoardDocumentSaveStatus.Invalid, target, document.Diagnostics[0].Message);
-                string json = document.ToJson();
+                string json = document.IsPool ? document.ToPoolFileJson() : document.ToJson();
                 string snapshot = BoardAuthoringJson.Format(document.Snapshot());
                 byte[] bytes = Utf8.GetBytes(json);
                 string fingerprint = Fingerprint(bytes);

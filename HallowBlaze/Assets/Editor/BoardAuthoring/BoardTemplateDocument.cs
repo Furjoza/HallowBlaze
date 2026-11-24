@@ -20,7 +20,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
         Discard
     }
 
-    /// <summary>Owns one detached template or placement draft, independent of Unity scenes and other documents.</summary>
+    /// <summary>Owns one detached template, placement or route-pool draft, independent of scenes and other documents.</summary>
     public sealed class BoardTemplateDocument
     {
         private JObject content;
@@ -31,6 +31,9 @@ namespace HallowBlaze.Editor.BoardAuthoring
         private readonly Stack<JObject> redo = new Stack<JObject>();
         private readonly Func<JObject, IReadOnlyList<BoardAuthoringDiagnostic>> validate;
         private readonly Func<JObject, string> serialize;
+        private string poolWorld;
+        private string[] poolTemplates;
+        private JObject poolVersions = new JObject();
 
         private BoardTemplateDocument(JObject data, bool placement,
             Func<JObject, IReadOnlyList<BoardAuthoringDiagnostic>> validate, Func<JObject, string> serialize)
@@ -43,6 +46,8 @@ namespace HallowBlaze.Editor.BoardAuthoring
 
         /// <summary>Gets whether this is a separate assignment document, never an assignment embedded in a grid.</summary>
         public bool IsPlacement { get; }
+        /// <summary>Gets whether this independently saved document contains route sources rather than a board grid.</summary>
+        public bool IsPool => poolWorld != null;
         /// <summary>Gets the last successfully opened/saved path, or null for a new/forked draft.</summary>
         public string SourcePath { get; private set; }
         /// <summary>Gets the exact saved file-byte fingerprint, not a gameplay seed or content identity.</summary>
@@ -130,6 +135,29 @@ namespace HallowBlaze.Editor.BoardAuthoring
             }, data => BoardAssignment.Read(data.ToString(), world, template).ToJson());
         }
 
+        /// <summary>Opens an independent pool manifest against detached exact world/template snapshots; all candidates must preflight.</summary>
+        public static BoardTemplateDocument ReadPool(string json, string worldJson, IEnumerable<string> templateJsons, BoardValidationCatalog catalog)
+        {
+            string[] templates = templateJsons?.ToArray() ?? throw new ArgumentNullException(nameof(templateJsons));
+            BoardPoolPublication publication = BoardPoolPublication.Read(worldJson, json, templates, catalog);
+            return Pool(JObject.Parse(publication.ToJson()), worldJson, templates, catalog);
+        }
+
+        /// <summary>Creates an unsaved route manifest with generated sources; membership edits never modify template documents.</summary>
+        public static BoardTemplateDocument NewPool(string worldJson, string edgeId, string publicationId,
+            IEnumerable<string> templateJsons, BoardValidationCatalog catalog)
+        {
+            WorldDefinition world = WorldDefinitionJson.Deserialize(worldJson);
+            if (!world.TryGetEdge(edgeId, out _)) throw new ArgumentException("Unknown route.", nameof(edgeId));
+            RequireNewId(publicationId);
+            return Pool(new JObject
+            {
+                ["schemaVersion"] = 1, ["publicationId"] = publicationId, ["publicationVersion"] = 1,
+                ["worldDefinitionId"] = world.WorldDefinitionId, ["worldVersion"] = world.Version,
+                ["edgeId"] = edgeId, ["sources"] = new JArray()
+            }, worldJson, templateJsons?.ToArray() ?? throw new ArgumentNullException(nameof(templateJsons)), catalog);
+        }
+
         /// <summary>Returns a complete detached copy; callers cannot mutate a document by retaining a JSON reference.</summary>
         public JObject Snapshot() => (JObject)content.DeepClone();
 
@@ -137,17 +165,22 @@ namespace HallowBlaze.Editor.BoardAuthoring
         {
             ["content"] = content.DeepClone(), ["savedContent"] = savedContent, ["path"] = SourcePath,
             ["fingerprint"] = FileFingerprint, ["readOnly"] = IsReadOnly,
+            ["poolWorld"] = poolWorld, ["poolTemplates"] = poolTemplates == null ? null : new JArray(poolTemplates),
+            ["poolVersions"] = poolVersions.DeepClone(),
             ["undo"] = new JArray(undo.Reverse().Select(snapshot => snapshot.DeepClone())),
             ["redo"] = new JArray(redo.Reverse().Select(snapshot => snapshot.DeepClone()))
         };
 
         internal static BoardTemplateDocument RestoreEditorState(JObject state, BoardValidationCatalog catalog)
         {
-            var document = Template((JObject)state["content"], catalog);
+            var document = state["poolWorld"]?.Type == JTokenType.String
+                ? Pool((JObject)state["content"], (string)state["poolWorld"], state["poolTemplates"].Values<string>().ToArray(), catalog)
+                : Template((JObject)state["content"], catalog);
             document.savedContent = (string)state["savedContent"];
             document.SourcePath = (string)state["path"];
             document.FileFingerprint = (string)state["fingerprint"];
             document.IsReadOnly = (bool)state["readOnly"];
+            document.RetainPoolVersions(state["poolVersions"] as JObject);
             foreach (JObject snapshot in state["undo"]) document.undo.Push((JObject)snapshot.DeepClone());
             foreach (JObject snapshot in state["redo"]) document.redo.Push((JObject)snapshot.DeepClone());
             return document;
@@ -187,7 +220,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
         /// <summary>Creates a new unpublished template identity; Save As alone never changes IDs or assignments.</summary>
         public BoardTemplateDocument Fork(string templateId, string configurationId, BoardValidationCatalog catalog)
         {
-            if (IsPlacement) throw new InvalidOperationException("Fork a board template, not its route assignment.");
+            if (IsPlacement || IsPool) throw new InvalidOperationException("Fork a board template, not its route sources.");
             RequireNewId(templateId);
             RequireNewId(configurationId);
             if (templateId == (string)content["templateId"] || configurationId == (string)content["configuration"]?["id"])
@@ -217,12 +250,47 @@ namespace HallowBlaze.Editor.BoardAuthoring
             return serialize(content);
         }
 
+        internal string ToPoolFileJson() => new JObject
+        {
+            ["authoringSchemaVersion"] = 2, ["publication"] = JObject.Parse(ToJson()),
+            ["worldJson"] = poolWorld, ["templateJsons"] = new JArray(poolTemplates),
+            ["poolVersions"] = CapturePoolVersions()
+        }.ToString(Newtonsoft.Json.Formatting.Indented);
+
         internal void MarkSaved(string path, string fingerprint, bool readOnly)
         {
+            if (IsPool) poolVersions = CapturePoolVersions();
             SourcePath = path;
             FileFingerprint = fingerprint;
             savedContent = BoardAuthoringJson.Format(content);
             IsReadOnly = readOnly;
+        }
+
+        internal JObject SavedSnapshot() => savedContent == null ? null : JObject.Parse(savedContent);
+
+        internal int NextPoolVersion(string id) => checked(((int?)poolVersions[id] ?? 0) + 1);
+
+        internal void RetainPoolVersions(JObject versions)
+        {
+            if (versions == null) return;
+            foreach (JProperty entry in versions.Properties())
+            {
+                if (string.IsNullOrWhiteSpace(entry.Name) || entry.Name != entry.Name.Trim() || entry.Value.Type != JTokenType.Integer || (int)entry.Value < 1)
+                    throw new ArgumentException("Invalid retained pool version history.");
+                poolVersions[entry.Name] = Math.Max((int?)poolVersions[entry.Name] ?? 0, (int)entry.Value);
+            }
+        }
+
+        private JObject CapturePoolVersions()
+        {
+            var retained = (JObject)poolVersions.DeepClone();
+            foreach (JObject source in content["sources"])
+                if (source["poolId"].Type == JTokenType.String)
+                {
+                    string id = (string)source["poolId"];
+                    retained[id] = Math.Max((int?)retained[id] ?? 0, (int)source["poolVersion"]);
+                }
+            return retained;
         }
 
         private static BoardTemplateDocument Template(JObject data, BoardValidationCatalog catalog)
@@ -230,6 +298,17 @@ namespace HallowBlaze.Editor.BoardAuthoring
             if (catalog == null) throw new ArgumentNullException(nameof(catalog));
             return new BoardTemplateDocument(data, false, snapshot => BoardAuthoringValidation.Template(snapshot, catalog),
                 snapshot => BoardAuthoringJson.WriteTemplate(snapshot, catalog));
+        }
+
+        private static BoardTemplateDocument Pool(JObject data, string worldJson, string[] templates, BoardValidationCatalog catalog)
+        {
+            var captured = (string[])templates.Clone();
+            return new BoardTemplateDocument(data, false, snapshot =>
+            {
+                try { BoardPoolPublication.Read(worldJson, snapshot.ToString(), captured, catalog); return Array.Empty<BoardAuthoringDiagnostic>(); }
+                catch (Exception exception) { return new[] { new BoardAuthoringDiagnostic("Pool", exception.Message) }; }
+            }, snapshot => BoardPoolPublication.Read(worldJson, snapshot.ToString(), captured, catalog).ToJson())
+            { poolWorld = worldJson, poolTemplates = captured };
         }
 
         private static JObject Range(int minimum, int maximum) => new JObject { ["minimum"] = minimum, ["maximum"] = maximum };

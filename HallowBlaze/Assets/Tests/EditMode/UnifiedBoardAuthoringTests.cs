@@ -17,6 +17,340 @@ namespace HallowBlaze.Tests.EditMode
     /// <summary>Checks the owner's minimal shared board and schema-1 compatibility without scene or player-data writes.</summary>
     public sealed class UnifiedBoardAuthoringTests
     {
+        /// <summary>Pool labels use saved board names without Unity menu separators; filename changes cannot change exact selection identity.</summary>
+        [Test]
+        public void PoolCandidateLabelsUseSavedNamesWithoutChangingPublication()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "HB-PoolNames-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                JObject data = Minimal();
+                const string templateId = "draft.generated.79740a3d685a48d285df1139849c98a4";
+                data["templateId"] = templateId;
+                var board = BoardTemplateDocument.ReadTemplate(data.ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+                string path = store.NamedBoardPath("North clearing");
+                Assert.That(store.Save(board, path).Succeeded, Is.True);
+                string world = File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json"));
+                var pool = new BoardPoolAuthoring();
+                pool.Create(store, world, "road.shelter-warm-up", "named.route");
+                string segment = WorldDefinitionJson.Deserialize(world).Edges.Single(edge => edge.EdgeId == "road.shelter-warm-up").Segments[1].SegmentId;
+                pool.SetSource(segment, "pool");
+                pool.AddEntry(segment, templateId, 1, "base");
+                string publicationPath = Path.Combine(root, "route.pool.json");
+                Assert.That(pool.Save(store, publicationPath).Succeeded, Is.True);
+                var describe = typeof(BoardPoolAuthoring).GetMethod("DescribeEntry", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                var label = (GUIContent)describe.Invoke(pool, new object[] { templateId, 1, "base" });
+                Assert.That(label.text, Is.EqualTo("North clearing | v1 | base"));
+                Assert.That(label.tooltip, Is.EqualTo(templateId + "/1 | base"));
+                Assert.That(label.text, Does.Not.Contain("/"));
+                string manifest = pool.Document.ToJson();
+                string bytes = File.ReadAllText(publicationPath);
+                var before = pool.CaptureSaved(store, out string[] templates);
+                var expected = BoardAuthoringTestContext.PreviewPoolRoute(world, before.ToJson(), templates, 64, 100, 100, false);
+                File.Move(path, store.NamedBoardPath("Renamed clearing"));
+                pool.RefreshLibrary(store);
+                label = (GUIContent)describe.Invoke(pool, new object[] { templateId, 1, "base" });
+                Assert.That(label.text, Is.EqualTo("Renamed clearing | v1 | base"));
+                Assert.That(pool.Document.ToJson(), Is.EqualTo(manifest));
+                Assert.That(pool.Document.IsDirty, Is.False);
+                Assert.That(File.ReadAllText(publicationPath), Is.EqualTo(bytes));
+                var after = pool.CaptureSaved(store, out templates);
+                Assert.That(after.ContentHash, Is.EqualTo(before.ContentHash));
+                var repeated = BoardAuthoringTestContext.PreviewPoolRoute(world, after.ToJson(), templates, 64, 100, 100, false);
+                Assert.That(HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeRun(repeated),
+                    Is.EqualTo(HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeRun(expected)));
+                var reopened = new BoardPoolAuthoring();
+                reopened.Open(store, publicationPath, world);
+                Assert.That(((GUIContent)describe.Invoke(reopened, new object[] { templateId, 1, "base" })).text,
+                    Is.EqualTo("Renamed clearing | v1 | base"));
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        /// <summary>Removing and recreating a pool across Save/Open never reuses its archived identity/version with different entries.</summary>
+        [Test]
+        public void RecreatedPoolRetainsVersionHistoryAcrossGeneratedSaveAndOpen()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "HB-PoolRecreated-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                var first = BoardTemplateDocument.ReadTemplate(Minimal().ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+                JObject data = first.Snapshot();
+                data["templateId"] = "draft.second";
+                var second = BoardTemplateDocument.ReadTemplate(data.ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+                Assert.That(store.Save(first, store.NamedBoardPath("First")).Succeeded, Is.True);
+                Assert.That(store.Save(second, store.NamedBoardPath("Second")).Succeeded, Is.True);
+                string world = File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json"));
+                var authoring = new BoardPoolAuthoring();
+                authoring.Create(store, world, "road.shelter-warm-up", "recreated.route");
+                string segment = WorldDefinitionJson.Deserialize(world).Edges.Single(edge => edge.EdgeId == "road.shelter-warm-up").Segments[1].SegmentId;
+                authoring.SetSource(segment, "pool");
+                authoring.AddEntry(segment, "draft.shared", 1, "base");
+                string path = Path.Combine(root, "route.pool.json");
+                Assert.That(authoring.Save(store, path).Succeeded, Is.True);
+                var original = authoring.CaptureSaved(store, out _);
+                authoring.SetSource(segment, "generated");
+                Assert.That(authoring.Save(store).Succeeded, Is.True);
+                var generated = authoring.CaptureSaved(store, out _);
+                var reopened = new BoardPoolAuthoring();
+                reopened.Open(store, path, world);
+                reopened.SetSource(segment, "pool");
+                reopened.AddEntry(segment, "draft.second", 1, "base");
+                Assert.That(reopened.Save(store).Succeeded, Is.True);
+                var recreated = reopened.CaptureSaved(store, out _);
+                Assert.That((int)reopened.Document.Snapshot()["sources"][0]["poolVersion"], Is.GreaterThan(1));
+                var archive = new BoardPoolPublication.Archive();
+                Assert.That(() => { archive.Add(original); archive.Add(generated); archive.Add(recreated); }, Throws.Nothing);
+                Assert.That(archive.Count, Is.EqualTo(3));
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        /// <summary>Missing files and failed saves never erase immutable content evidence before a changed same-version candidate returns.</summary>
+        [Test]
+        public void RefreshCannotForgetRemovedTemplateBeforeChangedVersionReturns()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "HB-PoolRefreshHistory-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                var board = BoardTemplateDocument.ReadTemplate(Minimal().ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+                string boardPath = store.NamedBoardPath("Candidate");
+                Assert.That(store.Save(board, boardPath).Succeeded, Is.True);
+                string world = File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json"));
+                var authoring = new BoardPoolAuthoring();
+                authoring.Create(store, world, "road.shelter-warm-up", "refresh.route");
+                string segment = WorldDefinitionJson.Deserialize(world).Edges.Single(edge => edge.EdgeId == "road.shelter-warm-up").Segments[1].SegmentId;
+                authoring.SetSource(segment, "pool");
+                authoring.AddEntry(segment, "draft.shared", 1, "base");
+                string publicationPath = Path.Combine(root, "route.pool.json");
+                Assert.That(authoring.Save(store, publicationPath).Succeeded, Is.True);
+                string publicationBytes = File.ReadAllText(publicationPath);
+                File.Delete(boardPath);
+                authoring.RefreshLibrary(store);
+                Assert.That(authoring.Templates.Single(), Is.EqualTo(board.ToJson()));
+                Assert.That(authoring.Save(store).Status, Is.EqualTo(BoardDocumentSaveStatus.Invalid));
+                JObject changed = board.Snapshot();
+                changed["outcomes"][0]["name"] = "Changed after removal";
+                File.WriteAllText(boardPath, changed.ToString());
+                Assert.That(() => authoring.RefreshLibrary(store), Throws.InvalidOperationException);
+                Assert.That(() => authoring.Save(store), Throws.InvalidOperationException);
+                Assert.That(() => authoring.CaptureSaved(store, out _), Throws.InvalidOperationException);
+                Assert.That(File.ReadAllText(publicationPath), Is.EqualTo(publicationBytes));
+                Assert.That(authoring.Templates.Single(), Is.EqualTo(board.ToJson()));
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        /// <summary>Reopening retains archived exact artifacts; changing a map beneath the same tuple cannot silently create a new publication hash.</summary>
+        [Test]
+        public void SavedPoolEnvelopeRetainsExactArtifactsAcrossReopen()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "HB-PoolArchiveReopen-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                var board = BoardTemplateDocument.ReadTemplate(Minimal().ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+                string boardPath = store.NamedBoardPath("Candidate");
+                Assert.That(store.Save(board, boardPath).Succeeded, Is.True);
+                string world = File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json"));
+                var authoring = new BoardPoolAuthoring();
+                authoring.Create(store, world, "road.shelter-warm-up", "archived.route");
+                string segment = WorldDefinitionJson.Deserialize(world).Edges.Single(edge => edge.EdgeId == "road.shelter-warm-up").Segments[1].SegmentId;
+                authoring.SetSource(segment, "pool");
+                authoring.AddEntry(segment, "draft.shared", 1, "base");
+                string path = Path.Combine(root, "route.pool.json");
+                Assert.That(authoring.Save(store, path).Succeeded, Is.True);
+                string hash = authoring.CaptureSaved(store, out _).ContentHash;
+                var reopened = new BoardPoolAuthoring();
+                reopened.Open(store, path, world);
+                Assert.That(reopened.CaptureSaved(store, out _).ContentHash, Is.EqualTo(hash));
+                JObject changed = board.Snapshot();
+                changed["outcomes"][0]["name"] = "Different payload under the same version";
+                File.WriteAllText(boardPath, changed.ToString());
+                var afterChange = new BoardPoolAuthoring();
+                afterChange.Open(store, path, world);
+                Assert.That(afterChange.Document.ToJson(), Is.EqualTo(authoring.Document.ToJson()));
+                Assert.That(afterChange.Templates.Single(), Is.EqualTo(board.ToJson()));
+                Assert.That(() => afterChange.CaptureSaved(store, out _), Throws.InvalidOperationException);
+                Assert.That(() => afterChange.RefreshLibrary(store), Throws.InvalidOperationException);
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        /// <summary>A missing live library candidate cannot be saved using stale captured data; the invalid draft and undo remain recoverable.</summary>
+        [Test]
+        public void PoolSaveRechecksLibraryWithoutDiscardingMembership()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "HB-PoolMissingSave-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                var board = BoardTemplateDocument.ReadTemplate(Minimal().ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+                string path = store.NamedBoardPath("Candidate");
+                Assert.That(store.Save(board, path).Succeeded, Is.True);
+                string world = File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json"));
+                var authoring = new BoardPoolAuthoring();
+                authoring.Create(store, world, "road.shelter-warm-up", "live.route");
+                string segment = WorldDefinitionJson.Deserialize(world).Edges.Single(edge => edge.EdgeId == "road.shelter-warm-up").Segments[1].SegmentId;
+                authoring.SetSource(segment, "pool");
+                authoring.AddEntry(segment, "draft.shared", 1, "base");
+                File.Delete(path);
+                Assert.That(authoring.Save(store, Path.Combine(root, "route.pool.json")).Status, Is.EqualTo(BoardDocumentSaveStatus.Invalid));
+                Assert.That(authoring.Document.Snapshot()["sources"][0]["entries"].Count(), Is.EqualTo(1));
+                Assert.That(authoring.Document.CanUndo, Is.True);
+                Assert.That(authoring.Document.IsDirty, Is.True);
+                Assert.That(File.Exists(Path.Combine(root, "route.pool.json")), Is.False);
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        /// <summary>Explicit reuse across two segment pools preserves the grid and exact versions, and removal/undo do not silently generate.</summary>
+        [Test]
+        public void PoolMembershipReuseAndSavedVersioningAreExplicit()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "HB-PoolMembership-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var catalog = OrdinaryBoardContent.CreateAuthoringCatalog();
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                var board = BoardTemplateDocument.ReadTemplate(Minimal().ToString(), catalog);
+                Assert.That(store.Save(board, store.NamedBoardPath("Reusable clearing")).Succeeded, Is.True);
+                string grid = board.ToJson();
+                string worldJson = File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json"));
+                var edge = WorldDefinitionJson.Deserialize(worldJson).Edges.Single(candidate => candidate.EdgeId == "road.shelter-warm-up");
+                var authoring = new BoardPoolAuthoring();
+                authoring.Create(store, worldJson, edge.EdgeId, "explicit.route");
+                foreach (var segment in edge.Segments.Skip(1))
+                {
+                    authoring.SetSource(segment.SegmentId, "pool");
+                    authoring.AddEntry(segment.SegmentId, "draft.shared", 1, "base");
+                }
+                Assert.That(authoring.Document.Snapshot()["sources"].Count(), Is.EqualTo(2));
+                Assert.That(() => authoring.AddEntry(edge.Segments[1].SegmentId, "draft.shared", 1, "base"), Throws.ArgumentException);
+                Assert.That(() => authoring.AddEntry(edge.Segments[1].SegmentId, "draft.shared", 99, "base"), Throws.ArgumentException);
+                Assert.That(() => authoring.AddEntry(edge.Segments[1].SegmentId, "draft.shared", 1, "missing"), Throws.InstanceOf<ArgumentException>());
+                Assert.That(authoring.Save(store, Path.Combine(root, "route.pool.json")).Succeeded, Is.True);
+                string saved = authoring.Document.ToJson();
+                authoring.RemoveEntry(edge.Segments[1].SegmentId, (JObject)authoring.Document.Snapshot()["sources"][0]["entries"][0]);
+                Assert.That((int)authoring.Document.Snapshot()["publicationVersion"], Is.EqualTo(2));
+                Assert.That(authoring.Document.Diagnostics, Is.Not.Empty);
+                Assert.That(authoring.Document.Undo(), Is.True);
+                Assert.That(authoring.Document.ToJson(), Is.EqualTo(saved));
+                Assert.That(authoring.Document.IsDirty, Is.False);
+                Assert.That(authoring.CaptureSaved(store, out _).ToJson(), Is.EqualTo(saved));
+                Assert.That(authoring.Document.Undo(), Is.True);
+                authoring.SetSource(edge.Segments[2].SegmentId, "generated");
+                Assert.That((int)authoring.Document.Snapshot()["publicationVersion"], Is.EqualTo(2), "Undo behind the saved checkpoint must not reuse its version for changed content.");
+                Assert.That(authoring.Save(store).Succeeded, Is.True);
+                Assert.That(board.ToJson(), Is.EqualTo(grid));
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        /// <summary>Repeated preview is side-effect free and Start uses the identical run identity, seed and choices.</summary>
+        [Test]
+        public void PoolRoutePreviewAndStartUseIdenticalPinnedPlan()
+        {
+            string worldJson = File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json"));
+            var world = WorldDefinitionJson.Deserialize(worldJson);
+            var edge = world.Edges.Single(candidate => candidate.EdgeId == "road.shelter-warm-up");
+            string[] templates = { Minimal().ToString() };
+            var document = BoardTemplateDocument.NewPool(worldJson, edge.EdgeId, "preview.route", templates, OrdinaryBoardContent.CreateAuthoringCatalog());
+            document.Edit(data => ((JArray)data["sources"]).Add(new JObject
+            {
+                ["segmentId"] = edge.Segments[1].SegmentId, ["generationConfigurationId"] = edge.Segments[1].GenerationConfigurationId,
+                ["generationVersion"] = edge.Segments[1].GenerationVersion, ["poolId"] = "middle.pool", ["poolVersion"] = 1,
+                ["entries"] = new JArray(new JObject { ["templateId"] = "draft.shared", ["templateVersion"] = 1, ["variantId"] = "base" })
+            }));
+            string manifest = document.ToJson();
+            string root = BoardAuthoringTestContext.CreateSaveRootPath();
+            try
+            {
+                var first = BoardAuthoringTestContext.PreviewPoolRoute(worldJson, manifest, templates, 7, 88, 999, true);
+                var repeated = BoardAuthoringTestContext.PreviewPoolRoute(worldJson, manifest, templates, 7, 88, 999, true);
+                string expected = HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeRun(first);
+                Assert.That(HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeRun(repeated), Is.EqualTo(expected));
+                Assert.That(BoardAuthoringTestContext.IsRequested, Is.False);
+                Assert.That(Directory.Exists(root), Is.False);
+                var context = BoardAuthoringTestContext.PreparePoolRoute(worldJson, manifest, templates, 7, 88, 999, true, root);
+                Assert.That(HallowBlaze.Core.Persistence.PersistenceJsonSerializer.SerializeRun(context.CreateInitialRun()), Is.EqualTo(expected));
+                Assert.That(File.ReadAllText(Path.Combine(root, "pool-publication.json")), Is.EqualTo(manifest));
+                Assert.That(() => BoardAuthoringTestContext.PreparePoolRoute(worldJson, manifest, templates, 8, 88, 999, true,
+                    BoardAuthoringTestContext.CreateSaveRootPath()), Throws.InvalidOperationException);
+                first.TryConsumeIntro(first.ActiveLeg.LegId);
+                first.TryAdvanceSegment(first.ActiveLeg.LegId, first.ActiveLeg.CurrentSegment.SegmentId);
+                var request = HallowBlaze.Core.Session.BoardRequest.CreateFromRun(first, world);
+                Assert.That(context.IsSharedBoard(request), Is.True);
+                Assert.That(context.CreateBoard(request, first).TemplateId, Is.EqualTo("draft.shared"));
+                Assert.That(first.ActiveLandmark, Is.Null);
+            }
+            finally { BoardAuthoringTestContext.Cancel(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
+        /// <summary>Pool persistence and undo are independent of a reused board; stale files and invalid membership cannot be saved.</summary>
+        [Test]
+        public void PoolDraftRoundTripUndoAndConflictDoNotChangeGrid()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "HB-PoolDraft-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                string worldJson = File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json"));
+                var world = WorldDefinitionJson.Deserialize(worldJson);
+                var edge = world.Edges.Single(candidate => candidate.EdgeId == "road.shelter-warm-up");
+                var catalog = OrdinaryBoardContent.CreateAuthoringCatalog();
+                var board = BoardTemplateDocument.ReadTemplate(Minimal().ToString(), catalog);
+                string gridState = board.ToJson();
+                var pool = BoardTemplateDocument.NewPool(worldJson, edge.EdgeId, "draft.route-pool", new[] { board.ToJson() }, catalog);
+                string generated = pool.ToJson();
+                pool.Edit(data => ((JArray)data["sources"]).Add(new JObject
+                {
+                    ["segmentId"] = edge.Segments[1].SegmentId,
+                    ["generationConfigurationId"] = edge.Segments[1].GenerationConfigurationId,
+                    ["generationVersion"] = edge.Segments[1].GenerationVersion,
+                    ["poolId"] = "pool.middle", ["poolVersion"] = 1,
+                    ["entries"] = new JArray(new JObject { ["templateId"] = "draft.shared", ["templateVersion"] = 1, ["variantId"] = "base" })
+                }));
+                string pooled = pool.ToJson();
+                Assert.That(pool.Undo(), Is.True);
+                Assert.That(pool.ToJson(), Is.EqualTo(generated));
+                Assert.That(pool.Redo(), Is.True);
+                Assert.That(pool.ToJson(), Is.EqualTo(pooled));
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                string path = Path.Combine(root, "opening.pool.json");
+                Assert.That(store.Save(pool, path).Succeeded, Is.True);
+                var reopened = store.OpenPool(path, worldJson, new[] { board.ToJson() }, catalog);
+                Assert.That(reopened.IsPool, Is.True);
+                Assert.That(reopened.IsDirty, Is.False);
+                Assert.That(reopened.ToJson(), Is.EqualTo(pooled));
+                reopened.Edit(data => data["publicationVersion"] = 2);
+                var capture = typeof(BoardTemplateDocument).GetMethod("CaptureEditorState", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                var restore = typeof(BoardTemplateDocument).GetMethod("RestoreEditorState", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+                string recovery = capture.Invoke(reopened, null).ToString();
+                var restored = (BoardTemplateDocument)restore.Invoke(null, new object[] { JObject.Parse(recovery), catalog });
+                Assert.That(capture.Invoke(restored, null).ToString(), Is.EqualTo(recovery));
+                File.AppendAllText(path, " ");
+                Assert.That(store.Save(reopened).Status, Is.EqualTo(BoardDocumentSaveStatus.Conflict));
+                Assert.That(reopened.IsDirty, Is.True);
+                Assert.That(reopened.CanUndo, Is.True);
+                reopened.Edit(data => ((JArray)data["sources"][0]["entries"]).RemoveAll());
+                Assert.That(reopened.Diagnostics, Is.Not.Empty);
+                Assert.That(store.Save(reopened, Path.Combine(root, "invalid.pool.json")).Status, Is.EqualTo(BoardDocumentSaveStatus.Invalid));
+                Assert.That(board.ToJson(), Is.EqualTo(gridState));
+                Assert.That(board.CanUndo, Is.False);
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
         /// <summary>An open floor/player/exit board is valid without an artificial second goal or generator perimeter.</summary>
         [Test]
         public void SingleExitOpenBoardIsAcceptedWithoutWeakeningLegacyReader()

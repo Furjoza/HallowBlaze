@@ -19,6 +19,107 @@ namespace HallowBlaze.Tests.EditMode
     /// <summary>Verifies visual authoring gestures preserve the document contract and existing board identities.</summary>
     public sealed class BoardAuthoringWindowTests
     {
+        /// <summary>Save As retains recoverable pool membership/history after an external conflict or replacement of an unavailable draft root.</summary>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void PoolSaveAsRecoversConflictOrUnavailableRootWithoutDiscard(bool unavailable)
+        {
+            WithWindow((window, root) =>
+            {
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                window.Pools.Create(store, window.Assignment.WorldJson, "road.shelter-warm-up", "save-as.route");
+                string path = Path.Combine(root, "original.pool.json");
+                Assert.That(window.TrySavePool(path), Is.True, window.LastError);
+                window.Pools.Document.Edit(data => data["publicationVersion"] = 2);
+                string before = window.Pools.Document.ToJson();
+                string replacement = Path.Combine(root, "replacement");
+                string unavailableRoot = root + "-unavailable";
+                try
+                {
+                    if (unavailable)
+                    {
+                        Directory.Move(root, unavailableRoot);
+                        Directory.CreateDirectory(root);
+                        Directory.CreateDirectory(replacement);
+                        Assert.That(window.TryConfigureRoot(replacement), Is.True);
+                    }
+                    else File.AppendAllText(path, " ");
+                    Assert.That(window.TrySavePool(), Is.False);
+                    Assert.That(window.Pools.Document.IsDirty, Is.True);
+                    Assert.That(window.Pools.Document.CanUndo, Is.True);
+                    string target = Path.Combine(unavailable ? replacement : root, "recovered.pool.json");
+                    Assert.That(window.TrySavePool(target), Is.True, window.LastError);
+                    Assert.That(window.Pools.Document.SourcePath, Is.EqualTo(target));
+                    Assert.That(window.Pools.Document.ToJson(), Is.EqualTo(before));
+                    Assert.That(window.Pools.Document.IsDirty, Is.False);
+                    Assert.That(window.Pools.Document.CanUndo, Is.True);
+                    Assert.That(window.Pools.Document.Undo(), Is.True);
+                    Assert.That((int)window.Pools.Document.Snapshot()["publicationVersion"], Is.EqualTo(1));
+                }
+                finally { if (Directory.Exists(unavailableRoot)) Directory.Delete(unavailableRoot, true); }
+            });
+        }
+
+        /// <summary>Wide/narrow native source controls add an explicit candidate and route keyboard undo only to the pool document.</summary>
+        [UnityTest]
+        public IEnumerator PoolSourceControlsUsePointerAndIndependentKeyboardUndo()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "HB-PoolUI-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            var window = ScriptableObject.CreateInstance<BoardAuthoringWindow>();
+            window.ShowUtility();
+            try
+            {
+                Assert.That(window.TryConfigureRoot(root), Is.True);
+                string path = Path.Combine(root, "North clearing.json");
+                File.WriteAllText(path, UnifiedBoardAuthoringTests.Minimal().ToString());
+                Assert.That(window.TryOpen(path, () => BoardDocumentDecision.Discard), Is.True);
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                string grid = window.Document.ToJson();
+                string evidence = Path.Combine(Path.GetTempPath(), "HB-M610b-native-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(evidence);
+                foreach (int width in new[] { 1280, 640 })
+                {
+                    window.Pools.Create(store, window.Assignment.WorldJson, "road.shelter-warm-up", "ui.route");
+                    window.position = new Rect(40, 50, width, 1000);
+                    typeof(BoardAuthoringWindow).GetField("scroll", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(window, Vector2.zero);
+                    yield return null;
+                    DrawWindow(window);
+                    Rect modes = (Rect)typeof(BoardPoolAuthoring).GetField("modeRect", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(window.Pools);
+                    Assert.That(modes.xMin, Is.GreaterThanOrEqualTo(0));
+                    Assert.That(modes.xMax, Is.LessThanOrEqualTo(window.position.width));
+                    Assert.That(modes.yMax, Is.LessThan(window.position.height));
+                    ClickWindow(window, new Vector2(modes.x + modes.width * 5 / 6, modes.center.y));
+                    yield return WaitForEditor(() => window.Pools.Document.Snapshot()["sources"].Count() == 1);
+                    Assert.That(window.Pools.Document.Snapshot()["sources"].Count(), Is.EqualTo(1));
+                    DrawWindow(window);
+                    var labels = (GUIContent[])typeof(BoardPoolAuthoring).GetField("candidateLabels", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(window.Pools);
+                    Assert.That(labels.Select(label => label.text), Is.EqualTo(new[] { "North clearing | v1 | base" }));
+                    Assert.That(labels[0].text, Does.Not.Contain("/"), "Unity must not split the saved name into technical ID/version submenus.");
+                    Assert.That(labels[0].tooltip, Is.EqualTo("draft.shared/1 | base"));
+                    Rect add = (Rect)typeof(BoardPoolAuthoring).GetField("addRect", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(window.Pools);
+                    ClickWindow(window, add.center);
+                    yield return WaitForEditor(() => window.Pools.Document.Diagnostics.Count == 0);
+                    Assert.That(window.Pools.Document.Snapshot()["sources"][0]["entries"].Count(), Is.EqualTo(1));
+                    window.Grid.Select(new GridPosition(0, 7));
+                    DrawWindow(window);
+                    CaptureWindow(window, Path.Combine(evidence, "sources-" + width + ".png"));
+                    SendKey(window, KeyCode.Z, EventModifiers.Control);
+                    yield return WaitForEditor(() => window.Pools.Document.Diagnostics.Count > 0);
+                    Assert.That(window.Pools.Document.Snapshot()["sources"][0]["entries"].Count(), Is.Zero);
+                    DrawWindow(window);
+                    SendKey(window, KeyCode.Y, EventModifiers.Control);
+                    yield return WaitForEditor(() => window.Pools.Document.Diagnostics.Count == 0);
+                    Assert.That(window.Pools.Document.Snapshot()["sources"][0]["entries"].Count(), Is.EqualTo(1));
+                    Assert.That(window.Document.ToJson(), Is.EqualTo(grid));
+                    Assert.That(window.Document.CanUndo, Is.False);
+                    LogAssert.NoUnexpectedReceived();
+                }
+                TestContext.WriteLine("Native screenshots: " + evidence);
+            }
+            finally { window.CloseAfterDecision(BoardDocumentDecision.Discard); Directory.Delete(root, true); }
+        }
+
         /// <summary>North is screen top; labels and outside pixels cannot activate a board cell.</summary>
         [Test]
         public void CanvasUsesXYWithNorthAtTheTop()
