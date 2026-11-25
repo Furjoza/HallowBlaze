@@ -43,24 +43,43 @@ namespace HallowBlaze.Core.Persistence
             return ProfileStateMapper.FromDto(dto);
         }
 
-        /// <summary>Writes a validated schema v7 resource/selection/landmark/equipment/travel boundary; profile serialization is unchanged.</summary>
+        /// <summary>Writes the validated v8 inventory/resource/selection/landmark/equipment/travel boundary; profile is unchanged.</summary>
         public static string SerializeRun(RunState run)
         {
             return SerializeTravelRun(run);
         }
 
-        /// <summary>Reads v1-v7 runs, clamping legacy resources while preserving tools, choices and the original layout RNG.</summary>
+        /// <summary>Reads v1-v8 with empty default item content; nonempty v8 requires the trusted-content overload.</summary>
         public static RunState DeserializeRun(string json)
         {
             return DeserializeTravelRun(json);
         }
 
-        /// <summary>Writes one bounded satiety value and resource configuration with the retained boundary; no mid-board snapshot.</summary>
-        public static string SerializeTravelRun(RunState run) => Serialize(RunStateV7Mapper.ToDto(run));
+        /// <summary>Reads v1-v8 using explicit trusted inventory definitions/effects; legacy saves receive empty inventory and revision zero.</summary>
+        /// <exception cref="ArgumentNullException">The trusted content is null.</exception>
+        /// <exception cref="PersistenceDataException">The schema, boundary or any required inventory reference is invalid.</exception>
+        public static RunState DeserializeRun(string json, InventoryContent content) => DeserializeTravelRun(json, content);
 
-        /// <summary>Strictly reads v7 or migrates v1-v6 food/health to accepted caps without changing RNG, travel, files or profiles.</summary>
-        /// <exception cref="PersistenceDataException">Schema, JSON structure or travel invariants are invalid.</exception>
-        public static RunState DeserializeTravelRun(string json)
+        /// <summary>Writes all carried ownership and one resource configuration; no mid-board snapshot or draft is implied.</summary>
+        public static string SerializeTravelRun(RunState run) => Serialize(RunStateV8Mapper.ToDto(run));
+
+        /// <summary>Reads v1-v8 with empty default item content, retaining historical resource and RNG migration rules.</summary>
+        /// <exception cref="PersistenceDataException">Schema, JSON structure or required references are invalid.</exception>
+        public static RunState DeserializeTravelRun(string json) => DeserializeTravelRun(json, InventoryContent.Empty);
+
+        /// <summary>Restores complete carried ownership against caller-supplied content; never drops unknown items or effects.</summary>
+        /// <exception cref="ArgumentNullException">The trusted content is null.</exception>
+        /// <exception cref="PersistenceDataException">Schema, JSON structure or required references are invalid.</exception>
+        public static RunState DeserializeTravelRun(string json, InventoryContent content)
+        {
+            if (content == null) throw new ArgumentNullException(nameof(content));
+            RunState run = ReadTravelRun(json, content);
+            if (!ReferenceEquals(run.InventoryContent, content))
+                run.RestoreInventoryState(content, run.InventoryRevision, run.Inventory.Placements);
+            return run;
+        }
+
+        private static RunState ReadTravelRun(string json, InventoryContent content)
         {
             JObject document = ParseDocument(json);
             int version = ReadSchemaVersion(document);
@@ -91,9 +110,14 @@ namespace HallowBlaze.Core.Persistence
                 ValidateTravelTokenTypes(document, typeof(RunStateV6Dto), string.Empty);
                 return RunStateV6Mapper.FromDto(Deserialize<RunStateV6Dto>(json, version));
             }
-            DtoValidation.RequireCurrentSchemaVersion(version, RunStateV7Dto.CurrentSchemaVersion);
-            ValidateTravelTokenTypes(document, typeof(RunStateV7Dto), string.Empty);
-            return RunStateV7Mapper.FromDto(Deserialize<RunStateV7Dto>(json, version));
+            if (version == RunStateV7Dto.CurrentSchemaVersion)
+            {
+                ValidateTravelTokenTypes(document, typeof(RunStateV7Dto), string.Empty);
+                return RunStateV7Mapper.FromDto(Deserialize<RunStateV7Dto>(json, version));
+            }
+            DtoValidation.RequireCurrentSchemaVersion(version, RunStateV8Dto.CurrentSchemaVersion);
+            ValidateTravelTokenTypes(document, typeof(RunStateV8Dto), string.Empty);
+            return RunStateV8Mapper.FromDto(Deserialize<RunStateV8Dto>(json, version), content);
         }
 
         private static void ValidateTravelTokenTypes(JToken token, Type expectedType, string path)
@@ -105,6 +129,9 @@ namespace HallowBlaze.Core.Persistence
             {
                 JTokenType required = expectedType == typeof(int) ? JTokenType.Integer : JTokenType.String;
                 if (token.Type != required)
+                    DtoValidation.ThrowInvalidValue(path);
+                if (expectedType == typeof(int) && !int.TryParse(token.ToString(Formatting.None),
+                    System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out _))
                     DtoValidation.ThrowInvalidValue(path);
                 return;
             }

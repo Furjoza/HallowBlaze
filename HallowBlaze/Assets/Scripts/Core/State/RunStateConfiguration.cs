@@ -11,6 +11,7 @@ namespace HallowBlaze.Core.State
         /// <param name="initialDay">Nonnegative completed day count.</param>
         /// <param name="initialWorldNodeId">Stable reached-checkpoint identity.</param>
         /// <param name="resourceRules">Persisted limits and costs; null selects the accepted initial balance.</param>
+        /// <param name="inventoryContent">Trusted immutable item/effect publication; null keeps the initial empty content.</param>
         /// <exception cref="ArgumentOutOfRangeException">Resources or the day are outside their ranges.</exception>
         /// <exception cref="ArgumentException">The checkpoint ID is invalid.</exception>
         public RunStateConfiguration(
@@ -18,9 +19,11 @@ namespace HallowBlaze.Core.State
             int initialSatiety,
             int initialDay,
             string initialWorldNodeId,
-            ResourceRules resourceRules = null)
+            ResourceRules resourceRules = null,
+            InventoryContent inventoryContent = null)
         {
             ResourceRules = resourceRules ?? ResourceRules.Default;
+            InventoryContent = inventoryContent ?? InventoryContent.Empty;
             if (initialHealth < 0 || initialHealth > ResourceRules.MaximumHealth)
                 throw new ArgumentOutOfRangeException(nameof(initialHealth));
             if (initialSatiety < 0 || initialSatiety > ResourceRules.MaximumSatiety)
@@ -48,5 +51,7 @@ namespace HallowBlaze.Core.State
         public string InitialWorldNodeId { get; }
         /// <summary>Gets the immutable caps and action-cost thresholds retained by this run.</summary>
         public ResourceRules ResourceRules { get; }
+        /// <summary>Gets trusted carried-item content; starting contents are empty and never inferred from UI.</summary>
+        public InventoryContent InventoryContent { get; }
     }
 }

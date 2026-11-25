@@ -9,6 +9,76 @@ namespace HallowBlaze.Tests.EditMode
     public sealed class InventoryStateTests
     {
         [Test]
+        public void RunOwnsEmptyInventoryAndNoOpCommitAdvancesOnceWithoutSpendingResources()
+        {
+            RunState run = NewInventoryRun();
+            Assert.That(run.Inventory.Placements, Is.Empty);
+            Assert.That(run.InventoryRevision, Is.Zero);
+            Assert.That(run.TryCommitInventory(0, Array.Empty<InventoryPlacement>(), out _), Is.True);
+            Assert.That(run.InventoryRevision, Is.EqualTo(1));
+            InventoryState accepted = run.Inventory;
+            Assert.That(run.TryCommitInventory(0, Array.Empty<InventoryPlacement>(), out InventoryDiagnostic stale), Is.False);
+            Assert.That(stale.Code, Is.EqualTo(InventoryErrorCode.StaleRevision));
+            Assert.That(run.Inventory, Is.SameAs(accepted));
+            Assert.That(run.InventoryRevision, Is.EqualTo(1));
+            Assert.That(run.Health, Is.EqualTo(100));
+            Assert.That(run.Satiety, Is.EqualTo(100));
+            Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
+        }
+
+        [Test]
+        public void RunCommitAndRestoreAreAtomicAndNewRunResetsOnlyItsOwnInventory()
+        {
+            RunState first = NewInventoryRun();
+            RunState second = NewInventoryRun();
+            Assert.That(first.TryCommitInventory(0, new[] { At("berry", "berries") }, out _), Is.True);
+            InventoryState before = first.Inventory;
+            Assert.That(first.TryCommitInventory(1, new[] { At("a", "berries"), At("b", "berries") },
+                out InventoryDiagnostic overlap), Is.False);
+            Assert.That(overlap.Code, Is.EqualTo(InventoryErrorCode.Overlap));
+            Assert.That(first.Inventory, Is.SameAs(before));
+            Assert.That(first.InventoryRevision, Is.EqualTo(1));
+            Assert.Throws<InventoryValidationException>(() => first.RestoreInventoryState(first.InventoryContent, 7,
+                new[] { At("unknown", "missing") }));
+            Assert.That(first.Inventory, Is.SameAs(before));
+            Assert.That(first.InventoryRevision, Is.EqualTo(1));
+            second.RestoreInventoryState(first.InventoryContent, 5, first.Inventory.Placements);
+            Assert.That(second.Inventory, Is.Not.SameAs(first.Inventory));
+            first.Reset("fresh", 11, new RunStateConfiguration(100, 100, 0, "start"));
+            Assert.That(first.InventoryRevision, Is.Zero);
+            Assert.That(first.Inventory.Placements, Is.Empty);
+            Assert.That(second.InventoryRevision, Is.EqualTo(5));
+            Assert.That(second.Inventory.Placements.Single().Item.InstanceId, Is.EqualTo("berry"));
+        }
+
+        [Test]
+        public void RequiredEffectsTerminalStateAndRevisionExhaustionRejectWithoutMutation()
+        {
+            RunState run = NewInventoryRun();
+            var missingEffect = new InventoryContent(Catalog(),
+                new ConsumableEffectCatalog(Array.Empty<ConsumableEffectDefinition>()));
+            Assert.Throws<InventoryValidationException>(() => run.RestoreInventoryState(missingEffect, 0,
+                new[] { At("berry", "berries") }));
+            Assert.That(run.Inventory.Placements, Is.Empty);
+            run.RestoreInventoryState(run.InventoryContent, int.MaxValue, Array.Empty<InventoryPlacement>());
+            Assert.That(run.TryCommitInventory(int.MaxValue, Array.Empty<InventoryPlacement>(), out InventoryDiagnostic exhausted), Is.False);
+            Assert.That(exhausted.Code, Is.EqualTo(InventoryErrorCode.RevisionExhausted));
+            Assert.That(run.InventoryRevision, Is.EqualTo(int.MaxValue));
+            run.MarkDead();
+            Assert.That(run.TryCommitInventory(int.MaxValue, Array.Empty<InventoryPlacement>(), out InventoryDiagnostic terminal), Is.False);
+            Assert.That(terminal.Code, Is.EqualTo(InventoryErrorCode.InvalidState));
+        }
+
+        private static RunState NewInventoryRun()
+        {
+            var content = new InventoryContent(Catalog(), new ConsumableEffectCatalog(new[]
+            {
+                new ConsumableEffectDefinition("restore.satiety", ConsumableResource.Satiety, 10)
+            }));
+            return new RunState("inventory-run", 103, new RunStateConfiguration(100, 100, 0, "start", inventoryContent: content));
+        }
+
+        [Test]
         public void NewBackpacksHaveNineEmptyCellsTwoEmptyPocketsAndNoToolContainers()
         {
             ItemCatalog catalog = Catalog();

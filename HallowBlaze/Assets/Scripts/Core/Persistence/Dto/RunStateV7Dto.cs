@@ -2,9 +2,9 @@ using Newtonsoft.Json;
 
 namespace HallowBlaze.Core.Persistence.Dto
 {
-    /// <summary>Current run boundary with one satiety field and explicit resource rules, without historical Food inheritance.</summary>
+    /// <summary>Resource-aware v7 boundary retained for migration and the inventory-aware extension, without Food inheritance.</summary>
     [JsonObject(MemberSerialization.OptIn)]
-    public sealed class RunStateV7Dto
+    public class RunStateV7Dto
     {
         /// <summary>Current resource-aware schema; profile and historical schemas are unchanged.</summary>
         public const int CurrentSchemaVersion = 7;

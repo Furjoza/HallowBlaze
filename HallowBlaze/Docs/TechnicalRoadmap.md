@@ -8404,7 +8404,7 @@ Vertical slice is complete only after `Accept` of `M8.8`. Implementing the featu
 
 # M10 — Spatial Inventory and Resource Pressure
 
-M10 is intentionally listed last. Its normal activation requires an explicit `proceed to M10` verdict from `M8.8` or a later explicit owner override; optional M9 work is not required. On 2026-11-25 the owner explicitly activated `M10.1` ahead of the no-backpack playtest, authorized its Unity validation, and then requested the next task, `M10.2`. Validation is now scoped to runtime rather than authoring-window tests, using headless Unity where possible. These overrides do not close the outstanding human playtest/release gates or activate subsequent M10 cards.
+M10 is intentionally listed last. Its normal activation requires an explicit `proceed to M10` verdict from `M8.8` or a later explicit owner override; optional M9 work is not required. On 2026-11-25 the owner explicitly activated `M10.1` ahead of the no-backpack playtest, authorized its Unity validation, and then requested the next task, `M10.2`. On 2026-11-26 the owner requested continuation to `M10.3`. Validation is scoped to runtime rather than authoring-window tests, using headless Unity. These overrides do not close the outstanding human playtest/release gates or activate M10.4 and later cards.
 
 ---
 
@@ -8531,13 +8531,13 @@ flowchart LR
 
 ## `M10.3` - Inventory persistence and RunState integration
 
-**Status:** `Deferred`
+**Status:** `Done` - 2026-11-26; scoped runtime validation and independent review passed.
 **Priority:** P1
 **Related contract:** sections 6, 16, 21.3–21.4, and 27.4/27.9.
 
 **Rationale:** A carried item is a run resource. Versioned saves and explicit save/load scenarios must prevent duplication, loss, or changed layouts after Continue. Portable replay is not required to prove those invariants.
 
-**Current behavior:** `RunState`/run DTO store resources and two tool slots but no item instances, spatial placements, pockets, or inventory revision. Portable replay is deferred to M9.7.
+**Current behavior:** Every `RunState` owns an immutable inventory snapshot, trusted item/effect content and a monotonic revision. Run schema v8 persists instances, main-grid anchors and pocket references alongside all v7 fields; schemas v1-v7 migrate with empty containers and revision zero. Missing required content fails without substituting an older backup. No carrying command or production carried-item publication is active; portable replay remains deferred to M9.7.
 
 **Expected outcome:** Every active run owns one empty-or-populated `InventoryState` and a monotonic inventory revision. Any accepted operation that changes inventory advances it, and every accepted `ManageInventoryCommand` advances it even when its final layout/actions are a no-op. Run DTO, validation, backup/recovery, and explicit round-trip scenarios preserve item instances, main-grid placements, pocket references, and revision using stable IDs only. Portable replay coverage is conditional on M9.7 acceptance.
 
@@ -8564,6 +8564,12 @@ flowchart LR
 **Save and compatibility impact:** New run schema. Profile schema is unchanged. Mid-board modal/draft state is intentionally absent; M9.1 must include committed inventory if it is implemented later.
 
 **Required handoff:** Complete domain-to-DTO field map, migration/recovery matrix, explicit round-trip evidence, and redacted sample save with every container represented. Include diagnostic hash evidence only for an accepted M9.7 extension.
+
+**Implemented boundary (2026-11-26):** `RunState.TryCommitInventory` validates a complete layout at the expected revision before mutation and advances exactly once, including an accepted no-op. Stale, invalid, terminal/zero-resource and exhausted attempts are free and unchanged. Restore validates before mutation without advancing the saved revision; new-run reset starts empty at zero. Immutable `InventoryContent` supplies trusted items/effects and defaults to empty until carried content is explicitly integrated. Schema v8 gives each unique instance exactly one grid/pocket owner; tool slots, resources/rules, travel, RNG, landmarks and pinned plans remain separate and retained. Unknown content fails closed rather than dropping items, rewriting saves or returning an older empty backup. Atomic store, checkpoint ownership and profile format are unchanged.
+
+**Field map and compatibility evidence:** [M10.3 Inventory Persistence](Testing.md#m103-inventory-persistence) documents every domain/DTO field, revision semantics, caller-supplied content, the v1-v8 migration/recovery matrix and a complete synthetic save with every container. Focused Unity validation passed **327/327** runtime EditMode cases plus **3/3** real-scene Continue/terminal PlayMode cases, headless with no failed/skipped/inconclusive cases or compiler/unhandled errors. No authoring-window, graphical/full-suite or future command/turn/replay validation is claimed. M10.4 remains Deferred.
+
+**Review and completion (2026-11-26):** The configured read-only `reviewer`, invoked without a runtime model override, returned **PASS** with no material findings. It inspected the complete diff, new sources/metadata and actual final XML, including revision/no-op/stale semantics, exact ownership, retained v7 fields and missing-content no-fallback. Scope/baseline protection and the four Unity-generated metadata GUIDs passed integrity checks. Final closeout changes only this card's acceptance metadata; no new implementation card or broader release/human gate is activated.
 
 ---
 

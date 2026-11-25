@@ -34,7 +34,15 @@ namespace HallowBlaze.Core.State
         /// <summary>More than one item occupies a pocket.</summary>
         PocketOccupied,
         /// <summary>A repack adds, removes, or changes the definition of an owned instance.</summary>
-        ItemSetMismatch
+        ItemSetMismatch,
+        /// <summary>An owned definition refers to a required effect absent from the supplied content.</summary>
+        UnknownEffectId,
+        /// <summary>The expected revision no longer identifies the active inventory snapshot.</summary>
+        StaleRevision,
+        /// <summary>The revision cannot advance without reusing an already accepted value.</summary>
+        RevisionExhausted,
+        /// <summary>The run cannot accept inventory commits after a terminal outcome or zero resources.</summary>
+        InvalidState
     }
 
     /// <summary>Immutable rejection detail; a failed operation leaves its original inventory unchanged.</summary>

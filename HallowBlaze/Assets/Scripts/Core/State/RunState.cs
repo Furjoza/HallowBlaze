@@ -106,6 +106,9 @@ namespace HallowBlaze.Core.State
             ToolInstanceSequence = 0;
             WorldNodeId = configuration.InitialWorldNodeId;
             ResourceRules = configuration.ResourceRules;
+            InventoryContent = configuration.InventoryContent;
+            Inventory = InventoryState.CreateEmpty(InventoryContent.Items);
+            InventoryRevision = 0;
             Health = configuration.InitialHealth;
             Satiety = configuration.InitialSatiety;
             Status = RunStatus.Active;

@@ -105,10 +105,16 @@ namespace HallowBlaze.Tests.PlayMode
             GameSession firstSession = GetProperty<GameSession>(firstManager, "Session");
             RunState firstRun = firstSession.ActiveRun;
             Assert.That(firstRun, Is.Not.Null);
+            Assert.That(firstRun.Inventory.Placements, Is.Empty);
+            Assert.That(firstRun.InventoryRevision, Is.Zero);
+            Assert.That(firstRun.TryCommitInventory(0, firstRun.Inventory.Placements, out _), Is.True);
+            Assert.That(new FileSystemSaveStore(persistenceRoot).SaveRun(firstRun).IsSuccess, Is.True);
             string layoutHash = GetGameplayLayoutHash();
             Vector3Int playerStart = GetPlayerGridPosition();
             firstSession.ConsumeSatiety(15);
             firstSession.TakeDamage(10);
+            Assert.That(firstRun.TryCommitInventory(1, firstRun.Inventory.Placements, out _), Is.True);
+            Assert.That(firstRun.InventoryRevision, Is.EqualTo(2));
 
             string runId = firstRun.RunId;
             int day = firstRun.CurrentDay;
@@ -132,6 +138,9 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(continuedRun.CurrentDay, Is.EqualTo(day));
             Assert.That(continuedRun.Satiety, Is.EqualTo(100));
             Assert.That(continuedRun.Health, Is.EqualTo(100));
+            Assert.That(continuedRun.InventoryRevision, Is.EqualTo(1));
+            Assert.That(continuedRun.Inventory.Placements, Is.Empty);
+            Assert.That(continuedRun.Inventory, Is.Not.SameAs(firstRun.Inventory));
             string continuedLayoutHash = GetGameplayLayoutHash();
             Assert.That(continuedLayoutHash, Is.EqualTo(layoutHash));
             Assert.That(GetPlayerGridPosition(), Is.EqualTo(playerStart));
@@ -153,6 +162,9 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(repeatedRun.CurrentDay, Is.EqualTo(day));
             Assert.That(repeatedRun.Satiety, Is.EqualTo(100));
             Assert.That(repeatedRun.Health, Is.EqualTo(100));
+            Assert.That(repeatedRun.InventoryRevision, Is.EqualTo(1));
+            Assert.That(repeatedRun.Inventory.Placements, Is.Empty);
+            Assert.That(repeatedRun.Inventory, Is.Not.SameAs(continuedRun.Inventory));
             string repeatedLayoutHash = GetGameplayLayoutHash();
             Assert.That(repeatedLayoutHash, Is.EqualTo(layoutHash));
             Assert.That(GetPlayerGridPosition(), Is.EqualTo(playerStart));

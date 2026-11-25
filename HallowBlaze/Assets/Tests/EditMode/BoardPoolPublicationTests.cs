@@ -156,7 +156,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(publication.Resolve(run, Address(run)), Is.Null);
         }
 
-        /// <summary>Every active and unvisited choice survives v6 at Pending, intro-consumed and later segment boundaries.</summary>
+        /// <summary>Every active/unvisited choice and carried item survives the current schema at Pending, consumed and later boundaries.</summary>
         [TestCase(0)]
         [TestCase(1)]
         [TestCase(2)]
@@ -170,9 +170,11 @@ namespace HallowBlaze.Tests.EditMode
             var tool = run.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 3));
             run.EquipTool(0, tool);
             run.TrySpendToolCharge(0, tool.InstanceId);
+            InventoryContent content = PersistenceDtoTests.InventoryTestContent();
+            run.RestoreInventoryState(content, 33, PersistenceDtoTests.InventoryFullRun().Inventory.Placements);
             string json = PersistenceJsonSerializer.SerializeTravelRun(run);
-            Assert.That((int)JObject.Parse(json)["schemaVersion"], Is.EqualTo(6));
-            var restored = PersistenceJsonSerializer.DeserializeTravelRun(json);
+            Assert.That((int)JObject.Parse(json)["schemaVersion"], Is.EqualTo(8));
+            var restored = PersistenceJsonSerializer.DeserializeTravelRun(json, content);
             Assert.That(PersistenceJsonSerializer.SerializeTravelRun(restored), Is.EqualTo(json));
             Assert.That(restored.ActiveLeg.BoardPlan, Is.Not.SameAs(run.ActiveLeg.BoardPlan));
             Assert.That(Address(restored), Is.EqualTo(Address(run)));
@@ -180,6 +182,9 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(restored.Satiety, Is.EqualTo(run.Satiety));
             Assert.That(restored.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
             Assert.That(restored.ToolInstanceSequence, Is.EqualTo(run.ToolInstanceSequence));
+            Assert.That(restored.InventoryRevision, Is.EqualTo(33));
+            Assert.That(restored.Inventory.Placements, Has.Count.EqualTo(11));
+            Assert.That(restored.Inventory, Is.Not.SameAs(run.Inventory));
             Assert.That(publication.Resolve(restored, Address(restored))?.TemplateId, Is.EqualTo(publication.Resolve(run, Address(run))?.TemplateId));
         }
 
@@ -190,17 +195,16 @@ namespace HallowBlaze.Tests.EditMode
         [TestCase(5)]
         public void OlderTravelSchemasRemainWithoutPoolPlans(int schema)
         {
-            JObject data = JObject.Parse(PersistenceJsonSerializer.SerializeTravelRun(PublishedRun(7)));
-            data["schemaVersion"] = schema;
-            data.Property("boardSelectionPlan").Remove();
-            if (schema < 5) { data.Property("activeLandmark").Remove(); data.Property("completedLandmarks").Remove(); }
-            if (schema < 4)
+            RunState run = PublishedRun(7);
+            object dto;
+            switch (schema)
             {
-                data.Property("toolInstanceSequence").Remove();
-                data["toolSlots"] = new JArray(new JObject { ["toolId"] = "", ["remainingUses"] = 0 }, new JObject { ["toolId"] = "", ["remainingUses"] = 0 });
+                case 2: dto = RunStateV2Mapper.ToDto(run); break;
+                case 3: dto = RunStateV3Mapper.ToDto(run); break;
+                case 4: dto = RunStateV4Mapper.ToDto(run); break;
+                default: dto = RunStateV5Mapper.ToDto(run); break;
             }
-            if (schema < 3) { data.Property("randomAlgorithmId").Remove(); data.Property("randomAlgorithmVersion").Remove(); }
-            var restored = PersistenceJsonSerializer.DeserializeTravelRun(data.ToString());
+            var restored = PersistenceJsonSerializer.DeserializeTravelRun(JObject.FromObject(dto).ToString());
             Assert.That(restored.ActiveLeg.BoardPlan, Is.Null);
             Assert.That(restored.ActiveLeg.SegmentIndex, Is.Zero);
             Assert.That((string)JObject.Parse(PersistenceJsonSerializer.SerializeTravelRun(restored))["boardSelectionPlan"], Is.Null);
