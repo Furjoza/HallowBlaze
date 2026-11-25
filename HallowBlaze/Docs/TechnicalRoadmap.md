@@ -8404,14 +8404,14 @@ Vertical slice is complete only after `Accept` of `M8.8`. Implementing the featu
 
 # M10 — Spatial Inventory and Resource Pressure
 
-M10 is intentionally listed last and remains **Deferred** until the owner has played the complete no-backpack vertical slice. It may begin only after an explicit `proceed to M10` verdict from `M8.8` or a later explicit owner override. It does not require optional M9 work.
+M10 is intentionally listed last. Its normal activation requires an explicit `proceed to M10` verdict from `M8.8` or a later explicit owner override; optional M9 work is not required. On 2026-11-25 the owner explicitly activated the first task, `M10.1`, ahead of the no-backpack playtest and prohibited starting Unity for this implementation. This override does not close the outstanding human playtest/release gates or activate the remaining M10 cards.
 
 ---
 
 ## `M10.1` — Item catalogue and spatial `InventoryState`
 
-**Status:** `Deferred`
-**Priority:** P1 after inventory gate
+**Status:** `Active` — implementation delivered 2026-11-25; Unity import and EditMode validation deferred under the owner's no-Unity instruction.
+**Priority:** P1 by explicit owner override on 2026-11-25
 **Related contract:** sections 3.2, 6, 13, 21.3, and 27.1/27.4.
 
 **Rationale:** Item footprint and ownership are domain rules, not UI coordinates. A pure model must prove that items cannot overlap, escape the bag, occupy two containers, or become confused with tool equipment before pickup and presentation depend on it.
@@ -8443,6 +8443,28 @@ M10 is intentionally listed last and remains **Deferred** until the owner has pl
 **Save and compatibility impact:** None in this card because the model is not yet attached to authoritative `RunState`. DTO shape and migration are owned by M10.3.
 
 **Required handoff:** Item definition/instance/container ownership diagram, placement invariants, rejected-case catalogue, and proof that tool equipment remains separate.
+
+**Implemented boundary (2026-11-25):** The pure model lives in the existing engine-free `HallowBlaze.Core.State` assembly. `ItemCatalog` copies and validates immutable definitions; `ItemInstanceState` carries immutable instance/definition IDs. `InventoryState.CreateEmpty` constructs an independent empty `3x3` bag plus left/right pockets without attaching it to `RunState`. Existing food, tool equipment, run factories, DTOs, scenes, prefabs, and economy are unchanged. Representative berries (`1x1`) and drink (`1x2`) definitions are test content only, not new production supply.
+
+```mermaid
+flowchart LR
+   Catalog[ItemCatalog] --> Definition[Immutable ItemDefinition]
+   Inventory[Immutable InventoryState] --> Placement[InventoryPlacement]
+   Placement --> Instance[Immutable ItemInstanceState]
+   Instance -->|definition ID| Definition
+   Placement --> Container[Main grid or left/right pocket]
+   Run[Existing RunState] --> Tools[Two separate tool slots]
+```
+
+**Placement invariants:** `TryCreate` publishes a complete copied layout or no inventory. `TryPlace` adds one distinct instance without moving existing items. `TryRepack` validates the complete destination at once, allowing swaps without intermediate collisions, but requires exactly the existing instance-to-definition set: it cannot add, consume, rename, or replace items. Both instance operations return the original unchanged snapshot on rejection. Read-only collections and immutable items prevent shared mutable ownership between inventories. Anchors are zero-based horizontal/vertical cell coordinates; no rotation is inferred. Pocket anchors must be `0.0`; even a `1x1` item occupies the whole pocket.
+
+**Typed rejected cases:** `InventoryValidationException.Diagnostic` identifies invalid textual IDs, nonpositive footprints, null catalogue entries, and duplicate definition IDs. Layout operations return `InventoryDiagnostic` for unknown definitions, duplicate instance IDs across any containers, null layout/placement, invalid container, out-of-bounds anchors/rectangles, overlap, incompatible pocket, occupied pocket, and repack item-set mismatch. Definition and instance lookup is ordinal; unknown content is never silently substituted. Positive oversized definitions may exist as content but cannot fit an incompatible container.
+
+**Managed-only validation:** The complete production slice compiles as C# 9 / `netstandard2.1` with XML documentation and warnings treated as errors. The existing project NUnit framework, run by an external temporary .NET 10 harness against the exact source files, passed all **30/30 tests**, zero failed/skipped/inconclusive. Coverage includes 400 footprint/anchor trials, all 1296 in-bounds rectangle pairs, both pockets over eligibility/footprint combinations, cross-container duplicate IDs, immutable collection/copy isolation, integer extremes, whole-layout swaps and rejected item loss/substitution, and 4500 deterministic random layouts across seeds `101`, `1729`, and `20261125` checked against an independent ownership/cell oracle.
+
+**Deferred validation:** Unity was not started or contacted. These NUnit results are not a Unity Test Framework/EditMode verdict. New C# assets remain unimported, so Unity-generated `.meta` files and the actual Unity compilation/EditMode run are still pending; no GUIDs were invented manually. `M10.1` remains `Active` until that follow-up is completed or its limitation is explicitly accepted. No inventory UI, resource effect, turn command, save migration, or subsequent M10 task is claimed complete.
+
+**Review (2026-11-25):** The configured read-only `reviewer` invocation failed with provider HTTP `429` (`OpenAI Codex request failed for gpt-6.1-sol`; client request `9958c8a1-2c7c-4180-8a2d-3c7ec23e2919`). No retry or provider/model override was used. Lead completed explicit self-review of the same candidate against the criteria and all 30 executed NUnit cases, finding no material geometry, identity, or atomicity defect. No independent review verdict is claimed; the Unity limitations above remain open.
 
 ---
 
