@@ -36,14 +36,14 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(run.ToolSlots[occupied].Instance.InstanceId, Is.EqualTo(option.Tool.InstanceId));
             Assert.That(run.ToolSlots[occupied].Instance.Charges, Is.EqualTo(3));
             Assert.That(run.ToolInstanceSequence, Is.EqualTo(sequence));
-            Assert.That(run.Food, Is.EqualTo(19));
+            Assert.That(run.Satiety, Is.EqualTo(19));
             Assert.That(result.Events.OfType<ActionCostAppliedEvent>().Count(), Is.EqualTo(1));
             Assert.That(result.Events.OfType<NoiseEvent>().Count(), Is.EqualTo(1));
             Assert.That(board.GetActiveNoises().Single().Strength, Is.EqualTo(ActionNoiseProfile.Prototype.InteractionStrength));
             Assert.That(result.Events.OfType<ToolPickedUpEvent>().Single().Command.Tool.SourceId, Is.EqualTo("source.shovel"));
             Assert.That(board.TryGetGroundTool(ToolId, out _), Is.False);
             Assert.That(controller.Resolve(option.Choices.Single()).Accepted, Is.False);
-            Assert.That(run.Food, Is.EqualTo(19));
+            Assert.That(run.Satiety, Is.EqualTo(19));
         }
 
         /// <summary>Confirmed replacement affects one cell and preserves the displaced identity/charges at the original ground binding.</summary>
@@ -75,7 +75,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(entity.Definition.ContentId, Is.EqualTo(old.DefinitionId));
             Assert.That(entity.Position, Is.EqualTo(option.Position));
             Assert.That(resolver.Resolve(board, run, PlayerId, option.Choices[slot]).Accepted, Is.False);
-            Assert.That(run.Food, Is.EqualTo(19));
+            Assert.That(run.Satiety, Is.EqualTo(19));
         }
 
         /// <summary>A changed replacement, target or capacity rejects without touching the same ground tool, costs or noise lifetime.</summary>
@@ -103,7 +103,7 @@ namespace HallowBlaze.Tests.EditMode
             TurnResult result = controller.Resolve(command);
             Assert.That(result.Accepted, Is.False);
             Assert.That(result.Events, Is.Empty);
-            Assert.That(run.Food, Is.EqualTo(20));
+            Assert.That(run.Satiety, Is.EqualTo(20));
             Assert.That(board.GetActiveNoises().Single(), Is.SameAs(noise));
             if (invalid != "removed")
             {
@@ -148,13 +148,13 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(board.TryGetGroundTool(ToolId, out GroundToolState remaining), Is.True);
             Assert.That(remaining, Is.SameAs(tool));
             Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
-            Assert.That(run.Food, Is.EqualTo(19));
+            Assert.That(run.Satiety, Is.EqualTo(19));
             Assert.That(board.TryAdd(new BoardEntityState(new EntityId(4), new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item,
                 "food", BoardEntityTraits.Default, 10), new GridPosition(2, 0))), Is.True);
-            run.ConsumeFood(18);
+            run.ConsumeSatiety(18);
             TurnResult move = resolver.Resolve(board, run, PlayerId, new MoveCommand(Direction.East));
             Assert.That(move.Accepted, Is.True);
-            Assert.That(run.Food, Is.EqualTo(10));
+            Assert.That(run.Satiety, Is.EqualTo(10));
             Assert.That(move.Events.OfType<PlayerStarvedEvent>(), Is.Empty);
             var eventTypes = move.Events.Select(gameEvent => gameEvent.EventType).ToList();
             Assert.That(eventTypes.IndexOf("FoodRestored"), Is.LessThan(eventTypes.IndexOf("ActionCostApplied")));
@@ -174,7 +174,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(resolver.Resolve(board, run, PlayerId, query.GetOptions(board, run, PlayerId).Single().Choices[0]).Accepted, Is.True);
             Assert.That(query.GetRejection(board, run, PlayerId, original), Is.EqualTo(CommandRejectionCode.StaleTool));
             Assert.That(resolver.Resolve(board, run, PlayerId, original).Accepted, Is.False);
-            Assert.That(run.Food, Is.EqualTo(18));
+            Assert.That(run.Satiety, Is.EqualTo(18));
         }
 
         /// <summary>Ground tool ownership cannot be bypassed by a generic context/collect interaction, even on an authored interactive item.</summary>
@@ -190,7 +190,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(new InteractionQuery().GetOptions(board, run, PlayerId), Is.Empty);
             Assert.That(new TurnResolver().Resolve(board, run, PlayerId,
                 new InteractCommand(ToolId, new GridPosition(1, 0), "interact")).Accepted, Is.False);
-            Assert.That(run.Food, Is.EqualTo(20));
+            Assert.That(run.Satiety, Is.EqualTo(20));
             Assert.That(board.TryGetGroundTool(ToolId, out GroundToolState same), Is.True);
             Assert.That(same, Is.SameAs(tool));
             for (int slot = 0; slot < 2; slot++) run.EquipTool(slot, run.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 2)));
@@ -268,7 +268,7 @@ namespace HallowBlaze.Tests.EditMode
             TurnResult result = new TurnResolver().Resolve(board, run, PlayerId, command);
             Assert.That(result.Accepted, Is.False);
             Assert.That(result.Events, Is.Empty);
-            Assert.That(run.Food, Is.EqualTo(20));
+            Assert.That(run.Satiety, Is.EqualTo(20));
             Assert.That(board.TryGetGroundTool(ToolId, out GroundToolState after), Is.True);
             Assert.That(after, Is.SameAs(original));
         }
@@ -301,7 +301,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(chopped.Events.OfType<ToolChargeSpentEvent>(), Is.Empty);
             Assert.That(run.ToolSlots[0].Instance.Charges, Is.Zero);
             Assert.That(run.ToolInstanceSequence, Is.EqualTo(sequence));
-            Assert.That(run.Food, Is.EqualTo(18));
+            Assert.That(run.Satiety, Is.EqualTo(18));
         }
 
         /// <summary>Pickup transfers a depleted concrete tool without refilling it and still pays exactly the normal accepted-action cost.</summary>
@@ -317,14 +317,14 @@ namespace HallowBlaze.Tests.EditMode
                 new GridPosition(1, 0)), depleted);
             var query = new ToolPickupQuery();
             PickupToolCommand command = query.GetOptions(board, run, PlayerId).Single().Choices.Single();
-            run.ConsumeFood(19);
+            run.ConsumeSatiety(19);
             TurnResult result = new TurnController(board, run, PlayerId, new TurnResolver(pickups: query)).Resolve(command);
             Assert.That(result.Accepted, Is.True);
             Assert.That(result.Events.OfType<PlayerStarvedEvent>().Count(), Is.EqualTo(1));
             Assert.That(result.Events.OfType<ToolChargeSpentEvent>(), Is.Empty);
             Assert.That(run.ToolSlots[0].Instance.Charges, Is.Zero);
             Assert.That(run.ToolInstanceSequence, Is.EqualTo(1));
-            Assert.That(run.Food, Is.Zero);
+            Assert.That(run.Satiety, Is.Zero);
         }
 
         private static RunState CreateRun() => new RunState("pickup-tests", 56, new RunStateConfiguration(100, 20, 0, "forest.start"));

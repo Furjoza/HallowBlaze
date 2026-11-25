@@ -177,7 +177,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(restored.ActiveLeg.BoardPlan, Is.Not.SameAs(run.ActiveLeg.BoardPlan));
             Assert.That(Address(restored), Is.EqualTo(Address(run)));
             Assert.That(restored.Health, Is.EqualTo(run.Health));
-            Assert.That(restored.Food, Is.EqualTo(run.Food));
+            Assert.That(restored.Satiety, Is.EqualTo(run.Satiety));
             Assert.That(restored.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
             Assert.That(restored.ToolInstanceSequence, Is.EqualTo(run.ToolInstanceSequence));
             Assert.That(publication.Resolve(restored, Address(restored))?.TemplateId, Is.EqualTo(publication.Resolve(run, Address(run))?.TemplateId));

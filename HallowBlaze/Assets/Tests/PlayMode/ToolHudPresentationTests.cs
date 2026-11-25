@@ -48,7 +48,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(hud.GetSlotText(0), Is.EqualTo("Empty"));
                 Assert.That(definitions["axe.basic"].MaximumCharges, Is.EqualTo(3));
                 Assert.That(first.Charges, Is.EqualTo(3));
-                Assert.That(run.Food, Is.EqualTo(100));
+                Assert.That(run.Satiety, Is.EqualTo(100));
                 Assert.That(run.Health, Is.EqualTo(100));
             }
         }

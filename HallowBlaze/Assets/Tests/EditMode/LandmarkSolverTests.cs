@@ -30,7 +30,7 @@ namespace HallowBlaze.Tests.EditMode
             LandmarkSolverResult result = solver.Solve("arrival");
             Assert.That(result.Status, Is.EqualTo(LandmarkSolverStatus.Solved), result.ToString());
             Assert.That(result.SolutionPath.Count, Is.EqualTo(2));
-            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.Satiety, Is.EqualTo(4));
             var controller = new TurnController(board, run, new EntityId(1), new TurnResolver());
             TurnResult turn = null;
             foreach (LandmarkSolverStep step in result.SolutionPath)
@@ -39,7 +39,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(turn.Accepted, Is.True);
             }
             Assert.That(turn.Events.OfType<ExitReachedEvent>().Single().ExitId, Is.EqualTo(new EntityId(12)));
-            Assert.That(run.Food, Is.EqualTo(2));
+            Assert.That(run.Satiety, Is.EqualTo(2));
         }
 
         /// <summary>Independent equal snapshots share a hash, and forced collisions do not merge changed resources.</summary>
@@ -112,7 +112,7 @@ namespace HallowBlaze.Tests.EditMode
                 Is.EqualTo(source.Landmark.Outcomes.Single(outcome => outcome.Id == outcomeId).ExitEntityId));
             Assert.That(fresh.Controller.IsTerminal, Is.True);
             Assert.That(fresh.Run.Health, Is.GreaterThan(0));
-            Assert.That(fresh.Run.Food, Is.EqualTo(outcomeId == "tower.arrival" ? 93 : 94));
+            Assert.That(fresh.Run.Satiety, Is.EqualTo(outcomeId == "tower.arrival" ? 93 : 94));
             if (outcomeId == "tower.supplies")
             {
                 Assert.That(events.OfType<BoulderPushedEvent>().Count(), Is.EqualTo(1));
@@ -137,7 +137,7 @@ namespace HallowBlaze.Tests.EditMode
             List<GameEvent> events = fresh.Execute(result);
             Assert.That(events.OfType<ExitReachedEvent>().Single().ExitId, Is.EqualTo(new EntityId(146)));
             Assert.That(events.OfType<ToolUsedEvent>(), Is.Empty);
-            Assert.That(fresh.Run.Food, Is.EqualTo(93));
+            Assert.That(fresh.Run.Satiety, Is.EqualTo(93));
             TestContext.WriteLine(result + " path=" + string.Join("; ", result.SolutionPath));
         }
 
@@ -168,7 +168,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(fresh.Run.Health, Is.GreaterThan(0), result.ToString());
                 Assert.That(fresh.Controller.IsTerminal, Is.True);
                 int reward = outcomeId == "tower.supplies" ? 5 : 0;
-                Assert.That(fresh.Run.Food, Is.EqualTo(100 + reward - result.SolutionPath.Count));
+                Assert.That(fresh.Run.Satiety, Is.EqualTo(100 + reward - result.SolutionPath.Count));
                 if (outcomeId == "tower.arrival")
                 {
                     Assert.That(events.OfType<BoulderPushedEvent>(), Is.Empty);
@@ -186,7 +186,7 @@ namespace HallowBlaze.Tests.EditMode
                     else Assert.That(events.OfType<ToolChargeSpentEvent>(), Is.Empty);
                 }
                 TestContext.WriteLine(result + " noAxe=" + withoutAxe + " health=" + fresh.Run.Health +
-                    " food=" + fresh.Run.Food + " path=" + string.Join("; ", result.SolutionPath));
+                    " food=" + fresh.Run.Satiety + " path=" + string.Join("; ", result.SolutionPath));
             }
         }
 
@@ -317,7 +317,7 @@ namespace HallowBlaze.Tests.EditMode
             var equal = new LandmarkSolverStateKey(equivalent.Board, equivalent.Run, new EntityId(1), equivalent.Enemies);
             Assert.That(before, Is.EqualTo(equal));
             if (field == "health") source.Run.TakeDamage(10);
-            else if (field == "food") source.Run.ConsumeFood(1);
+            else if (field == "food") source.Run.ConsumeSatiety(1);
             else if (field == "allocator") source.Run.CreateToolInstance(ToolContentCatalog.Load()["axe.basic"]);
             else if (field == "equipment")
             {
@@ -348,14 +348,14 @@ namespace HallowBlaze.Tests.EditMode
         {
             var source = new Tower();
             var solver = source.Solver();
-            source.Run.ConsumeFood(99);
+            source.Run.ConsumeSatiety(99);
             source.Run.TakeDamage(99);
             source.Enemies[0].ConsumeIntent();
             Assert.That(source.Board.TryRemove(new EntityId(20)), Is.True);
             LandmarkSolverResult result = solver.Solve("tower.supplies");
             Assert.That(result.Status, Is.EqualTo(LandmarkSolverStatus.Solved), result.ToString());
             Assert.That(result.SolutionPath.Count, Is.EqualTo(11));
-            Assert.That(source.Run.Food, Is.EqualTo(1));
+            Assert.That(source.Run.Satiety, Is.EqualTo(1));
             Assert.That(source.Run.Health, Is.EqualTo(1));
         }
 

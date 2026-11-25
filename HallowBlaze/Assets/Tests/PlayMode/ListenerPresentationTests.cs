@@ -80,7 +80,7 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(runtime.Views[listener.ActorId].transform.position.x, Is.EqualTo(2));
                     Assert.That(runtime.Views[listener.ActorId].transform.position.y, Is.EqualTo(1));
                     Assert.That(listener.LockedIntent.InvestigationTarget, Is.EqualTo(new GridPosition(1, 1)));
-                    Assert.That(run.Food, Is.EqualTo(8));
+                    Assert.That(run.Satiety, Is.EqualTo(8));
                     Assert.That(run.Health, Is.EqualTo(100));
                     Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(3));
                     var wait = presenter.Coordinator.SubmitAsync(new WaitCommand());

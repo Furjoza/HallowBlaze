@@ -36,7 +36,7 @@ namespace HallowBlaze.Tests.EditMode
         {
             RunStateConfiguration configuration = CreateConfiguration(
                 initialHealth: 80,
-                initialFood: 65,
+                initialSatiety: 65,
                 initialDay: 3,
                 initialWorldNodeId: "forest.start");
 
@@ -47,7 +47,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(run.CurrentDay, Is.EqualTo(3));
             Assert.That(run.WorldNodeId, Is.EqualTo("forest.start"));
             Assert.That(run.Health, Is.EqualTo(80));
-            Assert.That(run.Food, Is.EqualTo(65));
+            Assert.That(run.Satiety, Is.EqualTo(65));
             Assert.That(run.Status, Is.EqualTo(RunStatus.Active));
             Assert.That(run.ToolSlots, Has.Count.EqualTo(2));
             Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
@@ -106,7 +106,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.Throws<ArgumentOutOfRangeException>(
                 () => CreateConfiguration(initialHealth: -1));
             Assert.Throws<ArgumentOutOfRangeException>(
-                () => CreateConfiguration(initialFood: -1));
+                () => CreateConfiguration(initialSatiety: -1));
             Assert.Throws<ArgumentOutOfRangeException>(
                 () => CreateConfiguration(initialDay: -1));
             Assert.Throws<ArgumentException>(
@@ -138,17 +138,17 @@ namespace HallowBlaze.Tests.EditMode
             RunState run = CreateRun();
 
             run.TakeDamage(150);
-            run.ConsumeFood(150);
+            run.ConsumeSatiety(150);
 
             Assert.That(run.Health, Is.Zero);
-            Assert.That(run.Food, Is.Zero);
+            Assert.That(run.Satiety, Is.Zero);
             Assert.That(run.Status, Is.EqualTo(RunStatus.Active));
 
             run.RestoreHealth(25);
-            run.RestoreFood(30);
+            run.RestoreSatiety(30);
 
             Assert.That(run.Health, Is.EqualTo(25));
-            Assert.That(run.Food, Is.EqualTo(30));
+            Assert.That(run.Satiety, Is.EqualTo(30));
         }
 
         [Test]
@@ -158,23 +158,22 @@ namespace HallowBlaze.Tests.EditMode
 
             Assert.Throws<ArgumentOutOfRangeException>(() => run.TakeDamage(-1));
             Assert.Throws<ArgumentOutOfRangeException>(() => run.RestoreHealth(-1));
-            Assert.Throws<ArgumentOutOfRangeException>(() => run.ConsumeFood(-1));
-            Assert.Throws<ArgumentOutOfRangeException>(() => run.RestoreFood(-1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => run.ConsumeSatiety(-1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => run.RestoreSatiety(-1));
 
             Assert.That(run.Health, Is.EqualTo(100));
-            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Satiety, Is.EqualTo(100));
         }
 
         [Test]
-        public void IncreasingValuesUsesCheckedArithmetic()
+        public void RestorationsCapWithoutOverflowWhileDayArithmeticRemainsChecked()
         {
-            RunState run = CreateRun(CreateConfiguration(
-                initialHealth: int.MaxValue,
-                initialFood: int.MaxValue,
-                initialDay: int.MaxValue));
+            RunState run = CreateRun(new RunStateConfiguration(100, 200, int.MaxValue, "forest.start"));
 
-            Assert.Throws<OverflowException>(() => run.RestoreHealth(1));
-            Assert.Throws<OverflowException>(() => run.RestoreFood(1));
+            Assert.That(run.RestoreHealth(int.MaxValue).Wasted, Is.EqualTo(int.MaxValue));
+            Assert.That(run.RestoreSatiety(int.MaxValue).Wasted, Is.EqualTo(int.MaxValue));
+            Assert.That(run.Health, Is.EqualTo(100));
+            Assert.That(run.Satiety, Is.EqualTo(200));
             Assert.Throws<OverflowException>(() => run.AdvanceDay());
         }
 
@@ -317,7 +316,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(firstTool.DefinitionId, Is.EqualTo(definition.Id));
             Assert.That(firstTool.InstanceId, Is.Not.EqualTo(definition.Id));
             Assert.That(first.Health, Is.EqualTo(100));
-            Assert.That(first.Food, Is.EqualTo(100));
+            Assert.That(first.Satiety, Is.EqualTo(100));
             Assert.Throws<NotSupportedException>(() => ((IList<ToolSlotState>)first.ToolSlots).Clear());
         }
 
@@ -467,7 +466,7 @@ namespace HallowBlaze.Tests.EditMode
         {
             RunState run = CreateRun();
             run.TakeDamage(40);
-            run.ConsumeFood(30);
+            run.ConsumeSatiety(30);
             run.AdvanceDay();
             run.SetCurrentWorldNode("forest.clearing");
             run.RecordRouteNode("forest.start");
@@ -476,7 +475,7 @@ namespace HallowBlaze.Tests.EditMode
 
             RunStateConfiguration nextConfiguration = CreateConfiguration(
                 initialHealth: 70,
-                initialFood: 55,
+                initialSatiety: 55,
                 initialDay: 4,
                 initialWorldNodeId: "snow.border");
             run.Reset("run-002", -77, nextConfiguration);
@@ -486,7 +485,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(run.CurrentDay, Is.EqualTo(4));
             Assert.That(run.WorldNodeId, Is.EqualTo("snow.border"));
             Assert.That(run.Health, Is.EqualTo(70));
-            Assert.That(run.Food, Is.EqualTo(55));
+            Assert.That(run.Satiety, Is.EqualTo(55));
             Assert.That(run.Status, Is.EqualTo(RunStatus.Active));
             Assert.That(run.Route, Is.Empty);
             Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
@@ -505,7 +504,7 @@ namespace HallowBlaze.Tests.EditMode
 
             Assert.That(run.Status, Is.EqualTo(outcome));
             Assert.Throws<InvalidOperationException>(() => run.TakeDamage(1));
-            Assert.Throws<InvalidOperationException>(() => run.RestoreFood(1));
+            Assert.Throws<InvalidOperationException>(() => run.RestoreSatiety(1));
             Assert.Throws<InvalidOperationException>(() => run.AdvanceDay());
             Assert.Throws<InvalidOperationException>(() => run.SetCurrentWorldNode("forest.end"));
             Assert.Throws<InvalidOperationException>(() => run.RecordRouteNode("forest.end"));
@@ -538,13 +537,13 @@ namespace HallowBlaze.Tests.EditMode
 
         private static RunStateConfiguration CreateConfiguration(
             int initialHealth = 100,
-            int initialFood = 100,
+            int initialSatiety = 100,
             int initialDay = 1,
             string initialWorldNodeId = "forest.start")
         {
             return new RunStateConfiguration(
                 initialHealth,
-                initialFood,
+                initialSatiety,
                 initialDay,
                 initialWorldNodeId);
         }

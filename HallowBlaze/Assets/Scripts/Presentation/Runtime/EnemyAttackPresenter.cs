@@ -121,7 +121,7 @@ namespace HallowBlaze.Presentation.Runtime
                 token.ThrowIfCancellationRequested();
                 EnsureActive();
                 glyph.transform.localScale = Vector3.one;
-                hud.Refresh(runtime.RunState.Health, runtime.RunState.Food);
+                hud.Refresh(runtime.RunState.Health, runtime.RunState.Satiety);
                 feedback.ShowEvent(gameEvent);
             }
             catch

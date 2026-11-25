@@ -8404,7 +8404,7 @@ Vertical slice is complete only after `Accept` of `M8.8`. Implementing the featu
 
 # M10 — Spatial Inventory and Resource Pressure
 
-M10 is intentionally listed last. Its normal activation requires an explicit `proceed to M10` verdict from `M8.8` or a later explicit owner override; optional M9 work is not required. On 2026-11-25 the owner explicitly activated the first task, `M10.1`, ahead of the no-backpack playtest, initially requested managed-only implementation, and subsequently authorized Unity validation to complete that task. This override does not close the outstanding human playtest/release gates or activate the remaining M10 cards.
+M10 is intentionally listed last. Its normal activation requires an explicit `proceed to M10` verdict from `M8.8` or a later explicit owner override; optional M9 work is not required. On 2026-11-25 the owner explicitly activated `M10.1` ahead of the no-backpack playtest, authorized its Unity validation, and then requested the next task, `M10.2`. Validation is now scoped to runtime rather than authoring-window tests, using headless Unity where possible. These overrides do not close the outstanding human playtest/release gates or activate subsequent M10 cards.
 
 ---
 
@@ -8470,13 +8470,13 @@ flowchart LR
 
 ## `M10.2` — Health cap, satiety, and consumable effects
 
-**Status:** `Deferred`
-**Priority:** P1 after M10.1
+**Status:** `Done` — 2026-11-25; bounded resources, tiered costs, effects, schema migration and scoped runtime validation accepted after independent review.
+**Priority:** P1 by explicit owner continuation after M10.1
 **Related contract:** sections 10, 19, 25, and 27.5.
 
 **Rationale:** The bag matters only when carried resources create decisions. Health and satiety need one bounded, deterministic policy before item use, bag transactions, and route UI can reason about their outcomes.
 
-**Current behavior:** `RunState` owns unbounded `Health` and `Food`; restore operations can exceed any cap, and `TurnResolver` hard-codes action cost `1`. Food pickup is automatic.
+**Current behavior:** `RunState` owns bounded `Health` and one `Satiety` resource, immutable persisted `ResourceRules`, and capped restoration accounting. `TurnResolver` samples the action-cost tier before effects. Automatic board food remains a temporary adapter; inventory ownership and manual consumable pickup are not activated.
 
 **Expected outcome:** `RunState` has one authoritative `Satiety` value in `0..200`, initially `100`, and health in `0..100`. An action-cost policy samples satiety at command start (`1` at `<=100`, `2` above `100`). Pure, data-driven consumable effects resolve before the selected cost and report capped/wasted amounts.
 
@@ -8505,6 +8505,27 @@ flowchart LR
 **Save and compatibility impact:** New run schema maps old `food` to clamped satiety and adds explicit configuration/version semantics. Invalid legacy values produce a controlled migration result; profile save is unchanged.
 
 **Required handoff:** Resource transition table, exact event chronology, old→new DTO mapping, and proof that one runtime owner replaced `Food` rather than shadowing it.
+
+**Implemented boundary (2026-11-25):** `ResourceRules` versions configurable health/satiety caps, the normal threshold and both costs; defaults are `100`, `200`, `100`, `1`, `2`. New production runs still start with `100` satiety. `ResourceGain` reports requested/applied/wasted amounts without integer overflow. Immutable `ConsumableEffectDefinition` and `ConsumableEffectCatalog` restore one configured resource; unknown references and terminal/zero-resource runs reject without mutation. The automatic movement/collect/cache adapters share this effect contract until M10.5. First aid still requires a conscious interaction and rejects at full health; partial healing reports waste. No bag ownership, new item-use command, UI inventory, content distribution, scene, prefab, package, or profile changes are introduced.
+
+| Pre-command resources / request | Applied effect | Selected cost | Final state |
+| --- | --- | --- | --- |
+| Satiety `100`, automatic food `50` | Satiety `+50`, waste `0` | `1` | Satiety `149`; next accepted command selects `2` |
+| Satiety `101`, Wait | None | `2` | Satiety `99` |
+| Satiety `199`, reward `int.MaxValue` | Satiety `+1`, waste `int.MaxValue - 1` | `2` | Satiety `198` |
+| Satiety `200`, automatic reward `5` | Satiety `+0`, waste `5` | `2` | Satiety `198`; exact ground item consumed once |
+| Health `95`, first aid `10`, Satiety `100` | Health `+5`, waste `5` | `1` | Health `100`, Satiety `99` |
+| Health `100`, first-aid attempt | Rejected; no item removal | None | All state unchanged |
+| Satiety `1`, move onto exit without reward | None | `1` | Starvation; no exit outcome |
+| Blocked/stale command or unknown effect | Rejected | None | Resources, board, equipment and later phases unchanged |
+
+**Event chronology:** The resolver validates the run/player and samples cost plus `SatietyAtCommandStart` before dispatch. An accepted move emits `EntityMoved`, optional plate/gate changes, then `ItemCollected` and `FoodRestored` for the automatic adapter, followed by `ActionCostApplied`, optional noise, and starvation before any exit. Accepted medical interactions emit `InteractionPerformed`, `ItemCollected`, `HealthRestored`, plate/gate changes if any, `ActionCostApplied`, optional interaction noise, then starvation. Tool actions retain their existing direct-effect/charge ordering and pay the same preselected cost once. The controller does not run later phases after an existing terminal result. `FoodRestoredEvent` retains its historical adapter type name but its `Amount` is applied satiety, with `Wasted` and `Requested`; it is not another run resource. HUD gains use applied amounts only, and visible resource/cost labels say `Satiety`. Existing serialized scene references such as `foodText` and authored food/source IDs remain unchanged.
+
+**Persistence mapping:** The current writer emits standalone run schema `7`, with required `satiety` and versioned `resourceRules`, and no `food` field. Rules include both caps, threshold, normal cost and sated cost; current out-of-range values, missing/wrong-typed fields, unsupported rule versions and duplicate legacy fields are rejected rather than repaired. Historical schemas `1..6` retain their original DTO shapes: nonnegative `health` migrates to `min(health, 100)` and `food` to `min(food, 200)` under default rules; negative/corrupt values remain controlled failures. Run ID, seed, retained RNG, travel, tool instances, landmarks and selected board plan are preserved. Current Continue retains custom configurations exactly. Profile schema remains `2`, and tests use isolated temporary storage. The runtime has no `RunState.Food` property or synchronized Food/Satiety fields.
+
+**Runtime validation:** Actual Unity `6000.3.21f1` reports passed **613/613** scoped domain/integration tests (`ResourceRules`, `RunState`, session, movement/interactions/tools, turn contracts/controller, persistence/storage, travel and existing inventory model), and **15/15** scoped PlayMode tests for HUD gains/waste, selected costs, rejection, animation parity, scene reload, Continue and terminal outcomes. A final preview-only wording correction passed **63/63** interaction cases. Final runs used `-nographics -silent-crashes`, with zero failed/skipped/inconclusive cases and no compiler/unhandled/GUI errors. The first broad EditMode attempt was not a full-suite pass: it exposed authoring and generator/content expectation failures. The unchanged fruit catalogs and generator fixtures were confirmed byte-identical to baseline; their broader content regressions were not repaired here. After the owner's scope correction, no authoring-window tests or graphical/pixel checks were rerun, and no full-suite or visual acceptance is claimed.
+
+**Review and completion (2026-11-25):** The configured read-only `reviewer`, invoked without a model override, returned **PASS** with no material findings in the agreed runtime scope. It inspected the complete candidate, new files and actual reports, confirming pre-effect costs, rejection atomicity, capped feedback and versioned migration. Review did not run Unity or authoring tests. Final closeout changes only this card's acceptance metadata; subsequent inventory integration and outstanding broader content/authoring/visual gates remain separate.
 
 ---
 

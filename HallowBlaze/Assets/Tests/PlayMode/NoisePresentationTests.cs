@@ -86,13 +86,13 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(presenter.NoiseDisplay.Projections.Single(), Is.SameAs(noise.Noise));
                     Assert.That(sinks.Noises, Is.EqualTo(1));
                     Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
-                    Assert.That(run.Food, Is.EqualTo(9));
+                    Assert.That(run.Satiety, Is.EqualTo(9));
                     presenter.Coordinator.SubmitAsync(new WaitCommand()).GetAwaiter().GetResult();
                     Assert.That(presenter.NoiseDisplay.Projections, Is.Empty);
                     Assert.That(presenter.NoiseDisplay.GetComponentsInChildren<LineRenderer>(), Is.Empty);
                     Assert.That(runtime.BoardState.GetActiveNoises(), Is.Empty);
                     Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(2));
-                    Assert.That(run.Food, Is.EqualTo(8));
+                    Assert.That(run.Satiety, Is.EqualTo(8));
                     presenter.Coordinator.SubmitAsync(new WaitCommand()).GetAwaiter().GetResult();
                     Assert.That(presenter.NoiseDisplay.Projections, Is.Empty);
                     Assert.That(sinks.Noises, Is.EqualTo(1));

@@ -20,8 +20,8 @@ namespace HallowBlaze.Presentation.Runtime
     {
         /// <summary>Replaces displayed resource values with the latest RunState values.</summary>
         /// <param name="health">Current run health.</param>
-        /// <param name="food">Current run food after complete domain resolution.</param>
-        void Refresh(int health, int food);
+        /// <param name="satiety">Current run satiety after complete domain resolution.</param>
+        void Refresh(int health, int satiety);
     }
 
     /// <summary>Retains positive applied resource gains separately from totals until the next accepted replay or disposal.</summary>
@@ -29,8 +29,8 @@ namespace HallowBlaze.Presentation.Runtime
     {
         /// <summary>Accumulates actual positive restoration, never a configured reward or net final-minus-initial difference.</summary>
         /// <param name="health">Applied health restored; zero leaves health feedback unchanged.</param>
-        /// <param name="food">Applied Food restored; zero leaves Food feedback unchanged.</param>
-        void AddResourceGains(int health, int food);
+        /// <param name="satiety">Applied satiety restored, excluding waste; zero leaves feedback unchanged.</param>
+        void AddResourceGains(int health, int satiety);
         /// <summary>Clears only transient gains without changing displayed totals, resources or another input owner.</summary>
         void ClearResourceGains();
     }
@@ -450,7 +450,7 @@ namespace HallowBlaze.Presentation.Runtime
 
         private Task RefreshHud()
         {
-            hud.Refresh(runtime.RunState.Health, runtime.RunState.Food);
+            hud.Refresh(runtime.RunState.Health, runtime.RunState.Satiety);
             return Task.CompletedTask;
         }
 

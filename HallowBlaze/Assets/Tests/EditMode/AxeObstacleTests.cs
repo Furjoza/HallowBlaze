@@ -50,7 +50,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(result.Events.OfType<ToolChargeSpentEvent>(), Is.Empty);
                 Assert.That(result.Events.OfType<NoiseEvent>().Single().Noise.Strength, Is.EqualTo(6));
                 Assert.That(run.ToolSlots[0].Instance, Is.SameAs(retained));
-                Assert.That(run.Food, Is.EqualTo(19 - index));
+                Assert.That(run.Satiety, Is.EqualTo(19 - index));
                 TurnResult repeated = controller.Resolve(option.CreateCommand());
                 Assert.That(repeated.Accepted || repeated.ConsumesTurn, Is.False);
                 Assert.That(repeated.Events, Is.Empty);
@@ -87,7 +87,7 @@ namespace HallowBlaze.Tests.EditMode
                     Is.EqualTo(usesAxe ? ObstacleClearingRules.AxeNoiseFactId : null));
                 Assert.That(result.Events.OfType<ToolChargeSpentEvent>(), Is.Empty);
             }
-            Assert.That(run.Food, Is.EqualTo(20 - actions));
+            Assert.That(run.Satiety, Is.EqualTo(20 - actions));
             Assert.That(board.TryGetEntity(WallId, out _), Is.False);
             Assert.That(controller.Resolve(new MoveCommand(Direction.East)).Accepted, Is.True);
             if (usesAxe) Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(3));
@@ -194,7 +194,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(board.GetEntities(), Is.EqualTo(before));
             Assert.That(board.GetObstacleWork(WallId), Is.Zero);
             Assert.That(run.ToolSlots, Is.EqualTo(equipment));
-            Assert.That(run.Food, Is.EqualTo(20));
+            Assert.That(run.Satiety, Is.EqualTo(20));
             Assert.That(board.GetActiveNoises().Single(), Is.SameAs(old));
             Assert.That(old.RemainingTurns, Is.EqualTo(3));
             Assert.That(laterPhases, Is.Zero);
@@ -219,7 +219,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(controller.Resolve(selection).Accepted, Is.True);
             Assert.That(controller.Resolve(selection).Accepted, Is.False);
             Assert.That(board.TryGetEntity(WallId, out _), Is.False);
-            Assert.That(run.Food, Is.EqualTo(18));
+            Assert.That(run.Satiety, Is.EqualTo(18));
             Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(3));
         }
 

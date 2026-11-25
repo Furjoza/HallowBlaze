@@ -45,7 +45,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(fixture.Runtime.BoardState.TryGetGroundTool(fixture.ToolEntityId, out GroundToolState ground), Is.True);
                 Assert.That(picker.Open(), Is.True);
                 Assert.That(picker.PickupOptions.Single().Tool, Is.SameAs(ground));
-                Assert.That(picker.GetOptionLabel(0), Does.Contain("Shovel (3 charges)").And.Contain("Food -1"));
+                Assert.That(picker.GetOptionLabel(0), Does.Contain("Shovel (3 charges)").And.Contain("Satiety -1"));
                 Assert.That(picker.Select(0), Is.True);
                 Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
                 Assert.That(picker.IsReplacing, Is.False);
@@ -54,7 +54,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(fixture.Run.ToolSlots[1].Instance.InstanceId, Is.EqualTo(ground.InstanceId));
                 Assert.That(fixture.Hud.GetSlotText(1), Is.EqualTo("Shovel  3"));
                 Assert.That(fixture.ToolView.activeSelf, Is.False);
-                Assert.That(fixture.Run.Food, Is.EqualTo(19));
+                Assert.That(fixture.Run.Satiety, Is.EqualTo(19));
                 fixture.Dispose();
                 yield return null;
             }
@@ -83,7 +83,7 @@ namespace HallowBlaze.Tests.PlayMode
                     if (leave) picker.Leave(); else picker.Cancel();
                     Assert.That(fixture.Ground, Is.SameAs(incoming));
                     Assert.That(fixture.Run.ToolSlots[0].Instance, Is.SameAs(old));
-                    Assert.That(fixture.Run.Food, Is.EqualTo(20));
+                    Assert.That(fixture.Run.Satiety, Is.EqualTo(20));
                     Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
                     Assert.That(fixture.Presenter.Coordinator.SubmitAsync(new WaitCommand()).Result.Status, Is.EqualTo(CommandSubmissionStatus.Blocked));
                     yield return null;
@@ -100,7 +100,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(fixture.ToolView.activeSelf, Is.True);
                 Assert.That(fixture.Presenter.GroundToolsDisplay.Root.GetComponentsInChildren<TextMesh>().Single().text, Is.EqualTo("Axe"));
                 Assert.That(fixture.Hud.GetSlotText(0), Is.EqualTo("Shovel  3"));
-                Assert.That(fixture.Run.Food, Is.EqualTo(19));
+                Assert.That(fixture.Run.Satiety, Is.EqualTo(19));
                 Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
                 Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
                 fixture.Dispose();
@@ -122,7 +122,7 @@ namespace HallowBlaze.Tests.PlayMode
             fixture.Run.TrySpendToolCharge(0, fixture.Run.ToolSlots[0].Instance.InstanceId);
             Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
             Assert.That(fixture.Ground, Is.SameAs(ground));
-            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(20));
             Assert.That(fixture.Runtime.BoardState.GetActiveNoises(), Is.Empty);
             yield return null;
             Assert.That(picker.Open(), Is.True);
@@ -159,7 +159,7 @@ namespace HallowBlaze.Tests.PlayMode
             picker.Select(0);
             picker.ConfirmAsync();
             Assert.That(picker.IsReplacing, Is.True);
-            Assert.That(fixture.Run.Food, Is.EqualTo(19));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(19));
             fixture.Dispose();
             SceneManager.SetActiveScene(previous);
             yield return SceneManager.UnloadSceneAsync(temporary);
@@ -169,7 +169,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(next.Hud.GetSlotText(0), Is.EqualTo("Axe"));
             Assert.That(next.Hud.GetSlotText(1), Is.EqualTo("Shovel  3"));
             Assert.That(next.Run.ToolSlots[1].Instance.InstanceId, Is.EqualTo(identity));
-            Assert.That(next.Run.Food, Is.EqualTo(19));
+            Assert.That(next.Run.Satiety, Is.EqualTo(19));
             Assert.That(next.Presenter.Coordinator.ResolutionCount, Is.Zero);
             Assert.That(next.Ground.InstanceId, Is.Not.EqualTo(identity));
         }
@@ -270,7 +270,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(offset.y, Is.GreaterThan(0));
             Assert.That(row.yMin, Is.GreaterThanOrEqualTo(offset.y - 1));
             if (row.height <= height) Assert.That(row.yMax, Is.LessThanOrEqualTo(offset.y + height + 1));
-            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(20));
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
         }
 
@@ -290,7 +290,7 @@ namespace HallowBlaze.Tests.PlayMode
             picker.SampleInputAsync(key => key == KeyCode.F || key == KeyCode.Space, -96);
             Assert.That(picker.IsOpen, Is.False);
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
-            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(20));
             Assert.That(fixture.Run.ToolSlots[0].Instance.DefinitionId, Is.EqualTo("axe.basic"));
             Assert.That(fixture.Presenter.Coordinator.SubmitFromAsync(new PcCommandSource(key => key == KeyCode.Space)).Result.Status,
                 Is.EqualTo(CommandSubmissionStatus.Blocked));
@@ -322,7 +322,7 @@ namespace HallowBlaze.Tests.PlayMode
             picker.SampleInputAsync(key => key == KeyCode.Q || key == KeyCode.E, -87);
             Assert.That(picker.SelectedIndex, Is.EqualTo(retained));
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
-            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(20));
         }
 
         /// <summary>Empty, stale, paused and disposed picker contexts never consume a turn or select a replacement target.</summary>
@@ -347,7 +347,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(picker.SampleInputAsync(key => key == KeyCode.Space, -77).Result.Status,
                 Is.EqualTo(CommandSubmissionStatus.Rejected));
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
-            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(20));
             Assert.That(fixture.Runtime.BoardState.GetActiveNoises(), Is.Empty);
             picker.Dispose();
             picker.SampleInputAsync(key => key == KeyCode.F, -76);

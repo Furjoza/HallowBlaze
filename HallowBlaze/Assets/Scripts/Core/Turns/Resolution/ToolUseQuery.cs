@@ -62,13 +62,13 @@ namespace HallowBlaze.Core.Turns.Resolution
     {
         private readonly UseToolCommand command;
 
-        internal ToolUseOption(UseToolCommand command, ToolAction action, int foodCost, CommandRejectionCode rejectionCode,
+        internal ToolUseOption(UseToolCommand command, ToolAction action, int satietyCost, CommandRejectionCode rejectionCode,
             string effectLabel = null)
         {
             this.command = command;
             DefinitionId = action.DefinitionId;
             EffectLabel = effectLabel ?? action.EffectLabel;
-            FoodCost = foodCost;
+            SatietyCost = satietyCost;
             NoiseStrength = action.NoiseStrength;
             NoiseLifetimeTurns = action.NoiseLifetimeTurns;
             ChargeCost = action.ChargeCost;
@@ -91,8 +91,8 @@ namespace HallowBlaze.Core.Turns.Resolution
         public string ActionId => command.ActionId;
         /// <summary>Gets the direct effect shown before confirmation.</summary>
         public string EffectLabel { get; }
-        /// <summary>Gets the active policy's accepted-action food cost.</summary>
-        public int FoodCost { get; }
+        /// <summary>Gets the pre-effect satiety cost sampled for this option.</summary>
+        public int SatietyCost { get; }
         /// <summary>Gets zero for a reusable tool action or one for a finite-use action; preview and rejection spend none.</summary>
         public int ChargeCost { get; }
         /// <summary>Gets the noise path budget that will be emitted on acceptance.</summary>
@@ -154,7 +154,7 @@ namespace HallowBlaze.Core.Turns.Resolution
                         if (!action.Behavior.Supports(target)) continue;
                         var command = new UseToolCommand(slot, instance.InstanceId, instance.Charges,
                             target.Id, target.Position, action.Behavior.Id);
-                        options.Add(new ToolUseOption(command, action, ActionCosts.FoodCost,
+                        options.Add(new ToolUseOption(command, action, ActionCosts.GetCost(run),
                             Validate(board, run, playerId, command, out _, out _),
                             (action.Behavior as IInteractionConsequences)?.DescribeEffect(board, target)));
                     }
@@ -203,7 +203,7 @@ namespace HallowBlaze.Core.Turns.Resolution
         private static bool CanAct(BoardState board, RunState run, EntityId playerId, out BoardEntityState player)
         {
             player = null;
-            return run.Status == RunStatus.Active && run.Health > 0 && run.Food > 0 &&
+            return run.Status == RunStatus.Active && run.Health > 0 && run.Satiety > 0 &&
                 board.TryGetEntity(playerId, out player) && player.Definition.Layer == BoardLayer.Actor &&
                 player.Definition.Kind.Equals(EntityKind.Player);
         }

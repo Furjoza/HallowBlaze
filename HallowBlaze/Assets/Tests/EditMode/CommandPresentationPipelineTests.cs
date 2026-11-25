@@ -76,7 +76,7 @@ namespace HallowBlaze.Tests.EditMode
             for (int attempt = 0; attempt < 10; attempt++)
                 Assert.That(coordinator.SubmitAsync(new WaitCommand()).Result.Status, Is.EqualTo(CommandSubmissionStatus.Blocked));
             Assert.That(coordinator.ResolutionCount, Is.EqualTo(1));
-            Assert.That(runtime.RunState.Food, Is.EqualTo(99));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(99));
             CollectionAssert.AreEqual(new[] { "EntityMoved" }, trace);
 
             gate.SetBlocked(PresentationInputBlock.Modal, true);
@@ -157,7 +157,7 @@ namespace HallowBlaze.Tests.EditMode
                     if (callbackFails)
                         throw new InvalidOperationException("completion fault");
                 });
-                int beforeFood = runtime.RunState.Food;
+                int beforeFood = runtime.RunState.Satiety;
                 Assert.That(coordinator.SubmitAsync(null).Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
                 Assert.That(coordinator.SubmitAsync(new MoveCommand(Direction.West)).Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
                 gate.SetBlocked(PresentationInputBlock.Modal, true);
@@ -169,7 +169,7 @@ namespace HallowBlaze.Tests.EditMode
                     Assert.That(coordinator.SubmitAsync(new WaitCommand(), canceled.Token).Result.Status, Is.EqualTo(CommandSubmissionStatus.Canceled));
                 }
                 Assert.That(completions, Is.Zero);
-                Assert.That(runtime.RunState.Food, Is.EqualTo(beforeFood));
+                Assert.That(runtime.RunState.Satiety, Is.EqualTo(beforeFood));
                 int resolutionsBefore = coordinator.ResolutionCount;
                 using (var replayCancellation = new CancellationTokenSource())
                 {
@@ -192,7 +192,7 @@ namespace HallowBlaze.Tests.EditMode
                     if (scenario != "disposed")
                         Assert.That(observed, Is.SameAs(submission.Result.Result), scenario);
                     Assert.That(coordinator.ResolutionCount, Is.EqualTo(resolutionsBefore + 1), scenario);
-                    Assert.That(runtime.RunState.Food, Is.EqualTo(beforeFood - 1), scenario);
+                    Assert.That(runtime.RunState.Satiety, Is.EqualTo(beforeFood - 1), scenario);
                     Assert.That(gate.State, Is.EqualTo(PresentationGateState.Idle), scenario);
                     Assert.That(coordinator.CanSubmit, Is.EqualTo(scenario != "disposed"), scenario);
                     if (scenario == "success")
@@ -239,7 +239,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(coordinator.SubmitFromAsync(source).Result.Status, Is.EqualTo(CommandSubmissionStatus.Blocked));
             Assert.That(source.ReadCount, Is.Zero);
             Assert.That(coordinator.ResolutionCount, Is.Zero);
-            Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(100));
         }
 
         [Test]
@@ -255,7 +255,7 @@ namespace HallowBlaze.Tests.EditMode
                     Is.EqualTo(CommandSubmissionStatus.Canceled));
             }
             Assert.That(coordinator.ResolutionCount, Is.Zero);
-            Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(100));
             Assert.That(coordinator.CanSubmit, Is.True);
         }
 
@@ -266,7 +266,7 @@ namespace HallowBlaze.Tests.EditMode
             CommandSubmission submission = coordinator.SubmitAsync(new MoveCommand(Direction.West)).Result;
             Assert.That(submission.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
             Assert.That(rejection, Is.EqualTo(CommandRejectionCode.OutOfBounds));
-            Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(100));
             Assert.That(runtime.Views[runtime.PlayerId].transform.position, Is.EqualTo(original));
             Assert.That(trace, Is.Empty);
             Assert.That(recoveryCount, Is.Zero);
@@ -282,7 +282,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(submission.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             CollectionAssert.AreEqual(new[] { "EntityWaited", "ActionCostApplied" }, trace);
             Assert.That(coordinator.ResolutionCount, Is.EqualTo(1));
-            Assert.That(runtime.RunState.Food, Is.EqualTo(99));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(99));
             Assert.That(coordinator.CanSubmit, Is.True);
         }
 
@@ -307,7 +307,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(submission.Status, Is.EqualTo(CommandSubmissionStatus.PresentationFailed));
             Assert.That(submission.Result.Accepted, Is.True);
             Assert.That(submission.Diagnostic.Code, Is.EqualTo(PresentationDiagnosticCode.UnknownEvent));
-            Assert.That(runtime.RunState.Food, Is.EqualTo(99));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(99));
             Assert.That(coordinator.ResolutionCount, Is.EqualTo(1));
             Assert.That(recoveryCount, Is.EqualTo(1));
             Assert.That(coordinator.CanSubmit, Is.True);
@@ -358,7 +358,7 @@ namespace HallowBlaze.Tests.EditMode
             });
             Assert.That(coordinator.SubmitFromAsync(source).Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             Assert.That(coordinator.ResolutionCount, Is.EqualTo(1));
-            Assert.That(runtime.RunState.Food, Is.EqualTo(99));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(99));
         }
 
         [Test]
@@ -371,7 +371,7 @@ namespace HallowBlaze.Tests.EditMode
             });
             Assert.That(coordinator.SubmitFromAsync(source).Result.Status, Is.EqualTo(CommandSubmissionStatus.Blocked));
             Assert.That(coordinator.ResolutionCount, Is.Zero);
-            Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(100));
             Assert.That(gate.State, Is.EqualTo(PresentationGateState.Idle));
             Assert.That(gate.Blocks, Is.EqualTo(PresentationInputBlock.Modal));
         }
@@ -389,7 +389,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(coordinator.SubmitFromAsync(source, cancellation.Token).Result.Status,
                     Is.EqualTo(CommandSubmissionStatus.Canceled));
                 Assert.That(coordinator.ResolutionCount, Is.Zero);
-                Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+                Assert.That(runtime.RunState.Satiety, Is.EqualTo(100));
                 Assert.That(coordinator.CanSubmit, Is.True);
             }
         }
@@ -412,7 +412,7 @@ namespace HallowBlaze.Tests.EditMode
             Vector3 original = runtime.Views[runtime.PlayerId].transform.position;
             Assert.Throws<InvalidOperationException>(() => coordinator.SubmitAsync(new MoveCommand(Direction.West)).GetAwaiter().GetResult());
             Assert.That(coordinator.ResolutionCount, Is.EqualTo(1));
-            Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(100));
             Assert.That(runtime.Views[runtime.PlayerId].transform.position, Is.EqualTo(original));
             Assert.That(recoveryCount, Is.Zero);
             Assert.That(coordinator.CanSubmit, Is.True);
@@ -472,7 +472,7 @@ namespace HallowBlaze.Tests.EditMode
                     new PlayerDiedEvent(runtime.PlayerId)
                 };
                 Assert.That(presenter.Dispatcher.ReplayAsync(events).Result, Is.Null);
-                Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+                Assert.That(runtime.RunState.Satiety, Is.EqualTo(100));
                 CollectionAssert.AreEqual(new[] { "EntityMoved", "EntityWaited", "InteractionPerformed", "Hud:100:100", "FoodRestored", "Hud:100:100",
                     "ExitReached", "PlayerStarved", "PlayerDied" }, sinks.Trace);
                 var removed = runtime.BoardState.GetEntities().First(entity => entity.Definition.ContentId == "legacy.exit");
@@ -526,7 +526,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(coordinator.SubmitFromAsync(absent).Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
             Assert.That(coordinator.SubmitFromAsync(ambiguous).Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
             Assert.That(coordinator.ResolutionCount, Is.Zero);
-            Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(100));
         }
 
         [Test]
@@ -535,7 +535,7 @@ namespace HallowBlaze.Tests.EditMode
             var source = new PcCommandSource(key => key == KeyCode.E || key == KeyCode.W || key == KeyCode.Space, () => 1);
             Assert.That(coordinator.SubmitFromAsync(source).Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
             Assert.That(coordinator.ResolutionCount, Is.Zero);
-            Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(100));
         }
 
         private Task Record(GameEvent gameEvent)

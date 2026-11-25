@@ -564,7 +564,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
                     Defer(() => testSettings.Seed = BitConverter.ToInt32(Guid.NewGuid().ToByteArray(), 0));
             }
             testSettings.Health = EditorGUILayout.IntField("Starting Health", testSettings.Health);
-            testSettings.Food = EditorGUILayout.IntField("Starting Food", testSettings.Food);
+            testSettings.Food = EditorGUILayout.IntField("Starting Satiety", testSettings.Food);
             testSettings.EquipAxe = EditorGUILayout.Toggle("Equip Axe", testSettings.EquipAxe);
             if (document != null) DrawBoardCheck();
             if (document != null) assignmentPanel.Draw(Defer, SaveAssignment, OpenAssignment);

@@ -56,7 +56,7 @@ namespace HallowBlaze.Tests.EditMode
                     Assert.That(run.ActiveLandmark.VariantId, Is.EqualTo(variantId));
                     Assert.That(run.ActiveLandmark.Address, Is.EqualTo(BoardAddressFactory.CreateFromState(run)));
                     Assert.That(run.Health, Is.EqualTo(100));
-                    Assert.That(run.Food, Is.EqualTo(100));
+                    Assert.That(run.Satiety, Is.EqualTo(100));
                     Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
                     Assert.That(run.ToolInstanceSequence, Is.Zero);
                     Assert.That(run.CompletedLandmarks, Is.Empty);
@@ -114,11 +114,11 @@ namespace HallowBlaze.Tests.EditMode
             var scenario = new Scenario();
             var before = scenario.Board.GetEntities().ToArray();
             Assert.That(scenario.Controller.Resolve(new MoveCommand(Direction.West)).Accepted, Is.False);
-            Assert.That(scenario.Run.Food, Is.EqualTo(100));
+            Assert.That(scenario.Run.Satiety, Is.EqualTo(100));
             Assert.That(scenario.Board.GetEntities(), Is.EqualTo(before));
             List<GameEvent> events = scenario.Execute("NNNNNEE");
             Assert.That(events.OfType<ExitReachedEvent>().Single().ExitId, Is.EqualTo(new EntityId(151)));
-            Assert.That(scenario.Run.Food, Is.EqualTo(93));
+            Assert.That(scenario.Run.Satiety, Is.EqualTo(93));
             Assert.That(scenario.Run.Health, Is.EqualTo(100));
             Assert.That(scenario.Run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
             Assert.That(scenario.Board.GetGates().Single().IsOpen, Is.False);
@@ -138,7 +138,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(events.OfType<GateChangedEvent>().Any(change => change.Gate.IsOpen), Is.True);
             Assert.That(scenario.Board.TryGetEntity(new EntityId(21), out _), Is.False);
             Assert.That(scenario.Board.TryGetEntity(new EntityId(11), out _), Is.False);
-            Assert.That(scenario.Run.Food, Is.EqualTo(finalFood));
+            Assert.That(scenario.Run.Satiety, Is.EqualTo(finalFood));
             Assert.That(scenario.Run.Health, Is.GreaterThan(0));
             Assert.That(scenario.Run.ToolSlots[0].IsEmpty, Is.EqualTo(!useAxe));
             if (useAxe) Assert.That(scenario.Run.ToolSlots[0].RemainingUses, Is.EqualTo(scenario.Axe.Charges));
@@ -175,7 +175,7 @@ namespace HallowBlaze.Tests.EditMode
         public void DeathAndStarvationCannotCompleteLandmark(bool starvation)
         {
             var scenario = new Scenario();
-            if (starvation) scenario.Run.ConsumeFood(99);
+            if (starvation) scenario.Run.ConsumeSatiety(99);
             else
             {
                 scenario.Execute("NNPNEECCC");

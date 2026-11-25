@@ -17,6 +17,90 @@ namespace HallowBlaze.Tests.EditMode
     public sealed class PersistenceDtoTests
     {
         [Test]
+        public void SatietySchemaHasOneResourceAndPreservesCustomConfigurationOnContinue()
+        {
+            var rules = new ResourceRules(80, 150, 60, 2, 3);
+            var run = new RunState("resource-v7", 102, new RunStateConfiguration(70, 140, 0, "start", rules));
+            run.EquipTool(0, run.CreateToolInstance(new ToolDefinition("test.tool", "Tool", 3)));
+            string json = PersistenceJsonSerializer.SerializeRun(run);
+            JObject document = JObject.Parse(json);
+            Assert.That((int)document["schemaVersion"], Is.EqualTo(7));
+            Assert.That(document["food"], Is.Null);
+            Assert.That((int)document["satiety"], Is.EqualTo(140));
+            RunState restored = PersistenceJsonSerializer.DeserializeRun(json);
+            Assert.That(restored.Health, Is.EqualTo(70));
+            Assert.That(restored.Satiety, Is.EqualTo(140));
+            Assert.That(restored.ResourceRules.MaximumHealth, Is.EqualTo(80));
+            Assert.That(restored.ResourceRules.MaximumSatiety, Is.EqualTo(150));
+            Assert.That(restored.ResourceRules.SelectActionCost(60), Is.EqualTo(2));
+            Assert.That(restored.ResourceRules.SelectActionCost(61), Is.EqualTo(3));
+            Assert.That(restored.ToolSlots[0].Instance.InstanceId, Is.EqualTo(run.ToolSlots[0].Instance.InstanceId));
+            Assert.That(PersistenceJsonSerializer.SerializeRun(restored), Is.EqualTo(json));
+        }
+
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        [TestCase(4)]
+        [TestCase(5)]
+        [TestCase(6)]
+        public void EveryLegacySchemaClampsResourcesWithoutChangingIdentityOrRng(int version)
+        {
+            RunState run = TravelBoundary("checkpoint");
+            object dto;
+            switch (version)
+            {
+                case 1: dto = RunStateMapper.ToDto(run); break;
+                case 2: dto = RunStateV2Mapper.ToDto(run); break;
+                case 3: dto = RunStateV3Mapper.ToDto(run); break;
+                case 4: dto = RunStateV4Mapper.ToDto(run); break;
+                case 5: dto = RunStateV5Mapper.ToDto(run); break;
+                default: dto = RunStateV6Mapper.ToDto(run); break;
+            }
+            JObject document = JObject.FromObject(dto);
+            document["health"] = int.MaxValue;
+            document["food"] = int.MaxValue;
+            string source = document.ToString();
+            RunState migrated = PersistenceJsonSerializer.DeserializeRun(source);
+            Assert.That(migrated.RunId, Is.EqualTo(run.RunId));
+            Assert.That(migrated.RunSeed, Is.EqualTo(run.RunSeed));
+            Assert.That(migrated.Health, Is.EqualTo(100));
+            Assert.That(migrated.Satiety, Is.EqualTo(200));
+            Assert.That(migrated.RandomAlgorithmId, Is.EqualTo(version < 3 ? RunState.LegacyRandomAlgorithmId : run.RandomAlgorithmId));
+            Assert.That(PersistenceJsonSerializer.SerializeRun(migrated), Does.Contain("\"satiety\": 200").And.Not.Contain("\"food\""));
+            document["food"] = -1;
+            Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeRun(document.ToString()));
+            Assert.That(document.ToString(), Is.Not.EqualTo(source));
+        }
+
+        [TestCase("missing-satiety")]
+        [TestCase("duplicate-food")]
+        [TestCase("high-satiety")]
+        [TestCase("high-health")]
+        [TestCase("wrong-type")]
+        [TestCase("missing-rules")]
+        [TestCase("future-rules")]
+        [TestCase("bad-threshold")]
+        [TestCase("zero-cost")]
+        public void CurrentResourceSchemaRejectsMissingMalformedAndOutOfRangeData(string corruption)
+        {
+            JObject document = JObject.Parse(PersistenceJsonSerializer.SerializeRun(TravelBoundary("pending")));
+            switch (corruption)
+            {
+                case "missing-satiety": document.Remove("satiety"); break;
+                case "duplicate-food": document["food"] = 100; break;
+                case "high-satiety": document["satiety"] = 201; break;
+                case "high-health": document["health"] = 101; break;
+                case "wrong-type": document["satiety"] = "100"; break;
+                case "missing-rules": document.Remove("resourceRules"); break;
+                case "future-rules": document["resourceRules"]["version"] = 99; break;
+                case "bad-threshold": document["resourceRules"]["normalSatietyThreshold"] = 201; break;
+                case "zero-cost": document["resourceRules"]["satedActionCost"] = 0; break;
+            }
+            Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeRun(document.ToString()));
+        }
+
+        [Test]
         public void RunV2Dto_HasExplicitTravelSchemaWithoutV1Cutover()
         {
             Assert.That(RunStateV2Dto.CurrentSchemaVersion, Is.EqualTo(2));
@@ -94,7 +178,7 @@ namespace HallowBlaze.Tests.EditMode
         public void TravelRunWriter_EmitsCompleteV4StableState()
         {
             string json = PersistenceJsonSerializer.SerializeTravelRun(TravelBoundary("pending"));
-            Assert.That(json, Does.Contain("\"schemaVersion\": 6").And.Contain("\"introState\": \"pending\""));
+            Assert.That(json, Does.Contain("\"schemaVersion\": 7").And.Contain("\"introState\": \"pending\""));
             Assert.That(json, Does.Not.Contain("\"route\":").And.Not.Contain("\"boardSeed\":").And.Not.Contain("\"currentDay\":"));
             AssertTravelEquals(TravelBoundary("pending"), PersistenceJsonSerializer.DeserializeTravelRun(json));
             Assert.That(RunStateDto.CurrentSchemaVersion, Is.EqualTo(1));
@@ -144,7 +228,7 @@ namespace HallowBlaze.Tests.EditMode
             string profileJson = PersistenceJsonSerializer.SerializeProfile(profile);
             RunState run = TravelBoundary("intermediate");
             string runJson = PersistenceJsonSerializer.SerializeRun(run);
-            Assert.That(runJson, Does.Contain("\"schemaVersion\": 6"));
+            Assert.That(runJson, Does.Contain("\"schemaVersion\": 7"));
             AssertTravelEquals(run, PersistenceJsonSerializer.DeserializeRun(runJson));
             Assert.That(PersistenceJsonSerializer.SerializeProfile(profile), Is.EqualTo(profileJson));
             Assert.That(ProfileStateDto.CurrentSchemaVersion, Is.EqualTo(2));
@@ -206,7 +290,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(restored.ToolSlots[0].ToolId, Is.EqualTo("axe.basic"));
             Assert.That(restored.ToolSlots[0].Instance.Charges, Is.Zero);
             Assert.That(restored.ToolSlots[1].IsEmpty, Is.True);
-            Assert.That(restored.Food, Is.EqualTo(original.Food));
+            Assert.That(restored.Satiety, Is.EqualTo(original.Satiety));
             Assert.That(restored.Health, Is.EqualTo(original.Health));
             if (version >= 4) Assert.That(restored.ToolSlots[0].Instance.InstanceId, Is.EqualTo(axe.InstanceId));
             string rewritten = PersistenceJsonSerializer.SerializeRun(restored);
@@ -453,8 +537,8 @@ namespace HallowBlaze.Tests.EditMode
                 "run-maximum",
                 int.MinValue,
                 new RunStateConfiguration(
-                    int.MaxValue,
-                    int.MaxValue,
+                    100,
+                    200,
                     int.MaxValue,
                     "node.current"));
             original.RecordRouteNode("node.start");
@@ -643,7 +727,7 @@ namespace HallowBlaze.Tests.EditMode
         {
             string futureDocument = profile
                 ? "{\"schemaVersion\":3}"
-                : "{\"schemaVersion\":7}";
+                : "{\"schemaVersion\":8}";
 
             PersistenceDataException exception = Assert.Throws<PersistenceDataException>(() =>
             {
@@ -786,7 +870,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(actual.CurrentDay, Is.EqualTo(expected.CurrentDay));
             Assert.That(actual.WorldNodeId, Is.EqualTo(expected.WorldNodeId));
             Assert.That(actual.Health, Is.EqualTo(expected.Health));
-            Assert.That(actual.Food, Is.EqualTo(expected.Food));
+            Assert.That(actual.Satiety, Is.EqualTo(expected.Satiety));
             Assert.That(actual.Status, Is.EqualTo(expected.Status));
             Assert.That(actual.Route, Is.EqualTo(expected.Route));
             Assert.That(actual.ToolSlots, Has.Count.EqualTo(expected.ToolSlots.Count));

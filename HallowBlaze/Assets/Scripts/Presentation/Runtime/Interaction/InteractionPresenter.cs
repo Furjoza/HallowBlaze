@@ -308,7 +308,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 }
                 GUILayout.EndScrollView();
                 RevealSelectedRow();
-                GUILayout.Label("1 turn; Food -" + runtime.Tools.ActionCosts.FoodCost + "; Noise " +
+                GUILayout.Label("1 turn; Satiety -" + runtime.Tools.ActionCosts.GetCost(runtime.RunState) + "; Noise " +
                     ActionNoiseProfile.Prototype.InteractionStrength + " / " + ActionNoiseProfile.Prototype.LifetimeTurns + " turns");
                 GUI.enabled = replacementChoice != null;
                 if (GUILayout.Button("Replace", GUILayout.Height(32f))) ConfirmFromGui();
@@ -383,7 +383,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             if (index < Options.Count)
             {
                 InteractionOption option = Options[index];
-                if (option.ActionId == FirstAidInteractionAction.ActionId && runtime.RunState.Health >= FirstAidInteractionAction.HealthCeiling)
+                if (option.ActionId == FirstAidInteractionAction.ActionId && runtime.RunState.Health >= runtime.RunState.ResourceRules.MaximumHealth)
                     return "Health is full - first aid is not needed.";
                 return option.Availability.ToString();
             }
@@ -401,7 +401,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             {
                 InteractionOption interaction = Options[index];
                 if (interaction.EffectLabel == null) return ActionLabel(interaction.ActionId) + target;
-                return interaction.EffectLabel + target + "\n1 turn; Food -" + runtime.Tools.ActionCosts.FoodCost +
+                return interaction.EffectLabel + target + "\n1 turn; Satiety -" + runtime.Tools.ActionCosts.GetCost(runtime.RunState) +
                     "; Charge 0; Noise " + interaction.NoiseStrength + " / " + interaction.NoiseLifetimeTurns + " turns";
             }
             if (index >= Options.Count + ToolOptions.Count)
@@ -409,12 +409,12 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 ToolPickupOption pickup = PickupOptions[index - Options.Count - ToolOptions.Count];
                 return "Pick up " + DescribeTool(pickup.Tool.DefinitionId, pickup.Tool.Charges) + target +
                     (pickup.RequiresReplacement ? "\nReplace / Leave" : "\nTool " + (pickup.Choices.Count == 0 ? "?" : (pickup.Choices[0].SlotIndex + 1).ToString())) +
-                    "\n1 turn; Food -" + runtime.Tools.ActionCosts.FoodCost + "; Charge 0; Noise " +
+                    "\n1 turn; Satiety -" + runtime.Tools.ActionCosts.GetCost(runtime.RunState) + "; Charge 0; Noise " +
                     ActionNoiseProfile.Prototype.InteractionStrength + " / " + ActionNoiseProfile.Prototype.LifetimeTurns + " turns";
             }
             ToolUseOption option = ToolOptions[index - Options.Count];
             return "Tool " + (option.SlotIndex + 1) + ": " + option.EffectLabel + target +
-                "\n1 turn; Food -" + option.FoodCost +
+                "\n1 turn; Satiety -" + option.SatietyCost +
                 (option.ChargeCost == 0 ? "" : "; Charge -" + option.ChargeCost + " (" + option.ExpectedCharges + " left)") +
                 "; Noise " + option.NoiseStrength +
                 (option.NoiseStrength == 0 ? "" : " / " + option.NoiseLifetimeTurns + " turns");
