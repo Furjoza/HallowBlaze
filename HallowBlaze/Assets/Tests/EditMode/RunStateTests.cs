@@ -282,6 +282,22 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(run.ToolSlots[0].IsEmpty, Is.True);
         }
 
+        /// <summary>Reusable policy does not rewrite compatibility charges or change finite-use definitions.</summary>
+        [Test]
+        public void ReusableToolDefinitionsPreserveStoredSnapshotsWithoutAUseLimit()
+        {
+            var reusable = new ToolDefinition("axe.basic", "Axe", 3, isReusable: true);
+            var finite = new ToolDefinition("shovel.basic", "Shovel", 3);
+            Assert.That(reusable.IsReusable, Is.True);
+            Assert.That(reusable.UseChargeCost, Is.Zero);
+            Assert.That(finite.IsReusable, Is.False);
+            Assert.That(finite.UseChargeCost, Is.EqualTo(1));
+            RunState run = CreateRun();
+            ToolInstanceState instance = run.CreateToolInstance(reusable);
+            Assert.That(instance.Charges, Is.EqualTo(3));
+            Assert.That(reusable.MaximumCharges, Is.EqualTo(3));
+        }
+
         /// <summary>Definitions are reusable content; immutable equipped snapshots and identity allocation belong to each run.</summary>
         [Test]
         public void ToolDefinitionsAndInstancesRemainIndependentAcrossRunsAndSnapshots()
@@ -303,6 +319,27 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(first.Health, Is.EqualTo(100));
             Assert.That(first.Food, Is.EqualTo(100));
             Assert.Throws<NotSupportedException>(() => ((IList<ToolSlotState>)first.ToolSlots).Clear());
+        }
+
+        /// <summary>Travel retains the current run's tools; neither death nor victory transfers them or their allocator into a new run.</summary>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void TerminalRunToolsDoNotTransferIntoFreshRun(bool victory)
+        {
+            RunState run = CreateRun();
+            ToolInstanceState axe = run.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 3, isReusable: true));
+            ToolInstanceState shovel = run.CreateToolInstance(new ToolDefinition("shovel.basic", "Shovel", 3));
+            run.EquipTool(0, axe);
+            run.EquipTool(1, shovel);
+            run.AdvanceDay();
+            run.SetCurrentWorldNode("forest.clearing");
+            Assert.That(run.ToolSlots[0].Instance, Is.SameAs(axe));
+            Assert.That(run.ToolSlots[1].Instance, Is.SameAs(shovel));
+            if (victory) run.MarkWon();
+            else run.MarkDead();
+            run.Reset("fresh-run", 42, CreateConfiguration());
+            Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
+            Assert.That(run.ToolInstanceSequence, Is.Zero);
         }
 
         /// <summary>Replacing and removing return exact old instances and never reuse IDs or allow duplicate equipment.</summary>

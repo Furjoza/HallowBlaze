@@ -177,6 +177,42 @@ namespace HallowBlaze.Tests.EditMode
                 Is.Not.EqualTo(removed.InstanceId).And.Not.EqualTo(unknown.InstanceId));
         }
 
+        /// <summary>All retained schemas preserve a depleted axe snapshot; reusable behavior never requires save rewriting or refill.</summary>
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        [TestCase(4)]
+        [TestCase(5)]
+        [TestCase(6)]
+        public void RetainedAxeChargesStayUnchangedAcrossAllRunSchemas(int version)
+        {
+            RunState original = TravelBoundary("checkpoint");
+            original.ClearTool(0);
+            original.ClearTool(1);
+            ToolInstanceState axe = original.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 3));
+            original.EquipTool(0, axe);
+            for (int index = 0; index < 3; index++) Assert.That(original.TrySpendToolCharge(0, axe.InstanceId), Is.True);
+            object dto;
+            switch (version)
+            {
+                case 1: dto = RunStateMapper.ToDto(original); break;
+                case 2: dto = RunStateV2Mapper.ToDto(original); break;
+                case 3: dto = RunStateV3Mapper.ToDto(original); break;
+                case 4: dto = RunStateV4Mapper.ToDto(original); break;
+                case 5: dto = RunStateV5Mapper.ToDto(original); break;
+                default: dto = RunStateV6Mapper.ToDto(original); break;
+            }
+            RunState restored = PersistenceJsonSerializer.DeserializeRun(JsonConvert.SerializeObject(dto));
+            Assert.That(restored.ToolSlots[0].ToolId, Is.EqualTo("axe.basic"));
+            Assert.That(restored.ToolSlots[0].Instance.Charges, Is.Zero);
+            Assert.That(restored.ToolSlots[1].IsEmpty, Is.True);
+            Assert.That(restored.Food, Is.EqualTo(original.Food));
+            Assert.That(restored.Health, Is.EqualTo(original.Health));
+            if (version >= 4) Assert.That(restored.ToolSlots[0].Instance.InstanceId, Is.EqualTo(axe.InstanceId));
+            string rewritten = PersistenceJsonSerializer.SerializeRun(restored);
+            Assert.That(PersistenceJsonSerializer.DeserializeRun(rewritten).ToolSlots[0].Instance.Charges, Is.Zero);
+        }
+
         /// <summary>All historical schemas acquire deterministic instance IDs and preserve existing rewards, RNG and tool values.</summary>
         [TestCase(1)]
         [TestCase(2)]

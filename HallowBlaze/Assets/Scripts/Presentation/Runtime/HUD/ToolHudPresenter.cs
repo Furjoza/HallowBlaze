@@ -65,12 +65,14 @@ namespace HallowBlaze.Presentation.Runtime
             for (int index = 0; index < RunState.ToolSlotCount; index++)
             {
                 ToolSlotState slot = run.ToolSlots[index];
-                string next = slot.IsEmpty ? "Empty" :
-                    (catalog.TryGetValue(slot.ToolId, out ToolDefinition definition) ? definition.DisplayName : "Unknown tool") +
-                    "  " + slot.RemainingUses;
+                ToolDefinition definition = null;
+                if (!slot.IsEmpty) catalog.TryGetValue(slot.ToolId, out definition);
+                bool reusable = definition != null && definition.IsReusable;
+                string next = slot.IsEmpty ? "Empty" : (definition?.DisplayName ?? "Unknown tool") +
+                    (reusable ? "" : "  " + slot.RemainingUses);
                 if (values[index].text != next) values[index].text = next;
                 values[index].color = slot.IsEmpty ? new Color32(190, 196, 192, 255) :
-                    slot.RemainingUses == 0 ? new Color32(255, 198, 93, 255) : Color.white;
+                    !reusable && slot.RemainingUses == 0 ? new Color32(255, 198, 93, 255) : Color.white;
             }
         }
 

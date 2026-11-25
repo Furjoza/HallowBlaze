@@ -1,6 +1,7 @@
 using System.Linq;
 using HallowBlaze.Core.Board.Primitives;
 using HallowBlaze.Core.Board.State;
+using HallowBlaze.Core.Persistence;
 using HallowBlaze.Core.State;
 using HallowBlaze.Core.Turns.Contracts;
 using HallowBlaze.Core.Turns.Resolution;
@@ -14,7 +15,51 @@ namespace HallowBlaze.Tests.EditMode
         private static readonly EntityId PlayerId = new EntityId(1);
         private static readonly EntityId WallId = new EntityId(2);
 
-        /// <summary>Both alternatives open the same route; only the axe consumes a charge and its single emission is louder.</summary>
+        /// <summary>Reusable chopping accepts retained zero-charge axes and never changes their stored compatibility snapshot.</summary>
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(3)]
+        public void ReusableAxeClearsMoreThanThreeObstaclesWithoutSpendingStoredCharges(int retainedCharges)
+        {
+            BoardState board = CreateBoard();
+            var run = new RunState("reusable-axe", 54, new RunStateConfiguration(100, 20, 0, "forest.start"));
+            ToolInstanceState allocated = run.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 3));
+            var retained = new ToolInstanceState(allocated.InstanceId, allocated.DefinitionId, retainedCharges);
+            run.EquipTool(0, retained);
+            string saved = PersistenceJsonSerializer.SerializeRun(run);
+            run = PersistenceJsonSerializer.DeserializeRun(saved);
+            retained = run.ToolSlots[0].Instance;
+            Assert.That(retained.InstanceId, Is.EqualTo(allocated.InstanceId));
+            Assert.That(PersistenceJsonSerializer.SerializeRun(run), Is.EqualTo(saved));
+            var rules = new ObstacleClearingRules(new[] { "soft.wood" }, 3, 1, 6, 2);
+            var tools = new ToolUseQuery(new[] { new ToolAction("axe.basic", new ClearObstacleAction(rules, true), "Chop", 6, 2,
+                ObstacleClearingRules.AxeNoiseFactId, chargeCost: 0) });
+            int laterPhases = 0;
+            var controller = new TurnController(board, run, PlayerId, new TurnResolver(tools: tools), new TurnPhaseHandlers(
+                (state, activeRun, actor, events) => laterPhases++));
+            for (int index = 0; index < 5; index++)
+            {
+                if (index > 0)
+                    Assert.That(board.TryAdd(new BoardEntityState(new EntityId(100 + index),
+                        new BoardEntityDefinition(BoardLayer.Obstacle, EntityKind.Obstacle, "soft.wood"), new GridPosition(1, 0))), Is.True);
+                ToolUseOption option = tools.GetOptions(board, run, PlayerId).Single();
+                Assert.That(option.IsAvailable, Is.True);
+                Assert.That(option.ChargeCost, Is.Zero);
+                TurnResult result = controller.Resolve(option.CreateCommand());
+                Assert.That(result.Accepted && result.ConsumesTurn, Is.True);
+                Assert.That(result.Events.OfType<ToolChargeSpentEvent>(), Is.Empty);
+                Assert.That(result.Events.OfType<NoiseEvent>().Single().Noise.Strength, Is.EqualTo(6));
+                Assert.That(run.ToolSlots[0].Instance, Is.SameAs(retained));
+                Assert.That(run.Food, Is.EqualTo(19 - index));
+                TurnResult repeated = controller.Resolve(option.CreateCommand());
+                Assert.That(repeated.Accepted || repeated.ConsumesTurn, Is.False);
+                Assert.That(repeated.Events, Is.Empty);
+            }
+            Assert.That(laterPhases, Is.EqualTo(5));
+            Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(retainedCharges));
+        }
+
+        /// <summary>Both alternatives open the same route without tool depletion; the faster axe emits louder noise.</summary>
         [TestCase(false)]
         [TestCase(true)]
         public void ManualAndAxeClearTheSameRouteWithExplicitCosts(bool usesAxe)
@@ -24,7 +69,7 @@ namespace HallowBlaze.Tests.EditMode
             var rules = new ObstacleClearingRules(new[] { "soft.wood" }, 3, 1, 6, 2);
             var interactions = new InteractionQuery(new[] { new ClearObstacleAction(rules, false) });
             var tools = new ToolUseQuery(new[] { new ToolAction("axe.basic", new ClearObstacleAction(rules, true), "Chop: clear obstacle", 6, 2,
-                ObstacleClearingRules.AxeNoiseFactId) });
+                ObstacleClearingRules.AxeNoiseFactId, chargeCost: 0) });
             if (usesAxe) run.EquipTool(0, run.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 3)));
             var controller = new TurnController(board, run, PlayerId, new TurnResolver(interactions: interactions, tools: tools));
             Assert.That(controller.Resolve(new MoveCommand(Direction.East)).Accepted, Is.False);
@@ -40,12 +85,12 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(result.Events.OfType<NoiseEvent>().Single().Noise.Strength, Is.EqualTo(usesAxe ? 6 : 1));
                 Assert.That(result.Events.OfType<NoiseEvent>().Single().ObservedFactId,
                     Is.EqualTo(usesAxe ? ObstacleClearingRules.AxeNoiseFactId : null));
-                Assert.That(result.Events.OfType<ToolChargeSpentEvent>().Count(), Is.EqualTo(usesAxe ? 1 : 0));
+                Assert.That(result.Events.OfType<ToolChargeSpentEvent>(), Is.Empty);
             }
             Assert.That(run.Food, Is.EqualTo(20 - actions));
             Assert.That(board.TryGetEntity(WallId, out _), Is.False);
             Assert.That(controller.Resolve(new MoveCommand(Direction.East)).Accepted, Is.True);
-            if (usesAxe) Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
+            if (usesAxe) Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(3));
             else Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
             controller.Resolve(new MoveCommand(Direction.East));
             controller.Resolve(new MoveCommand(Direction.East));
@@ -69,7 +114,7 @@ namespace HallowBlaze.Tests.EditMode
             run.EquipTool(0, run.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 3)));
             var rules = new ObstacleClearingRules(new[] { "soft.wood" }, 3, 1, 6, 2);
             var tools = new ToolUseQuery(new[] { new ToolAction("axe.basic", new ClearObstacleAction(rules, true), "Chop", 6, 2,
-                ObstacleClearingRules.AxeNoiseFactId) });
+                ObstacleClearingRules.AxeNoiseFactId, chargeCost: 0) });
             var controller = new TurnController(board, run, PlayerId, new TurnResolver(tools: tools), phases.Handlers);
             TurnResult result = controller.Resolve(tools.GetOptions(board, run, PlayerId).Single().CreateCommand());
             NoiseEvent emission = result.Events.OfType<NoiseEvent>().Single();
@@ -103,7 +148,7 @@ namespace HallowBlaze.Tests.EditMode
 
         /// <summary>Invalid axe decisions cannot partially work an obstacle, consume a charge, emit noise or advance enemy phases.</summary>
         [TestCase("empty")]
-        [TestCase("depleted")]
+        [TestCase("charges")]
         [TestCase("stone")]
         [TestCase("actor")]
         [TestCase("shovel")]
@@ -116,16 +161,12 @@ namespace HallowBlaze.Tests.EditMode
             var run = new RunState("m54-reject", 54, new RunStateConfiguration(100, 20, 0, "forest.start"));
             var rules = new ObstacleClearingRules(new[] { "soft.wood" }, 3, 1, 6, 2);
             var tools = new ToolUseQuery(new[] { new ToolAction("axe.basic", new ClearObstacleAction(rules, true), "Chop", 6, 2,
-                ObstacleClearingRules.AxeNoiseFactId) });
+                ObstacleClearingRules.AxeNoiseFactId, chargeCost: 0) });
             ToolInstanceState axe = run.CreateToolInstance(new ToolDefinition(invalid == "shovel" ? "shovel.basic" : "axe.basic", "Tool", 3));
             run.EquipTool(0, axe);
             var command = new UseToolCommand(0, axe.InstanceId, 3, WallId, new GridPosition(1, 0), "chop");
             if (invalid == "empty") run.RemoveTool(0);
-            if (invalid == "depleted")
-            {
-                for (int charge = 0; charge < 3; charge++) run.TrySpendToolCharge(0, axe.InstanceId);
-                command = new UseToolCommand(0, axe.InstanceId, 0, WallId, new GridPosition(1, 0), "chop");
-            }
+            if (invalid == "charges") run.TrySpendToolCharge(0, axe.InstanceId);
             if (invalid == "stone" || invalid == "actor")
             {
                 board.TryRemove(WallId);
@@ -167,7 +208,7 @@ namespace HallowBlaze.Tests.EditMode
             var run = new RunState("m54-mixed", 54, new RunStateConfiguration(100, 20, 0, "forest.start"));
             var rules = new ObstacleClearingRules(new[] { "soft.wood" }, 4, 0, 5, 3);
             var interactions = new InteractionQuery(new[] { new ClearObstacleAction(rules, false) });
-            var tools = new ToolUseQuery(new[] { new ToolAction("axe.basic", new ClearObstacleAction(rules, true), "Chop", 5, 3) });
+            var tools = new ToolUseQuery(new[] { new ToolAction("axe.basic", new ClearObstacleAction(rules, true), "Chop", 5, 3, chargeCost: 0) });
             run.EquipTool(0, run.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 3)));
             var controller = new TurnController(board, run, PlayerId, new TurnResolver(ActionNoiseProfile.Prototype, interactions, tools));
             Assert.That(controller.Resolve(interactions.GetOptions(board, run, PlayerId).Single().CreateCommand()).Accepted, Is.True);
@@ -179,7 +220,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(controller.Resolve(selection).Accepted, Is.False);
             Assert.That(board.TryGetEntity(WallId, out _), Is.False);
             Assert.That(run.Food, Is.EqualTo(18));
-            Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
+            Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(3));
         }
 
         private static BoardState CreateBoard()

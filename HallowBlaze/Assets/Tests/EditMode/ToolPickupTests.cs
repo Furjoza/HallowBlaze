@@ -273,6 +273,37 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(after, Is.SameAs(original));
         }
 
+        /// <summary>Picking up a retained zero-charge axe preserves its identity and makes its reusable action available without refill.</summary>
+        [Test]
+        public void PickedUpZeroChargeAxeRemainsUsableWithoutRefill()
+        {
+            RunState run = CreateRun();
+            BoardState board = CreateBoard(run);
+            board.TryRemove(ToolId);
+            ToolInstanceState allocated = run.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 3, isReusable: true));
+            var incoming = new GroundToolState(ToolId, allocated.InstanceId, allocated.DefinitionId, 0);
+            Assert.That(board.TryAddGroundTool(new BoardEntityState(ToolId,
+                new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, incoming.DefinitionId), new GridPosition(1, 0)), incoming), Is.True);
+            var pickups = new ToolPickupQuery();
+            var rules = new ObstacleClearingRules(new[] { "soft.wood" }, 3, 1, 6, 2);
+            var tools = new ToolUseQuery(new[] { new ToolAction("axe.basic", new ClearObstacleAction(rules, true), "Chop", 6, 2, chargeCost: 0) });
+            var controller = new TurnController(board, run, PlayerId, new TurnResolver(tools: tools, pickups: pickups));
+            int sequence = run.ToolInstanceSequence;
+            Assert.That(controller.Resolve(pickups.GetOptions(board, run, PlayerId).Single().Choices.Single()).Accepted, Is.True);
+            Assert.That(run.ToolSlots[0].Instance.InstanceId, Is.EqualTo(incoming.InstanceId));
+            Assert.That(run.ToolSlots[0].Instance.Charges, Is.Zero);
+            Assert.That(board.TryAdd(new BoardEntityState(new EntityId(99),
+                new BoardEntityDefinition(BoardLayer.Obstacle, EntityKind.Obstacle, "soft.wood"), new GridPosition(1, 0))), Is.True);
+            ToolUseOption choice = tools.GetOptions(board, run, PlayerId).Single();
+            Assert.That(choice.IsAvailable, Is.True);
+            TurnResult chopped = controller.Resolve(choice.CreateCommand());
+            Assert.That(chopped.Accepted, Is.True);
+            Assert.That(chopped.Events.OfType<ToolChargeSpentEvent>(), Is.Empty);
+            Assert.That(run.ToolSlots[0].Instance.Charges, Is.Zero);
+            Assert.That(run.ToolInstanceSequence, Is.EqualTo(sequence));
+            Assert.That(run.Food, Is.EqualTo(18));
+        }
+
         /// <summary>Pickup transfers a depleted concrete tool without refilling it and still pays exactly the normal accepted-action cost.</summary>
         [Test]
         public void DepletedToolCanBePickedUpWithoutRefillOrAllocatorAdvance()

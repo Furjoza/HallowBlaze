@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace HallowBlaze.Presentation.Runtime.Interaction
 {
-    /// <summary>Displays the actual ground tool definition and charges, including the preserved old tool after an exchange.</summary>
+    /// <summary>Displays concrete ground tool names and finite-use charges; reusable tools never display a depletion counter.</summary>
     public sealed class GroundToolPresenter : IDisposable
     {
         private readonly BoardRuntime runtime;
@@ -49,8 +49,9 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 text.anchor = TextAnchor.MiddleCenter;
                 text.alignment = TextAlignment.Center;
                 text.color = Color.white;
-                text.text = (catalog.TryGetValue(tool.DefinitionId, out ToolDefinition definition) ? definition.DisplayName : tool.DefinitionId) +
-                    "\n" + tool.Charges + " charges";
+                bool known = catalog.TryGetValue(tool.DefinitionId, out ToolDefinition definition);
+                text.text = (known ? definition.DisplayName : tool.DefinitionId) +
+                    (known && definition.IsReusable ? "" : "\n" + tool.Charges + " charges");
                 MeshRenderer renderer = owner.GetComponent<MeshRenderer>();
                 renderer.sharedMaterial = text.font.material;
                 renderer.sortingLayerName = EnemyIntentView.GlyphSortingLayer;

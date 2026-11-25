@@ -214,9 +214,12 @@ namespace HallowBlaze.Core.Turns.Resolution
             var events = new List<GameEvent> { new ToolUsedEvent(player.Id, command, action.DefinitionId) };
             action.Behavior.Apply(boardState, runState, player, target, events);
             PlateGateEventRecorder.Append(boardState, events);
-            if (!runState.TrySpendToolCharge(command.SlotIndex, command.InstanceId))
-                throw new InvalidOperationException("Validated tool charges changed during a synchronous effect.");
-            events.Add(new ToolChargeSpentEvent(player.Id, command));
+            if (action.ChargeCost > 0)
+            {
+                if (!runState.TrySpendToolCharge(command.SlotIndex, command.InstanceId))
+                    throw new InvalidOperationException("Validated tool charges changed during a synchronous effect.");
+                events.Add(new ToolChargeSpentEvent(player.Id, command));
+            }
             ApplyCost(runState, player.Id, events);
             if (action.NoiseStrength > 0)
                 events.Add(new NoiseEvent(boardState.EmitNoise(player.Id, player.Position,

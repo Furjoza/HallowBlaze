@@ -139,7 +139,7 @@ namespace HallowBlaze.Core.Generation.Landmarks
             {
                 new ToolAction(ObstacleClearingRules.AxeDefinitionId, new ClearObstacleAction(clearingRules, true),
                     "Chop: clear obstacle", clearingRules.AxeNoiseStrength, clearingRules.NoiseLifetimeTurns,
-                    ObstacleClearingRules.AxeNoiseFactId)
+                    ObstacleClearingRules.AxeNoiseFactId, chargeCost: 0)
             });
             root = new Node(board, run, enemies.ToArray(), null, null);
             if (run.Status != RunStatus.Active || run.Health <= 0 || run.Food <= 0 ||

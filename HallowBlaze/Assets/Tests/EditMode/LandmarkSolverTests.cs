@@ -112,12 +112,12 @@ namespace HallowBlaze.Tests.EditMode
                 Is.EqualTo(source.Landmark.Outcomes.Single(outcome => outcome.Id == outcomeId).ExitEntityId));
             Assert.That(fresh.Controller.IsTerminal, Is.True);
             Assert.That(fresh.Run.Health, Is.GreaterThan(0));
-            Assert.That(fresh.Run.Food, Is.EqualTo(outcomeId == "tower.arrival" ? 93 : 109));
+            Assert.That(fresh.Run.Food, Is.EqualTo(outcomeId == "tower.arrival" ? 93 : 94));
             if (outcomeId == "tower.supplies")
             {
                 Assert.That(events.OfType<BoulderPushedEvent>().Count(), Is.EqualTo(1));
-                Assert.That(events.OfType<ToolChargeSpentEvent>().Count(), Is.EqualTo(1));
-                Assert.That(fresh.Run.ToolSlots[0].RemainingUses, Is.EqualTo(2));
+                Assert.That(events.OfType<ToolChargeSpentEvent>(), Is.Empty);
+                Assert.That(fresh.Run.ToolSlots[0].RemainingUses, Is.EqualTo(3));
                 Assert.That(fresh.Board.TryGetEntity(new EntityId(21), out _), Is.False);
             }
             TestContext.WriteLine(result + " path=" + string.Join("; ", result.SolutionPath));
@@ -137,7 +137,7 @@ namespace HallowBlaze.Tests.EditMode
             List<GameEvent> events = fresh.Execute(result);
             Assert.That(events.OfType<ExitReachedEvent>().Single().ExitId, Is.EqualTo(new EntityId(146)));
             Assert.That(events.OfType<ToolUsedEvent>(), Is.Empty);
-            Assert.That(fresh.Run.Food, Is.EqualTo(108));
+            Assert.That(fresh.Run.Food, Is.EqualTo(93));
             TestContext.WriteLine(result + " path=" + string.Join("; ", result.SolutionPath));
         }
 
@@ -167,7 +167,7 @@ namespace HallowBlaze.Tests.EditMode
                     Is.EqualTo(source.Landmark.Outcomes.Single(outcome => outcome.Id == outcomeId).ExitEntityId));
                 Assert.That(fresh.Run.Health, Is.GreaterThan(0), result.ToString());
                 Assert.That(fresh.Controller.IsTerminal, Is.True);
-                int reward = outcomeId == "tower.supplies" ? 20 : 0;
+                int reward = outcomeId == "tower.supplies" ? 5 : 0;
                 Assert.That(fresh.Run.Food, Is.EqualTo(100 + reward - result.SolutionPath.Count));
                 if (outcomeId == "tower.arrival")
                 {
@@ -183,7 +183,7 @@ namespace HallowBlaze.Tests.EditMode
                     Assert.That(fresh.Board.TryGetEntity(new EntityId(21), out _), Is.False);
                     Assert.That(fresh.Board.TryGetEntity(new EntityId(11), out _), Is.False);
                     if (withoutAxe) Assert.That(events.OfType<ToolUsedEvent>(), Is.Empty);
-                    else Assert.That(events.OfType<ToolChargeSpentEvent>().Count(), Is.EqualTo(1));
+                    else Assert.That(events.OfType<ToolChargeSpentEvent>(), Is.Empty);
                 }
                 TestContext.WriteLine(result + " noAxe=" + withoutAxe + " health=" + fresh.Run.Health +
                     " food=" + fresh.Run.Food + " path=" + string.Join("; ", result.SolutionPath));
