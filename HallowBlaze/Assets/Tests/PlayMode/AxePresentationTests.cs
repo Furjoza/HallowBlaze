@@ -46,16 +46,16 @@ namespace HallowBlaze.Tests.PlayMode
                 var picker = fixture.Presenter.InteractionDisplay;
                 Assert.That(picker.Open(), Is.True);
                 Assert.That(picker.Options.Single().EffectLabel, Is.EqualTo("Clear by hand: 3 actions left"));
-                Assert.That(picker.GetOptionLabel(0), Does.Contain("Food -1").And.Contain("Charge 0").And.Contain("Noise 1 / 2"));
+                Assert.That(picker.GetOptionLabel(0), Does.Contain("Satiety -1").And.Contain("Charge 0").And.Contain("Noise 1 / 2"));
                 Assert.That(picker.ToolOptions.Count, Is.EqualTo(axe ? 1 : 0));
                 int selected = axe ? picker.Options.Count : 0;
-                if (axe) Assert.That(picker.GetOptionLabel(selected), Does.Contain("Chop: clear obstacle").And.Contain("Charge -1")
+                if (axe) Assert.That(picker.GetOptionLabel(selected), Does.Contain("Chop: clear obstacle").And.Not.Contain("Charge")
                     .And.Contain("Noise 6 / 2"));
                 Assert.That(fixture.Profile.DiscoveredFactIds, Is.Empty);
                 Assert.That(picker.Select(selected), Is.True);
                 Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
                 Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
-                Assert.That(fixture.Run.Food, Is.EqualTo(19));
+                Assert.That(fixture.Run.Satiety, Is.EqualTo(19));
                 Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
                 Assert.That(fixture.WallHp, Is.EqualTo(4));
                 if (!axe)
@@ -74,10 +74,10 @@ namespace HallowBlaze.Tests.PlayMode
                 }
                 Assert.That(fixture.WallView.activeSelf, Is.False);
                 Assert.That(fixture.Runtime.BoardState.TryGetEntity(fixture.WallId, out _), Is.False);
-                Assert.That(fixture.Run.Food, Is.EqualTo(axe ? 19 : 17));
+                Assert.That(fixture.Run.Satiety, Is.EqualTo(axe ? 19 : 17));
                 Assert.That(fixture.WallHp, Is.EqualTo(4));
                 Assert.That(fixture.Profile.DiscoveredFactIds, axe ? Is.EqualTo(new[] { ObstacleClearingRules.AxeNoiseFactId }) : Is.Empty);
-                if (axe) Assert.That(fixture.Run.ToolSlots[1].Instance.Charges, Is.EqualTo(2));
+                if (axe) Assert.That(fixture.Run.ToolSlots[1].Instance.Charges, Is.EqualTo(3));
                 yield return null;
                 Assert.That(fixture.Presenter.Coordinator.SubmitAsync(new MoveCommand(Direction.East)).Result.Status,
                     Is.EqualTo(CommandSubmissionStatus.Presented));
@@ -115,7 +115,7 @@ namespace HallowBlaze.Tests.PlayMode
             picker.SampleInputAsync(key => key == KeyCode.S, -170);
             Assert.That(picker.SelectedIndex, Is.EqualTo(picker.Options.Count));
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
-            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(20));
             picker.SampleInputAsync(key => key == KeyCode.E, -160);
             Assert.That(picker.SelectedIndex, Is.EqualTo(picker.Options.Count), "Wrapping one object must not replace its selected action.");
             picker.SampleInputAsync(key => key == KeyCode.Q || key == KeyCode.E, -16);
@@ -123,8 +123,8 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(picker.SampleInputAsync(key => key == KeyCode.Space, -15).Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             picker.SampleInputAsync(key => key == KeyCode.Space, -15);
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
-            Assert.That(fixture.Run.Food, Is.EqualTo(19));
-            Assert.That(fixture.Run.ToolSlots[1].Instance.Charges, Is.EqualTo(2));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(19));
+            Assert.That(fixture.Run.ToolSlots[1].Instance.Charges, Is.EqualTo(3));
             Assert.That(fixture.Runtime.BoardState.GetActiveNoises().Count, Is.EqualTo(1));
             yield return null;
             picker.SampleInputAsync(key => key == KeyCode.F, -14);
@@ -145,7 +145,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
             Assert.That(fixture.Runtime.BoardState.GetObstacleWork(fixture.WallId), Is.EqualTo(1));
-            Assert.That(fixture.Run.Food, Is.EqualTo(19));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(19));
             Assert.That(result.Result.Events.OfType<NoiseEvent>().Count(), Is.EqualTo(1));
             Assert.That(fixture.Run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
         }
@@ -164,7 +164,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(picker.SelectedIndex, Is.EqualTo(-1));
             Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
-            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(20));
         }
 
         /// <summary>Repeated cosmetic rotations preserve run/board snapshots, emitted-noise identity/lifetime and retained enemy plans.</summary>
@@ -222,7 +222,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.Store.SaveRun(fixture.Run).IsSuccess, Is.True);
             RunState restored = fixture.Store.LoadRun().Data;
             Assert.That(restored.ToolSlots[1].Instance.InstanceId, Is.EqualTo(selection.InstanceId));
-            Assert.That(restored.ToolSlots[1].Instance.Charges, Is.EqualTo(2));
+            Assert.That(restored.ToolSlots[1].Instance.Charges, Is.EqualTo(3));
             Assert.That(fixture.Presenter.Coordinator.SubmitAsync(new WaitCommand()).Result.Status,
                 Is.EqualTo(CommandSubmissionStatus.Presented));
             fixture.Runtime.BoardState.TryGetEntity(fixture.ListenerId, out listener);
@@ -232,10 +232,10 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.Store.LoadProfile().Data.DiscoveredFactIds, Does.Contain(ObstacleClearingRules.AxeNoiseFactId));
         }
 
-        /// <summary>Missing/displaced targets and depleted tools cannot add progress, noise, facts or resource cost.</summary>
+        /// <summary>Missing/displaced targets and stale tool snapshots cannot add progress, noise, facts or resource cost.</summary>
         [TestCase("removed")]
         [TestCase("displaced")]
-        [TestCase("depleted")]
+        [TestCase("charges")]
         public void RejectedAxeCannotDocumentKnowledgeOrMutateObstacleProgress(string invalid)
         {
             Fixture fixture = CreateFixture(true, false);
@@ -243,15 +243,11 @@ namespace HallowBlaze.Tests.PlayMode
             UseToolCommand command = option.CreateCommand();
             if (invalid == "removed") fixture.Runtime.BoardState.TryRemove(fixture.WallId);
             if (invalid == "displaced") fixture.Runtime.BoardState.TryMove(fixture.WallId, new GridPosition(1, 2));
-            if (invalid == "depleted")
-            {
-                for (int charge = 0; charge < 3; charge++) fixture.Run.TrySpendToolCharge(1, option.InstanceId);
-                command = new UseToolCommand(1, option.InstanceId, 0, option.TargetId, option.TargetPosition, option.ActionId);
-            }
+            if (invalid == "charges") fixture.Run.TrySpendToolCharge(1, option.InstanceId);
             Assert.That(fixture.Presenter.Coordinator.SubmitAsync(command).Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
             Assert.That(fixture.Runtime.BoardState.GetObstacleWork(fixture.WallId), Is.Zero);
             Assert.That(fixture.Runtime.BoardState.GetActiveNoises(), Is.Empty);
-            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(20));
             Assert.That(fixture.Profile.DiscoveredFactIds, Is.Empty);
             Assert.That(fixture.Store.LoadProfile().Data.DiscoveredFactIds, Is.Empty);
         }
@@ -285,8 +281,8 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(source.clip, Is.Not.Null);
                 Assert.That(source.clip, Is.SameAs(wall.GetType().GetField("chopSound1").GetValue(wall)));
                 Assert.That(fixture.WallHp, Is.EqualTo(4));
-                Assert.That(fixture.Run.ToolSlots[1].Instance.Charges, Is.EqualTo(2));
-                Assert.That(fixture.Run.Food, Is.EqualTo(19));
+                Assert.That(fixture.Run.ToolSlots[1].Instance.Charges, Is.EqualTo(3));
+                Assert.That(fixture.Run.Satiety, Is.EqualTo(19));
             }
             finally { singleton.SetValue(null, previous); }
         }
@@ -303,7 +299,7 @@ namespace HallowBlaze.Tests.PlayMode
                 fixture.Run, fixture.Runtime.PlayerId).Single().CreateCommand();
             Assert.That(fixture.Presenter.Coordinator.SubmitAsync(command).Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             fixture.Hud.Refresh();
-            Assert.That(fixture.Hud.GetSlotText(1), Is.EqualTo(axe ? "Axe  2" : "Empty"));
+            Assert.That(fixture.Hud.GetSlotText(1), Is.EqualTo(axe ? "Axe" : "Empty"));
             Assert.That(fixture.Presenter.NoiseDisplay.GetComponentInChildren<TextMesh>().text, Is.EqualTo(axe ? "S6 T2" : "S1 T2"));
             var cameraOwner = new GameObject("Axe evidence camera");
             fixture.Objects.Add(cameraOwner);

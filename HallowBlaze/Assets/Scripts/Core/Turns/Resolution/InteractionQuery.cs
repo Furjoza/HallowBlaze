@@ -158,7 +158,7 @@ namespace HallowBlaze.Core.Turns.Resolution
         private static bool CanAct(BoardState board, RunState run, EntityId playerId, out BoardEntityState player)
         {
             player = null;
-            return run.Status == RunStatus.Active && run.Health > 0 && run.Food > 0 &&
+            return run.Status == RunStatus.Active && run.Health > 0 && run.Satiety > 0 &&
                 board.TryGetEntity(playerId, out player) && player.Definition.Layer == BoardLayer.Actor &&
                 player.Definition.Kind.Equals(EntityKind.Player);
         }

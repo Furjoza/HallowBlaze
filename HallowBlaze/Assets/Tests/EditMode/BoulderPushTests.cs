@@ -89,10 +89,10 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(pushed.PlayerTo, Is.EqualTo(new GridPosition(2, 1)));
             Assert.That(pushed.BoulderTo, Is.EqualTo(new GridPosition(3, 1)));
             Assert.That(board.GetActiveNoises().Single().Position, Is.EqualTo(pushed.PlayerTo));
-            Assert.That(run.Food, Is.EqualTo(19));
+            Assert.That(run.Satiety, Is.EqualTo(19));
             Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
             Assert.That(resolver.Resolve(board, run, new EntityId(1), option.CreateCommand()).Accepted, Is.False);
-            Assert.That(run.Food, Is.EqualTo(19));
+            Assert.That(run.Satiety, Is.EqualTo(19));
             Assert.That(board.GetActiveNoises().Count, Is.EqualTo(1));
         }
 
@@ -121,7 +121,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(board.GetEntities().Single(entity => entity.Id.Equals(new EntityId(1))).Position, Is.EqualTo(boulderCell));
             Assert.That(board.GetEntities().Single(entity => entity.Id.Equals(new EntityId(2))).Position, Is.EqualTo(destination));
             Assert.That(board.GetEntities().Single(entity => entity.Id.Equals(terrain.Id)).Definition.ContentId, Is.EqualTo("landmark.plate"));
-            Assert.That(run.Food, Is.EqualTo(19));
+            Assert.That(run.Satiety, Is.EqualTo(19));
         }
 
         /// <summary>Out-of-bounds, overflow, diagonal, same-cell and wrong identities fail without changing either layer.</summary>
@@ -179,7 +179,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(result.Accepted || result.ConsumesTurn, Is.False);
             Assert.That(result.Events, Is.Empty);
             Assert.That(phases, Is.Zero);
-            Assert.That(run.Food, Is.EqualTo(20));
+            Assert.That(run.Satiety, Is.EqualTo(20));
             Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
             Assert.That(board.GetEntities(), Is.EqualTo(before));
             Assert.That(board.GetActiveNoises(), Is.EqualTo(noises));
@@ -210,7 +210,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(result.Events.OfType<PlayerStarvedEvent>().Count(), Is.EqualTo(starvation ? 1 : 0));
             Assert.That(phases, Is.EqualTo(starvation ? 0 : 3));
             Assert.That(controller.IsTerminal, Is.EqualTo(starvation));
-            Assert.That(run.Food, Is.EqualTo(starvation ? 0 : 19));
+            Assert.That(run.Satiety, Is.EqualTo(starvation ? 0 : 19));
             Assert.That(board.GetEntities().Single(entity => entity.Id.Equals(new EntityId(1))).Position, Is.EqualTo(new GridPosition(2, 1)));
             Assert.That(board.GetEntities().Single(entity => entity.Id.Equals(new EntityId(2))).Position, Is.EqualTo(new GridPosition(3, 1)));
         }

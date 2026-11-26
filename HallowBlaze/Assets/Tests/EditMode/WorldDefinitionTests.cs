@@ -263,7 +263,7 @@ namespace HallowBlaze.Tests.EditMode
             BoardAddress pinned = BoardAddressFactory.CreateFromState(run);
             Assert.That(BoardAddressFactory.Create(run, world), Is.EqualTo(pinned));
             Assert.That(run.ActiveLeg.Segments, Has.Count.EqualTo(1));
-            Assert.That(run.Food, Is.EqualTo(83));
+            Assert.That(run.Satiety, Is.EqualTo(83));
             Assert.That(run.Health, Is.EqualTo(67));
             foreach (bool consumed in new[] { false, true })
             {
@@ -290,7 +290,7 @@ namespace HallowBlaze.Tests.EditMode
                     Assert.That(map.Travel.TryCompleteSegment(request, out _, out _), Is.False);
                     Assert.That(session.ActiveRun.TravelHistory.Single().CompletedSegmentCount, Is.EqualTo(1));
                     Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(1));
-                    Assert.That(session.ActiveRun.Food, Is.EqualTo(83));
+                    Assert.That(session.ActiveRun.Satiety, Is.EqualTo(83));
                     Assert.That(session.ActiveRun.Health, Is.EqualTo(67));
                     Assert.That(session.Profile.DiscoveredFactIds, Does.Contain("retained-old-knowledge"));
                 }
@@ -334,15 +334,15 @@ namespace HallowBlaze.Tests.EditMode
                     BoardRequest request = BoardRequest.CreateFromRun(run, world);
                     Assert.That(request.Address.DayNumber, Is.EqualTo(1));
                     Assert.That(run.ActiveLeg.SegmentIndex, Is.EqualTo(index));
-                    run.ConsumeFood(index + 1);
-                    int food = run.Food;
+                    run.ConsumeSatiety(index + 1);
+                    int food = run.Satiety;
                     Assert.That(map.Travel.TryCompleteSegment(request, out SaveStoreResult checkpoint, out bool arrived), Is.True);
                     Assert.That(checkpoint.IsSuccess, Is.True);
                     Assert.That(arrived, Is.EqualTo(index == 2));
                     Assert.That(map.Travel.TryCompleteSegment(request, out _, out _), Is.False);
                     session.ContinueRun(store.LoadRun().Data);
                     map = new WorldMapService(world, session, store);
-                    Assert.That(session.ActiveRun.Food, Is.EqualTo(food));
+                    Assert.That(session.ActiveRun.Satiety, Is.EqualTo(food));
                     Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(index == 2 ? 1 : 0));
                     if (index < 2)
                     {

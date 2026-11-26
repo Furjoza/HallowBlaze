@@ -1,5 +1,242 @@
 # HallowBlaze Testing
 
+## M10.4 Atomic Backpack Session
+
+`ManageInventoryCommand` uses the existing `TurnResolver`, `TurnController` and presentation
+coordinator. It adds no save schema, automatic checkpoint, production item catalogue, pickup,
+quick-use wrapper, B binding, grid UI or hotbar. Final player-facing presentation belongs to
+M10.7. The minimal `BoardEventPresenter.InventoryDisplay` adapter is available to isolated
+test/debug callers on an active board; it grants no items and does not bypass lifecycle gates.
+
+### Payload And Ownership
+
+| Payload | Meaning / authority |
+| --- | --- |
+| `ExpectedRevision` | Exact revision observed at draft opening; no-op acceptance also makes it stale |
+| `Actions[0..2]` | Ordered immutable `InventoryItemAction(Use/Discard, instanceId)`; every target must be currently owned and unique |
+| `FinalLayout` | Exactly all survivors, each once, as `InventoryLayoutEntry(instanceId, containerId, column, row)` |
+| `containerId` | Exact `main-grid`, `left-pocket` or `right-pocket`; pockets require anchor 0.0 |
+| Definitions / effects | Resolved only from run-owned `InventoryContent`; the command cannot provide or replace a definition |
+| `InventoryDraft` | Detached transient proposal; staging/repacking never mutates resources, inventory or revision |
+
+The payload copies its sequences and exposes read-only collections of immutable values.
+Repacking is a whole-layout proposal, so swaps do not require a collision-free intermediate
+state. No action can add/rename an instance, target another actor, affect the board or create
+a ground item. Both Use and Discard permanently remove the selected carried identity; only
+Use applies its trusted restoration. Legal Use at the cap still consumes the item and reports
+its wasted amount under the M10.2 effect contract.
+
+### Validation And Commit Chronology
+
+1. Existing run/player validation rejects terminal, zero-resource or missing-player state.
+    The resolver samples the satiety cost tier once before any item effect.
+2. Validate expected revision, nonnull sequences, at most two actions and available revision
+    space. Validate every action kind, currently owned target and unique action identity.
+3. Resolve required effects and calculate ordered capped gains/waste using local projected
+    resources. Validate the exact survivor set, all anchors, unique ownership and compatibility.
+    No authoritative mutation occurs in these validation steps.
+4. Commit the validated final inventory once using `TryCommitInventory`; advance revision
+    exactly once, including no-op. Apply the already validated restoration effects in payload
+    order. Synchronous controller ownership excludes external mutations during resolution.
+5. Emit ordered `InventoryItemActionEvent` facts (Use/Discard, exact instance/definition,
+    effect/resource and applied/wasted accounting), then one `InventoryCommittedEvent` with
+    the final layout/new revision, then one `ActionCostAppliedEvent` using the preselected tier.
+6. Apply the existing immediate starvation check. A nonterminal result executes one locked
+    hostile phase, one environment phase and existing next-intent planning. Immediate terminal
+    results stop later phases under O-002; no item grants an extra opportunity or replans an intent.
+7. Presentation replays the accepted facts once. Applied resource gains stay separate from
+    the later cost/damage. Its gate remains held until replay or recovery finishes; presentation
+    failure cannot refund, repeat or reopen an accepted bag transaction.
+
+| Action mix | Removed items | Resource effects | Final layout / turn |
+| --- | --- | --- | --- |
+| None | None | None | Arbitrary valid repack or no-op; revision +1, one cost/hostile opportunity |
+| Use | One | One capped effect | Every other instance exactly once; same single turn |
+| Discard | One | None | Every other instance exactly once; no ground entity; same single turn |
+| Use, Use | Two distinct | Both in submitted order, with per-item waste | All survivors exactly once; same single turn |
+| Use, Discard | Two distinct | First effect only | Same single turn |
+| Discard, Use | Two distinct | Second effect only | Same single turn |
+| Discard, Discard | Two distinct | None | Same single turn |
+
+The action-mix fixture starts at health 95/satiety 100 with three 1x1 test berries, each +10.
+It explicitly expects `99 + 10 * numberOfUses` satiety, unchanged health, `3 - actionCount`
+survivors at their requested anchors, revision 1 and exactly one hostile/environment/planning
+call for every mix. Separate real-Shambler scenarios use food +50 and medicine up to +10:
+health 95 -> 100 -> 90 after one announced attack, satiety 100 -> 150 -> 149 with cost 1;
+the next bag no-op pays 2 and the announced enemy rest does not become another attack.
+
+### Rejection And Modal Matrix
+
+| Attempt | Result / unchanged authority |
+| --- | --- |
+| Old expected revision / repeated accepted payload | `StaleInventory`; no event, item, resource, turn or later-phase change |
+| Third/duplicate/null/unsupported action or foreign target | `InvalidInventory`; the first valid action cannot leak an effect |
+| Null/missing/extra/duplicate survivor, foreign identity or removed target in final layout | `InvalidInventory`; no implicit loss/substitution |
+| Overlap, out-of-bounds, unknown container, incompatible pocket or nonzero pocket anchor | `InvalidInventory`; original layout and resources retained |
+| Missing required effect | Cannot enter trusted run inventory; restore/content validation rejects without mutation, and resolver never substitutes an effect |
+| Revision `Int32.MaxValue` | `InvalidInventory`; no wrap, effect or cost |
+| Terminal, zero-resource or missing-player state | Existing `InvalidState`; no revival or post-terminal command |
+| Quick use / a primary command inside a bag payload | Not part of this sealed payload; no modifier or nested command dispatch exists in M10.4 |
+| Movement/Wait/interaction while bag is open | Independent `Inventory` input block; no coordinator invocation |
+| Pause, other modal or pending replay during Finish | Blocked; unrelated input ownership stays intact |
+| Stale Finish | Draft stays open and rebases to current run, with cleared staged actions; not a free close |
+| Canceled before resolution | No command/cost; unfinished draft remains open |
+| Rapid Finish while resolving/replaying or after accepted close | Blocked; one controller invocation only |
+| Board/terminal/presenter disposal | Lifecycle-only draft disposal; removes only its own input block and grants no gameplay close shortcut |
+
+`InventorySessionPresenter.TryOpen()` is free, but it has no normal Cancel/Close API.
+`FinishAsync()` is the normal exit even for no-op. `Dispose()` is reserved for lifecycle
+teardown, not a free inventory action. Opening and Finish both recheck live input permission.
+Items repacked into pockets cannot be used through another submission until the complete
+turn and its replay release the shared gate. M10.6 owns the actual quick-use path.
+
+### Validation And Limits
+
+On 2026-11-26 Unity 6000.3.21f1 passed **454/454** scoped runtime EditMode cases (inventory
+commands/model, resource rules, turn contracts/controller, movement, interactions, tool pickup,
+shared gate/replay, DTO and filesystem store) and **10/10** required PlayMode cases: seven new
+bag adapter cases plus three real Main Continue/terminal ownership cases. Both final reports
+have zero failures/skips/inconclusive results; final compiler/unhandled-error checks were clear.
+All invocations used `-nographics -silent-crashes`, and all XML/logs are outside the project.
+Save tests use isolated temporary directories. Schema v8 round-trip and backup recovery preserve
+the committed post-turn state; saving during a detached draft contains only the unchanged run.
+
+A broader presentation probe was **12/14**, not PASS. The unchanged
+`OrderedBoardPresentationTests.AnimationOnOff_HasIdenticalFinalViewsHudAndGate_AndBlocksRapidInput`
+and `CancellationDuringMove_SnapsAllViewsAndHudWithoutApplyingAnotherTurn` expect satiety 109
+from legacy Food, while the unchanged mapping uses the accepted RaspberryFoodReward 5 and
+therefore produces 104. The fixture and catalog/composer files were byte-identical to the
+recorded M10.3 baseline; the legacy movement/reward path is unchanged. This is source evidence,
+not a separately executed baseline A/B test. Their stale assertions were not edited in M10.4.
+The final required-scope report is separate and does not turn that broader probe into a pass.
+No full-suite, authoring-window, graphical/pixel, manual UI or portable-replay acceptance is
+claimed. Human/release gates and M10.5-M10.8 remain separate.
+
+## M10.3 Inventory Persistence
+
+Run schema `8` extends the resource-aware v7 boundary. Historical card references to the
+then-current writer describe their acceptance date; the current writer is v8. Profile
+schema remains `2`. No player data is used by inventory tests, and no board snapshot,
+pending command, modal draft, profile inventory or replay format is added.
+
+### Ownership And Field Map
+
+| Domain authority | Schema v8 path | Validation / reconstruction |
+| --- | --- | --- |
+| `RunState.InventoryRevision` | `inventory.revision` | Required nonnegative Int32; restore does not increment it |
+| `Inventory.Placements[].Item.InstanceId` | `inventory.items[].instanceId` | Unique stable textual run-local identity, ordinal comparison |
+| `ItemInstanceState.DefinitionId` | `inventory.items[].definitionId` | Exact lookup in trusted `InventoryContent.Items`; no substitution |
+| Main-grid ownership and anchor | `inventory.mainGrid[].instanceId`, `.column`, `.row` | Exactly one owner per instance; trusted fixed footprint covers cells inside 3x3 without overlap |
+| Left pocket | `inventory.leftPocket` | Required explicit null or one owned instance ID; eligible width 1, height 1-3 |
+| Right pocket | `inventory.rightPocket` | Same independent rule; cannot duplicate any other owner |
+| `InventoryContent.Items` / `.Effects` | Not serialized | Caller supplies immutable trusted content; footprint, eligibility and required effect resolve from it |
+| Run identity, seed, status, RNG | Existing v7 fields | Existing stable identity, supported version and terminal-state rules retained |
+| Health, satiety, resource rules | Existing `health`, `satiety`, `resourceRules` | All caps, threshold, costs and rule version retained; no second `food` resource |
+| Two tool slots and allocator | Existing `toolSlots`, `toolInstanceSequence` | Remain separate; identities and charges are never inferred from bag contents |
+| Travel, intro, landmarks, pinned plan | All existing v7 travel/landmark/selection fields | Exact existing mapping; no reroll, arrival or presentation side effect on load |
+
+The `items` list and grid anchors are written in ordinal instance-ID order. Pocket names
+are stable textual JSON fields, not serialized enum ordinals. Cell occupancy is derived
+from trusted definitions; unused instances, foreign references and duplicate ownership
+are invalid. Definitions/effects and immutable values may be shared; restored instances,
+inventory snapshots and collections are detached. DTO mutation cannot mutate a run.
+
+`RunState.TryCommitInventory(expectedRevision, placements, out diagnostic)` is an owning
+commit primitive, not an inventory command or permission to grant arbitrary items from UI.
+The future resolver must validate action budgets, transfer provenance and effects first.
+Every accepted commit, including an identical or empty layout, advances once. Stale,
+invalid, terminal/zero-resource and exhausted-revision attempts mutate nothing and spend
+no resources or turn. Revision `Int32.MaxValue` can be restored but cannot advance or wrap.
+Only a new-run reset starts an empty inventory at revision zero. The dedicated restore
+API validates a complete save boundary before mutation and does not replay a commit.
+
+### Migration And Recovery
+
+| Input / failure | Result | Preservation guarantee |
+| --- | --- | --- |
+| Run v1-v6 | Empty grid, empty pockets, revision 0 | Existing legacy resource clamping/RNG/travel/tool migration retained; profile untouched |
+| Run v7 | Empty grid, empty pockets, revision 0 | Custom resources/rules and every v7 boundary field retained |
+| Valid v8 | Exact items, owners, anchors and revision | Both tool slots, resource rules and retained travel/selection state survive |
+| Missing/null/wrong-typed fields, overflow, invalid geometry or ownership | Controlled `PersistenceDataException`; store may return explicit `Recovered` from a valid backup | No partially restored run and no mixed inventory; no file rewrite on load |
+| Missing definition or required effect | `MissingInventoryContent`; store returns `Corrupt` without backup substitution | A newer bag cannot be silently replaced with an older/empty bag; both files untouched |
+| Unknown future run schema | `UnsupportedFutureSchema` | No older backup substitution or file rewrite |
+| Failure before atomic replace | `IoError`; old complete boundary remains | Inventory, revision, resources and tools all come from the pre-change snapshot |
+| Failure after atomic replace | `IoError`; new complete boundary may remain | All fields come from the post-change snapshot; backup still contains the complete old boundary |
+| New-game snapshot/replace failure | Existing two-file rollback restores previous current/backup pairs | Profile and run remain coherent; temporary files cleaned |
+| Continue / new run | Continue keeps the committed boundary; new run starts empty | Unsaved inventory revisions do not leak into Continue or the new run; profile knowledge retained |
+
+`RunStateConfiguration`, the explicit-content deserialization overloads and
+`FileSystemSaveStore(inventoryContent: ...)` accept `InventoryContent`. The default is
+intentionally empty: M10.3 does not publish carried items or replace automatic food pickup.
+Nonempty writes are refused before touching files if the store could not read their item
+or effect references. Content authors must retain stable definition/effect semantics or
+provide an explicit future migration; definitions are not trusted merely because they
+arrived in a save. No missing-content reset, item removal or neutral consumable fallback
+is performed. Existing unknown-tool retention is unchanged.
+
+### Synthetic Example
+
+This complete save contains only synthetic identities, no player data. Supply
+`PersistenceDtoTests.InventoryTestContent()` to load it: `test.meal` is a fixed 2x1 item
+and `test.drink` is an eligible 1x2 pocket item; both require `test.restore`. Those are
+test definitions, not a newly activated production content catalogue.
+
+```json
+{
+    "schemaVersion": 8,
+    "runId": "sample-run",
+    "runSeed": 103,
+    "completedDayCount": 0,
+    "reachedCheckpointNodeId": "start",
+    "traversalSequence": 0,
+    "health": 75,
+    "satiety": 110,
+    "status": "active",
+    "toolSlots": [null, null],
+    "travelHistory": [],
+    "activeLeg": null,
+    "randomAlgorithmId": "hallowblaze.pcg32",
+    "randomAlgorithmVersion": 1,
+    "toolInstanceSequence": 0,
+    "activeLandmark": null,
+    "completedLandmarks": [],
+    "boardSelectionPlan": null,
+    "resourceRules": {
+        "version": 1, "maximumHealth": 100, "maximumSatiety": 200,
+        "normalSatietyThreshold": 100, "normalActionCost": 1, "satedActionCost": 2
+    },
+    "inventory": {
+        "revision": 12,
+        "items": [
+            {"instanceId": "grid", "definitionId": "test.meal"},
+            {"instanceId": "left", "definitionId": "test.drink"},
+            {"instanceId": "right", "definitionId": "test.drink"}
+        ],
+        "mainGrid": [{"instanceId": "grid", "column": 1, "row": 1}],
+        "leftPocket": "left",
+        "rightPocket": "right"
+    }
+}
+```
+
+### Focused Evidence
+
+On 2026-11-26, Unity 6000.3.21f1 passed 327/327 scoped runtime EditMode cases and 3/3
+PlayMode ownership/real-Main-Continue/terminal cases, headless with `-nographics
+-silent-crashes`. The runtime filter covered inventory, RunState, session/lifecycle,
+route legs, DTO/store, M1 ownership, landmarks and only the saved-plan/migration methods
+of `BoardPoolPublicationTests`. No authoring-window, graphics or full-suite acceptance
+is claimed. All final cases executed without failures, skips or inconclusive results;
+compiler and unhandled-error checks were clear. Reports remain outside the project.
+
+Inventory evidence includes seven journey/terminal boundaries; all v1-v7 migrations;
+26 malformed/unresolved cases; explicit DTO property coverage; 25 full-bag DTO copies;
+10 full-bag file/Continue cycles; pre/post replace interruption; missing-content no-fallback;
+two-file new-game rollback; separate tool charges; reset/profile isolation; accepted no-op,
+stale retry and revision exhaustion. M10.4 owns actual command/turn/hostile-phase tests.
+M9.1 must include committed inventory if mid-board snapshots are later implemented;
+M9.7 remains deferred and adds no hash/replay dependency here.
+
 ## M4.9 And M6.6 Owner Acceptance - 2026-11-12
 
 Both human gates are Done with owner-recorded Proceed. The owner accepts the available

@@ -20,8 +20,8 @@ namespace HallowBlaze.Presentation.Runtime
     {
         /// <summary>Replaces displayed resource values with the latest RunState values.</summary>
         /// <param name="health">Current run health.</param>
-        /// <param name="food">Current run food after complete domain resolution.</param>
-        void Refresh(int health, int food);
+        /// <param name="satiety">Current run satiety after complete domain resolution.</param>
+        void Refresh(int health, int satiety);
     }
 
     /// <summary>Retains positive applied resource gains separately from totals until the next accepted replay or disposal.</summary>
@@ -29,8 +29,8 @@ namespace HallowBlaze.Presentation.Runtime
     {
         /// <summary>Accumulates actual positive restoration, never a configured reward or net final-minus-initial difference.</summary>
         /// <param name="health">Applied health restored; zero leaves health feedback unchanged.</param>
-        /// <param name="food">Applied Food restored; zero leaves Food feedback unchanged.</param>
-        void AddResourceGains(int health, int food);
+        /// <param name="satiety">Applied satiety restored, excluding waste; zero leaves feedback unchanged.</param>
+        void AddResourceGains(int health, int satiety);
         /// <summary>Clears only transient gains without changing displayed totals, resources or another input owner.</summary>
         void ClearResourceGains();
     }
@@ -131,6 +131,7 @@ namespace HallowBlaze.Presentation.Runtime
                     DiggingDisplay.Refresh();
                     GroundToolsDisplay.Refresh();
                 });
+            InventoryDisplay = new InventorySessionPresenter(runtime, Coordinator, interactionInputAllowed);
             var interactionOwner = new GameObject("Board interaction") { hideFlags = HideFlags.DontSave };
             InteractionDisplay = interactionOwner.AddComponent<InteractionPresenter>();
             InteractionDisplay.Bind(runtime, Coordinator, interactionInputAllowed);
@@ -190,6 +191,15 @@ namespace HallowBlaze.Presentation.Runtime
                 return Task.CompletedTask;
             });
             Dispatcher.Register<FoodRestoredEvent>((gameEvent, token) => RefreshFood(gameEvent));
+            Dispatcher.Register<InventoryItemActionEvent>((gameEvent, token) =>
+            {
+                RefreshHud();
+                (hud as ITurnResourceGains)?.AddResourceGains(
+                    gameEvent.ResourceId == InventoryItemActionEvent.Health ? gameEvent.Applied : 0,
+                    gameEvent.ResourceId == InventoryItemActionEvent.Satiety ? gameEvent.Applied : 0);
+                return ShowFeedback(gameEvent);
+            });
+            Dispatcher.Register<InventoryCommittedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<HealthRestoredEvent>((gameEvent, token) =>
             {
                 RefreshHud();
@@ -218,6 +228,8 @@ namespace HallowBlaze.Presentation.Runtime
 
         /// <summary>Gets the one command path borrowing the runtime's existing controller.</summary>
         public CommandPresentationCoordinator Coordinator { get; }
+        /// <summary>Gets the minimal modal bag draft adapter; final B/grid/hotbar presentation belongs to M10.7.</summary>
+        public InventorySessionPresenter InventoryDisplay { get; }
         /// <summary>Gets the extensible registry; future concrete events can register handlers before replay.</summary>
         public OrderedEventDispatcher Dispatcher { get; }
         /// <summary>Gets this presenter's owned debug hearing display; snapshots are never recomputed by presentation.</summary>
@@ -450,12 +462,13 @@ namespace HallowBlaze.Presentation.Runtime
 
         private Task RefreshHud()
         {
-            hud.Refresh(runtime.RunState.Health, runtime.RunState.Food);
+            hud.Refresh(runtime.RunState.Health, runtime.RunState.Satiety);
             return Task.CompletedTask;
         }
 
         private Task NotifyOutcome(GameEvent gameEvent)
         {
+            InventoryDisplay.Dispose();
             (hud as ITurnResourceGains)?.ClearResourceGains();
             CloseIntents();
             NoiseDisplay.Dispose();
@@ -490,6 +503,7 @@ namespace HallowBlaze.Presentation.Runtime
             if (disposed)
                 return;
             disposed = true;
+            InventoryDisplay.Dispose();
             Coordinator.Dispose();
             attacks.Dispose();
             CloseIntents();

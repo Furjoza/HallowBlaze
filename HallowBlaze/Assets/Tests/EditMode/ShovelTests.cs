@@ -53,7 +53,7 @@ namespace HallowBlaze.Tests.EditMode
             BoardState board = CreateBoard();
             Add(board, 3, BoardLayer.Item, EntityKind.Item, "marked.cache", 1);
             RunState run = CreateRun();
-            run.ConsumeFood(shovel ? 19 : 17);
+            run.ConsumeSatiety(shovel ? 19 : 17);
             ShovelRules rules = Rules();
             var manual = new InteractionQuery(new[] { new CacheDigAction(rules, false) });
             ToolUseQuery tools = Tools(rules);
@@ -75,7 +75,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(last.Events.OfType<ItemCollectedEvent>().Count(), Is.EqualTo(1));
             Assert.That(last.Events.Select(gameEvent => gameEvent.EventType).ToList().IndexOf("FoodRestored"),
                 Is.LessThan(last.Events.Select(gameEvent => gameEvent.EventType).ToList().IndexOf("ActionCostApplied")));
-            Assert.That(run.Food, Is.EqualTo(10));
+            Assert.That(run.Satiety, Is.EqualTo(10));
             Assert.That(board.HasRevealedCache(new EntityId(3)), Is.True);
             Assert.That(board.TryGetEntity(new EntityId(3), out _), Is.False);
             Assert.That(board.GetCacheWork(new EntityId(3)), Is.Zero);
@@ -98,13 +98,13 @@ namespace HallowBlaze.Tests.EditMode
             CacheRewardItem reward = result.Events.OfType<CacheWorkedEvent>().Single().Reward;
             Assert.That(board.TryGetCacheReward(new EntityId(3), out CacheRewardItem ground), Is.True);
             Assert.That(ground, Is.SameAs(reward));
-            Assert.That(run.Food, Is.EqualTo(19));
+            Assert.That(run.Satiety, Is.EqualTo(19));
             BoardState clone = board.Clone();
             clone.TryRemove(ground.Entity.Id);
             Assert.That(board.TryGetCacheReward(new EntityId(3), out ground), Is.True);
             Assert.That(resolver.Resolve(board, run, PlayerId, command).Accepted, Is.False);
             Assert.That(board.TryWorkCache(new EntityId(3), 3, 3, rules.RewardDefinition, out _), Is.False);
-            Assert.That(run.Food, Is.EqualTo(19));
+            Assert.That(run.Satiety, Is.EqualTo(19));
         }
 
         /// <summary>The ordinary tool path creates a fresh full-lifetime pit, spends one charge and rejects repeated excavation for free.</summary>
@@ -175,15 +175,15 @@ namespace HallowBlaze.Tests.EditMode
             TurnResult rejected = controller.Resolve(command);
             Assert.That(rejected.Accepted, Is.False);
             Assert.That(rejected.Events, Is.Empty);
-            Assert.That(run.Food, Is.EqualTo(20));
+            Assert.That(run.Satiety, Is.EqualTo(20));
             Assert.That(run.ToolSlots[0].Instance?.Charges ?? 0, Is.EqualTo(charges));
             Assert.That(board.GetActiveNoises(), Is.Empty);
             Assert.That(board.GetPits().All(pit => pit.RemainingTurns == 4), Is.True);
         }
 
-        /// <summary>Completion overflow rejects before progress/reveal/charge mutation; partial work clones independently.</summary>
+        /// <summary>Completion wastes excess before the selected cost; partial work still clones independently.</summary>
         [Test]
-        public void CacheOverflowIsAtomicAndPartialWorkClonesIndependently()
+        public void CacheWasteIsReportedAndPartialWorkClonesIndependently()
         {
             BoardState board = CreateBoard();
             Add(board, 3, BoardLayer.Item, EntityKind.Item, "marked.cache", 1);
@@ -198,15 +198,20 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(clone.TryWorkCache(new EntityId(3), 1, 3, rules.RewardDefinition, out _), Is.True);
             Assert.That(board.GetCacheWork(new EntityId(3)), Is.EqualTo(1));
             Assert.That(clone.GetCacheWork(new EntityId(3)), Is.EqualTo(2));
-            run.RestoreFood(int.MaxValue - run.Food);
+            run.RestoreSatiety(int.MaxValue - run.Satiety);
             UseToolCommand command = tools.GetOptions(board, run, PlayerId).Single(option => option.ActionId == "unearth").CreateCommand();
+            TurnResult completed = resolver.Resolve(board, run, PlayerId, command);
+            Assert.That(completed.Accepted, Is.True);
+            Assert.That(board.HasRevealedCache(new EntityId(3)), Is.True);
+            Assert.That(run.Satiety, Is.EqualTo(198));
+            Assert.That(completed.Events.OfType<FoodRestoredEvent>().Single().Amount, Is.Zero);
+            Assert.That(completed.Events.OfType<FoodRestoredEvent>().Single().Wasted,
+                Is.EqualTo(rules.RewardDefinition.AutomaticFoodReward));
+            Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
             Assert.That(resolver.Resolve(board, run, PlayerId, command).Accepted, Is.False);
-            Assert.That(board.GetCacheWork(new EntityId(3)), Is.EqualTo(1));
-            Assert.That(board.HasRevealedCache(new EntityId(3)), Is.False);
-            Assert.That(run.Food, Is.EqualTo(int.MaxValue));
-            Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(3));
-            board.TryRemove(new EntityId(3));
-            Assert.That(board.GetCacheWork(new EntityId(3)), Is.Zero);
+            Assert.That(run.Satiety, Is.EqualTo(198));
+            clone.TryRemove(new EntityId(3));
+            Assert.That(clone.GetCacheWork(new EntityId(3)), Is.Zero);
         }
 
         /// <summary>Neither digging nor ignoring a cache is required to reach the exit; a pit remains walkable even with no shovel equipped.</summary>
@@ -223,7 +228,7 @@ namespace HallowBlaze.Tests.EditMode
             for (int step = 0; step < 4; step++) result = controller.Resolve(new MoveCommand(Direction.East));
             Assert.That(result.Events.OfType<ExitReachedEvent>().Count(), Is.EqualTo(1));
             Assert.That(run.Health, Is.EqualTo(100));
-            Assert.That(run.Food, Is.EqualTo(16));
+            Assert.That(run.Satiety, Is.EqualTo(16));
             Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
             Assert.That(board.HasRevealedCache(new EntityId(3)), Is.False);
             Assert.That(board.IsTrappedShambler(PlayerId), Is.False);

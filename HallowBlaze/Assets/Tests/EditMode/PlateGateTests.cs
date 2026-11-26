@@ -61,7 +61,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(result.Events.Select(gameEvent => gameEvent.EventType), Is.EqualTo(new[]
                 { "EntityMoved", "PressurePlateChanged", "GateChanged", "ActionCostApplied", "EntityWaited" }));
             Assert.That(result.Events.OfType<GateChangedEvent>().Single().Gate.IsOpen, Is.False);
-            Assert.That(run.Food, Is.EqualTo(19));
+            Assert.That(run.Satiety, Is.EqualTo(19));
             Assert.That(run.Health, Is.EqualTo(100));
             Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
             Assert.That(enemy.LockedIntent.Kind, Is.EqualTo(EnemyIntentKind.Wait));
@@ -90,7 +90,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(result.Events.OfType<EntityWaitedEvent>().Last().EntityId, Is.EqualTo(second.ActorId));
             Assert.That(board.GetGates().Single().IsOpen, Is.False);
             Assert.That(board.TakePlateGateChanges(), Is.Empty);
-            Assert.That(run.Food, Is.EqualTo(19));
+            Assert.That(run.Satiety, Is.EqualTo(19));
         }
 
         /// <summary>Atomic boulder/player handover keeps a shared pressure plate pressed without a false close/open pair.</summary>
@@ -173,7 +173,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(left.Accepted, Is.True);
             Assert.That(left.Events.OfType<GateChangedEvent>().Single().Gate.IsOpen, Is.False);
             Assert.That(board.GetGates().Single().IsOpen, Is.False);
-            Assert.That(run.Food, Is.EqualTo(18));
+            Assert.That(run.Satiety, Is.EqualTo(18));
         }
 
         /// <summary>Closing does not crush a current occupant; leaving is legal, subsequent entry into the closed terrain is free rejection.</summary>
@@ -197,7 +197,7 @@ namespace HallowBlaze.Tests.EditMode
             TurnResult blocked = controller.Resolve(new MoveCommand(Direction.East));
             Assert.That(blocked.Accepted, Is.False);
             Assert.That(blocked.Events, Is.Empty);
-            Assert.That(run.Food, Is.EqualTo(20));
+            Assert.That(run.Satiety, Is.EqualTo(20));
             Assert.That(run.Health, Is.EqualTo(100));
             Assert.That(board.GetActiveNoises().Single(), Is.SameAs(previousNoise));
             Assert.That(board.GetPits().Single().RemainingTurns, Is.EqualTo(3));
@@ -225,7 +225,7 @@ namespace HallowBlaze.Tests.EditMode
                 { "EntityMoved", "PressurePlateChanged", "GateChanged", "ActionCostApplied", "EntityWaited" }));
             Assert.That(result.Events.OfType<ListenerInvestigatedEvent>(), Is.Empty);
             Assert.That(board.GetEntities().Single(entity => entity.Id.Equals(listener.ActorId)).Position, Is.EqualTo(new GridPosition(4, 2)));
-            Assert.That(run.Food, Is.EqualTo(19));
+            Assert.That(run.Satiety, Is.EqualTo(19));
         }
 
         /// <summary>Path and hearing queries use the derived terrain immediately; old emitted hearing footprints remain immutable.</summary>
@@ -262,7 +262,7 @@ namespace HallowBlaze.Tests.EditMode
                 { "EntityMoved", "PressurePlateChanged", "GateChanged", "ActionCostApplied", "Noise", "PlayerStarved" }));
             Assert.That(board.GetGates().Single().IsOpen, Is.True);
             Assert.That(controller.IsTerminal, Is.True);
-            Assert.That(run.Food, Is.Zero);
+            Assert.That(run.Satiety, Is.Zero);
         }
 
         /// <summary>Two gates may share one visible link but declare different All/Any rules; clones preserve and isolate that fixed layout.</summary>
@@ -308,7 +308,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(result.Events.Select(gameEvent => gameEvent.EventType), Is.EqualTo(new[]
                 { "EntityWaited", "ActionCostApplied", "PressurePlateChanged", "GateChanged" }));
             Assert.That(planned, Is.True);
-            Assert.That(run.Food, Is.EqualTo(19));
+            Assert.That(run.Satiety, Is.EqualTo(19));
         }
 
         /// <summary>Link validation is pure and rejects orphan, duplicate and unbound authored cells.</summary>

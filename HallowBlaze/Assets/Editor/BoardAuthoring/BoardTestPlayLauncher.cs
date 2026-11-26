@@ -91,7 +91,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
         }
 
         internal string Describe(BoardTestPlaySettings settings) => preview + "\n\nSeed " + settings.Seed + " | Health " + settings.Health +
-            " | Food " + settings.Food + " | Axe " + (settings.EquipAxe ? "Yes" : "No") + DescribePool(settings);
+            " | Satiety " + settings.Food + " | Axe " + (settings.EquipAxe ? "Yes" : "No") + DescribePool(settings);
 
         internal BoardAuthoringTestContext Prepare(BoardTestPlaySettings settings) => poolJson == null
             ? BoardAuthoringTestContext.PrepareRoute(worldJson, edgeId, templates, assignments, settings.Seed, settings.Health, settings.Food, settings.EquipAxe, BoardAuthoringTestContext.CreateSaveRootPath())

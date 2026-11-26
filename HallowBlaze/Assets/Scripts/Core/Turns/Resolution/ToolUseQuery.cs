@@ -17,8 +17,9 @@ namespace HallowBlaze.Core.Turns.Resolution
         /// <param name="noiseStrength">Nonnegative path-budget strength; zero means silent.</param>
         /// <param name="noiseLifetimeTurns">Positive lifetime of emitted noise.</param>
         /// <param name="observedNoiseFactId">Optional knowledge recorded after presenting this actual noise, never an unlock condition.</param>
+        /// <param name="chargeCost">Zero for a reusable tool action or one for a finite-use tool action; other action costs are unchanged.</param>
         public ToolAction(string definitionId, IInteractionAction behavior, string effectLabel,
-            int noiseStrength, int noiseLifetimeTurns, string observedNoiseFactId = null)
+            int noiseStrength, int noiseLifetimeTurns, string observedNoiseFactId = null, int chargeCost = 1)
         {
             if (string.IsNullOrWhiteSpace(definitionId) || definitionId != definitionId.Trim())
                 throw new ArgumentException("A tool definition ID is required.", nameof(definitionId));
@@ -28,6 +29,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             if (string.IsNullOrWhiteSpace(effectLabel)) throw new ArgumentException("An effect label is required.", nameof(effectLabel));
             if (noiseStrength < 0) throw new ArgumentOutOfRangeException(nameof(noiseStrength));
             if (noiseLifetimeTurns <= 0) throw new ArgumentOutOfRangeException(nameof(noiseLifetimeTurns));
+            if (chargeCost < 0 || chargeCost > 1) throw new ArgumentOutOfRangeException(nameof(chargeCost));
             if (observedNoiseFactId != null && (noiseStrength == 0 || string.IsNullOrWhiteSpace(observedNoiseFactId) ||
                 observedNoiseFactId != observedNoiseFactId.Trim()))
                 throw new ArgumentException("A noise fact requires an audible consequence and a stable ID.", nameof(observedNoiseFactId));
@@ -36,6 +38,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             NoiseStrength = noiseStrength;
             NoiseLifetimeTurns = noiseLifetimeTurns;
             ObservedNoiseFactId = observedNoiseFactId;
+            ChargeCost = chargeCost;
         }
 
         /// <summary>Gets the immutable content identity used for dispatch.</summary>
@@ -50,6 +53,8 @@ namespace HallowBlaze.Core.Turns.Resolution
         public int NoiseLifetimeTurns { get; }
         /// <summary>Gets optional knowledge discovered only when the emitted consequence is presented.</summary>
         public string ObservedNoiseFactId { get; }
+        /// <summary>Gets zero for a reusable action or one for an action that requires and spends a charge.</summary>
+        public int ChargeCost { get; }
     }
 
     /// <summary>Detached consequence preview retaining the exact tool, charges, target, behavior and current cost.</summary>
@@ -57,15 +62,16 @@ namespace HallowBlaze.Core.Turns.Resolution
     {
         private readonly UseToolCommand command;
 
-        internal ToolUseOption(UseToolCommand command, ToolAction action, int foodCost, CommandRejectionCode rejectionCode,
+        internal ToolUseOption(UseToolCommand command, ToolAction action, int satietyCost, CommandRejectionCode rejectionCode,
             string effectLabel = null)
         {
             this.command = command;
             DefinitionId = action.DefinitionId;
             EffectLabel = effectLabel ?? action.EffectLabel;
-            FoodCost = foodCost;
+            SatietyCost = satietyCost;
             NoiseStrength = action.NoiseStrength;
             NoiseLifetimeTurns = action.NoiseLifetimeTurns;
+            ChargeCost = action.ChargeCost;
             RejectionCode = rejectionCode;
         }
 
@@ -75,7 +81,7 @@ namespace HallowBlaze.Core.Turns.Resolution
         public string InstanceId => command.InstanceId;
         /// <summary>Gets the tool definition used for dispatch.</summary>
         public string DefinitionId { get; }
-        /// <summary>Gets the charge precondition; an accepted decision cannot be submitted twice.</summary>
+        /// <summary>Gets the captured charge snapshot; commit also rechecks instance identity, target and effect availability.</summary>
         public int ExpectedCharges => command.ExpectedCharges;
         /// <summary>Gets the exact selected ground entity.</summary>
         public EntityId TargetId => command.TargetId;
@@ -85,10 +91,10 @@ namespace HallowBlaze.Core.Turns.Resolution
         public string ActionId => command.ActionId;
         /// <summary>Gets the direct effect shown before confirmation.</summary>
         public string EffectLabel { get; }
-        /// <summary>Gets the active policy's accepted-action food cost.</summary>
-        public int FoodCost { get; }
-        /// <summary>Gets the accepted-action charge cost; preview and rejection spend none.</summary>
-        public int ChargeCost => 1;
+        /// <summary>Gets the pre-effect satiety cost sampled for this option.</summary>
+        public int SatietyCost { get; }
+        /// <summary>Gets zero for a reusable tool action or one for a finite-use action; preview and rejection spend none.</summary>
+        public int ChargeCost { get; }
         /// <summary>Gets the noise path budget that will be emitted on acceptance.</summary>
         public int NoiseStrength { get; }
         /// <summary>Gets how many accepted subsequent commands the new noise survives.</summary>
@@ -148,7 +154,7 @@ namespace HallowBlaze.Core.Turns.Resolution
                         if (!action.Behavior.Supports(target)) continue;
                         var command = new UseToolCommand(slot, instance.InstanceId, instance.Charges,
                             target.Id, target.Position, action.Behavior.Id);
-                        options.Add(new ToolUseOption(command, action, ActionCosts.FoodCost,
+                        options.Add(new ToolUseOption(command, action, ActionCosts.GetCost(run),
                             Validate(board, run, playerId, command, out _, out _),
                             (action.Behavior as IInteractionConsequences)?.DescribeEffect(board, target)));
                     }
@@ -175,12 +181,13 @@ namespace HallowBlaze.Core.Turns.Resolution
             if (instance == null) return CommandRejectionCode.EmptyToolSlot;
             if (instance.InstanceId != command.InstanceId || instance.Charges != command.ExpectedCharges)
                 return CommandRejectionCode.StaleTool;
-            if (instance.Charges == 0) return CommandRejectionCode.ToolDepleted;
+            if (actions.TryGetValue(instance.DefinitionId, out var behaviors))
+                behaviors.TryGetValue(command.ActionId, out action);
+            if (instance.Charges == 0 && (action?.ChargeCost ?? 1) > 0) return CommandRejectionCode.ToolDepleted;
             if (!board.TryGetEntity(command.TargetId, out target) || target.Id.Equals(playerId) ||
                 !target.Position.Equals(command.TargetPosition) || player.Position.ManhattanDistance(target.Position) > 1)
                 return CommandRejectionCode.InvalidTarget;
-            if (!actions.TryGetValue(instance.DefinitionId, out var behaviors) ||
-                !behaviors.TryGetValue(command.ActionId, out action) || !action.Behavior.Supports(target))
+            if (action == null || !action.Behavior.Supports(target))
                 return CommandRejectionCode.UnsupportedTool;
             switch (action.Behavior.Evaluate(board, run, player, target))
             {
@@ -196,7 +203,7 @@ namespace HallowBlaze.Core.Turns.Resolution
         private static bool CanAct(BoardState board, RunState run, EntityId playerId, out BoardEntityState player)
         {
             player = null;
-            return run.Status == RunStatus.Active && run.Health > 0 && run.Food > 0 &&
+            return run.Status == RunStatus.Active && run.Health > 0 && run.Satiety > 0 &&
                 board.TryGetEntity(playerId, out player) && player.Definition.Layer == BoardLayer.Actor &&
                 player.Definition.Kind.Equals(EntityKind.Player);
         }

@@ -83,7 +83,7 @@ namespace HallowBlaze.Tests.PlayMode
                         if (!noisyChoice)
                             Capture(fixture, Path.Combine(participant, id + "-before.png"), true);
                         int healthBefore = fixture.Run.Health;
-                        int foodBefore = fixture.Run.Food;
+                        int foodBefore = fixture.Run.Satiety;
                         var results = new List<TurnResult>();
                         results.Add(Submit(fixture, Command(caseNumber, mirrored, noisyChoice, fixture)));
                         if (caseNumber == 9)
@@ -92,7 +92,7 @@ namespace HallowBlaze.Tests.PlayMode
                         Assert.That(fixture.Runtime.BoardState.TryGetEntity(fixture.EnemyId, out BoardEntityState enemy), Is.True, id);
                         Assert.That(enemy.Position, Is.EqualTo(expected), id);
                         Assert.That(fixture.Run.Health - healthBefore, Is.EqualTo(caseNumber == 1 ? -10 : 0), id);
-                        Assert.That(foodBefore - fixture.Run.Food, Is.EqualTo(results.Count), id);
+                        Assert.That(foodBefore - fixture.Run.Satiety, Is.EqualTo(results.Count), id);
                         GameEvent[] enemyEvents = results.SelectMany(result => result.Events).Where(gameEvent =>
                             gameEvent is EntityMovedEvent moved && moved.EntityId.Equals(fixture.EnemyId) ||
                             gameEvent is EntityWaitedEvent waited && waited.EntityId.Equals(fixture.EnemyId) ||
@@ -393,7 +393,7 @@ namespace HallowBlaze.Tests.PlayMode
             public void UpdateHud()
             {
                 if (hud == null) hud = Label(Root.transform, "", new Vector3(2.5f, 5.95f, -0.2f), 0.085f);
-                hud.text = "HP " + Run.Health + "   Food " + Run.Food;
+                hud.text = "HP " + Run.Health + "   Food " + Run.Satiety;
             }
 
             public void Dispose()

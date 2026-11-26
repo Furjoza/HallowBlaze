@@ -43,12 +43,9 @@ namespace HallowBlaze.Tests.EditMode
         public void VersionFourMigratesWithEmptyLandmarkState()
         {
             RunState run = Run();
-            JObject json = JObject.Parse(PersistenceJsonSerializer.SerializeRun(run));
-            json["schemaVersion"] = 4;
-            json.Remove("activeLandmark"); json.Remove("completedLandmarks");
-            json.Remove("boardSelectionPlan");
+            JObject json = JObject.FromObject(RunStateV4Mapper.ToDto(run));
             RunState restored = PersistenceJsonSerializer.DeserializeRun(json.ToString());
-            Assert.That(restored.Food, Is.EqualTo(run.Food));
+            Assert.That(restored.Satiety, Is.EqualTo(run.Satiety));
             Assert.That(BoardAddressFactory.CreateFromState(restored), Is.EqualTo(BoardAddressFactory.CreateFromState(run)));
             Assert.That(restored.ActiveLandmark, Is.Null);
             Assert.That(restored.CompletedLandmarks, Is.Empty);
@@ -97,7 +94,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(store.Saves, Is.EqualTo(saved));
             Assert.That(travel.TryCompleteSegment(request, out _, out _), Is.False);
             var result = new LandmarkRecord(request.Address, selection.TemplateId, 1, "base", "tower.supplies");
-            run.RestoreFood(20);
+            run.RestoreSatiety(20);
             store.Fail = true;
             Assert.That(travel.TryCompleteSegment(request, out SaveStoreResult failed, out bool failedArrival, result), Is.True);
             Assert.That(failed.IsFailure, Is.True);
@@ -109,11 +106,11 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(travel.TryCompleteSegment(request, out SaveStoreResult committed, out bool arrived, result), Is.True);
             Assert.That(committed.IsSuccess, Is.True);
             Assert.That(arrived, Is.True);
-            Assert.That(run.Food, Is.EqualTo(120));
+            Assert.That(run.Satiety, Is.EqualTo(120));
             RunState durable = PersistenceJsonSerializer.DeserializeRun(store.Json);
             Assert.That(durable.CompletedLandmarks.Count, Is.EqualTo(1));
             Assert.That(durable.CompletedDayCount, Is.EqualTo(5));
-            Assert.That(durable.Food, Is.EqualTo(120));
+            Assert.That(durable.Satiety, Is.EqualTo(120));
             saved = store.Saves;
             Assert.That(travel.TryCompleteSegment(request, out _, out _, result), Is.False);
             Assert.That(store.Saves, Is.EqualTo(saved));

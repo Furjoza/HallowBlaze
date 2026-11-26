@@ -139,10 +139,10 @@ namespace HallowBlaze.Core.Generation.Landmarks
             {
                 new ToolAction(ObstacleClearingRules.AxeDefinitionId, new ClearObstacleAction(clearingRules, true),
                     "Chop: clear obstacle", clearingRules.AxeNoiseStrength, clearingRules.NoiseLifetimeTurns,
-                    ObstacleClearingRules.AxeNoiseFactId)
+                    ObstacleClearingRules.AxeNoiseFactId, chargeCost: 0)
             });
             root = new Node(board, run, enemies.ToArray(), null, null);
-            if (run.Status != RunStatus.Active || run.Health <= 0 || run.Food <= 0 ||
+            if (run.Status != RunStatus.Active || run.Health <= 0 || run.Satiety <= 0 ||
                 run.RunId != landmark.Blueprint.Address.RunId || !board.TryGetEntity(playerId, out BoardEntityState player) ||
                 player.Definition.Layer != BoardLayer.Actor || !player.Definition.Kind.Equals(EntityKind.Player) ||
                 board.TryGetEntity(BoardLayer.Terrain, player.Position, out BoardEntityState groundUnderPlayer) && groundUnderPlayer.Definition.Traits.IsExit ||
@@ -294,7 +294,7 @@ namespace HallowBlaze.Core.Generation.Landmarks
             internal Node Copy(LandmarkSolverStep step = null)
             {
                 var run = new RunState(Run.RunId, Run.RunSeed,
-                    new RunStateConfiguration(Run.Health, Run.Food, Run.CompletedDayCount, Run.WorldNodeId),
+                    new RunStateConfiguration(Run.Health, Run.Satiety, Run.CompletedDayCount, Run.WorldNodeId, Run.ResourceRules),
                     Run.RandomAlgorithmId, Run.RandomAlgorithmVersion);
                 run.RestoreTravelState(Run.CompletedDayCount, Run.WorldNodeId, Run.TraversalSequence, Run.TravelHistory, Run.ActiveLeg);
                 run.RestoreLandmarkState(Run.ActiveLandmark, Run.CompletedLandmarks);

@@ -19,6 +19,7 @@ namespace HallowBlaze.Core.Persistence.Storage
         private readonly string rootPath;
         private readonly Action<string, string, string> replaceFile;
         private readonly Action<string, string> copyFile;
+        private readonly InventoryContent inventoryContent;
 
         /// <summary>
         /// Creates a file-backed save store with optional file-operation overrides for testing.
@@ -26,10 +27,12 @@ namespace HallowBlaze.Core.Persistence.Storage
         /// <param name="rootPath">The directory that owns profile and run save files.</param>
         /// <param name="replaceFile">Optional atomic replacement operation.</param>
         /// <param name="copyFile">Optional snapshot copy operation.</param>
+        /// <param name="inventoryContent">Trusted item/effect publication for both writes and reads; null selects empty initial content.</param>
         public FileSystemSaveStore(
             string rootPath,
             Action<string, string, string> replaceFile = null,
-            Action<string, string> copyFile = null)
+            Action<string, string> copyFile = null,
+            InventoryContent inventoryContent = null)
         {
             if (string.IsNullOrWhiteSpace(rootPath))
                 throw new ArgumentException("A save root path is required.", nameof(rootPath));
@@ -37,6 +40,7 @@ namespace HallowBlaze.Core.Persistence.Storage
             this.rootPath = Path.GetFullPath(rootPath);
             this.replaceFile = replaceFile ?? File.Replace;
             this.copyFile = copyFile ?? File.Copy;
+            this.inventoryContent = inventoryContent ?? InventoryContent.Empty;
         }
 
         public SaveStoreResult SaveProfile(ProfileState profile)
@@ -62,6 +66,9 @@ namespace HallowBlaze.Core.Persistence.Storage
                 throw new ArgumentNullException(nameof(profile));
             if (run == null)
                 throw new ArgumentNullException(nameof(run));
+
+            if (!inventoryContent.TryCreateInventory(run.Inventory.Placements, out _, out _))
+                return SaveStoreResult.Corrupt("Required inventory content is unavailable; no files were changed.");
 
             string transactionId = Guid.NewGuid().ToString("N");
             string profilePath = Path.Combine(rootPath, ProfileFileName);
@@ -150,10 +157,16 @@ namespace HallowBlaze.Core.Persistence.Storage
                 PersistenceJsonSerializer.DeserializeProfile);
         }
 
+        /// <summary>Atomically writes the entire boundary, refusing carried content this store could not subsequently read.</summary>
+        /// <returns>A typed failure before touching files if required item/effect content is unavailable.</returns>
+        /// <exception cref="ArgumentNullException">The run is null.</exception>
         public SaveStoreResult SaveRun(RunState run)
         {
             if (run == null)
                 throw new ArgumentNullException(nameof(run));
+
+            if (!inventoryContent.TryCreateInventory(run.Inventory.Placements, out _, out _))
+                return SaveStoreResult.Corrupt("Required inventory content is unavailable; no files were changed.");
 
             return Save(
                 RunFileName,
@@ -161,13 +174,15 @@ namespace HallowBlaze.Core.Persistence.Storage
                 PersistenceJsonSerializer.SerializeRun(run));
         }
 
+        /// <summary>Loads v1-v8 against trusted content; missing content never substitutes an older inventory from backup.</summary>
+        /// <returns>Success, explicit backup recovery for corruption, or a typed failure without file mutation.</returns>
         public SaveStoreResult<RunState> LoadRun()
         {
             return Load(
                 RunFileName,
                 RunBackupFileName,
-                RunStateV5Dto.CurrentSchemaVersion,
-                PersistenceJsonSerializer.DeserializeRun);
+                RunStateV8Dto.CurrentSchemaVersion,
+                json => PersistenceJsonSerializer.DeserializeRun(json, inventoryContent));
         }
 
         public SaveStoreResult DeleteRun()
@@ -254,6 +269,8 @@ namespace HallowBlaze.Core.Persistence.Storage
                 }
                 catch (PersistenceDataException exception)
                 {
+                    if (exception.Error == PersistenceDataError.MissingInventoryContent)
+                        return SaveStoreResultExtensions.Corrupt<T>("Required inventory content is unavailable; the save was not substituted.");
                     if (IsFutureSchema(exception, currentJson, currentSchemaVersion))
                         return SaveStoreResultExtensions.UnsupportedFutureSchema<T>();
                 }

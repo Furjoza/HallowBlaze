@@ -11,7 +11,7 @@ namespace HallowBlaze.Core.Turns.Resolution
     /// Resolves one player command against authoritative board and run state.
     /// Rejected commands leave both states unchanged.
     /// </summary>
-    public sealed class TurnResolver : IPlayerPhaseResolver
+    public sealed partial class TurnResolver : IPlayerPhaseResolver
     {
         private readonly ActionNoiseProfile noiseProfile;
         private readonly InteractionQuery interactions;
@@ -51,7 +51,7 @@ namespace HallowBlaze.Core.Turns.Resolution
                 throw new ArgumentNullException(nameof(runState));
             if (command == null)
                 return new RejectedTurnResult(CommandRejectionCode.InvalidCommand);
-            if (runState.Status != RunStatus.Active || runState.Health <= 0 || runState.Food <= 0)
+            if (runState.Status != RunStatus.Active || runState.Health <= 0 || runState.Satiety <= 0)
                 return new RejectedTurnResult(CommandRejectionCode.InvalidState);
             if (!boardState.TryGetEntity(playerId, out BoardEntityState player) ||
                 player.Definition.Layer != BoardLayer.Actor ||
@@ -60,23 +60,28 @@ namespace HallowBlaze.Core.Turns.Resolution
                 return new RejectedTurnResult(CommandRejectionCode.InvalidState);
             }
 
+            int selectedCost = tools.ActionCosts.GetCost(runState);
+            int satietyAtStart = runState.Satiety;
             TurnResult result;
             switch (command)
             {
                 case MoveCommand moveCommand:
-                    result = ResolveMove(boardState, runState, player, moveCommand);
+                    result = ResolveMove(boardState, runState, player, moveCommand, selectedCost, satietyAtStart);
                     break;
                 case WaitCommand _:
-                    result = ResolveWait(runState, playerId);
+                    result = ResolveWait(runState, playerId, selectedCost, satietyAtStart);
                     break;
                 case InteractCommand interactCommand:
-                    result = ResolveInteract(boardState, runState, player, interactCommand);
+                    result = ResolveInteract(boardState, runState, player, interactCommand, selectedCost, satietyAtStart);
                     break;
                 case UseToolCommand toolCommand:
-                    result = ResolveUseTool(boardState, runState, player, toolCommand);
+                    result = ResolveUseTool(boardState, runState, player, toolCommand, selectedCost, satietyAtStart);
                     break;
                 case PickupToolCommand pickupCommand:
-                    result = ResolvePickupTool(boardState, runState, player, pickupCommand);
+                    result = ResolvePickupTool(boardState, runState, player, pickupCommand, selectedCost, satietyAtStart);
+                    break;
+                case ManageInventoryCommand inventoryCommand:
+                    result = ResolveManageInventory(runState, playerId, inventoryCommand, selectedCost, satietyAtStart);
                     break;
                 default:
                     return new RejectedTurnResult(CommandRejectionCode.InvalidCommand);
@@ -97,7 +102,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             BoardState boardState,
             RunState runState,
             BoardEntityState player,
-            MoveCommand command)
+            MoveCommand command, int selectedCost, int satietyAtStart)
         {
             GridPosition destination;
             try
@@ -128,8 +133,6 @@ namespace HallowBlaze.Core.Turns.Resolution
             if (boardState.TryGetEntity(BoardLayer.Item, destination, out BoardEntityState item) &&
                 item.Definition.AutomaticFoodReward > 0)
             {
-                if (runState.Food > int.MaxValue - item.Definition.AutomaticFoodReward)
-                    return new RejectedTurnResult(CommandRejectionCode.InvalidState);
                 automaticFood = item;
             }
 
@@ -145,8 +148,8 @@ namespace HallowBlaze.Core.Turns.Resolution
             {
                 CollectAutomaticFood(boardState, runState, player.Id, automaticFood, events);
             }
-            ApplyCost(runState, player.Id, events);
-            if (runState.Food == 0)
+            ApplyCost(runState, player.Id, events, selectedCost, satietyAtStart);
+            if (runState.Satiety == 0)
             {
                 events.Add(new PlayerStarvedEvent(player.Id));
                 return new AcceptedTurnResult(events);
@@ -156,14 +159,14 @@ namespace HallowBlaze.Core.Turns.Resolution
             return new AcceptedTurnResult(events);
         }
 
-        private TurnResult ResolveWait(RunState runState, EntityId playerId)
+        private TurnResult ResolveWait(RunState runState, EntityId playerId, int selectedCost, int satietyAtStart)
         {
             var events = new List<GameEvent>
             {
                 new EntityWaitedEvent(playerId)
             };
-            ApplyCost(runState, playerId, events);
-            if (runState.Food == 0)
+            ApplyCost(runState, playerId, events, selectedCost, satietyAtStart);
+            if (runState.Satiety == 0)
                 events.Add(new PlayerStarvedEvent(playerId));
             return new AcceptedTurnResult(events);
         }
@@ -172,7 +175,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             BoardState boardState,
             RunState runState,
             BoardEntityState player,
-            InteractCommand command)
+            InteractCommand command, int selectedCost, int satietyAtStart)
         {
             InteractionAvailability availability = interactions.Validate(boardState, runState, player.Id, command,
                 out BoardEntityState target, out IInteractionAction action);
@@ -192,7 +195,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             };
             action.Apply(boardState, runState, player, target, events);
             PlateGateEventRecorder.Append(boardState, events);
-            ApplyCost(runState, player.Id, events);
+            ApplyCost(runState, player.Id, events, selectedCost, satietyAtStart);
             var consequences = action as IInteractionConsequences;
             int strength = consequences?.NoiseStrength ?? noiseProfile?.InteractionStrength ?? 0;
             if (strength > 0)
@@ -201,12 +204,13 @@ namespace HallowBlaze.Core.Turns.Resolution
                 events.Add(new NoiseEvent(boardState.EmitNoise(player.Id, currentPlayer.Position, strength,
                     consequences?.NoiseLifetimeTurns ?? noiseProfile.LifetimeTurns)));
             }
-            if (runState.Food == 0)
+            if (runState.Satiety == 0)
                 events.Add(new PlayerStarvedEvent(player.Id));
             return new AcceptedTurnResult(events);
         }
 
-        private TurnResult ResolveUseTool(BoardState boardState, RunState runState, BoardEntityState player, UseToolCommand command)
+        private TurnResult ResolveUseTool(BoardState boardState, RunState runState, BoardEntityState player, UseToolCommand command,
+            int selectedCost, int satietyAtStart)
         {
             CommandRejectionCode rejection = tools.Validate(boardState, runState, player.Id, command,
                 out BoardEntityState target, out ToolAction action);
@@ -214,18 +218,22 @@ namespace HallowBlaze.Core.Turns.Resolution
             var events = new List<GameEvent> { new ToolUsedEvent(player.Id, command, action.DefinitionId) };
             action.Behavior.Apply(boardState, runState, player, target, events);
             PlateGateEventRecorder.Append(boardState, events);
-            if (!runState.TrySpendToolCharge(command.SlotIndex, command.InstanceId))
-                throw new InvalidOperationException("Validated tool charges changed during a synchronous effect.");
-            events.Add(new ToolChargeSpentEvent(player.Id, command));
-            ApplyCost(runState, player.Id, events);
+            if (action.ChargeCost > 0)
+            {
+                if (!runState.TrySpendToolCharge(command.SlotIndex, command.InstanceId))
+                    throw new InvalidOperationException("Validated tool charges changed during a synchronous effect.");
+                events.Add(new ToolChargeSpentEvent(player.Id, command));
+            }
+            ApplyCost(runState, player.Id, events, selectedCost, satietyAtStart);
             if (action.NoiseStrength > 0)
                 events.Add(new NoiseEvent(boardState.EmitNoise(player.Id, player.Position,
                     action.NoiseStrength, action.NoiseLifetimeTurns), action.ObservedNoiseFactId));
-            if (runState.Food == 0) events.Add(new PlayerStarvedEvent(player.Id));
+            if (runState.Satiety == 0) events.Add(new PlayerStarvedEvent(player.Id));
             return new AcceptedTurnResult(events);
         }
 
-        private TurnResult ResolvePickupTool(BoardState board, RunState run, BoardEntityState player, PickupToolCommand command)
+        private TurnResult ResolvePickupTool(BoardState board, RunState run, BoardEntityState player, PickupToolCommand command,
+            int selectedCost, int satietyAtStart)
         {
             CommandRejectionCode rejection = pickups.Validate(board, run, player.Id, command, out GroundToolState ground);
             if (rejection != CommandRejectionCode.None) return new RejectedTurnResult(rejection);
@@ -238,10 +246,10 @@ namespace HallowBlaze.Core.Turns.Resolution
             else run.ReplaceTool(command.SlotIndex, incoming);
             var events = new List<GameEvent> { new ToolPickedUpEvent(player.Id, command, displaced) };
             if (old == null) events.Add(new ItemCollectedEvent(player.Id, ground.EntityId));
-            ApplyCost(run, player.Id, events);
+            ApplyCost(run, player.Id, events, selectedCost, satietyAtStart);
             if (noiseProfile != null && noiseProfile.InteractionStrength > 0)
                 events.Add(new NoiseEvent(board.EmitNoise(player.Id, player.Position, noiseProfile.InteractionStrength, noiseProfile.LifetimeTurns)));
-            if (run.Food == 0) events.Add(new PlayerStarvedEvent(player.Id));
+            if (run.Satiety == 0) events.Add(new PlayerStarvedEvent(player.Id));
             return new AcceptedTurnResult(events);
         }
 
@@ -256,18 +264,18 @@ namespace HallowBlaze.Core.Turns.Resolution
                 throw new InvalidOperationException("Validated automatic food item could not be removed.");
 
             int reward = item.Definition.AutomaticFoodReward;
-            runState.RestoreFood(reward);
+            ResourceGain gain = AutomaticFoodCompatibility.Apply(runState, reward);
             events.Add(new ItemCollectedEvent(playerId, item.Id));
-            events.Add(new FoodRestoredEvent(playerId, item.Id, reward));
+            events.Add(new FoodRestoredEvent(playerId, item.Id, gain.Applied, gain.Wasted));
         }
 
-        private void ApplyCost(
+        private static void ApplyCost(
             RunState runState,
             EntityId playerId,
-            ICollection<GameEvent> events)
+            ICollection<GameEvent> events, int selectedCost, int satietyAtStart)
         {
-            runState.ConsumeFood(tools.ActionCosts.FoodCost);
-            events.Add(new ActionCostAppliedEvent(playerId, tools.ActionCosts.FoodCost));
+            runState.ConsumeSatiety(selectedCost);
+            events.Add(new ActionCostAppliedEvent(playerId, selectedCost, satietyAtStart));
         }
     }
 }

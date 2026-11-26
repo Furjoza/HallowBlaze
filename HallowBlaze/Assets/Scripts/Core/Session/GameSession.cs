@@ -65,14 +65,16 @@ namespace HallowBlaze.Core.Session
             return activeRunState;
         }
 
-        public void ConsumeFood(int amount = 1)
+        /// <summary>Spends an explicit nonnegative cost on the active run and notifies observers.</summary>
+        public void ConsumeSatiety(int amount = 1)
         {
-            Mutate(run => run.ConsumeFood(amount));
+            Mutate(run => run.ConsumeSatiety(amount));
         }
 
-        public void RestoreFood(int amount)
+        /// <summary>Restores the active run's satiety under its cap; excess is discarded.</summary>
+        public void RestoreSatiety(int amount)
         {
-            Mutate(run => run.RestoreFood(amount));
+            Mutate(run => run.RestoreSatiety(amount));
         }
 
         public void TakeDamage(int amount)
@@ -81,16 +83,16 @@ namespace HallowBlaze.Core.Session
         }
 
         /// <summary>Applies existing health restoration and reports the positive applied amount independently of later damage or refreshes.</summary>
-        /// <param name="amount">Non-negative health to restore under the current uncapped health rules.</param>
+        /// <param name="amount">Nonnegative requested healing; only the applied amount is announced.</param>
         /// <exception cref="ArgumentOutOfRangeException">The amount is negative.</exception>
         /// <exception cref="InvalidOperationException">There is no active mutable run.</exception>
-        /// <exception cref="OverflowException">The restored total would overflow.</exception>
         public void RestoreHealth(int amount)
         {
             RunState restoredRun = GetCurrentRun();
-            Mutate(run => run.RestoreHealth(amount));
-            if (amount > 0)
-                OnHealthRestored?.Invoke(restoredRun, amount);
+            ResourceGain gain = restoredRun.RestoreHealth(amount);
+            OnRunChanged?.Invoke(restoredRun);
+            if (gain.Applied > 0)
+                OnHealthRestored?.Invoke(restoredRun, gain.Applied);
         }
 
         public void AdvanceDay()
