@@ -46,7 +46,7 @@ namespace HallowBlaze.Tests.PlayMode
                 var picker = fixture.Presenter.InteractionDisplay;
                 Assert.That(picker.Open(), Is.True);
                 Assert.That(picker.Options.Single().ActionId, Is.EqualTo(BoulderPushAction.ActionId));
-                Assert.That(picker.GetOptionLabel(0), Does.Contain("advance one cell").And.Contain("Food -1").And.Contain("Noise 4 / 2"));
+                Assert.That(picker.GetOptionLabel(0), Does.Contain("advance one cell").And.Contain("Satiety -1").And.Contain("Noise 4 / 2"));
                 Assert.That(picker.Select(0), Is.True);
                 var operation = picker.ConfirmAsync();
                 Assert.That(fixture.PlayerCell, Is.EqualTo(new GridPosition(2, 1)));
@@ -62,7 +62,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(operation.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
                 Assert.That(operation.Result.Result.Events.OfType<BoulderPushedEvent>().Count(), Is.EqualTo(1));
                 Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
-                Assert.That(fixture.Run.Food, Is.EqualTo(19));
+                Assert.That(fixture.Run.Satiety, Is.EqualTo(19));
                 Assert.That(fixture.Player.transform.position.x, Is.EqualTo(2));
                 Assert.That(fixture.Boulder.transform.position.x, Is.EqualTo(3));
                 Assert.That(fixture.Feedback.OfType<BoulderPushedEvent>().Count(), Is.EqualTo(1));
@@ -80,7 +80,7 @@ namespace HallowBlaze.Tests.PlayMode
             var picker = fixture.Presenter.InteractionDisplay;
             Assert.That(picker.Open(), Is.True);
             picker.Cancel();
-            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(20));
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
             yield return null;
             Assert.That(picker.Open(), Is.True);
@@ -92,7 +92,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.BoulderCell, Is.EqualTo(new GridPosition(2, 1)));
             Assert.That(fixture.Player.transform.position.x, Is.EqualTo(1));
             Assert.That(fixture.Boulder.transform.position.x, Is.EqualTo(2));
-            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(20));
             Assert.That(fixture.Runtime.BoardState.GetActiveNoises(), Is.Empty);
             yield return null;
             Assert.That(picker.Open(), Is.True);
@@ -122,7 +122,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(operation.Result.Diagnostic.Code, Is.EqualTo(PresentationDiagnosticCode.Canceled));
                 Assert.That(fixture.Diagnostics.Count, Is.EqualTo(1));
                 Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
-                Assert.That(fixture.Run.Food, Is.EqualTo(19));
+                Assert.That(fixture.Run.Satiety, Is.EqualTo(19));
                 Assert.That(fixture.Player.transform.position.x, Is.EqualTo(fixture.PlayerCell.X));
                 Assert.That(fixture.Boulder.transform.position.x, Is.EqualTo(fixture.BoulderCell.X));
                 Assert.That(fixture.Feedback.OfType<BoulderPushedEvent>(), Is.Empty);
@@ -172,7 +172,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.PlayerCell, Is.EqualTo(new GridPosition(2, 1)));
             Assert.That(fixture.Runtime.BoardState.GetEntities().Single(entity => entity.Id.Equals(new EntityId(2))).Position, Is.EqualTo(new GridPosition(3, 1)));
             Assert.That(blueprint.Entities.Single(entity => entity.Id.Equals(new EntityId(2))).Position, Is.EqualTo(new GridPosition(2, 1)));
-            Assert.That(fixture.Run.Food, Is.EqualTo(19));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(19));
         }
 
         /// <summary>Real authored sprites remain framed and nonblank before/after a push in desktop and portrait captures.</summary>

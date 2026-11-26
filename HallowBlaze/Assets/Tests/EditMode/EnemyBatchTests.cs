@@ -192,7 +192,7 @@ namespace HallowBlaze.Tests.EditMode
                     }
                 }
                 Assert.That(run.Health, Is.EqualTo(expectedHealth), context);
-                Assert.That(run.Food, Is.EqualTo(25), context);
+                Assert.That(run.Satiety, Is.EqualTo(25), context);
                 Assert.That(run.Status, Is.EqualTo(RunStatus.Active), context);
                 CollectionAssert.AreEqual(inputBefore, enemies, context);
                 permutationCount++;
@@ -319,7 +319,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(enemies.Single(enemy => enemy.ActorId.Equals(moverId)).Phase, Is.EqualTo(ShamblerPhase.Rest));
                 Assert.That(enemies.All(enemy => enemy.LockedIntent == null), Is.True);
                 Assert.That(run.Health, Is.EqualTo(isHit ? 100 - 2 * damage : 100));
-                Assert.That(run.Food, Is.EqualTo(25));
+                Assert.That(run.Satiety, Is.EqualTo(25));
                 Assert.That(run.Status, Is.EqualTo(RunStatus.Active));
                 CollectionAssert.AreEqual(inputBefore, enemies);
             }
@@ -404,7 +404,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(removedIntent.Kind, Is.EqualTo(removedAction));
                 Assert.That(removedIntent.TargetPosition, Is.EqualTo(removedTarget));
                 Assert.That(run.Health, Is.EqualTo(100));
-                Assert.That(run.Food, Is.EqualTo(25));
+                Assert.That(run.Satiety, Is.EqualTo(25));
                 CollectionAssert.AreEqual(inputBefore, enemies);
                 var after = board.GetEntities();
                 Assert.Throws<InvalidOperationException>(() => executor.Execute(board, run, enemies, events));
@@ -523,7 +523,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(board.TryGetEntity(playerId, out BoardEntityState player), Is.True);
                 Assert.That(player.Position, Is.EqualTo(new GridPosition(7, 7)));
                 Assert.That(run.Health, Is.EqualTo(100));
-                Assert.That(run.Food, Is.EqualTo(25));
+                Assert.That(run.Satiety, Is.EqualTo(25));
                 CollectionAssert.AreEqual(inputBefore, enemies);
             }
         }
@@ -578,7 +578,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(leftIntent.TargetPosition, Is.EqualTo(rightPosition));
             Assert.That(rightIntent.TargetPosition, Is.EqualTo(leftPosition));
             Assert.That(run.Health, Is.EqualTo(100));
-            Assert.That(run.Food, Is.EqualTo(25));
+            Assert.That(run.Satiety, Is.EqualTo(25));
             CollectionAssert.AreEqual(reverseInput ? new[] { right, left } : new[] { left, right }, input);
         }
 
@@ -665,7 +665,7 @@ namespace HallowBlaze.Tests.EditMode
                     Assert.That(unrelatedMove.From, Is.EqualTo(new GridPosition(6, 5 + round)));
                     Assert.That(unrelatedMove.To, Is.EqualTo(new GridPosition(6, 6 + round)));
                     Assert.That(enemies.Single(enemy => enemy.ActorId.Value == 42).Phase, Is.EqualTo(ShamblerPhase.Rest));
-                    Assert.That(run.Food, Is.EqualTo(25));
+                    Assert.That(run.Satiety, Is.EqualTo(25));
                     Assert.That(run.Health, Is.EqualTo(100));
 
                     if (round == 0)
@@ -754,7 +754,7 @@ namespace HallowBlaze.Tests.EditMode
                     Assert.That(enemy.Phase, Is.EqualTo(index % 2 == 0 ? ShamblerPhase.Rest : ShamblerPhase.Active));
                 }
                 Assert.That(run.Health, Is.EqualTo(100));
-                Assert.That(run.Food, Is.EqualTo(25));
+                Assert.That(run.Satiety, Is.EqualTo(25));
                 var after = board.GetEntities();
                 Assert.Throws<InvalidOperationException>(() => executor.Execute(board, run, enemies, events));
                 CollectionAssert.AreEqual(after, board.GetEntities());
@@ -827,7 +827,7 @@ namespace HallowBlaze.Tests.EditMode
                 CollectionAssert.AreEqual(before, board.GetEntities());
                 Assert.That(enemies.Select(enemy => enemy.Phase), Is.EqualTo(beforePhases));
                 Assert.That(run.Health, Is.EqualTo(100));
-                Assert.That(run.Food, Is.EqualTo(25));
+                Assert.That(run.Satiety, Is.EqualTo(25));
                 Assert.Throws<InvalidOperationException>(() => planner.Plan(board, enemies, playerId));
                 foreach (ShamblerState enemy in enemies)
                     Assert.That(enemy.LockedIntent, Is.SameAs(plans.Single(intent => intent.ActorId.Equals(enemy.ActorId))));

@@ -16,7 +16,7 @@ namespace HallowBlaze.Core.Persistence.Mapping
             RunStateDto resources = RunStateMapper.ToDto(run);
             var dto = new RunStateV2Dto
             {
-                RunId = run.RunId, RunSeed = run.RunSeed, Health = run.Health, Food = run.Food,
+                RunId = run.RunId, RunSeed = run.RunSeed, Health = run.Health, Food = run.Satiety,
                 Status = resources.Status, ToolSlots = resources.ToolSlots,
                 CompletedDayCount = run.CompletedDayCount, ReachedCheckpointNodeId = run.WorldNodeId,
                 TraversalSequence = run.TraversalSequence,
@@ -67,7 +67,7 @@ namespace HallowBlaze.Core.Persistence.Mapping
         }
 
         internal static RunState FromDto(RunStateV2Dto dto, int schemaVersion,
-            string randomAlgorithmId, int randomAlgorithmVersion)
+            string randomAlgorithmId, int randomAlgorithmVersion, ResourceRules resourceRules = null)
         {
             if (dto == null)
                 throw new ArgumentNullException(nameof(dto));
@@ -80,7 +80,7 @@ namespace HallowBlaze.Core.Persistence.Mapping
                 RunId = dto.RunId, RunSeed = dto.RunSeed, Health = dto.Health, Food = dto.Food, Status = dto.Status,
                 ToolSlots = dto.ToolSlots, CurrentDay = dto.CompletedDayCount, WorldNodeId = dto.ReachedCheckpointNodeId,
                 Route = Array.Empty<string>()
-            }, randomAlgorithmId, randomAlgorithmVersion);
+            }, randomAlgorithmId, randomAlgorithmVersion, resourceRules);
             var history = new List<TravelHistoryEntry>();
             TravelHistoryDto[] entries = DtoValidation.RequireArray(dto.TravelHistory, "travelHistory");
             for (int index = 0; index < entries.Length; index++)

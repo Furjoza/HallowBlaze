@@ -16,7 +16,7 @@ namespace HallowBlaze.Tests.EditMode
             RunLifecycleService firstLifecycle = new RunLifecycleService(firstSession, store);
             Assert.That(firstLifecycle.StartNewRun("run-001", 7, CreateConfiguration()).IsSuccess, Is.True);
             Assert.That(store.SaveRunCallCount, Is.EqualTo(1));
-            firstSession.ConsumeFood(12);
+            firstSession.ConsumeSatiety(12);
 
             Assert.That(firstLifecycle.ExitToMenu().IsSuccess, Is.True);
             Assert.That(firstSession.ActiveRun, Is.Null);

@@ -24,7 +24,9 @@ namespace HallowBlaze.Core.Persistence.Mapping
 
         /// <summary>Rejects unknown RNG versions rather than substituting an algorithm with a different layout.</summary>
         /// <exception cref="PersistenceDataException">The schema, RNG metadata or travel fields are invalid.</exception>
-        public static RunState FromDto(RunStateV3Dto dto)
+        public static RunState FromDto(RunStateV3Dto dto) => FromDto(dto, null);
+
+        internal static RunState FromDto(RunStateV3Dto dto, ResourceRules resourceRules)
         {
             if (dto == null)
                 throw new ArgumentNullException(nameof(dto));
@@ -38,7 +40,7 @@ namespace HallowBlaze.Core.Persistence.Mapping
                 !RandomStreamProvider.IsSupported(dto.RandomAlgorithmId, dto.RandomAlgorithmVersion))
                 DtoValidation.ThrowInvalidValue("randomAlgorithmVersion");
             return RunStateV2Mapper.FromDto(dto, RunStateV3Dto.CurrentSchemaVersion,
-                dto.RandomAlgorithmId, dto.RandomAlgorithmVersion);
+                dto.RandomAlgorithmId, dto.RandomAlgorithmVersion, resourceRules);
         }
     }
 }

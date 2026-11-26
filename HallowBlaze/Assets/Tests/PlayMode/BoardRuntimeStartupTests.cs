@@ -242,7 +242,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(GetProperty<BoardBlueprint>(manager, "ActiveBlueprint").ContentHash, Is.EqualTo(fingerprint));
                 Assert.That(resumed.BoardState.GetEntities(), Is.EqualTo(blueprint.Entities));
                 Assert.That(run.Health, Is.EqualTo(100));
-                Assert.That(run.Food, Is.EqualTo(100));
+                Assert.That(run.Satiety, Is.EqualTo(100));
                 yield return null;
             }
             finally { UnityEngine.Random.state = previousRandom; }
@@ -269,7 +269,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetProperty<BoardRequest>(manager, "ActiveRequest"), Is.Null);
             Assert.That(player.transform.position, Is.EqualTo(new Vector3(2, 2, 0)));
             Assert.That(run.Health, Is.EqualTo(100));
-            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Satiety, Is.EqualTo(100));
             yield return null;
             Assert.That(manager.transform.childCount, Is.Zero);
         }
@@ -373,7 +373,7 @@ namespace HallowBlaze.Tests.PlayMode
                             Assert.That(bushView.activeSelf, Is.True);
                             CommandSubmission blocked = presenter.Coordinator.SubmitAsync(new MoveCommand(step)).Result;
                             Assert.That(blocked.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
-                            Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+                            Assert.That(runtime.RunState.Satiety, Is.EqualTo(100));
                             Assert.That(runtime.BoardState.TryGetEntity(item.Id, out _), Is.True);
                             Assert.That(runtime.BoardState.TryGetEntity(runtime.PlayerId, out BoardEntityState playerState), Is.True);
                             Assert.That(playerState.Position, Is.Not.EqualTo(item.Position));
@@ -400,25 +400,25 @@ namespace HallowBlaze.Tests.PlayMode
                             presenter.SynchronizeFromState();
                             Assert.That(bushView.activeSelf, Is.False);
                         }
-                        int beforePickup = runtime.RunState.Food;
+                        int beforePickup = runtime.RunState.Satiety;
                         player.GetComponent<Animator>().Update(0f);
                         CaptureLandmark(runtime, new Vector2Int(1280, 720), prefab + "-before-" + animations, "HB-M715");
                         Task<CommandSubmission> pending = presenter.Coordinator.SubmitAsync(new MoveCommand(step));
                         while (!pending.IsCompleted) yield return null;
                         Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
                         int reward = foodId == OrdinaryBoardContent.BerryFoodId ? 10 : 15;
-                        Assert.That(runtime.RunState.Food, Is.EqualTo(beforePickup + reward - 1));
-                        Assert.That(foodText.text, Is.EqualTo("Food: " + (beforePickup + reward - 1) + " +" + reward));
+                        Assert.That(runtime.RunState.Satiety, Is.EqualTo(beforePickup + reward - 1));
+                        Assert.That(foodText.text, Is.EqualTo("Satiety: " + (beforePickup + reward - 1) + " +" + reward));
                         Assert.That(itemView.activeSelf, Is.False);
                         Assert.That(runtime.BoardState.TryGetEntity(item.Id, out _), Is.False);
                         Assert.That(sinks.Events.OfType<FoodRestoredEvent>().Single().Amount, Is.EqualTo(reward));
-                        int before = runtime.RunState.Food;
+                        int before = runtime.RunState.Satiety;
                         Assert.That(presenter.Coordinator.SubmitAsync(new InteractCommand(item.Id)).Result.Status,
                             Is.EqualTo(CommandSubmissionStatus.Rejected));
                         presenter.SynchronizeFromState();
-                        Assert.That(runtime.RunState.Food, Is.EqualTo(before));
+                        Assert.That(runtime.RunState.Satiety, Is.EqualTo(before));
                         Assert.That(itemView.activeSelf, Is.False);
-                        Assert.That(foodText.text, Is.EqualTo("Food: " + before));
+                        Assert.That(foodText.text, Is.EqualTo("Satiety: " + before));
                         CaptureLandmark(runtime, new Vector2Int(1280, 720), prefab + "-after-" + animations, "HB-M715");
                     }
                 }
@@ -426,7 +426,7 @@ namespace HallowBlaze.Tests.PlayMode
 
         /// <summary>Production medical items are used only through a conscious keyboard command and replay once within the checkpoint boundary.</summary>
         [UnityTest]
-        public IEnumerator ProductionFirstAidKeyboardUseAndCheckpointRecovery([Values(95, 100, 120)] int initialHealth)
+        public IEnumerator ProductionFirstAidKeyboardUseAndCheckpointRecovery([Values(95, 100)] int initialHealth)
         {
             foreach (bool animations in new[] { true, false })
             {
@@ -485,7 +485,7 @@ namespace HallowBlaze.Tests.PlayMode
                         Assert.That(presenter.Coordinator.SubmitAsync(new InteractCommand(kit.Id, kit.Position, FirstAidInteractionAction.ActionId)).Result.Status,
                             Is.EqualTo(CommandSubmissionStatus.Rejected));
                         Assert.That(runtime.RunState.Health, Is.EqualTo(initialHealth));
-                        Assert.That(runtime.RunState.Food, Is.EqualTo(100));
+                        Assert.That(runtime.RunState.Satiety, Is.EqualTo(100));
                         Assert.That(runtime.BoardState.TryGetEntity(kit.Id, out _), Is.True);
                         Assert.That(runtime.Views[kit.Id].activeSelf, Is.True);
                         Assert.That(sinks.Events, Is.Empty);
@@ -494,7 +494,7 @@ namespace HallowBlaze.Tests.PlayMode
                     }
                     Assert.That(picker.SelectedIndex, Is.GreaterThanOrEqualTo(0));
                     Assert.That(picker.Options[picker.SelectedIndex].ActionId, Is.EqualTo(FirstAidInteractionAction.ActionId));
-                    Assert.That(picker.GetOptionLabel(picker.SelectedIndex), Does.Contain("Health").And.Contain("Food -1").And.Contain("Noise 4"));
+                    Assert.That(picker.GetOptionLabel(picker.SelectedIndex), Does.Contain("Health").And.Contain("Satiety -1").And.Contain("Noise 4"));
                     Assert.That(runtime.RunState.Health, Is.EqualTo(95));
                     player.GetComponent<Animator>().Update(0f);
                     CaptureLandmark(runtime, new Vector2Int(1280, 720), "aid-before-" + animations, "HB-M716");
@@ -502,7 +502,7 @@ namespace HallowBlaze.Tests.PlayMode
                     while (!pending.IsCompleted) yield return null;
                     Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
                     Assert.That(runtime.RunState.Health, Is.EqualTo(100));
-                    Assert.That(runtime.RunState.Food, Is.EqualTo(99));
+                    Assert.That(runtime.RunState.Satiety, Is.EqualTo(99));
                     Assert.That(healthText.text, Is.EqualTo("Health: 100 +5"));
                     Assert.That(runtime.Views[kit.Id].activeSelf, Is.False);
                     Assert.That(runtime.BoardState.TryGetEntity(kit.Id, out _), Is.False);
@@ -514,7 +514,7 @@ namespace HallowBlaze.Tests.PlayMode
                     presenter.SynchronizeFromState();
                     Assert.That(healthText.text, Is.EqualTo("Health: 100"));
                     Assert.That(runtime.RunState.Health, Is.EqualTo(100));
-                    Assert.That(runtime.RunState.Food, Is.EqualTo(99));
+                    Assert.That(runtime.RunState.Satiety, Is.EqualTo(99));
                     CaptureLandmark(runtime, new Vector2Int(1280, 720), "aid-after-" + animations, "HB-M716");
                     appliedStateJson = PersistenceJsonSerializer.SerializeRun(runtime.RunState);
                 }
@@ -522,16 +522,16 @@ namespace HallowBlaze.Tests.PlayMode
                 BoardRuntime resumed = InvokeSetup(manager, boundaryRequest, restored, player);
                 Assert.That(GetProperty<BoardBlueprint>(manager, "ActiveBlueprint"), Is.EqualTo(blueprint));
                 Assert.That(restored.Health, Is.EqualTo(95), "Continue restores the pre-board checkpoint, not uncommitted healing.");
-                Assert.That(restored.Food, Is.EqualTo(100));
+                Assert.That(restored.Satiety, Is.EqualTo(100));
                 Assert.That(resumed.BoardState.TryGetEntity(kit.Id, out _), Is.True);
                 RunState applied = PersistenceJsonSerializer.DeserializeRun(appliedStateJson);
                 BoardRuntime appliedReload = InvokeSetup(manager, boundaryRequest, applied, player);
                 Assert.That(applied.Health, Is.EqualTo(100), "Loading serialized totals cannot apply another healing effect.");
-                Assert.That(applied.Food, Is.EqualTo(99));
+                Assert.That(applied.Satiety, Is.EqualTo(99));
                 Assert.That(appliedReload.BoardState.TryMove(appliedReload.PlayerId, kit.Position), Is.True);
                 Assert.That(appliedReload.Controller.Resolve(new InteractCommand(kit.Id, kit.Position, FirstAidInteractionAction.ActionId)).Accepted, Is.False);
                 Assert.That(applied.Health, Is.EqualTo(100));
-                Assert.That(applied.Food, Is.EqualTo(99));
+                Assert.That(applied.Satiety, Is.EqualTo(99));
             }
         }
 
@@ -570,7 +570,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(continued.ToString(), Is.EqualTo(result.ToString()));
             Assert.That(first.IsDisposed, Is.True);
             Assert.That(second.Request.Address, Is.EqualTo(request.Address));
-            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Satiety, Is.EqualTo(100));
             Assert.That(run.Health, Is.EqualTo(100));
             yield return null;
         }
@@ -599,7 +599,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(runtime.Enemies.Count, Is.EqualTo(2));
                 Assert.That(runtime.Enemies.All(enemy => enemy.LockedIntent != null), Is.True);
                 Assert.That(runtime.Controller.Resolve(new WaitCommand()).Accepted, Is.True);
-                Assert.That(run.Food, Is.EqualTo(99));
+                Assert.That(run.Satiety, Is.EqualTo(99));
             }
             yield return null;
         }
@@ -634,7 +634,7 @@ namespace HallowBlaze.Tests.PlayMode
                 }
                 TurnController controller = runtime.Controller;
                 Assert.That(controller.Resolve(new WaitCommand()).Accepted, Is.True);
-                Assert.That(run.Food, Is.EqualTo(99));
+                Assert.That(run.Satiety, Is.EqualTo(99));
                 Assert.That(run.Health, Is.EqualTo(100));
                 Assert.That(runtime.Enemies.All(enemy => enemy.Phase == ShamblerPhase.Rest), Is.True);
                 Assert.That(runtime.Controller, Is.SameAs(controller));
@@ -699,7 +699,7 @@ namespace HallowBlaze.Tests.PlayMode
                 yield return null;
                 Assert.That(enemy.LockedIntent, Is.SameAs(initialPlan));
                 Assert.That(run.Health, Is.EqualTo(100));
-                Assert.That(run.Food, Is.EqualTo(100));
+                Assert.That(run.Satiety, Is.EqualTo(100));
 
                 Assert.That(controller.Resolve(new MoveCommand(Direction.West)).Accepted, Is.False);
                 Assert.That(enemy.LockedIntent, Is.SameAs(initialPlan));
@@ -710,7 +710,7 @@ namespace HallowBlaze.Tests.PlayMode
                     Is.EqualTo(target));
                 Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
                 Assert.That(enemy.LockedIntent.Kind, Is.EqualTo(EnemyIntentKind.Wait));
-                Assert.That(run.Food, Is.EqualTo(99));
+                Assert.That(run.Satiety, Is.EqualTo(99));
                 Assert.That(runtime.Controller, Is.SameAs(controller));
                 Assert.That(runtime.Views[enemy.ActorId].transform.position,
                     Is.EqualTo(new Vector3(source.X, source.Y, 0f)), "Legacy artwork must not execute its own movement.");
@@ -752,7 +752,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(GetProperty<BoardRuntime>(manager, "ActiveRuntime"), Is.Null);
                 Assert.That(GetProperty<BoardRequest>(manager, "ActiveRequest"), Is.Null);
                 Assert.That(run.Health, Is.EqualTo(100));
-                Assert.That(run.Food, Is.EqualTo(100));
+                Assert.That(run.Satiety, Is.EqualTo(100));
                 yield return null;
             }
         }
@@ -879,7 +879,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(enemy.LockedIntent, Is.SameAs(initial));
             Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Active));
             Assert.That(session.ActiveRun.Health, Is.EqualTo(100));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(100));
             Assert.That(presenter.Coordinator.ResolutionCount, Is.Zero);
             marker = display.Views[enemy.ActorId];
             InvokeManager(manager, "HideLevelImage");
@@ -902,7 +902,7 @@ namespace HallowBlaze.Tests.PlayMode
             yield return null;
             Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
             Assert.That(enemy.LockedIntent, Is.SameAs(initial));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(100));
             Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(count));
             Time.timeScale = 1;
             InvokeManager(manager, "SetGameplayInputBlocked", false);
@@ -911,7 +911,7 @@ namespace HallowBlaze.Tests.PlayMode
             while (!accepted.IsCompleted)
                 yield return null;
             Assert.That(accepted.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(99));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(99));
             Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(count + 1));
             Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter"), Is.SameAs(presenter));
             Assert.That(display.Projections.Single().Symbol, Is.EqualTo(EnemyIntentSymbol.Wait));
@@ -922,7 +922,7 @@ namespace HallowBlaze.Tests.PlayMode
             ((Behaviour)manager).enabled = true;
             Assert.That(enemy.LockedIntent, Is.SameAs(rest));
             Assert.That(display.Views.Count, Is.EqualTo(1));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(99));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(99));
 
             EntityId oldId = enemy.ActorId;
             var oldControl = legend.Control;
@@ -951,7 +951,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(nextLegend.Control.gameObject.activeInHierarchy, Is.True);
             yield return null;
             Assert.That(oldOwner == null, Is.True);
-            session.ConsumeFood(session.ActiveRun.Food - 1);
+            session.ConsumeSatiety(session.ActiveRun.Satiety - 1);
             var terminalControl = nextLegend.Control;
             Assert.That(TrySubmit(manager, new WaitCommand(), out Task<CommandSubmission> terminal), Is.True);
             while (!terminal.IsCompleted)
@@ -984,7 +984,7 @@ namespace HallowBlaze.Tests.PlayMode
             yield return null;
             Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.False);
             Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(100));
             TestContext.WriteLine("P1 production roster; markers/legend hidden during day transition including re-enable/replacement; prepared plans revealed before input without AI or cost; one coordinator; terminal/failure cleanup; isolated save root.");
         }
 
@@ -1067,12 +1067,12 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(legend.IsVisible, Is.True);
             legend.Control.onClick.Invoke();
             Assert.That(legend.IsVisible, Is.False);
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(100));
             Assert.That(TrySubmit(manager, new WaitCommand(), out Task<CommandSubmission> pending), Is.True);
             while (!pending.IsCompleted)
                 yield return null;
             Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(99));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(99));
             Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.EqualTo(1));
             InvokeManager(manager, "BlockBoardStartup");
             Assert.That(toolHud.IsDisposed, Is.True);
@@ -1136,7 +1136,7 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That((bool)InvokeManager(manager, "HandleBoardOutcome", outcome), Is.False, foreign.ToString());
             }
             Assert.That(run.Status, Is.EqualTo(RunStatus.Active));
-            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Satiety, Is.EqualTo(100));
             Assert.That(run.Health, Is.EqualTo(100));
             Assert.That(run.CompletedDayCount, Is.Zero);
             Assert.That(run.ActiveLeg.SegmentIndex, Is.Zero);
@@ -1202,7 +1202,7 @@ namespace HallowBlaze.Tests.PlayMode
             while (!command.IsCompleted)
                 yield return null;
             Assert.That(command.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(99));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(99));
         }
 
         [UnityTest]
@@ -1231,11 +1231,11 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(TrySubmit(manager, new WaitCommand(), out Task<CommandSubmission> command), Is.True);
             while (!command.IsCompleted)
                 yield return null;
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(99));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(99));
             lifecycle.ExitToMenu();
             Assert.That(lifecycle.ContinueRun().IsSuccess, Is.True);
             InvokeManager(manager, "InitGame");
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(100), "Unsaved mid-board action restarts the same boundary.");
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(100), "Unsaved mid-board action restarts the same boundary.");
             Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address, Is.EqualTo(address));
             Assert.That(GetManagerField<GameObject>(manager, "levelImage").activeSelf, Is.False);
         }
@@ -1298,7 +1298,7 @@ namespace HallowBlaze.Tests.PlayMode
             InvokeManager(manager, "InitGame");
             yield return null;
             RunState run = session.ActiveRun;
-            session.ConsumeFood(run.Food - 1);
+            session.ConsumeSatiety(run.Satiety - 1);
             Assert.That(TrySubmit(manager, new WaitCommand(), out Task<CommandSubmission> death), Is.True);
             while (!death.IsCompleted)
                 yield return null;
@@ -1356,7 +1356,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.True);
             Assert.That(runtime.BoardState.TryGetEntity(target.Id, out BoardEntityState retained), Is.True);
             Assert.That(retained, Is.SameAs(target));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(100));
             Assert.That(presenter.Coordinator.ResolutionCount, Is.Zero);
         }
 
@@ -1403,7 +1403,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(GetProperty<BoardBlueprint>(GetManagerField<Component>(manager, "boardScript"), "ActiveBlueprint").ContentHash, Is.EqualTo(hash));
                 restored.BoardState.TryGetGroundTool(new EntityId(20), out GroundToolState restoredAxe);
                 Assert.That(restoredAxe.InstanceId, Is.EqualTo(firstAxe.InstanceId));
-                Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+                Assert.That(session.ActiveRun.Satiety, Is.EqualTo(100));
                 Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
                 UnityEngine.Object.DestroyImmediate(manager.gameObject);
                 GameObject player = GameObject.FindGameObjectWithTag("Player");
@@ -1441,7 +1441,7 @@ namespace HallowBlaze.Tests.PlayMode
                     LandmarkRecord completed = durable.CompletedLandmarks.Single();
                     Assert.That(completed.VariantId, Is.EqualTo(variantId));
                     Assert.That(completed.OutcomeId, Is.EqualTo(outcomeId));
-                    Assert.That(durable.Food, Is.EqualTo(100 + (outcomeId == "tower.supplies" ? 20 : 0) - solution.SolutionPath.Count));
+                    Assert.That(durable.Satiety, Is.EqualTo(100 + (outcomeId == "tower.supplies" ? 20 : 0) - solution.SolutionPath.Count));
                     Assert.That(durable.CompletedDayCount, Is.EqualTo(5));
                     Assert.That(store.LoadProfile().Data.GetNodeDiscoveryState("landmark.radio-tower"), Is.EqualTo(NodeDiscoveryState.Visited));
                     Assert.That(durable.ActiveLandmark, Is.Null);
@@ -1488,7 +1488,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(store.LoadProfile().Data.WonRunCount, Is.EqualTo(1));
                 Assert.That(durable.CompletedLandmarks.Single().OutcomeId, Is.EqualTo(supplies ? "tower.supplies" : "tower.arrival"));
                 Assert.That(durable.CompletedDayCount, Is.EqualTo(5));
-                Assert.That(durable.Food, Is.EqualTo(supplies ? 108 : 93));
+                Assert.That(durable.Satiety, Is.EqualTo(supplies ? 108 : 93));
                 Assert.That(durable.ActiveLandmark, Is.Null);
                 Assert.That(store.LoadProfile().Data.GetNodeDiscoveryState("landmark.radio-tower"), Is.EqualTo(NodeDiscoveryState.Visited));
                 int saves = store.RunSaves;
@@ -1524,7 +1524,7 @@ namespace HallowBlaze.Tests.PlayMode
             yield return ExecuteLandmarkSteps(manager, solution.SolutionPath.Skip(solution.SolutionPath.Count - 1));
             Assert.That(session.ActiveRun.CompletedLandmarks, Is.Empty);
             Assert.That(session.ActiveRun.ActiveLandmark, Is.Not.Null);
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(expectedFood));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(expectedFood));
             Assert.That(TrySubmit(manager, new WaitCommand(), out _), Is.False);
             int resolutions = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount;
             store.FailRun = false;
@@ -1541,7 +1541,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That((bool)InvokeManager(manager, "RetryTravelCheckpoint"), Is.False);
             Assert.That(session.ActiveRun, Is.SameAs(completed));
             Assert.That(completed.Status, Is.EqualTo(RunStatus.Won));
-            Assert.That(completed.Food, Is.EqualTo(expectedFood));
+            Assert.That(completed.Satiety, Is.EqualTo(expectedFood));
             Assert.That(session.Profile.WonRunCount, Is.EqualTo(1));
             store.FailTerminalProfile = false;
             Assert.That((bool)InvokeManager(manager, "RetryTravelCheckpoint"), Is.True);
@@ -1549,7 +1549,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(session.ActiveRun, Is.Null);
             Assert.That(completed.Status, Is.EqualTo(RunStatus.Won));
             Assert.That(completed.CompletedLandmarks.Count, Is.EqualTo(1));
-            Assert.That(completed.Food, Is.EqualTo(expectedFood));
+            Assert.That(completed.Satiety, Is.EqualTo(expectedFood));
             Assert.That(store.LoadProfile().Data.WonRunCount, Is.EqualTo(1));
             Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.EqualTo(resolutions));
             Assert.That(store.LoadProfile().Data.GetNodeDiscoveryState("landmark.radio-tower"), Is.EqualTo(NodeDiscoveryState.Visited));
@@ -1564,7 +1564,7 @@ namespace HallowBlaze.Tests.PlayMode
             InvokeManager(manager, "HideLevelImage");
             yield return null;
             RunState run = session.ActiveRun;
-            run.ConsumeFood(99);
+            run.ConsumeSatiety(99);
             GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").AnimationsEnabled = false;
             Assert.That(TrySubmit(manager, new WaitCommand(), out Task<CommandSubmission> pending), Is.True);
             while (!pending.IsCompleted) yield return null;
@@ -1796,7 +1796,7 @@ namespace HallowBlaze.Tests.PlayMode
                     yield return null;
                 }
                 Assert.That(runtime.Controller.IsTerminal, Is.True);
-                Assert.That(runtime.RunState.Food, Is.EqualTo(100 - (index + 1) * 2));
+                Assert.That(runtime.RunState.Satiety, Is.EqualTo(100 - (index + 1) * 2));
                 Assert.That(store.RunSaves, Is.EqualTo(before + 1));
                 Assert.That((bool)InvokeManager(manager, "HandleBoardOutcome", BoardOutcome.ExitReached(request)), Is.False);
                 Assert.That(store.RunSaves, Is.EqualTo(before + 1), "Duplicate outcome must not save again.");

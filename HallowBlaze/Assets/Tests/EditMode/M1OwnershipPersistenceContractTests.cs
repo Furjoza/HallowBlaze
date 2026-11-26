@@ -44,14 +44,14 @@ namespace HallowBlaze.Tests.EditMode
                 101,
                 CreateConfiguration()).IsSuccess, Is.True);
             firstSession.AdvanceDay();
-            firstSession.ConsumeFood(20);
+            firstSession.ConsumeSatiety(20);
             Assert.That(firstLifecycle.SaveBoardBoundary().IsSuccess, Is.True);
 
             GameSession continuedSession = LoadSession(store);
             RunLifecycleService continuedLifecycle = new RunLifecycleService(continuedSession, store);
             Assert.That(continuedLifecycle.ContinueRun().IsSuccess, Is.True);
             Assert.That(continuedSession.ActiveRun.CurrentDay, Is.EqualTo(1));
-            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(80));
+            Assert.That(continuedSession.ActiveRun.Satiety, Is.EqualTo(80));
             Assert.That(continuedLifecycle.MarkDead().IsSuccess, Is.True);
 
             GameSession secondSession = LoadSession(store);
@@ -66,7 +66,7 @@ namespace HallowBlaze.Tests.EditMode
                 "run-won",
                 202,
                 CreateConfiguration()).IsSuccess, Is.True);
-            Assert.That(secondSession.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(secondSession.ActiveRun.Satiety, Is.EqualTo(100));
             Assert.That(secondSession.ActiveRun.Health, Is.EqualTo(100));
             secondSession.AdvanceDay();
             secondSession.AdvanceDay();
@@ -91,11 +91,11 @@ namespace HallowBlaze.Tests.EditMode
             RunLifecycleService lifecycle = new RunLifecycleService(session, store);
             lifecycle.StartNewRun("run-boundary", 303, CreateConfiguration());
             session.AdvanceDay();
-            session.ConsumeFood(15);
+            session.ConsumeSatiety(15);
             int boardSeed = session.ActiveRun.GetBoardSeed();
             Assert.That(lifecycle.SaveBoardBoundary().IsSuccess, Is.True);
 
-            session.ConsumeFood(40);
+            session.ConsumeSatiety(40);
             session.TakeDamage(25);
 
             GameSession restoredSession = LoadSession(store);
@@ -104,7 +104,7 @@ namespace HallowBlaze.Tests.EditMode
 
             Assert.That(result.IsSuccess, Is.True);
             Assert.That(restoredSession.ActiveRun.CurrentDay, Is.EqualTo(1));
-            Assert.That(restoredSession.ActiveRun.Food, Is.EqualTo(85));
+            Assert.That(restoredSession.ActiveRun.Satiety, Is.EqualTo(85));
             Assert.That(restoredSession.ActiveRun.Health, Is.EqualTo(100));
             Assert.That(restoredSession.ActiveRun.GetBoardSeed(), Is.EqualTo(boardSeed));
         }
@@ -116,7 +116,7 @@ namespace HallowBlaze.Tests.EditMode
             GameSession targetSession = new GameSession(CreateProfile("profile-exit"));
             RunLifecycleService targetLifecycle = new RunLifecycleService(targetSession, store);
             targetLifecycle.StartNewRun("run-target", 404, CreateConfiguration());
-            targetSession.ConsumeFood(10);
+            targetSession.ConsumeSatiety(10);
 
             Assert.That(targetLifecycle.ExitToMenu().IsSuccess, Is.True);
             Assert.That(targetSession.ActiveRun, Is.Null);
@@ -124,7 +124,7 @@ namespace HallowBlaze.Tests.EditMode
             GameSession continuedSession = LoadSession(store);
             RunLifecycleService continuedLifecycle = new RunLifecycleService(continuedSession, store);
             Assert.That(continuedLifecycle.ContinueRun().IsSuccess, Is.True);
-            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(continuedSession.ActiveRun.Satiety, Is.EqualTo(100));
 
             Assert.That(continuedLifecycle.DeleteRunAndAbandon().IsSuccess, Is.True);
             Assert.That(continuedSession.ActiveRun, Is.Null);
@@ -141,7 +141,7 @@ namespace HallowBlaze.Tests.EditMode
             RunLifecycleService recoveredLifecycle =
                 new RunLifecycleService(recoveredSession, recoveredStore);
             recoveredLifecycle.StartNewRun("run-recovered", 505, CreateConfiguration());
-            recoveredSession.ConsumeFood(20);
+            recoveredSession.ConsumeSatiety(20);
             recoveredLifecycle.SaveBoardBoundary();
             File.WriteAllText(Path.Combine(recoveredRoot, "run.json"), "not-json");
 
@@ -150,7 +150,7 @@ namespace HallowBlaze.Tests.EditMode
 
             Assert.That(recoveredResult.Type, Is.EqualTo(SaveStoreResultType.Recovered));
             Assert.That(recoveredResult.Data.RunId, Is.EqualTo("run-recovered"));
-            Assert.That(recoveredResult.Data.Food, Is.EqualTo(100));
+            Assert.That(recoveredResult.Data.Satiety, Is.EqualTo(100));
 
             string corruptRoot = Path.Combine(testRoot, "corrupt");
             FileSystemSaveStore corruptStore = new FileSystemSaveStore(corruptRoot);
@@ -176,7 +176,7 @@ namespace HallowBlaze.Tests.EditMode
                 "run-valid",
                 606,
                 CreateConfiguration()).IsSuccess, Is.True);
-            sourceSession.ConsumeFood(20);
+            sourceSession.ConsumeSatiety(20);
             Assert.That(sourceLifecycle.SaveBoardBoundary().IsSuccess, Is.True);
 
             string runPath = Path.Combine(corruptRoot, "run.json");
@@ -212,7 +212,7 @@ namespace HallowBlaze.Tests.EditMode
             secondSession.Profile.DiscoverFact("fact.second");
             firstLifecycle.StartNewRun("run-first", 1, CreateConfiguration());
             secondLifecycle.StartNewRun("run-second", 2, CreateConfiguration());
-            secondSession.ConsumeFood(30);
+            secondSession.ConsumeSatiety(30);
             secondLifecycle.SaveBoardBoundary();
             string secondProfileBefore = File.ReadAllText(Path.Combine(secondRoot, "profile.json"));
             string secondRunBefore = File.ReadAllText(Path.Combine(secondRoot, "run.json"));
@@ -225,7 +225,7 @@ namespace HallowBlaze.Tests.EditMode
                 Is.EqualTo(secondRunBefore));
             Assert.That(secondStore.LoadProfile().Data.ProfileId, Is.EqualTo("profile-second"));
             Assert.That(secondStore.LoadRun().Data.RunId, Is.EqualTo("run-second"));
-            Assert.That(secondStore.LoadRun().Data.Food, Is.EqualTo(70));
+            Assert.That(secondStore.LoadRun().Data.Satiety, Is.EqualTo(70));
         }
 
         [Test]
@@ -246,7 +246,7 @@ namespace HallowBlaze.Tests.EditMode
                 File.ReadAllText(Path.Combine(testRoot, "run.json")));
 
             Assert.That(profileEnvelope.schemaVersion, Is.EqualTo(2));
-            Assert.That(runEnvelope.schemaVersion, Is.EqualTo(5));
+            Assert.That(runEnvelope.schemaVersion, Is.EqualTo(7));
             RunState restored = store.LoadRun().Data;
             Assert.That(restored.RandomAlgorithmId, Is.EqualTo(HallowBlaze.Core.Random.RandomStreamProvider.AlgorithmId));
             Assert.That(restored.RandomAlgorithmVersion, Is.EqualTo(HallowBlaze.Core.Random.RandomStreamProvider.AlgorithmVersion));

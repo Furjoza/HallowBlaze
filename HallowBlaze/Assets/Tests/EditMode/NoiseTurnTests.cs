@@ -24,7 +24,7 @@ namespace HallowBlaze.Tests.EditMode
             TurnResult result = controller.Resolve(new MoveCommand(Direction.East));
             NoiseEvent emitted = result.Events.OfType<NoiseEvent>().Single();
             Assert.That(result.Accepted, Is.True);
-            Assert.That(run.Food, Is.EqualTo(9));
+            Assert.That(run.Satiety, Is.EqualTo(9));
             Assert.That(emitted.Noise, Is.SameAs(board.GetActiveNoises().Single()));
             Assert.That(emitted.Noise.SourceId, Is.EqualTo(PlayerId));
             Assert.That(emitted.Noise.Position, Is.EqualTo(new GridPosition(2, 1)));
@@ -44,11 +44,11 @@ namespace HallowBlaze.Tests.EditMode
             var controller = new TurnController(board, run, PlayerId, new TurnResolver(ActionNoiseProfile.Prototype));
             if (reason == "terminal")
             {
-                run.ConsumeFood(9);
+                run.ConsumeSatiety(9);
                 controller.Resolve(new WaitCommand());
             }
             BoardNoise noise = board.EmitNoise(PlayerId, new GridPosition(1, 1), 1, 1);
-            int food = run.Food;
+            int food = run.Satiety;
             PlayerCommand command = reason == "blocked" ? (PlayerCommand)new MoveCommand(Direction.West) : null;
             if (reason == "blocked")
                 Assert.That(board.TryAdd(new BoardEntityState(new EntityId(800),
@@ -56,7 +56,7 @@ namespace HallowBlaze.Tests.EditMode
             TurnResult result = controller.Resolve(command);
             Assert.That(result.Accepted, Is.False);
             Assert.That(result.Events, Is.Empty);
-            Assert.That(run.Food, Is.EqualTo(food));
+            Assert.That(run.Satiety, Is.EqualTo(food));
             Assert.That(board.GetActiveNoises().Single(), Is.SameAs(noise));
         }
 
@@ -144,7 +144,7 @@ namespace HallowBlaze.Tests.EditMode
         {
             BoardState board = CreateBoard();
             RunState run = CreateRun();
-            run.ConsumeFood(9);
+            run.ConsumeSatiety(9);
             var controller = new TurnController(board, run, PlayerId, new TurnResolver(ActionNoiseProfile.Prototype));
             TurnResult result = controller.Resolve(new MoveCommand(Direction.East));
             Assert.That(result.Events.Select(gameEvent => gameEvent.EventType),

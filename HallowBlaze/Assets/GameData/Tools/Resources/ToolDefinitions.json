@@ -1,6 +1,6 @@
 {
   "tools": [
-    { "id": "axe.basic", "displayName": "Axe", "maximumCharges": 3 },
+    { "id": "axe.basic", "displayName": "Axe", "maximumCharges": 3, "isReusable": true },
     { "id": "shovel.basic", "displayName": "Shovel", "maximumCharges": 3 }
   ]
 }

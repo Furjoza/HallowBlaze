@@ -142,7 +142,7 @@ public class PlayerScript : MovingObject, IRunHud, ITurnFeedback, IPlayerStepAud
         displayedHealth = health;
         displayedFood = food;
         if (foodText != null)
-            foodText.text = "Food: " + food + (foodGain > 0 ? " +" + foodGain : "");
+            foodText.text = "Satiety: " + food + (foodGain > 0 ? " +" + foodGain : "");
         if (healthText != null)
             healthText.text = "Health: " + health + (healthGain > 0 ? " +" + healthGain : "");
     }

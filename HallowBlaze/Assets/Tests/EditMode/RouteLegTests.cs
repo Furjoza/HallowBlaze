@@ -106,7 +106,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(BoardOutcomeIdentityGuard.ValidateOutcome(BoardOutcome.ExitReached(wrong), request, run, out string diagnostic), Is.False);
                 Assert.That(diagnostic, Does.StartWith("ForeignBoardOutcome:"));
             }
-            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Satiety, Is.EqualTo(100));
             Assert.That(run.TravelHistory, Is.Empty);
             run.TryConsumeIntro("leg.1");
             run.TryAdvanceSegment("leg.1", "segment.1");
@@ -390,7 +390,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(run.TryConsumeIntro("leg.1"), Is.False);
             Assert.That(run.ActiveLeg, Is.SameAs(consumed));
             Assert.That(run.CompletedDayCount, Is.Zero);
-            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Satiety, Is.EqualTo(100));
             run.MarkDead();
             Assert.That(run.TryConsumeIntro("leg.1"), Is.False);
         }
@@ -416,7 +416,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(run.TravelHistory, Is.Empty);
             }
             Assert.That(run.TryAdvanceSegment("leg.1", segments[count - 1].SegmentId), Is.False);
-            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Satiety, Is.EqualTo(100));
         }
 
         [Test]
@@ -479,7 +479,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(run.TravelHistory.Single(), Is.EqualTo(TravelHistoryEntry.Completed("leg.1", "edge", "a", "b", 1, count)));
             Assert.That(run.ActiveLeg, Is.Null);
             Assert.That(run.Health, Is.EqualTo(100));
-            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Satiety, Is.EqualTo(100));
             Assert.That(run.ToolSlots[0].RemainingUses, Is.EqualTo(3));
             Assert.That(independent.TravelHistory, Is.Empty);
             Assert.That(independent.ActiveLeg, Is.Null);
@@ -574,7 +574,7 @@ namespace HallowBlaze.Tests.EditMode
                 }
                 Assert.That(source.ActiveLeg?.SegmentIndex, Is.EqualTo(boundary == "intermediate" ? (int?)1 :
                     boundary == "pending" || boundary == "consumed" ? (int?)0 : null));
-                Assert.That(restored.Food, Is.EqualTo(100));
+                Assert.That(restored.Satiety, Is.EqualTo(100));
                 Assert.That(restored.ToolSlots[0].RemainingUses, Is.EqualTo(3));
             }
             finally
@@ -616,7 +616,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(BoardOutcomeIdentityGuard.ValidateOutcome(BoardOutcome.ExitReached(final), final, run, out _), Is.False);
                 Assert.That(run.CompletedDayCount, Is.EqualTo(1));
                 Assert.That(run.TravelHistory, Has.Count.EqualTo(1));
-                Assert.That(run.Food, Is.EqualTo(100));
+                Assert.That(run.Satiety, Is.EqualTo(100));
             }
             finally
             {
@@ -698,7 +698,7 @@ namespace HallowBlaze.Tests.EditMode
             TurnResult move = controller.Resolve(new WaitCommand());
             Assert.That(move.Events.Select(gameEvent => gameEvent.EventType),
                 Is.EqualTo(new[] { "EntityWaited", "ActionCostApplied", "EntityMoved", "EntityMoved" }), context);
-            Assert.That(run.Food, Is.EqualTo(99), context);
+            Assert.That(run.Satiety, Is.EqualTo(99), context);
             Assert.That(move.Events.OfType<EntityMovedEvent>().Select(gameEvent => gameEvent.EntityId.Value), Is.EqualTo(new long[] { 2, 3 }), context);
             Assert.That(first.Phase, Is.EqualTo(ShamblerPhase.Rest), context);
             Assert.That(second.Phase, Is.EqualTo(ShamblerPhase.Rest), context);
@@ -706,12 +706,12 @@ namespace HallowBlaze.Tests.EditMode
             TurnResult rejected = controller.Resolve(new MoveCommand(Direction.West));
             Assert.That(rejected.Accepted, Is.False, context);
             Assert.That(rejected.Events, Is.Empty, context);
-            Assert.That(run.Food, Is.EqualTo(99), context);
+            Assert.That(run.Satiety, Is.EqualTo(99), context);
             Assert.That(first.LockedIntent, Is.SameAs(retained), context);
             TurnResult rest = controller.Resolve(new WaitCommand());
             Assert.That(rest.Events.Select(gameEvent => gameEvent.EventType),
                 Is.EqualTo(new[] { "EntityWaited", "ActionCostApplied", "EntityWaited", "EntityWaited" }), context);
-            Assert.That(run.Food, Is.EqualTo(98), context);
+            Assert.That(run.Satiety, Is.EqualTo(98), context);
             Assert.That(first.LockedIntent.Kind, Is.EqualTo(EnemyIntentKind.Attack), context);
             Assert.That(first.LockedIntent.TargetPosition, Is.EqualTo(new GridPosition(1, 1)), context);
             Assert.That(second.LockedIntent.TargetPosition, Is.EqualTo(new GridPosition(1, 2)), context);
@@ -726,7 +726,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(attacks[1].TargetPosition, Is.EqualTo(new GridPosition(1, 2)), context);
             Assert.That(attacks[1].HealthChange, Is.EqualTo(-10), context);
             Assert.That(run.Health, Is.EqualTo(90), context);
-            Assert.That(run.Food, Is.EqualTo(97), context);
+            Assert.That(run.Satiety, Is.EqualTo(97), context);
             Assert.That(board.TryGetEntity(new EntityId(1), out BoardEntityState player), Is.True);
             Assert.That(player.Position, Is.EqualTo(new GridPosition(1, 2)), context);
             Assert.That(board.TryGetEntity(new EntityId(2), out BoardEntityState firstActor), Is.True);
@@ -738,7 +738,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(run.TravelHistory, Is.EqualTo(source.TravelHistory), context);
             if (address != null)
                 Assert.That(BoardAddressFactory.CreateFromState(run), Is.EqualTo(address), context);
-            Assert.That(source.Food, Is.EqualTo(100), context);
+            Assert.That(source.Satiety, Is.EqualTo(100), context);
             Assert.That(source.Health, Is.EqualTo(100), context);
         }
 

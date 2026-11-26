@@ -20,7 +20,7 @@ using UnityEngine.UI;
 public class GameManager : MonoBehaviour, IBoardOutcomeSink
 {
     private const int InitialHealth = 100;
-    private const int InitialFood = 100;
+    private const int InitialSatiety = 100;
     private const string OpeningWarmUpOriginNodeId = "shelter.warm-up";
     private const string OpeningWarmUpEdgeId = "road.shelter-warm-up";
     private const string MenuSceneName = "Menu";
@@ -1290,7 +1290,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (activePlayerView == null || activeBoardRuntime == null || activeBoardRuntime.IsDisposed ||
             !ReferenceEquals(run, session.ActiveRun) || !ReferenceEquals(run, activeBoardRuntime.RunState))
             return;
-        activePlayerView.Refresh(run.Health, run.Food);
+        activePlayerView.Refresh(run.Health, run.Satiety);
         activePlayerView.AddResourceGains(amount, 0);
     }
 
@@ -1322,7 +1322,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         nextRunSequence = checked(nextRunSequence + 1);
         RunStateConfiguration configuration = new RunStateConfiguration(
             InitialHealth,
-            InitialFood,
+            InitialSatiety,
             0,
             OpeningWarmUpOriginNodeId);
         string runId = session.Profile.ProfileId + "-run-" +
@@ -1575,7 +1575,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         nextRunSequence = checked(nextRunSequence + 1);
         RunStateConfiguration configuration = new RunStateConfiguration(
             InitialHealth,
-            InitialFood,
+            InitialSatiety,
             0,
             OpeningWarmUpOriginNodeId);
         RunState freshRun = new RunState(

@@ -33,7 +33,9 @@ namespace HallowBlaze.Core.Persistence.Mapping
         /// Availability of unknown content is a catalog concern, not permission to discard persisted ownership.
         /// </summary>
         /// <exception cref="PersistenceDataException">Equipment or the existing travel/RNG contract is invalid.</exception>
-        public static RunState FromDto(RunStateV4Dto dto)
+        public static RunState FromDto(RunStateV4Dto dto) => FromDto(dto, null);
+
+        internal static RunState FromDto(RunStateV4Dto dto, ResourceRules resourceRules)
         {
             if (dto == null) throw new ArgumentNullException(nameof(dto));
             DtoValidation.RequireCurrentSchemaVersion(dto.SchemaVersion, RunStateV4Dto.CurrentSchemaVersion);
@@ -53,7 +55,7 @@ namespace HallowBlaze.Core.Persistence.Mapping
                 if (!ids.Add(slot.InstanceId)) DtoValidation.ThrowInvalidValue(path + ".instanceId");
                 instances[index] = new ToolInstanceState(slot.InstanceId, slot.DefinitionId, slot.Charges);
             }
-            RunState run = RunStateV3Mapper.FromDto(dto.CreateTravelDocument());
+            RunState run = RunStateV3Mapper.FromDto(dto.CreateTravelDocument(), resourceRules);
             try { run.RestoreToolState(dto.ToolInstanceSequence, instances); }
             catch (ArgumentException) { DtoValidation.ThrowInvalidValue("toolSlots"); }
             return run;

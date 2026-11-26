@@ -107,7 +107,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(firstRun, Is.Not.Null);
             string layoutHash = GetGameplayLayoutHash();
             Vector3Int playerStart = GetPlayerGridPosition();
-            firstSession.ConsumeFood(15);
+            firstSession.ConsumeSatiety(15);
             firstSession.TakeDamage(10);
 
             string runId = firstRun.RunId;
@@ -130,7 +130,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(continuedRun, Is.Not.Null);
             Assert.That(continuedRun.RunId, Is.EqualTo(runId));
             Assert.That(continuedRun.CurrentDay, Is.EqualTo(day));
-            Assert.That(continuedRun.Food, Is.EqualTo(100));
+            Assert.That(continuedRun.Satiety, Is.EqualTo(100));
             Assert.That(continuedRun.Health, Is.EqualTo(100));
             string continuedLayoutHash = GetGameplayLayoutHash();
             Assert.That(continuedLayoutHash, Is.EqualTo(layoutHash));
@@ -151,7 +151,7 @@ namespace HallowBlaze.Tests.PlayMode
             RunState repeatedRun = GetProperty<GameSession>(thirdManager, "Session").ActiveRun;
             Assert.That(repeatedRun.RunId, Is.EqualTo(runId));
             Assert.That(repeatedRun.CurrentDay, Is.EqualTo(day));
-            Assert.That(repeatedRun.Food, Is.EqualTo(100));
+            Assert.That(repeatedRun.Satiety, Is.EqualTo(100));
             Assert.That(repeatedRun.Health, Is.EqualTo(100));
             string repeatedLayoutHash = GetGameplayLayoutHash();
             Assert.That(repeatedLayoutHash, Is.EqualTo(layoutHash));

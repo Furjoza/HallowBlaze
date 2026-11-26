@@ -75,8 +75,12 @@ namespace HallowBlaze.Core.State
         public int TraversalSequence { get; private set; }
         /// <summary>Gets the sole ordered travel-history authority.</summary>
         public IReadOnlyList<TravelHistoryEntry> TravelHistory => historyView;
+        /// <summary>Gets health in zero through <see cref="ResourceRules.MaximumHealth"/>; healing never banks excess.</summary>
         public int Health { get; private set; }
-        public int Food { get; private set; }
+        /// <summary>Gets the sole food-related resource in zero through <see cref="ResourceRules.MaximumSatiety"/>.</summary>
+        public int Satiety { get; private set; }
+        /// <summary>Gets immutable persisted limits and pre-command cost tiers; reset takes the new run's configuration.</summary>
+        public ResourceRules ResourceRules { get; private set; }
         public RunStatus Status { get; private set; }
         /// <summary>Gets read-only generic equipment; instances are immutable and charges are owned by this run.</summary>
         public IReadOnlyList<ToolSlotState> ToolSlots => toolSlotsView;
@@ -101,8 +105,9 @@ namespace HallowBlaze.Core.State
             TraversalSequence = 0;
             ToolInstanceSequence = 0;
             WorldNodeId = configuration.InitialWorldNodeId;
+            ResourceRules = configuration.ResourceRules;
             Health = configuration.InitialHealth;
-            Food = configuration.InitialFood;
+            Satiety = configuration.InitialSatiety;
             Status = RunStatus.Active;
             travelHistory.Clear();
             ActiveLandmark = null;
@@ -110,6 +115,9 @@ namespace HallowBlaze.Core.State
             Array.Clear(toolSlots, 0, toolSlots.Length);
         }
 
+        /// <summary>Applies nonnegative damage, clamped at zero; the turn controller still chooses the terminal outcome.</summary>
+        /// <exception cref="ArgumentOutOfRangeException">Damage is negative.</exception>
+        /// <exception cref="InvalidOperationException">The run has ended.</exception>
         public void TakeDamage(int amount)
         {
             EnsureActive();
@@ -117,25 +125,38 @@ namespace HallowBlaze.Core.State
             Health = Math.Max(0, Health - amount);
         }
 
-        public void RestoreHealth(int amount)
+        /// <summary>Restores health up to its configured cap and reports applied and wasted amounts.</summary>
+        /// <returns>Accounting for the requested restoration, including zero applied at full health.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">The amount is negative.</exception>
+        /// <exception cref="InvalidOperationException">The run has ended.</exception>
+        public ResourceGain RestoreHealth(int amount)
         {
             EnsureActive();
-            ValidateNonNegative(amount, nameof(amount));
-            Health = checked(Health + amount);
+            ResourceGain gain = new ResourceGain(Health, amount, ResourceRules.MaximumHealth);
+            Health += gain.Applied;
+            return gain;
         }
 
-        public void ConsumeFood(int amount)
+        /// <summary>Applies one already-selected nonnegative satiety cost, clamped at zero without choosing death.</summary>
+        /// <exception cref="ArgumentOutOfRangeException">The cost is negative.</exception>
+        /// <exception cref="InvalidOperationException">The run has ended.</exception>
+        public void ConsumeSatiety(int amount)
         {
             EnsureActive();
             ValidateNonNegative(amount, nameof(amount));
-            Food = Math.Max(0, Food - amount);
+            Satiety = Math.Max(0, Satiety - amount);
         }
 
-        public void RestoreFood(int amount)
+        /// <summary>Restores satiety up to its configured cap without overflow or storing waste elsewhere.</summary>
+        /// <returns>Applied and wasted portions of the requested restoration.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">The amount is negative.</exception>
+        /// <exception cref="InvalidOperationException">The run has ended.</exception>
+        public ResourceGain RestoreSatiety(int amount)
         {
             EnsureActive();
-            ValidateNonNegative(amount, nameof(amount));
-            Food = checked(Food + amount);
+            ResourceGain gain = new ResourceGain(Satiety, amount, ResourceRules.MaximumSatiety);
+            Satiety += gain.Applied;
+            return gain;
         }
 
         /// <summary>Advances a transitional checkpoint-only day, never an active leg.</summary>
