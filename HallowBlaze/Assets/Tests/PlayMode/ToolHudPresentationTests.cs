@@ -24,13 +24,18 @@ namespace HallowBlaze.Tests.PlayMode
             run.EquipTool(1, second);
             using (var hud = new ToolHudPresenter(run, null, new Vector2(640, 480), definitions))
             {
-                Assert.That(hud.GetSlotText(0), Is.EqualTo("Axe  3"));
-                Assert.That(hud.GetSlotText(1), Is.EqualTo("Axe  3"));
+                Assert.That(hud.GetSlotText(0), Is.EqualTo("Axe"));
+                Assert.That(hud.GetSlotText(1), Is.EqualTo("Axe"));
                 Assert.That(hud.Root.GetComponentsInChildren<Button>(), Is.Empty);
                 Assert.That(run.TrySpendToolCharge(0, first.InstanceId), Is.True);
                 hud.Refresh();
-                Assert.That(hud.GetSlotText(0), Is.EqualTo("Axe  2"));
-                Assert.That(hud.GetSlotText(1), Is.EqualTo("Axe  3"));
+                Assert.That(hud.GetSlotText(0), Is.EqualTo("Axe"));
+                Assert.That(hud.GetSlotText(1), Is.EqualTo("Axe"));
+                Assert.That(run.TrySpendToolCharge(0, first.InstanceId), Is.True);
+                Assert.That(run.TrySpendToolCharge(0, first.InstanceId), Is.True);
+                hud.Refresh();
+                Assert.That(hud.GetSlotText(0), Is.EqualTo("Axe"));
+                Assert.That(hud.Root.GetComponentsInChildren<Text>().Where(text => text.text == "Axe").All(text => text.color == Color.white), Is.True);
                 ToolInstanceState unknown = run.CreateToolInstance(new ToolDefinition("missing.content", "Missing", 1));
                 run.ReplaceTool(1, unknown);
                 run.TrySpendToolCharge(1, unknown.InstanceId);
@@ -55,6 +60,11 @@ namespace HallowBlaze.Tests.PlayMode
             var definitions = ToolContentCatalog.Load();
             Assert.That(definitions.Keys, Is.EquivalentTo(new[] { "axe.basic", "shovel.basic" }));
             Assert.That(definitions.Values.All(definition => definition.MaximumCharges > 0), Is.True);
+            Assert.That(definitions["axe.basic"].IsReusable, Is.True);
+            Assert.That(definitions["axe.basic"].UseChargeCost, Is.Zero);
+            Assert.That(definitions["shovel.basic"].IsReusable, Is.False);
+            Assert.That(definitions["shovel.basic"].UseChargeCost, Is.EqualTo(1));
+            Assert.That(ToolContentCatalog.Read("{\"tools\":[{\"id\":\"finite\",\"displayName\":\"Finite\",\"maximumCharges\":3}]}")["finite"].IsReusable, Is.False);
             Assert.Throws<ArgumentException>(() => ToolContentCatalog.Read("{}"));
             Assert.Throws<ArgumentOutOfRangeException>(() => ToolContentCatalog.Read(
                 "{\"tools\":[{\"id\":\"axe.basic\",\"displayName\":\"Axe\",\"maximumCharges\":-1}]}"));

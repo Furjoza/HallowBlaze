@@ -141,7 +141,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(scenario.Run.Food, Is.EqualTo(finalFood));
             Assert.That(scenario.Run.Health, Is.GreaterThan(0));
             Assert.That(scenario.Run.ToolSlots[0].IsEmpty, Is.EqualTo(!useAxe));
-            if (useAxe) Assert.That(scenario.Run.ToolSlots[0].RemainingUses, Is.EqualTo(scenario.Axe.Charges - 1));
+            if (useAxe) Assert.That(scenario.Run.ToolSlots[0].RemainingUses, Is.EqualTo(scenario.Axe.Charges));
         }
 
         /// <summary>A discarded boulder position cannot block the mandatory route; only the optional resource route depends on its placement.</summary>

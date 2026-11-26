@@ -77,8 +77,8 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
                     Assert.That(picker.IsReplacing, Is.True);
                     Assert.That(fixture.Presenter.Coordinator.SubmitAsync(new WaitCommand()).Result.Status, Is.EqualTo(CommandSubmissionStatus.Blocked));
-                    Assert.That(picker.ReplacementLabels[0], Does.Contain("Axe (2 charges)").And.Contain("Shovel (3 charges)").And.Contain("Old tool remains here"));
-                    Assert.That(picker.ReplacementLabels[1], Does.Contain("Axe (1 charges)").And.Contain("Shovel (3 charges)"));
+                    Assert.That(picker.ReplacementLabels[0], Does.Contain("Axe -> Shovel (3 charges)").And.Contain("Old tool remains here"));
+                    Assert.That(picker.ReplacementLabels[1], Does.Contain("Axe -> Shovel (3 charges)"));
                     Assert.That(picker.SelectReplacement(0), Is.True);
                     if (leave) picker.Leave(); else picker.Cancel();
                     Assert.That(fixture.Ground, Is.SameAs(incoming));
@@ -98,7 +98,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(fixture.Ground.InstanceId, Is.EqualTo(old.InstanceId));
                 Assert.That(fixture.Ground.Charges, Is.EqualTo(2));
                 Assert.That(fixture.ToolView.activeSelf, Is.True);
-                Assert.That(fixture.Presenter.GroundToolsDisplay.Root.GetComponentsInChildren<TextMesh>().Single().text, Is.EqualTo("Axe\n2 charges"));
+                Assert.That(fixture.Presenter.GroundToolsDisplay.Root.GetComponentsInChildren<TextMesh>().Single().text, Is.EqualTo("Axe"));
                 Assert.That(fixture.Hud.GetSlotText(0), Is.EqualTo("Shovel  3"));
                 Assert.That(fixture.Run.Food, Is.EqualTo(19));
                 Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
@@ -166,7 +166,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(picker.IsDisposed, Is.True);
             Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
             Fixture next = CreateFixture(0, false, restored);
-            Assert.That(next.Hud.GetSlotText(0), Is.EqualTo("Axe  2"));
+            Assert.That(next.Hud.GetSlotText(0), Is.EqualTo("Axe"));
             Assert.That(next.Hud.GetSlotText(1), Is.EqualTo("Shovel  3"));
             Assert.That(next.Run.ToolSlots[1].Instance.InstanceId, Is.EqualTo(identity));
             Assert.That(next.Run.Food, Is.EqualTo(19));
@@ -188,7 +188,7 @@ namespace HallowBlaze.Tests.PlayMode
             picker.SelectReplacement(0);
             Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             Assert.That(fixture.Hud.GetSlotText(0), Is.EqualTo("Shovel  3"));
-            Assert.That(fixture.Presenter.GroundToolsDisplay.Root.GetComponentsInChildren<TextMesh>().Single().text, Is.EqualTo("Axe\n2 charges"));
+            Assert.That(fixture.Presenter.GroundToolsDisplay.Root.GetComponentsInChildren<TextMesh>().Single().text, Is.EqualTo("Axe"));
             fixture.Hud.Resize(new Vector2(width, height));
             var cameraOwner = new GameObject("Tool pickup evidence camera");
             fixture.Objects.Add(cameraOwner);

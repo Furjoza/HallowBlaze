@@ -1172,6 +1172,67 @@ run, a claim that every manual scenario was exercised, balance acceptance or pro
 activation. The closeout changes documentation only.
 Resource aggregation M6.10c and the separate Check board TimeLimit stay open.
 
+### M6.10c - Read-Only Resource Summary
+
+Implementation started on 2026-11-25 at the owner's request. The existing Board Editor has a
+compact **Resources** panel above the inspector, stacked below the canvas in narrow windows.
+Its **Board**, **Pool** and **Route** views retain separate meanings:
+
+- Board counts the current unsaved draft and selected variant, or the selected segment's
+  captured map. When both sources exist, **Draft** and **Segment map** select the source
+  explicitly; without an open draft the segment map is shown directly. A fixed source shows
+  its exact saved template/version/variant, including resource details, while a pool shows
+  the test seed's selected map. An uncaptured generated map remains unknown. The source and
+  saved map name are labelled; inspecting a map does not open or replace a draft. Painting,
+  deletion, undo/redo, variant and segment/source changes refresh the corresponding values.
+- Pool counts one draw from the selected Route Sources segment's exact captured
+  template/version/variant entries. It shows minimum, arithmetic mean and maximum, not the
+  sum of all alternatives. Candidate details retain saved names and exact IDs in tooltips.
+- Route sums one contribution per ordered segment. Fixed placements contribute once each,
+  including repeated placements of the same template. Food alternatives 10/30 plus a fixed
+  five produce 15/25/35. Separate resource extrema need not describe one achievable combination.
+
+Counts come from physical entities and authoritative Food, first-aid, digging and tool
+definitions, not prefab names or duplicate item/source bindings. Food is gross nominal supply;
+Health is nominal restoration before caps. Hidden supply and digging-required cache rewards
+are annotated. Axes count as reusable units with no charge total; finite tools retain separate
+initial-charge totals. Starting Food, Health and equipment remain a separate row. Unsupported
+rewards and invalid source data are explicit, never a complete zero or a stale successful result.
+
+Generated segments start **Unknown**. The refresh icon explicitly captures their actual
+production-generated snapshots for the sandbox's complete run/leg/route/segment/configuration
+address and seed; repaint never generates a board. These seed-conditioned values may then
+contribute to the estimate. The separately labelled seed-selected total uses the exact pool
+choices shown by the existing preview. Changing the seed, world, captured templates,
+membership/publication or reward definitions discards generated snapshots. Remaining known
+segments are labelled a **partial authored subtotal**, never the whole route.
+
+Saved route candidates do not silently follow the open board draft. Explicit library Refresh
+continues to reject same-version content drift and reports missing saved maps while retaining
+their captured evidence. Resource inspection does not refresh the filesystem library, change
+history/selection/RNG, publish a test context, start Play, or write saves. It does not calculate
+reachability, actual collection, effective healing, turn costs, net Food or difficulty, and
+does not change the separate Check board solver.
+
+The narrow implementation checks passed six focused EditMode cases, including native 1280/640
+GUI-point captures, pointer tabs, edit/undo/redo and variant refresh, independent captured-map
+supply, invalid membership recovery, missing-map warnings and seed-snapshot invalidation.
+Broader regression validation and independent review are recorded in the owning
+[M6.10c card](TechnicalRoadmap.md#m610c---resource-balance-panel-for-boards-segment-pools-and-routes).
+Technical verification completed on 2026-11-25: 202 passed, zero failed and two explicitly
+skipped existing scene prerequisites; independent re-review PASS closed both error-handling
+findings. No fresh PlayMode or Player-compilation result is claimed for this Editor-only change.
+The later Fixed-map display correction passed the complete live window fixture, 42/42 with
+zero failures or skips, and independent read-only review PASS. This does not rerun the earlier
+202-case authoring result or turn its two skipped prerequisites into passes.
+
+**Owner acceptance (2026-11-25):** After reporting correct route recalculation and exercising
+the corrected individual-map display, the owner reported that it appears to work and authorized
+continuation. This closes M6.10c's practical usability gate and completes the delivered M6.10
+editor/sandbox scope. It is not a measured balance verdict, a claim that every manual scenario
+was exercised, production campaign activation or a fix for the separate Check board TimeLimit.
+This acceptance closeout changes documentation only.
+
 ### Editor Reference Walkthrough And Delivery Gates
 
 The read-only M6.7 audit uses the existing

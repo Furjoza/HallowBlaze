@@ -414,13 +414,18 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             }
             ToolUseOption option = ToolOptions[index - Options.Count];
             return "Tool " + (option.SlotIndex + 1) + ": " + option.EffectLabel + target +
-                "\n1 turn; Food -" + option.FoodCost + "; Charge -" + option.ChargeCost +
-                " (" + option.ExpectedCharges + " left); Noise " + option.NoiseStrength +
+                "\n1 turn; Food -" + option.FoodCost +
+                (option.ChargeCost == 0 ? "" : "; Charge -" + option.ChargeCost + " (" + option.ExpectedCharges + " left)") +
+                "; Noise " + option.NoiseStrength +
                 (option.NoiseStrength == 0 ? "" : " / " + option.NoiseLifetimeTurns + " turns");
         }
 
-        private string DescribeTool(string definitionId, int charges) =>
-            (toolCatalog.TryGetValue(definitionId, out ToolDefinition definition) ? definition.DisplayName : definitionId) + " (" + charges + " charges)";
+        private string DescribeTool(string definitionId, int charges)
+        {
+            bool known = toolCatalog.TryGetValue(definitionId, out ToolDefinition definition);
+            return (known ? definition.DisplayName : definitionId) +
+                (known && definition.IsReusable ? "" : " (" + charges + " charges)");
+        }
 
         private bool IsAvailable(int index) => index < Options.Count ? Options[index].IsAvailable :
             index < Options.Count + ToolOptions.Count ? ToolOptions[index - Options.Count].IsAvailable :
