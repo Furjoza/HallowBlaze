@@ -131,6 +131,7 @@ namespace HallowBlaze.Presentation.Runtime
                     DiggingDisplay.Refresh();
                     GroundToolsDisplay.Refresh();
                 });
+            InventoryDisplay = new InventorySessionPresenter(runtime, Coordinator, interactionInputAllowed);
             var interactionOwner = new GameObject("Board interaction") { hideFlags = HideFlags.DontSave };
             InteractionDisplay = interactionOwner.AddComponent<InteractionPresenter>();
             InteractionDisplay.Bind(runtime, Coordinator, interactionInputAllowed);
@@ -190,6 +191,15 @@ namespace HallowBlaze.Presentation.Runtime
                 return Task.CompletedTask;
             });
             Dispatcher.Register<FoodRestoredEvent>((gameEvent, token) => RefreshFood(gameEvent));
+            Dispatcher.Register<InventoryItemActionEvent>((gameEvent, token) =>
+            {
+                RefreshHud();
+                (hud as ITurnResourceGains)?.AddResourceGains(
+                    gameEvent.ResourceId == InventoryItemActionEvent.Health ? gameEvent.Applied : 0,
+                    gameEvent.ResourceId == InventoryItemActionEvent.Satiety ? gameEvent.Applied : 0);
+                return ShowFeedback(gameEvent);
+            });
+            Dispatcher.Register<InventoryCommittedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<HealthRestoredEvent>((gameEvent, token) =>
             {
                 RefreshHud();
@@ -218,6 +228,8 @@ namespace HallowBlaze.Presentation.Runtime
 
         /// <summary>Gets the one command path borrowing the runtime's existing controller.</summary>
         public CommandPresentationCoordinator Coordinator { get; }
+        /// <summary>Gets the minimal modal bag draft adapter; final B/grid/hotbar presentation belongs to M10.7.</summary>
+        public InventorySessionPresenter InventoryDisplay { get; }
         /// <summary>Gets the extensible registry; future concrete events can register handlers before replay.</summary>
         public OrderedEventDispatcher Dispatcher { get; }
         /// <summary>Gets this presenter's owned debug hearing display; snapshots are never recomputed by presentation.</summary>
@@ -456,6 +468,7 @@ namespace HallowBlaze.Presentation.Runtime
 
         private Task NotifyOutcome(GameEvent gameEvent)
         {
+            InventoryDisplay.Dispose();
             (hud as ITurnResourceGains)?.ClearResourceGains();
             CloseIntents();
             NoiseDisplay.Dispose();
@@ -490,6 +503,7 @@ namespace HallowBlaze.Presentation.Runtime
             if (disposed)
                 return;
             disposed = true;
+            InventoryDisplay.Dispose();
             Coordinator.Dispose();
             attacks.Dispose();
             CloseIntents();

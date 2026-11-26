@@ -1,5 +1,117 @@
 # HallowBlaze Testing
 
+## M10.4 Atomic Backpack Session
+
+`ManageInventoryCommand` uses the existing `TurnResolver`, `TurnController` and presentation
+coordinator. It adds no save schema, automatic checkpoint, production item catalogue, pickup,
+quick-use wrapper, B binding, grid UI or hotbar. Final player-facing presentation belongs to
+M10.7. The minimal `BoardEventPresenter.InventoryDisplay` adapter is available to isolated
+test/debug callers on an active board; it grants no items and does not bypass lifecycle gates.
+
+### Payload And Ownership
+
+| Payload | Meaning / authority |
+| --- | --- |
+| `ExpectedRevision` | Exact revision observed at draft opening; no-op acceptance also makes it stale |
+| `Actions[0..2]` | Ordered immutable `InventoryItemAction(Use/Discard, instanceId)`; every target must be currently owned and unique |
+| `FinalLayout` | Exactly all survivors, each once, as `InventoryLayoutEntry(instanceId, containerId, column, row)` |
+| `containerId` | Exact `main-grid`, `left-pocket` or `right-pocket`; pockets require anchor 0.0 |
+| Definitions / effects | Resolved only from run-owned `InventoryContent`; the command cannot provide or replace a definition |
+| `InventoryDraft` | Detached transient proposal; staging/repacking never mutates resources, inventory or revision |
+
+The payload copies its sequences and exposes read-only collections of immutable values.
+Repacking is a whole-layout proposal, so swaps do not require a collision-free intermediate
+state. No action can add/rename an instance, target another actor, affect the board or create
+a ground item. Both Use and Discard permanently remove the selected carried identity; only
+Use applies its trusted restoration. Legal Use at the cap still consumes the item and reports
+its wasted amount under the M10.2 effect contract.
+
+### Validation And Commit Chronology
+
+1. Existing run/player validation rejects terminal, zero-resource or missing-player state.
+    The resolver samples the satiety cost tier once before any item effect.
+2. Validate expected revision, nonnull sequences, at most two actions and available revision
+    space. Validate every action kind, currently owned target and unique action identity.
+3. Resolve required effects and calculate ordered capped gains/waste using local projected
+    resources. Validate the exact survivor set, all anchors, unique ownership and compatibility.
+    No authoritative mutation occurs in these validation steps.
+4. Commit the validated final inventory once using `TryCommitInventory`; advance revision
+    exactly once, including no-op. Apply the already validated restoration effects in payload
+    order. Synchronous controller ownership excludes external mutations during resolution.
+5. Emit ordered `InventoryItemActionEvent` facts (Use/Discard, exact instance/definition,
+    effect/resource and applied/wasted accounting), then one `InventoryCommittedEvent` with
+    the final layout/new revision, then one `ActionCostAppliedEvent` using the preselected tier.
+6. Apply the existing immediate starvation check. A nonterminal result executes one locked
+    hostile phase, one environment phase and existing next-intent planning. Immediate terminal
+    results stop later phases under O-002; no item grants an extra opportunity or replans an intent.
+7. Presentation replays the accepted facts once. Applied resource gains stay separate from
+    the later cost/damage. Its gate remains held until replay or recovery finishes; presentation
+    failure cannot refund, repeat or reopen an accepted bag transaction.
+
+| Action mix | Removed items | Resource effects | Final layout / turn |
+| --- | --- | --- | --- |
+| None | None | None | Arbitrary valid repack or no-op; revision +1, one cost/hostile opportunity |
+| Use | One | One capped effect | Every other instance exactly once; same single turn |
+| Discard | One | None | Every other instance exactly once; no ground entity; same single turn |
+| Use, Use | Two distinct | Both in submitted order, with per-item waste | All survivors exactly once; same single turn |
+| Use, Discard | Two distinct | First effect only | Same single turn |
+| Discard, Use | Two distinct | Second effect only | Same single turn |
+| Discard, Discard | Two distinct | None | Same single turn |
+
+The action-mix fixture starts at health 95/satiety 100 with three 1x1 test berries, each +10.
+It explicitly expects `99 + 10 * numberOfUses` satiety, unchanged health, `3 - actionCount`
+survivors at their requested anchors, revision 1 and exactly one hostile/environment/planning
+call for every mix. Separate real-Shambler scenarios use food +50 and medicine up to +10:
+health 95 -> 100 -> 90 after one announced attack, satiety 100 -> 150 -> 149 with cost 1;
+the next bag no-op pays 2 and the announced enemy rest does not become another attack.
+
+### Rejection And Modal Matrix
+
+| Attempt | Result / unchanged authority |
+| --- | --- |
+| Old expected revision / repeated accepted payload | `StaleInventory`; no event, item, resource, turn or later-phase change |
+| Third/duplicate/null/unsupported action or foreign target | `InvalidInventory`; the first valid action cannot leak an effect |
+| Null/missing/extra/duplicate survivor, foreign identity or removed target in final layout | `InvalidInventory`; no implicit loss/substitution |
+| Overlap, out-of-bounds, unknown container, incompatible pocket or nonzero pocket anchor | `InvalidInventory`; original layout and resources retained |
+| Missing required effect | Cannot enter trusted run inventory; restore/content validation rejects without mutation, and resolver never substitutes an effect |
+| Revision `Int32.MaxValue` | `InvalidInventory`; no wrap, effect or cost |
+| Terminal, zero-resource or missing-player state | Existing `InvalidState`; no revival or post-terminal command |
+| Quick use / a primary command inside a bag payload | Not part of this sealed payload; no modifier or nested command dispatch exists in M10.4 |
+| Movement/Wait/interaction while bag is open | Independent `Inventory` input block; no coordinator invocation |
+| Pause, other modal or pending replay during Finish | Blocked; unrelated input ownership stays intact |
+| Stale Finish | Draft stays open and rebases to current run, with cleared staged actions; not a free close |
+| Canceled before resolution | No command/cost; unfinished draft remains open |
+| Rapid Finish while resolving/replaying or after accepted close | Blocked; one controller invocation only |
+| Board/terminal/presenter disposal | Lifecycle-only draft disposal; removes only its own input block and grants no gameplay close shortcut |
+
+`InventorySessionPresenter.TryOpen()` is free, but it has no normal Cancel/Close API.
+`FinishAsync()` is the normal exit even for no-op. `Dispose()` is reserved for lifecycle
+teardown, not a free inventory action. Opening and Finish both recheck live input permission.
+Items repacked into pockets cannot be used through another submission until the complete
+turn and its replay release the shared gate. M10.6 owns the actual quick-use path.
+
+### Validation And Limits
+
+On 2026-11-26 Unity 6000.3.21f1 passed **454/454** scoped runtime EditMode cases (inventory
+commands/model, resource rules, turn contracts/controller, movement, interactions, tool pickup,
+shared gate/replay, DTO and filesystem store) and **10/10** required PlayMode cases: seven new
+bag adapter cases plus three real Main Continue/terminal ownership cases. Both final reports
+have zero failures/skips/inconclusive results; final compiler/unhandled-error checks were clear.
+All invocations used `-nographics -silent-crashes`, and all XML/logs are outside the project.
+Save tests use isolated temporary directories. Schema v8 round-trip and backup recovery preserve
+the committed post-turn state; saving during a detached draft contains only the unchanged run.
+
+A broader presentation probe was **12/14**, not PASS. The unchanged
+`OrderedBoardPresentationTests.AnimationOnOff_HasIdenticalFinalViewsHudAndGate_AndBlocksRapidInput`
+and `CancellationDuringMove_SnapsAllViewsAndHudWithoutApplyingAnotherTurn` expect satiety 109
+from legacy Food, while the unchanged mapping uses the accepted RaspberryFoodReward 5 and
+therefore produces 104. The fixture and catalog/composer files were byte-identical to the
+recorded M10.3 baseline; the legacy movement/reward path is unchanged. This is source evidence,
+not a separately executed baseline A/B test. Their stale assertions were not edited in M10.4.
+The final required-scope report is separate and does not turn that broader probe into a pass.
+No full-suite, authoring-window, graphical/pixel, manual UI or portable-replay acceptance is
+claimed. Human/release gates and M10.5-M10.8 remain separate.
+
 ## M10.3 Inventory Persistence
 
 Run schema `8` extends the resource-aware v7 boundary. Historical card references to the

@@ -8404,7 +8404,7 @@ Vertical slice is complete only after `Accept` of `M8.8`. Implementing the featu
 
 # M10 — Spatial Inventory and Resource Pressure
 
-M10 is intentionally listed last. Its normal activation requires an explicit `proceed to M10` verdict from `M8.8` or a later explicit owner override; optional M9 work is not required. On 2026-11-25 the owner explicitly activated `M10.1` ahead of the no-backpack playtest, authorized its Unity validation, and then requested the next task, `M10.2`. On 2026-11-26 the owner requested continuation to `M10.3`. Validation is scoped to runtime rather than authoring-window tests, using headless Unity. These overrides do not close the outstanding human playtest/release gates or activate M10.4 and later cards.
+M10 is intentionally listed last. Its normal activation requires an explicit `proceed to M10` verdict from `M8.8` or a later explicit owner override; optional M9 work is not required. On 2026-11-25 the owner explicitly activated `M10.1` ahead of the no-backpack playtest, authorized its Unity validation, and then requested the next task, `M10.2`. On 2026-11-26 the owner requested continuation to `M10.3` and subsequently `M10.4`. Validation is scoped to runtime rather than authoring-window tests, using headless Unity. These overrides do not close the outstanding human playtest/release gates or activate M10.5 and later cards.
 
 ---
 
@@ -8575,13 +8575,13 @@ flowchart LR
 
 ## `M10.4` — Atomic one-turn backpack session
 
-**Status:** `Deferred`
+**Status:** `Done` - 2026-11-26; scoped runtime validation and independent review passed, with the broader-probe limitation recorded below.
 **Priority:** P1
 **Related contract:** sections 10, 18, 21.2, and 27.7.
 
 **Rationale:** Charging separately for opening and using would make a berry irrationally expensive, while unlimited actions would let the player heal and eat without enemy response. One atomic session with a two-action budget creates a clear tactical compromise.
 
-**Current behavior:** There is no inventory command. Opening ordinary map/selection UI is free, and item use cannot be proposed together with a final spatial layout.
+**Current behavior:** `ManageInventoryCommand` validates and commits zero to two ordered Use/Discard actions plus the exact survivor layout through the existing resolver/controller. An accepted no-op also advances the revision and pays once. The detached draft and minimal modal test/debug adapter use the shared gate and ordered event presentation. No production carried items, B/grid/hotbar UI, pickup or quick-use path is activated.
 
 **Expected outcome:** `ManageInventoryCommand(expectedRevision, actions[0..2], finalLayout)` validates a complete draft and atomically commits up to two ordered `Use`/`Discard` actions plus arbitrary repacking. Any accepted finish—including no-op—advances the inventory revision exactly once, costs exactly one turn/resource payment, and triggers one hostile/environment phase.
 
@@ -8609,6 +8609,14 @@ flowchart LR
 **Save and compatibility impact:** Only the committed post-turn inventory is saved. Drafts are never saved. Existing M10.3 schema should not change unless events require a separately justified version.
 
 **Required handoff:** Command payload, validation/commit chronology, state-before/state-after examples for all action mixes, proof of one hostile phase, and complete rejection matrix.
+
+**Closed writes (project-relative):** `Assets/Scripts/Core/Turns/Contracts/{ManageInventoryCommand.cs,InventoryEvents.cs,CommandRejectionCode.cs}`, `Assets/Scripts/Core/Turns/Resolution/{TurnResolver.cs,TurnResolver.Inventory.cs,InventoryDraft.cs}`, `Assets/Scripts/Presentation/Runtime/{InventorySessionPresenter.cs,CommandPresentationPipeline.cs,BoardEventPresenter.cs}`, `Assets/Tests/EditMode/{InventoryTurnTests.cs,CommandPresentationPipelineTests.cs}`, `Assets/Tests/PlayMode/InventorySessionPresentationTests.cs`, `Docs/Testing.md` and this roadmap. Only seven new source/test assets receive Unity-generated metadata; no scenes, prefabs, existing metadata, assemblies, packages, settings, production content or save format changes.
+
+**Implementation and evidence (2026-11-26):** The resolver prevalidates every action and required effect, projects capped resource accounting locally, and checks exact survivor ownership/geometry before any mutation. It commits one revision, applies ordered effects, emits action facts plus one final-layout event, then charges the preselected cost once. Existing terminal/hostile/environment/planning rules remain the sole turn pipeline. The minimal adapter has only Finish as its normal exit, independent Inventory input ownership, stale rebase, rapid-submit blocking and lifecycle disposal. [Payload, chronology, action-mix examples and rejection matrix](Testing.md#m104-atomic-backpack-session) include the exact existing-v8 save boundary and validation limits.
+
+**Runtime validation:** Final scoped Unity tests passed **454/454** EditMode and **10/10** required PlayMode cases, headless with no failed/skipped/inconclusive cases or compiler/unhandled diagnostics. Actual Shambler opportunity, starvation, cap/waste, next-turn cost tier, full rejection atomicity, draft/payload isolation, pocket swaps, existing-v8 recovery, modal/pause/disposal/rapid Finish, both animation modes and real Continue are covered. A broader presentation probe remains **12/14**, not PASS: two unchanged tests expect 109 after a legacy reward whose unchanged accepted value is 5, giving 104. Their fixture and catalog/composer bytes match baseline; no baseline A/B test or unrelated assertion repair is claimed. No authoring-window/full-suite/graphical/replay or human-gate acceptance is inferred. M10.5 remains Deferred.
+
+**Review and completion (2026-11-26):** The configured read-only `reviewer`, invoked without a runtime model override, returned **PASS** after receiving the complete candidate, new files, acceptance criteria, actual required-scope reports and the explicit 12/14 broader-probe limitation. It reported no material findings. Exact write-scope/baseline and seven Unity-generated metadata GUID checks passed. Final closeout changes only this card's acceptance metadata; it does not activate pickup, quick use, final inventory UI or a broader release/human gate.
 
 ---
 

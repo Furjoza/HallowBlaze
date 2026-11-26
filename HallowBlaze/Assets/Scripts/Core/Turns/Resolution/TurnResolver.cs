@@ -11,7 +11,7 @@ namespace HallowBlaze.Core.Turns.Resolution
     /// Resolves one player command against authoritative board and run state.
     /// Rejected commands leave both states unchanged.
     /// </summary>
-    public sealed class TurnResolver : IPlayerPhaseResolver
+    public sealed partial class TurnResolver : IPlayerPhaseResolver
     {
         private readonly ActionNoiseProfile noiseProfile;
         private readonly InteractionQuery interactions;
@@ -79,6 +79,9 @@ namespace HallowBlaze.Core.Turns.Resolution
                     break;
                 case PickupToolCommand pickupCommand:
                     result = ResolvePickupTool(boardState, runState, player, pickupCommand, selectedCost, satietyAtStart);
+                    break;
+                case ManageInventoryCommand inventoryCommand:
+                    result = ResolveManageInventory(runState, playerId, inventoryCommand, selectedCost, satietyAtStart);
                     break;
                 default:
                     return new RejectedTurnResult(CommandRejectionCode.InvalidCommand);
