@@ -86,7 +86,7 @@ namespace HallowBlaze.Tests.EditMode
             TurnResult escaped = controller.Resolve(new MoveCommand(Direction.North));
             Assert.That(escaped.Events.OfType<EntityMovedEvent>().Last().To, Is.EqualTo(new GridPosition(2, 1)));
             Assert.That(listener.LockedIntent.InvestigationTarget, Is.EqualTo(new GridPosition(1, 1)));
-            Assert.That(run.Food, Is.EqualTo(8));
+            Assert.That(run.Satiety, Is.EqualTo(8));
             Assert.That(run.Health, Is.EqualTo(100));
         }
 
@@ -101,7 +101,7 @@ namespace HallowBlaze.Tests.EditMode
             batch.PlanInitialIntents(board, new EntityId(1));
             EnemyIntent announced = listener.LockedIntent;
             RunState run = CreateRun();
-            run.ConsumeFood(9);
+            run.ConsumeSatiety(9);
             var controller = new TurnController(board, run, new EntityId(1), phases: batch.Handlers);
             controller.Resolve(new WaitCommand());
             Assert.That(controller.IsTerminal, Is.True);

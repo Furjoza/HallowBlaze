@@ -19,6 +19,271 @@ namespace HallowBlaze.Tests.EditMode
     /// <summary>Verifies visual authoring gestures preserve the document contract and existing board identities.</summary>
     public sealed class BoardAuthoringWindowTests
     {
+        /// <summary>A fixed segment exposes its captured map without an open draft; choosing another map or draft never substitutes or mutates the other source.</summary>
+        [UnityTest]
+        public IEnumerator ResourceBoardShowsFixedSegmentWithoutAnOpenDraft()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "HB-FixedResources-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            var window = ScriptableObject.CreateInstance<BoardAuthoringWindow>();
+            window.ShowUtility();
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            try
+            {
+                Assert.That(window.TryConfigureRoot(root), Is.True);
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                foreach (var map in new[] { (Id: "fixed.five", Name: "Raspberry clearing", Content: "legacy.food"),
+                    (Id: "fixed.ten", Name: "Blueberry clearing", Content: "ordinary.berries") })
+                {
+                    JObject data = UnifiedBoardAuthoringTests.Minimal();
+                    data["templateId"] = map.Id;
+                    var draft = BoardTemplateDocument.ReadTemplate(data.ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+                    var grid = new BoardGridView();
+                    grid.ChooseContent(map.Content);
+                    Assert.That(grid.Activate(draft, "base", new GridPosition(1, 1)), Is.True);
+                    Assert.That(store.Save(draft, store.NamedBoardPath(map.Name)).Succeeded, Is.True);
+                }
+                Assert.That(window.Document, Is.Null);
+                window.Pools.Create(store, window.Assignment.WorldJson, "road.shelter-warm-up", "fixed.resources");
+                string segment = window.Assignment.World.Edges.Single(edge => edge.EdgeId == "road.shelter-warm-up").Segments[0].SegmentId;
+                window.Pools.SetSource(segment, "fixed");
+                typeof(BoardPoolAuthoring).GetField("visible", flags).SetValue(window.Pools, false);
+                var panel = (BoardResourcePanel)typeof(BoardAuthoringWindow).GetField("resources", flags).GetValue(window);
+                foreach (int width in new[] { 1280, 640 })
+                {
+                    window.position = new Rect(40, 50, width, 1000);
+                    window.Pools.AddEntry(segment, "fixed.five", 1, "base");
+                    yield return null;
+                    DrawWindow(window);
+                    Assert.That(panel.SummaryText, Does.Contain("Food 5"));
+                    Assert.That(panel.BoardSupply, Is.Null, "Inspecting a segment must not create a draft.");
+                    Rect details = (Rect)typeof(BoardResourcePanel).GetField("detailsRect", flags).GetValue(panel);
+                    Assert.That(details.yMax, Is.LessThan(window.position.height));
+                    if (!(bool)typeof(BoardResourcePanel).GetField("details", flags).GetValue(panel)) ClickWindow(window, details.center);
+                    DrawWindow(window);
+                    var supply = (HallowBlaze.Editor.BoardAuthoring.BoardResourceAnalysis.Supply)typeof(BoardResourcePanel).GetField("inspectedBoard", flags).GetValue(panel);
+                    Assert.That(supply.Resources.Single().Id, Is.EqualTo("legacy.food"));
+                    string before = (string)typeof(BoardAuthoringWindow).GetMethod("CaptureTestRecovery", flags).Invoke(window, null);
+                    var random = UnityEngine.Random.state;
+                    bool requested = BoardAuthoringTestContext.IsRequested;
+                    DrawWindow(window);
+                    Assert.That((string)typeof(BoardAuthoringWindow).GetMethod("CaptureTestRecovery", flags).Invoke(window, null), Is.EqualTo(before));
+                    Assert.That(UnityEngine.Random.state, Is.EqualTo(random));
+                    Assert.That(BoardAuthoringTestContext.IsRequested, Is.EqualTo(requested));
+                    window.Pools.AddEntry(segment, "fixed.ten", 1, "base");
+                    DrawWindow(window);
+                    Assert.That(panel.SummaryText, Does.Contain("Food 10"));
+                    Assert.That(panel.RouteSupply.Estimate.Values["Food"].Mean, Is.EqualTo(10));
+                    window.Pools.Document.Undo();
+                    DrawWindow(window);
+                    Assert.That(panel.SummaryText, Does.Contain("Food 5"));
+                }
+                Assert.That(window.TryOpen(store.NamedBoardPath("Blueberry clearing"), () => BoardDocumentDecision.Discard), Is.True);
+                window.position = new Rect(40, 50, 1280, 1000);
+                DrawWindow(window);
+                Assert.That(panel.SummaryText, Does.Contain("Food 10"));
+                Rect sources = (Rect)typeof(BoardResourcePanel).GetField("boardSourceRect", flags).GetValue(panel);
+                Assert.That(sources.yMax, Is.LessThan(window.position.height));
+                ClickWindow(window, new Vector2(sources.x + sources.width * 3 / 4, sources.center.y));
+                DrawWindow(window);
+                Assert.That(panel.SummaryText, Does.Contain("Food 5"));
+                Assert.That(panel.BoardSupply.Food, Is.EqualTo(10), "The draft remains an independent resource source.");
+                ClickWindow(window, new Vector2(sources.x + sources.width / 4, sources.center.y));
+                DrawWindow(window);
+                Assert.That(panel.SummaryText, Does.Contain("Food 10"));
+                LogAssert.NoUnexpectedReceived();
+            }
+            finally { window.CloseAfterDecision(BoardDocumentDecision.Discard); Directory.Delete(root, true); }
+        }
+
+        /// <summary>Malformed intermediate membership renders Invalid data, while a failed explicit capture keeps its error across unchanged repaints.</summary>
+        [UnityTest]
+        public IEnumerator ResourcePanelInvalidEntriesAndCaptureFailureStayVisible()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "HB-ResourceErrors-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            var window = ScriptableObject.CreateInstance<BoardAuthoringWindow>();
+            window.ShowUtility();
+            window.position = new Rect(40, 50, 1280, 1000);
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            try
+            {
+                Assert.That(window.TryConfigureRoot(root), Is.True);
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                string path = store.NamedBoardPath("Candidate");
+                File.WriteAllText(path, UnifiedBoardAuthoringTests.Minimal().ToString());
+                Assert.That(window.TryOpen(path, () => BoardDocumentDecision.Discard), Is.True);
+                window.Pools.Create(store, window.Assignment.WorldJson, "road.shelter-warm-up", "resource.errors");
+                string segment = window.Assignment.World.Edges.Single(edge => edge.EdgeId == "road.shelter-warm-up").Segments[0].SegmentId;
+                window.Pools.SetSource(segment, "fixed");
+                window.Pools.AddEntry(segment, "draft.shared", 1, "base");
+                typeof(BoardPoolAuthoring).GetField("visible", flags).SetValue(window.Pools, false);
+                var panel = (BoardResourcePanel)typeof(BoardAuthoringWindow).GetField("resources", flags).GetValue(window);
+                yield return null;
+                foreach (string fault in new[] { "missing", "null", "type" })
+                {
+                    window.Pools.Document.Edit(data =>
+                    {
+                        var entry = (JObject)data["sources"][0]["entries"][0];
+                        if (fault == "missing") entry.Remove("templateVersion");
+                        else if (fault == "null") entry["templateVersion"] = JValue.CreateNull();
+                        else entry["templateVersion"] = new JArray(1);
+                    });
+                    foreach (int mode in new[] { 1, 2 })
+                    {
+                        typeof(BoardResourcePanel).GetField("mode", flags).SetValue(panel, mode);
+                        DrawWindow(window);
+                        Assert.That(panel.SummaryText, Is.EqualTo("Invalid data"), fault);
+                        Assert.That(panel.RouteSupply, Is.Null);
+                        LogAssert.NoUnexpectedReceived();
+                    }
+                    Assert.That(window.Pools.Document.Undo(), Is.True);
+                }
+                DrawWindow(window);
+                Assert.That(panel.RouteSupply, Is.Not.Null);
+                var failureSource = new Func<string, string, string[], int, IReadOnlyDictionary<string, HallowBlaze.Core.Generation.BoardBlueprint>>(
+                    (world, manifest, templates, seed) => throw new InvalidOperationException("Injected generation failure"));
+                typeof(BoardResourcePanel).GetField("captureSnapshots", flags).SetValue(panel, failureSource);
+                var settings = (BoardTestPlaySettings)typeof(BoardAuthoringWindow).GetField("testSettings", flags).GetValue(window);
+                typeof(BoardResourcePanel).GetMethod("CaptureGenerated", flags).Invoke(panel, new object[] { window.Pools, settings });
+                var error = typeof(BoardResourcePanel).GetField("captureError", flags);
+                string failure = (string)error.GetValue(panel);
+                Assert.That(failure, Is.EqualTo("Injected generation failure"));
+                for (int frame = 0; frame < 3; frame++)
+                {
+                    yield return null;
+                    DrawWindow(window);
+                    Assert.That((string)error.GetValue(panel), Is.EqualTo(failure));
+                    Assert.That(panel.RouteSupply.Selected.IsComplete, Is.False);
+                }
+                settings.Seed++;
+                DrawWindow(window);
+                Assert.That(error.GetValue(panel), Is.Null, "Only changed inputs or a fresh attempt clear the capture error.");
+                LogAssert.NoUnexpectedReceived();
+            }
+            finally { window.CloseAfterDecision(BoardDocumentDecision.Discard); Directory.Delete(root, true); }
+        }
+
+        /// <summary>Actual wide/narrow resource tabs refresh after edits and undo without changing histories, selection, random state or test context.</summary>
+        [UnityTest]
+        public IEnumerator ResourcePanelNativeTabsRefreshAndKeepInspectionReadOnly()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "HB-ResourceUI-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            var window = ScriptableObject.CreateInstance<BoardAuthoringWindow>();
+            window.ShowUtility();
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            try
+            {
+                Assert.That(window.TryConfigureRoot(root), Is.True);
+                string path = Path.Combine(root, "Supply clearing.json");
+                JObject data = UnifiedBoardAuthoringTests.Minimal();
+                JToken variant = data["variants"][0].DeepClone();
+                variant["id"] = "other";
+                ((JArray)data["variants"]).Add(variant);
+                File.WriteAllText(path, data.ToString());
+                Assert.That(window.TryOpen(path, () => BoardDocumentDecision.Discard), Is.True);
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                window.Pools.Create(store, window.Assignment.WorldJson, "road.shelter-warm-up", "resource.ui");
+                string segment = window.Assignment.World.Edges.Single(edge => edge.EdgeId == "road.shelter-warm-up").Segments[0].SegmentId;
+                window.Pools.SetSource(segment, "fixed");
+                window.Pools.AddEntry(segment, "draft.shared", 1, "base");
+                var unavailable = typeof(BoardPoolAuthoring).GetProperty("UnavailableEntries", flags);
+                Assert.That((IEnumerable<string>)unavailable.GetValue(window.Pools), Is.Empty);
+                typeof(BoardPoolAuthoring).GetField("visible", flags).SetValue(window.Pools, false);
+                var panel = (BoardResourcePanel)typeof(BoardAuthoringWindow).GetField("resources", flags).GetValue(window);
+                var settings = (BoardTestPlaySettings)typeof(BoardAuthoringWindow).GetField("testSettings", flags).GetValue(window);
+                settings.Food = 87; settings.Health = 59; settings.EquipAxe = true;
+                string evidence = Path.Combine(Path.GetTempPath(), "HB-Resources-native-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(evidence);
+                foreach (int width in new[] { 1280, 640 })
+                {
+                    window.position = new Rect(40, 50, width, 1000);
+                    typeof(BoardAuthoringWindow).GetField("scroll", flags).SetValue(window, Vector2.zero);
+                    window.Grid.Select(new GridPosition(0, 0));
+                    yield return null;
+                    DrawWindow(window);
+                    for (int attempt = 0; attempt < 18; attempt++)
+                    {
+                        Rect panelBounds = (Rect)typeof(BoardResourcePanel).GetField("panelRect", flags).GetValue(panel);
+                        if (panelBounds.yMax < window.position.height - 25) break;
+                        Rect viewport = (Rect)typeof(BoardAuthoringWindow).GetField("workspaceViewportRect", flags).GetValue(window);
+                        window.SendEvent(new Event { type = EventType.ScrollWheel, mousePosition = viewport.center, delta = new Vector2(0, 5) });
+                        yield return null;
+                        DrawWindow(window);
+                    }
+                    Rect tabs = (Rect)typeof(BoardResourcePanel).GetField("tabsRect", flags).GetValue(panel);
+                    Assert.That(tabs.yMin, Is.GreaterThan(0));
+                    Assert.That(tabs.yMax, Is.LessThan(window.position.height));
+                    Assert.That(tabs.xMax, Is.LessThanOrEqualTo(window.position.width));
+                    ClickWindow(window, new Vector2(tabs.x + tabs.width / 6, tabs.center.y));
+                    DrawWindow(window);
+                    Assert.That(panel.SummaryText, Does.Contain("Food 0"));
+                    string before = (string)typeof(BoardAuthoringWindow).GetMethod("CaptureTestRecovery", flags).Invoke(window, null);
+                    var random = UnityEngine.Random.state;
+                    bool context = BoardAuthoringTestContext.IsRequested;
+                    for (int tab = 1; tab <= 2; tab++)
+                    {
+                        ClickWindow(window, new Vector2(tabs.x + tabs.width * (tab * 2 + 1) / 6, tabs.center.y));
+                        DrawWindow(window);
+                        Assert.That(panel.RouteSupply, Is.Not.Null);
+                    }
+                    Assert.That(panel.SummaryText, Does.Contain("Partial authored subtotal"));
+                    Assert.That((string)typeof(BoardAuthoringWindow).GetMethod("CaptureTestRecovery", flags).Invoke(window, null), Is.EqualTo(before));
+                    Assert.That(UnityEngine.Random.state, Is.EqualTo(random));
+                    Assert.That(BoardAuthoringTestContext.IsRequested, Is.EqualTo(context));
+                    ClickWindow(window, new Vector2(tabs.x + tabs.width / 6, tabs.center.y));
+                    window.Grid.ChooseContent("ordinary.berries");
+                    Assert.That(window.ActivateCell(new GridPosition(1, 1)), Is.True);
+                    DrawWindow(window);
+                    Assert.That(panel.SummaryText, Does.Contain("Food 10"));
+                    Assert.That(panel.RouteSupply.Segments[0].Selected.Supply.Food, Is.Zero, "Saved candidate supply must not silently use the edited draft.");
+                    Assert.That(window.Document.Undo(), Is.True);
+                    DrawWindow(window);
+                    Assert.That(panel.SummaryText, Does.Contain("Food 0"));
+                    Assert.That(window.Document.Redo(), Is.True);
+                    DrawWindow(window);
+                    Assert.That(panel.BoardSupply.Food, Is.EqualTo(10));
+                    Assert.That(window.SelectVariant("other"), Is.True);
+                    DrawWindow(window);
+                    Assert.That(panel.BoardSupply.Food, Is.Zero);
+                    Assert.That(window.SelectVariant("base"), Is.True);
+                    DrawWindow(window);
+                    Assert.That(panel.BoardSupply.Food, Is.EqualTo(10));
+                    window.Document.Undo();
+                    DrawWindow(window);
+                    CaptureWindow(window, Path.Combine(evidence, "board-" + width + ".png"));
+                    ClickWindow(window, new Vector2(tabs.x + tabs.width * 5 / 6, tabs.center.y));
+                    DrawWindow(window);
+                    typeof(BoardResourcePanel).GetMethod("CaptureGenerated", flags).Invoke(panel, new object[] { window.Pools, settings });
+                    DrawWindow(window);
+                    Assert.That(panel.RouteSupply.Selected.IsComplete, Is.True);
+                    settings.Seed++;
+                    DrawWindow(window);
+                    Assert.That(panel.RouteSupply.Selected.IsComplete, Is.False, "Seed changes must discard generated snapshots.");
+                    Assert.That(panel.RouteSupply.Segments[1].Candidates, Is.Empty);
+                    settings.Seed--;
+                    window.Pools.RemoveEntry(segment, (JObject)window.Pools.Document.Snapshot()["sources"][0]["entries"][0]);
+                    DrawWindow(window);
+                    Assert.That(panel.RouteSupply, Is.Null, "An invalid empty fixed source cannot retain stale totals.");
+                    Assert.That(panel.SummaryText, Is.EqualTo("Invalid data"));
+                    window.Pools.Document.Undo();
+                    DrawWindow(window);
+                    Assert.That(panel.RouteSupply.Segments[0].Selected.Supply.Food, Is.Zero);
+                    ClickWindow(window, new Vector2(tabs.x + tabs.width / 6, tabs.center.y));
+                    DrawWindow(window);
+                    LogAssert.NoUnexpectedReceived();
+                }
+                File.Delete(path);
+                window.Pools.RefreshLibrary(store);
+                DrawWindow(window);
+                Assert.That((IEnumerable<string>)unavailable.GetValue(window.Pools), Has.Some.EqualTo("Unavailable saved map: draft.shared | v1 | base"));
+                Assert.That(panel.RouteSupply.Segments[0].Selected.Supply.Food, Is.Zero, "Missing files must not replace captured source data.");
+                TestContext.WriteLine("Resource screenshots: " + evidence);
+            }
+            finally { window.CloseAfterDecision(BoardDocumentDecision.Discard); Directory.Delete(root, true); }
+        }
+
         /// <summary>Save As retains recoverable pool membership/history after an external conflict or replacement of an unavailable draft root.</summary>
         [TestCase(false)]
         [TestCase(true)]
@@ -675,7 +940,9 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(wide.xMin, Is.GreaterThanOrEqualTo(0));
                 Assert.That(wide.xMax, Is.LessThanOrEqualTo(window.position.width));
                 Rect inspector = PropertyControl(window, "Viewport");
-                Assert.That(inspector.height, Is.GreaterThanOrEqualTo(wide.height), "Inspector must use the board's height, not a 200-point strip.");
+                Rect resourceArea = (Rect)typeof(BoardAuthoringWindow).GetField("resourceViewportRect", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(window);
+                Assert.That(inspector.height + resourceArea.height, Is.GreaterThanOrEqualTo(wide.height), "Resources and inspector must share the board's height.");
+                Assert.That(inspector.yMin, Is.GreaterThanOrEqualTo(resourceArea.yMax));
                 Assert.That(inspector.yMax, Is.GreaterThanOrEqualTo(wide.yMax));
                 Assert.That(inspector.xMin, Is.GreaterThanOrEqualTo(wide.xMax));
                 AssertWorkspaceCentered(window);
@@ -746,7 +1013,11 @@ namespace HallowBlaze.Tests.EditMode
                 yield return null;
                 DrawWindow(window);
                 AssertWorkspaceCentered(window);
-                Assert.That(PropertyControl(window, "Viewport").height, Is.GreaterThanOrEqualTo(window.CanvasRect.height));
+                Rect resourcesViewport = (Rect)typeof(BoardAuthoringWindow).GetField("resourceViewportRect", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(window);
+                Rect inspectorViewport = PropertyControl(window, "Viewport");
+                Assert.That(inspectorViewport.height + resourcesViewport.height, Is.GreaterThanOrEqualTo(window.CanvasRect.height));
+                Assert.That(inspectorViewport.yMin, Is.GreaterThanOrEqualTo(resourcesViewport.yMax));
+                Assert.That(inspectorViewport.yMax - resourcesViewport.yMin, Is.LessThanOrEqualTo(window.CanvasRect.height + 48));
                 CaptureWindow(window, Path.Combine(root, "large.png"));
                 string saved = Path.Combine(root, "smoke.json");
                 Assert.That(window.TrySave(saved), Is.True, window.LastError);
@@ -955,15 +1226,21 @@ namespace HallowBlaze.Tests.EditMode
                 DrawWindow(window);
                 int count = window.Document.Snapshot()["outcomes"].Count();
                 Rect viewport = PropertyControl(window, "Viewport");
-                for (int attempt = 0; attempt < 8 && !viewport.Contains(PropertyControl(window, "Outcomes.Add").center); attempt++)
+                for (int attempt = 0; attempt < 8 && (!viewport.Contains(PropertyControl(window, "Outcomes.Add").center) ||
+                    PropertyControl(window, "Outcomes.Add").yMax >= window.position.height - 24); attempt++)
                 {
-                    window.SendEvent(new Event { type = EventType.ScrollWheel, delta = new Vector2(0, 20), mousePosition = viewport.center });
+                    Rect workspace = (Rect)typeof(BoardAuthoringWindow).GetField("workspaceViewportRect", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(window);
+                    Vector2 pointer = viewport.yMax >= window.position.height - 24 ? new Vector2(window.CanvasRect.center.x, workspace.center.y) : viewport.center;
+                    window.SendEvent(new Event { type = EventType.ScrollWheel, delta = new Vector2(0, 20), mousePosition = pointer });
+                    yield return null;
                     DrawWindow(window);
+                    viewport = PropertyControl(window, "Viewport");
                 }
                 Assert.That(viewport.Contains(PropertyControl(window, "Outcomes.Add").center), Is.True, "The Add button must be visible inside the inspector viewport before clicking.");
+                Assert.That(PropertyControl(window, "Outcomes.Add").yMax, Is.LessThan(window.position.height - 24), "The entire Add button must also be visible inside the real window.");
                 ClickWindow(window, PropertyControl(window, "Outcomes.Add").center);
                 yield return WaitForEditor(() => window.Document.Snapshot()["outcomes"].Count() != count);
-                Assert.That(window.Document.Snapshot()["outcomes"].Count(), Is.EqualTo(count + 1));
+                Assert.That(window.Document.Snapshot()["outcomes"].Count(), Is.EqualTo(count + 1), "Add=" + PropertyControl(window, "Outcomes.Add") + "; viewport=" + viewport + "; window=" + window.position);
                 Assert.That(window.hasUnsavedChanges, Is.True);
                 var reports = (System.Collections.Generic.IReadOnlyList<BoardAuthoringDiagnostic>)typeof(BoardAuthoringWindow)
                     .GetField("diagnostics", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(window);

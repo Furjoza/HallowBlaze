@@ -46,6 +46,139 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(store.LoadRun().Data.RunId, Is.EqualTo("run-main"));
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void InventoryInterruptedReplaceRestoresOnlyACompletePreOrPostBoundary(bool failAfterReplace)
+        {
+            InventoryContent content = PersistenceDtoTests.InventoryTestContent();
+            var store = new FileSystemSaveStore(testRootPath, inventoryContent: content);
+            RunState run = PersistenceDtoTests.InventoryFullRun();
+            Assert.That(store.SaveRun(run).IsSuccess, Is.True);
+            string before = PersistenceJsonSerializer.SerializeRun(run);
+            Assert.That(run.TryCommitInventory(17, run.Inventory.Placements.Where(value => value.Container != InventoryContainer.RightPocket), out _), Is.True);
+            run.TakeDamage(11);
+            run.RestoreSatiety(20);
+            run.TrySpendToolCharge(0, run.ToolSlots[0].Instance.InstanceId);
+            string after = PersistenceJsonSerializer.SerializeRun(run);
+            var interrupted = new FileSystemSaveStore(testRootPath, (source, destination, backup) =>
+            {
+                if (failAfterReplace) File.Replace(source, destination, backup);
+                throw new IOException("Injected inventory boundary interruption.");
+            }, inventoryContent: content);
+            Assert.That(interrupted.SaveRun(run).Type, Is.EqualTo(SaveStoreResultType.IoError));
+            SaveStoreResult<RunState> loaded = store.LoadRun();
+            Assert.That(loaded.Type, Is.EqualTo(SaveStoreResultType.Success));
+            Assert.That(PersistenceJsonSerializer.SerializeRun(loaded.Data), Is.EqualTo(failAfterReplace ? after : before));
+            Assert.That(Directory.GetFiles(testRootPath, ".*.tmp*"), Is.Empty);
+            if (failAfterReplace)
+            {
+                File.WriteAllText(Path.Combine(testRootPath, "run.json"), "{broken");
+                SaveStoreResult<RunState> recovered = store.LoadRun();
+                Assert.That(recovered.Type, Is.EqualTo(SaveStoreResultType.Recovered));
+                Assert.That(PersistenceJsonSerializer.SerializeRun(recovered.Data), Is.EqualTo(before));
+            }
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void MissingInventoryContentNeverFallsBackToEmptyBackupOrMutatesFiles(bool missingEffect)
+        {
+            InventoryContent content = PersistenceDtoTests.InventoryTestContent();
+            var store = new FileSystemSaveStore(testRootPath, inventoryContent: content);
+            RunState run = PersistenceDtoTests.TravelBoundary("consumed");
+            Assert.That(store.SaveRun(run).IsSuccess, Is.True);
+            run = PersistenceDtoTests.InventoryFullRun();
+            Assert.That(store.SaveRun(run).IsSuccess, Is.True);
+            string currentPath = Path.Combine(testRootPath, "run.json");
+            string backupPath = Path.Combine(testRootPath, "run.backup.json");
+            byte[] current = File.ReadAllBytes(currentPath);
+            byte[] backup = File.ReadAllBytes(backupPath);
+            var missing = new FileSystemSaveStore(testRootPath,
+                inventoryContent: missingEffect ? PersistenceDtoTests.InventoryTestContent(false) : InventoryContent.Empty);
+            SaveStoreResult<RunState> result = missing.LoadRun();
+            Assert.That(result.Type, Is.EqualTo(SaveStoreResultType.Corrupt));
+            Assert.That(result.Data, Is.Null);
+            Assert.That(result.ErrorMessage, Does.Contain("content").And.Not.Contain("grid-0"));
+            Assert.That(missing.SaveRun(run).Type, Is.EqualTo(SaveStoreResultType.Corrupt));
+            Assert.That(missing.ResetGame(CreateProfile("must-not-replace"), run).Type, Is.EqualTo(SaveStoreResultType.Corrupt));
+            Assert.That(File.Exists(Path.Combine(testRootPath, "profile.json")), Is.False);
+            Assert.That(File.ReadAllBytes(currentPath), Is.EqualTo(current));
+            Assert.That(File.ReadAllBytes(backupPath), Is.EqualTo(backup));
+            Assert.That(PersistenceJsonSerializer.SerializeRun(store.LoadRun().Data), Is.EqualTo(PersistenceJsonSerializer.SerializeRun(run)));
+        }
+
+        [Test]
+        public void InventoryBoundaryContinueNewRunAndRepeatedFullBagWritesPreserveProfileKnowledge()
+        {
+            InventoryContent content = PersistenceDtoTests.InventoryTestContent();
+            var store = new FileSystemSaveStore(testRootPath, inventoryContent: content);
+            ProfileState profile = CreateProfile("inventory-owner");
+            profile.DiscoverFact("fact.inventory-kept");
+            profile.AdvanceNodeDiscovery("a", NodeDiscoveryState.Visited);
+            var session = new GameSession(profile);
+            var lifecycle = new RunLifecycleService(session, store);
+            RunState run = PersistenceDtoTests.InventoryFullRun();
+            run.EquipTool(1, run.CreateToolInstance(new ToolDefinition("test.separate-tool", "Tool", 7)));
+            run.TrySpendToolCharge(1, run.ToolSlots[1].Instance.InstanceId);
+            run.TakeDamage(17);
+            run.RestoreSatiety(23);
+            session.ContinueRun(run);
+            Assert.That(store.SaveProfile(profile).IsSuccess, Is.True);
+            byte[] profileBefore = File.ReadAllBytes(Path.Combine(testRootPath, "profile.json"));
+            Assert.That(lifecycle.SaveBoardBoundary().IsSuccess, Is.True);
+            string expected = PersistenceJsonSerializer.SerializeRun(run);
+            for (int iteration = 0; iteration < 10; iteration++)
+            {
+                Assert.That(lifecycle.ExitToMenu().IsSuccess, Is.True);
+                Assert.That(lifecycle.ContinueRun().IsSuccess, Is.True);
+                Assert.That(PersistenceJsonSerializer.SerializeRun(session.ActiveRun), Is.EqualTo(expected), "iteration " + iteration);
+                Assert.That(lifecycle.SaveBoardBoundary().IsSuccess, Is.True);
+            }
+            Assert.That(File.ReadAllBytes(Path.Combine(testRootPath, "profile.json")), Is.EqualTo(profileBefore));
+            Assert.That(session.ActiveRun.TryCommitInventory(17, session.ActiveRun.Inventory.Placements, out _), Is.True);
+            Assert.That(session.ActiveRun.InventoryRevision, Is.EqualTo(18));
+            Assert.That(session.ActiveRun.TryCommitInventory(17, session.ActiveRun.Inventory.Placements, out _), Is.False);
+            Assert.That(lifecycle.ExitToMenu().IsSuccess, Is.True);
+            Assert.That(lifecycle.ContinueRun().IsSuccess, Is.True);
+            Assert.That(session.ActiveRun.InventoryRevision, Is.EqualTo(17));
+            Assert.That(lifecycle.StartNewRun("next-inventory-run", 44,
+                new RunStateConfiguration(100, 100, 0, "a", inventoryContent: content)).IsSuccess, Is.True);
+            Assert.That(session.ActiveRun.Inventory.Placements, Is.Empty);
+            Assert.That(session.ActiveRun.InventoryRevision, Is.Zero);
+            Assert.That(session.Profile.DiscoveredFactIds, Does.Contain("fact.inventory-kept"));
+            Assert.That(File.ReadAllBytes(Path.Combine(testRootPath, "profile.json")), Is.EqualTo(profileBefore));
+            Assert.That(run.Inventory.Placements, Has.Count.EqualTo(11));
+            Assert.That(run.InventoryRevision, Is.EqualTo(17));
+        }
+
+        [TestCase(1)]
+        [TestCase(2)]
+        public void InventoryNewGameRollbackRestoresBothFullSnapshotsAndProfile(int failingReplaceCall)
+        {
+            InventoryContent content = PersistenceDtoTests.InventoryTestContent();
+            var store = new FileSystemSaveStore(testRootPath, inventoryContent: content);
+            RunState previous = PersistenceDtoTests.InventoryFullRun();
+            Assert.That(store.SaveProfile(CreateProfile("previous-owner")).IsSuccess, Is.True);
+            Assert.That(store.SaveRun(previous).IsSuccess, Is.True);
+            Assert.That(store.SaveProfile(CreateProfile("previous-owner")).IsSuccess, Is.True);
+            Assert.That(previous.TryCommitInventory(17, previous.Inventory.Placements.Skip(1), out _), Is.True);
+            Assert.That(store.SaveRun(previous).IsSuccess, Is.True);
+            string[] files = { "profile.json", "profile.backup.json", "run.json", "run.backup.json" };
+            byte[][] before = files.Select(file => File.ReadAllBytes(Path.Combine(testRootPath, file))).ToArray();
+            int replaceCount = 0;
+            var interrupted = new FileSystemSaveStore(testRootPath, (source, destination, backup) =>
+            {
+                if (++replaceCount == failingReplaceCall) throw new IOException("Injected inventory new-game failure.");
+                File.Replace(source, destination, backup);
+            }, inventoryContent: content);
+            Assert.That(interrupted.ResetGame(CreateProfile("fresh-owner"), CreateRun("fresh-run")).Type,
+                Is.EqualTo(SaveStoreResultType.IoError));
+            for (int index = 0; index < files.Length; index++)
+                Assert.That(File.ReadAllBytes(Path.Combine(testRootPath, files[index])), Is.EqualTo(before[index]), files[index]);
+            Assert.That(Directory.GetFiles(testRootPath, ".*.tmp*"), Is.Empty);
+            Assert.That(PersistenceJsonSerializer.SerializeRun(store.LoadRun().Data), Is.EqualTo(PersistenceJsonSerializer.SerializeRun(previous)));
+        }
+
         /// <summary>Equipment survives file round-trip and backup recovery without changing profile knowledge or resetting the allocator.</summary>
         [Test]
         public void ToolEquipmentRoundTripsAndRecoversWithoutMutatingProfile()
@@ -109,8 +242,8 @@ namespace HallowBlaze.Tests.EditMode
             RunState restored = new FileSystemSaveStore(testRootPath).LoadRun().Data;
             Assert.That(restored.ToolSlots[0].Instance.InstanceId, Is.EqualTo(tool.InstanceId));
             Assert.That(restored.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
-            Assert.That(restored.Food, Is.EqualTo(run.Food));
-            Assert.That(File.ReadAllText(Path.Combine(testRootPath, "run.json")), Does.Contain("\"schemaVersion\": 6"));
+            Assert.That(restored.Satiety, Is.EqualTo(run.Satiety));
+            Assert.That(File.ReadAllText(Path.Combine(testRootPath, "run.json")), Does.Contain("\"schemaVersion\": 8"));
             Assert.That(controller.Resolve(command).Accepted, Is.False);
             Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
         }
@@ -161,7 +294,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(migrated.TravelHistory.All(entry => entry.EdgeId == null && entry.LegId == null), Is.True);
             Assert.That(File.ReadAllText(runPath), Is.EqualTo(legacy), "Reading must not rewrite an old file.");
             Assert.That(store.SaveRun(migrated).IsSuccess, Is.True);
-            Assert.That(File.ReadAllText(runPath), Does.Contain("\"schemaVersion\": 6")
+            Assert.That(File.ReadAllText(runPath), Does.Contain("\"schemaVersion\": 8")
                 .And.Contain(RunState.LegacyRandomAlgorithmId));
             Assert.That(File.ReadAllText(Path.Combine(testRootPath, "run.backup.json")), Is.EqualTo(legacy));
             Assert.That(File.ReadAllBytes(profilePath), Is.EqualTo(profileBytes));
@@ -389,6 +522,11 @@ namespace HallowBlaze.Tests.EditMode
 
             Assert.That(result.Type, Is.EqualTo(SaveStoreResultType.IoError));
             Assert.That(result.ErrorMessage, Does.Not.Contain("profile-io"));
+            RunState inventoryRun = PersistenceDtoTests.InventoryFullRun();
+            string before = PersistenceJsonSerializer.SerializeRun(inventoryRun);
+            var inventoryStore = new FileSystemSaveStore(pathOccupiedByFile, inventoryContent: inventoryRun.InventoryContent);
+            Assert.That(inventoryStore.SaveRun(inventoryRun).Type, Is.EqualTo(SaveStoreResultType.IoError));
+            Assert.That(PersistenceJsonSerializer.SerializeRun(inventoryRun), Is.EqualTo(before));
         }
 
         [Test]
@@ -402,7 +540,7 @@ namespace HallowBlaze.Tests.EditMode
             string backupPath = Path.Combine(testRootPath, "run.backup.json");
             string backup = File.ReadAllText(backupPath);
             var document = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(currentPath));
-            document["schemaVersion"] = 7;
+            document["schemaVersion"] = 9;
             string future = document.ToString();
             File.WriteAllText(currentPath, future);
             Assert.That(store.LoadRun().Type, Is.EqualTo(SaveStoreResultType.UnsupportedFutureSchema));

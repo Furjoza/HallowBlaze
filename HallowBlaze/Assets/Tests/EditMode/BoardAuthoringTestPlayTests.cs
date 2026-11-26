@@ -280,7 +280,7 @@ namespace HallowBlaze.Tests.EditMode
                     Assert.That(preview, Does.Contain("1/3 | " + edge.Segments[0].SegmentId));
                     Assert.That(preview, Does.Contain("Generated | ordinary.board.v1/6"));
                     Assert.That(preview, Does.Contain("Route Middle | " + template.Id + "/" + template.Version + " | base"));
-                    Assert.That(preview, Does.Contain("Seed 91 | Health 88 | Food 77 | Axe Yes"));
+                    Assert.That(preview, Does.Contain("Seed 91 | Health 88 | Satiety 77 | Axe Yes"));
                     return false;
                 }, () => false, () => true, () => entered = true), Is.False);
                 Assert.That(entered, Is.False);
@@ -433,7 +433,7 @@ namespace HallowBlaze.Tests.EditMode
             var runtime = (BoardRuntime)managerType.GetProperty("ActiveBoardRuntime").GetValue(manager);
             Assert.That(runtime.RunState.RunSeed, Is.EqualTo(975));
             Assert.That(runtime.RunState.Health, Is.EqualTo(89));
-            Assert.That(runtime.RunState.Food, Is.EqualTo(43));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(43));
             Assert.That(runtime.RunState.CompletedDayCount, Is.Zero);
             Assert.That(runtime.RunState.ActiveLeg.SegmentIndex, Is.Zero);
             Assert.That(runtime.Request.Address.EdgeId, Is.EqualTo("road.shelter-warm-up"));
@@ -499,7 +499,7 @@ namespace HallowBlaze.Tests.EditMode
             managerType.GetMethod("HideLevelImage", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Invoke(manager, null);
             yield return null;
             var runtime = (BoardRuntime)managerType.GetProperty("ActiveBoardRuntime").GetValue(manager);
-            Assert.That(runtime.RunState.Food, Is.EqualTo(43));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(43));
             Assert.That(runtime.RunState.Health, Is.EqualTo(89));
             Assert.That(runtime.RunState.RunSeed, Is.EqualTo(975));
             Assert.That(runtime.RunState.ActiveLandmark, Is.Null, "A shared-board fork must not checkpoint a legacy landmark selection.");

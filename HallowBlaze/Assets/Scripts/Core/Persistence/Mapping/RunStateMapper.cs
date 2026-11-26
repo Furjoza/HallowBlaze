@@ -30,7 +30,7 @@ namespace HallowBlaze.Core.Persistence.Mapping
                 CurrentDay = run.CurrentDay,
                 WorldNodeId = run.WorldNodeId,
                 Health = run.Health,
-                Food = run.Food,
+                Food = run.Satiety,
                 Status = ToStatusId(run.Status),
                 ToolSlots = toolSlots,
                 Route = Copy(run.Route)
@@ -43,7 +43,8 @@ namespace HallowBlaze.Core.Persistence.Mapping
             return FromDto(dto, RunState.LegacyRandomAlgorithmId, RunState.LegacyRandomAlgorithmVersion);
         }
 
-        internal static RunState FromDto(RunStateDto dto, string randomAlgorithmId, int randomAlgorithmVersion)
+        internal static RunState FromDto(RunStateDto dto, string randomAlgorithmId, int randomAlgorithmVersion,
+            ResourceRules resourceRules = null)
         {
             if (dto == null)
                 throw new ArgumentNullException(nameof(dto));
@@ -69,10 +70,10 @@ namespace HallowBlaze.Core.Persistence.Mapping
             DtoValidation.ValidateStableIds(route, "route", false);
 
             RunStateConfiguration configuration = new RunStateConfiguration(
-                dto.Health,
-                dto.Food,
+                resourceRules == null ? Math.Min(dto.Health, ResourceRules.Default.MaximumHealth) : dto.Health,
+                resourceRules == null ? Math.Min(dto.Food, ResourceRules.Default.MaximumSatiety) : dto.Food,
                 dto.CurrentDay,
-                dto.WorldNodeId);
+                dto.WorldNodeId, resourceRules);
             RunState run = new RunState(dto.RunId, dto.RunSeed, configuration,
                 randomAlgorithmId, randomAlgorithmVersion);
 

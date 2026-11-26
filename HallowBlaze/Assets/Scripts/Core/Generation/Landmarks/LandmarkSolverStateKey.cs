@@ -25,7 +25,7 @@ namespace HallowBlaze.Core.Generation.Landmarks
             if (board == null) throw new ArgumentNullException(nameof(board));
             if (run == null) throw new ArgumentNullException(nameof(run));
             if (enemies == null) throw new ArgumentNullException(nameof(enemies));
-            var data = new List<object> { board.Bounds, playerId, run.Health, run.Food, run.Status, run.ToolInstanceSequence };
+            var data = new List<object> { board.Bounds, playerId, run.Health, run.Satiety, run.Status, run.ToolInstanceSequence };
             foreach (ToolSlotState slot in run.ToolSlots)
             {
                 data.Add(slot.Instance?.InstanceId);

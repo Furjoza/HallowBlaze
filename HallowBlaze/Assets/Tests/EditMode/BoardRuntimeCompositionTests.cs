@@ -140,7 +140,7 @@ namespace HallowBlaze.Tests.EditMode
             else Assert.Throws<BoardRuntimeCompositionException>(() =>
                 BlueprintBoardRuntimeComposer.Compose(request, run, blueprint, catalog, views, groundTools: bindings));
             Assert.That(run.ToolInstanceSequence, Is.EqualTo(1));
-            Assert.That(run.Food, Is.EqualTo(20));
+            Assert.That(run.Satiety, Is.EqualTo(20));
             Assert.That(blueprint.CreateState().TryGetGroundTool(new EntityId(3), out _), Is.False);
         }
 
@@ -175,7 +175,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(runtime.Views.Count, Is.EqualTo(blueprint.Entities.Count));
                 runtime.BoardState.TryRemove(blueprint.Items[0].EntityId);
                 Assert.That(blueprint.CreateState().Count, Is.EqualTo(blueprint.Entities.Count));
-                Assert.That(run.Food, Is.EqualTo(100));
+                Assert.That(run.Satiety, Is.EqualTo(100));
                 Assert.That(run.Health, Is.EqualTo(100));
             }
         }
@@ -219,7 +219,7 @@ namespace HallowBlaze.Tests.EditMode
                 BlueprintBoardRuntimeComposer.Compose(request, run, blueprint, catalog, views));
             Assert.That(failure.Code, Is.EqualTo(expected));
             Assert.That(blueprint.ContentHash, Is.EqualTo(hash));
-            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Satiety, Is.EqualTo(100));
             Assert.That(run.Health, Is.EqualTo(100));
         }
 
@@ -236,7 +236,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(result.Events.Last(), Is.TypeOf<ExitReachedEvent>());
                 Assert.That(result.Events.OfType<ExitReachedEvent>().Count(), Is.EqualTo(1));
                 Assert.That(result.Events.OfType<ActionCostAppliedEvent>().Count(), Is.EqualTo(1));
-                Assert.That(run.Food, Is.EqualTo(98));
+                Assert.That(run.Satiety, Is.EqualTo(98));
                 Assert.That(runtime.Controller.IsTerminal, Is.True);
                 Assert.That(runtime.BoardState.GetEntities().Single(entity => entity.Definition.Layer == BoardLayer.Terrain &&
                     entity.Position.Equals(new GridPosition(1, 1))).Definition.Traits.IsExit, Is.True);
@@ -299,7 +299,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(initial.Enemies.All(enemy => enemy.Phase == ShamblerPhase.Active &&
                     enemy.LockedIntent.Kind == EnemyIntentKind.Attack), Is.True);
                 Assert.That(run.Health, Is.EqualTo(100));
-                Assert.That(run.Food, Is.EqualTo(100));
+                Assert.That(run.Satiety, Is.EqualTo(100));
             }
 
             layout.Reverse();
@@ -315,7 +315,7 @@ namespace HallowBlaze.Tests.EditMode
                 TurnController soleController = runtime.Controller;
                 Assert.That(soleController.Resolve(new MoveCommand(Direction.West)).Accepted, Is.False);
                 CollectionAssert.AreEqual(initialPlans, roster.Select(enemy => enemy.LockedIntent));
-                Assert.That(run.Food, Is.EqualTo(100));
+                Assert.That(run.Satiety, Is.EqualTo(100));
                 Assert.That(run.Health, Is.EqualTo(100));
 
                 TurnResult active = soleController.Resolve(new WaitCommand());
@@ -325,14 +325,14 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(attacks, Has.Length.EqualTo(2));
                 CollectionAssert.AreEqual(roster.Select(enemy => enemy.ActorId), attacks.Select(attack => attack.AttackerId));
                 Assert.That(run.Health, Is.EqualTo(70));
-                Assert.That(run.Food, Is.EqualTo(99));
+                Assert.That(run.Satiety, Is.EqualTo(99));
                 Assert.That(roster.All(enemy => enemy.Phase == ShamblerPhase.Rest &&
                     enemy.LockedIntent.Kind == EnemyIntentKind.Wait), Is.True);
 
                 TurnResult rest = soleController.Resolve(new WaitCommand());
                 Assert.That(rest.Events.OfType<EnemyAttackResolvedEvent>(), Is.Empty);
                 Assert.That(run.Health, Is.EqualTo(70));
-                Assert.That(run.Food, Is.EqualTo(98));
+                Assert.That(run.Satiety, Is.EqualTo(98));
                 Assert.That(roster.All(enemy => enemy.Phase == ShamblerPhase.Active &&
                     enemy.LockedIntent.Kind == EnemyIntentKind.Attack), Is.True);
 
@@ -346,7 +346,7 @@ namespace HallowBlaze.Tests.EditMode
                 CollectionAssert.AreEqual(terminalPlans, roster.Select(enemy => enemy.LockedIntent));
                 Assert.That(runtime.Controller, Is.SameAs(soleController));
                 Assert.That(soleController.Resolve(new WaitCommand()).Accepted, Is.False);
-                Assert.That(run.Food, Is.EqualTo(96));
+                Assert.That(run.Satiety, Is.EqualTo(96));
                 runtime.Dispose();
                 runtime.Dispose();
                 Assert.That(roster, Is.Empty);
@@ -373,7 +373,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(diagnostic.Code, Is.EqualTo(BoardRuntimeDiagnosticCode.InvalidInput));
             Assert.That(diagnostic.Context, Does.StartWith("enemy-damage:"));
             Assert.That(run.Health, Is.EqualTo(100));
-            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Satiety, Is.EqualTo(100));
         }
 
         [Test]
@@ -444,7 +444,7 @@ namespace HallowBlaze.Tests.EditMode
             int day = run.CurrentDay;
             string node = run.WorldNodeId;
             int health = run.Health;
-            int food = run.Food;
+            int food = run.Satiety;
             RunStatus status = run.Status;
             int routeCount = run.Route.Count;
 
@@ -459,7 +459,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(run.CurrentDay, Is.EqualTo(day));
             Assert.That(run.WorldNodeId, Is.EqualTo(node));
             Assert.That(run.Health, Is.EqualTo(health));
-            Assert.That(run.Food, Is.EqualTo(food));
+            Assert.That(run.Satiety, Is.EqualTo(food));
             Assert.That(run.Status, Is.EqualTo(status));
             Assert.That(run.Route, Has.Count.EqualTo(routeCount));
 
@@ -556,7 +556,7 @@ namespace HallowBlaze.Tests.EditMode
                 new GridBounds(0, 0, 1, 1), layout));
             Assert.That(run.CompletedDayCount, Is.Zero);
             Assert.That(run.TravelHistory, Is.Empty);
-            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Satiety, Is.EqualTo(100));
             Assert.That(layout.All(view => view.View != null && view.View.activeSelf), Is.True);
         }
 

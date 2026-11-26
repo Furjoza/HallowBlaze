@@ -436,6 +436,29 @@ namespace HallowBlaze.Tests.EditMode
             finally { Directory.Delete(root, true); }
         }
 
+        /// <summary>Supply counts physical items once, uses authoritative rewards and never invents charges for reusable axes.</summary>
+        [Test]
+        public void ResourceSummaryCountsVariantSpawnsWithoutBindingDuplication()
+        {
+            var document = BoardTemplateDocument.ReadTemplate(Minimal().ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+            var grid = new BoardGridView();
+            string[] contents = { "ordinary.berries", "legacy.food", "ordinary.carrot", "legacy.aid", "axe.basic" };
+            for (int index = 0; index < contents.Length; index++)
+            {
+                grid.ChooseContent(contents[index]);
+                Assert.That(grid.Activate(document, "base", new HallowBlaze.Core.Board.Primitives.GridPosition(index + 1, 2)), Is.True);
+            }
+            var capture = typeof(BoardTemplateDocument).GetMethod("CaptureEditorState", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            string before = capture.Invoke(document, null).ToString();
+            var supply = BoardResourceAnalysis.Board(document.ToJson(), "base");
+            Assert.That(supply.Food, Is.EqualTo(30));
+            Assert.That(supply.Health, Is.EqualTo(10));
+            Assert.That(supply.Resources.Single(resource => resource.Id == "axe.basic").Count, Is.EqualTo(1));
+            Assert.That(supply.Resources.Single(resource => resource.Id == "axe.basic").Charges, Is.Null);
+            Assert.That(supply.Resources, Has.Count.EqualTo(5));
+            Assert.That(capture.Invoke(document, null).ToString(), Is.EqualTo(before));
+        }
+
         internal static JObject Minimal()
         {
             JObject data = BoardTemplateDocument.NewTemplate("draft.shared", "draft.shared.config", RadioTowerLandmark.CreateCatalog()).Snapshot();
@@ -448,6 +471,154 @@ namespace HallowBlaze.Tests.EditMode
             entities.Add(new JObject { ["id"] = 1, ["layer"] = "Actor", ["contentId"] = "legacy.player", ["x"] = 0, ["y"] = 0 });
             data["outcomes"] = new JArray(new JObject { ["id"] = "exit.73", ["name"] = "Exit", ["exitEntityId"] = 73, ["optional"] = false });
             return data;
+        }
+
+        /// <summary>Route estimates draw once per segment, count reused placements and keep generated unknown until a full addressed snapshot exists.</summary>
+        [Test]
+        public void ResourceRouteEstimatesAreDetachedAndUseOneChoicePerSegment()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "HB-ResourceRoute-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                var store = new BoardDocumentStore(root, Path.GetDirectoryName(Application.dataPath));
+                var templates = new System.Collections.Generic.List<string>();
+                foreach (var item in new[] { (Id: "ten", Content: "ordinary.berries", Count: 1), (Id: "thirty", Content: "ordinary.carrot", Count: 2),
+                    (Id: "five", Content: "legacy.food", Count: 1) })
+                {
+                    JObject data = Minimal();
+                    data["templateId"] = "resource." + item.Id;
+                    var board = BoardTemplateDocument.ReadTemplate(data.ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+                    var grid = new BoardGridView();
+                    grid.ChooseContent(item.Content);
+                    for (int index = 0; index < item.Count; index++) grid.Activate(board, "base", new HallowBlaze.Core.Board.Primitives.GridPosition(index + 1, 2));
+                    Assert.That(store.Save(board, store.NamedBoardPath(item.Id)).Succeeded, Is.True);
+                    templates.Add(board.ToJson());
+                }
+                File.Copy(store.NamedBoardPath("ten"), store.NamedBoardPath("ten copy"));
+                string world = File.ReadAllText(Path.Combine(Application.dataPath, "GameData/World/prototype-world.json"));
+                var pool = new BoardPoolAuthoring();
+                pool.Create(store, world, "road.shelter-warm-up", "resource.route");
+                var segments = WorldDefinitionJson.Deserialize(world).Edges.Single(edge => edge.EdgeId == "road.shelter-warm-up").Segments;
+                pool.SetSource(segments[1].SegmentId, "pool");
+                pool.AddEntry(segments[1].SegmentId, "resource.ten", 1, "base");
+                pool.AddEntry(segments[1].SegmentId, "resource.thirty", 1, "base");
+                pool.SetSource(segments[2].SegmentId, "fixed");
+                pool.AddEntry(segments[2].SegmentId, "resource.five", 1, "base");
+                string manifest = pool.Document.ToJson();
+                string history = (string)typeof(BoardPoolAuthoring).GetMethod("Capture", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(pool, null);
+                bool requested = BoardAuthoringTestContext.IsRequested;
+                var result = BoardResourceAnalysis.Route(world, manifest, pool.Templates, 64);
+                Assert.That(result.Estimate.IsComplete || result.Selected.IsComplete, Is.False);
+                Assert.That(result.Segments[0].Candidates, Is.Empty);
+                Assert.That(result.Estimate.Values["Food"].Minimum, Is.EqualTo(15m));
+                Assert.That(result.Estimate.Values["Food"].Mean, Is.EqualTo(25m));
+                Assert.That(result.Estimate.Values["Food"].Maximum, Is.EqualTo(35m));
+                Assert.That(result.Segments[1].Candidates, Has.Count.EqualTo(2));
+                Assert.That(result.Selected.Values["Food"].Mean, Is.EqualTo(result.Segments[1].Selected.Supply.Food + 5));
+                var repeated = BoardResourceAnalysis.Route(world, manifest, pool.Templates, 64);
+                Assert.That(repeated.Selected.Values["Food"].Mean, Is.EqualTo(result.Selected.Values["Food"].Mean));
+                var snapshots = BoardResourceAnalysis.CaptureGenerated(world, manifest, pool.Templates, 64);
+                var exact = BoardResourceAnalysis.Route(world, manifest, pool.Templates, 64, snapshots);
+                Assert.That(exact.Estimate.IsComplete && exact.Selected.IsComplete, Is.True);
+                Assert.That(exact.Selected.Values["Food"].Mean,
+                    Is.EqualTo(result.Selected.Values["Food"].Mean + BoardResourceAnalysis.Blueprint(snapshots[segments[0].SegmentId]).Food));
+                Assert.Throws<ArgumentException>(() => BoardResourceAnalysis.Route(world, manifest, pool.Templates, 65, snapshots));
+                Assert.That(BoardAuthoringTestContext.IsRequested, Is.EqualTo(requested));
+                Assert.That((string)typeof(BoardPoolAuthoring).GetMethod("Capture", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(pool, null), Is.EqualTo(history));
+                pool.SetSource(segments[0].SegmentId, "fixed");
+                pool.AddEntry(segments[0].SegmentId, "resource.five", 1, "base");
+                var reused = BoardResourceAnalysis.Route(world, pool.Document.ToJson(), pool.Templates, 64);
+                Assert.That(reused.Estimate.Values["Food"].Minimum, Is.EqualTo(20m));
+                Assert.That(reused.Estimate.Values["Food"].Mean, Is.EqualTo(30m));
+                Assert.That(reused.Estimate.Values["Food"].Maximum, Is.EqualTo(40m));
+                pool.RemoveEntry(segments[1].SegmentId, (JObject)pool.Document.Snapshot()["sources"].Single(source => (string)source["segmentId"] == segments[1].SegmentId)["entries"][0]);
+                Assert.That(BoardResourceAnalysis.Route(world, pool.Document.ToJson(), pool.Templates, 64).Segments[1].Estimate.Values["Food"].Mean, Is.EqualTo(30m));
+                pool.Document.Undo();
+                Assert.That(BoardResourceAnalysis.Route(world, pool.Document.ToJson(), pool.Templates, 64).Estimate.Values["Food"].Mean, Is.EqualTo(30m));
+            }
+            finally { Directory.Delete(root, true); }
+        }
+
+        /// <summary>Variants are independent and unsupported data cannot masquerade as zero-valued supply.</summary>
+        [Test]
+        public void ResourceVariantsAndFractionalExpectationsRemainExplicit()
+        {
+            var document = BoardTemplateDocument.ReadTemplate(Minimal().ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+            var empty = BoardResourceAnalysis.Board(document.ToJson(), "base");
+            var grid = new BoardGridView();
+            grid.ChooseContent("legacy.food");
+            grid.Activate(document, "base", new HallowBlaze.Core.Board.Primitives.GridPosition(1, 1));
+            document.Edit(data =>
+            {
+                var copy = data["variants"][0].DeepClone();
+                copy["id"] = "other";
+                ((JArray)copy["items"]).RemoveAll();
+                var food = copy["entities"].Single(entity => (string)entity["contentId"] == "legacy.food");
+                food.Remove();
+                ((JArray)data["variants"]).Add(copy);
+            });
+            var foodSupply = BoardResourceAnalysis.Board(document.ToJson(), "base");
+            Assert.That(foodSupply.Food, Is.EqualTo(5));
+            Assert.That(BoardResourceAnalysis.Board(document.ToJson(), "other").Food, Is.Zero);
+            var estimates = BoardResourceAnalysis.Choices(new[] { empty, foodSupply, empty });
+            Assert.That(estimates.Values["Food"].Mean, Is.EqualTo(5m / 3m));
+            Assert.That(estimates.Values["Food"].Minimum, Is.Zero);
+            Assert.That(estimates.Values["Food"].Maximum, Is.EqualTo(5));
+            Assert.That(BoardResourceAnalysis.Choices(Array.Empty<BoardResourceAnalysis.Supply>()).IsComplete, Is.False);
+            JObject invalid = document.Snapshot();
+            invalid["variants"][0]["entities"].Single(entity => (string)entity["contentId"] == "legacy.food")["contentId"] = "unknown.reward";
+            Assert.Throws<Newtonsoft.Json.JsonSerializationException>(() => BoardResourceAnalysis.Board(invalid.ToString(), "base"));
+            Assert.Throws<ArgumentException>(() => BoardResourceAnalysis.Board(document.ToJson(), "missing"));
+        }
+
+        /// <summary>Aliases retain their real rewards; finite charges, hidden supply and conditional cache rewards remain distinct from reusable axe units.</summary>
+        [Test]
+        public void ResourceDefinitionsAndIndependentExtremaUseAuthoritativeUnits()
+        {
+            var document = BoardTemplateDocument.ReadTemplate(Minimal().ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+            var grid = new BoardGridView();
+            string[] aliases = { "legacy.bush-food", "landmark.radio-tower.rations", "legacy.aid" };
+            for (int index = 0; index < aliases.Length; index++)
+            {
+                grid.ChooseContent(aliases[index]);
+                Assert.That(grid.Activate(document, "base", new HallowBlaze.Core.Board.Primitives.GridPosition(index + 1, 3)), Is.True);
+            }
+            document.Edit(data => data["variants"][0]["items"][0]["initiallyObservable"] = false);
+            var supply = BoardResourceAnalysis.Board(document.ToJson(), "base");
+            Assert.That(supply.Food, Is.EqualTo(15));
+            Assert.That(supply.Health, Is.EqualTo(10));
+            Assert.That(supply.Notes.Any(note => note.StartsWith("Hidden supply", StringComparison.Ordinal)), Is.True);
+            var original = BoardTemplateJson.ReadCompatible(document.ToJson(), OrdinaryBoardContent.CreateAuthoringCatalog());
+            var address = new BoardAddress("resource-units", "leg", "route", "segment", 1, original.Config.Id, original.Config.Version, 64);
+            var blueprint = original.CreateBoard(address, "base").Blueprint;
+            var shovel = new HallowBlaze.Core.Board.State.BoardEntityDefinition(HallowBlaze.Core.Board.State.BoardLayer.Item,
+                HallowBlaze.Core.Board.Primitives.EntityKind.Item, "shovel.basic", new HallowBlaze.Core.Board.State.BoardEntityTraits(false, false, true));
+            var entityId = new HallowBlaze.Core.Board.Primitives.EntityId(900);
+            var digging = ShovelContent.LoadRules();
+            var cacheId = new HallowBlaze.Core.Board.Primitives.EntityId(901);
+            var cache = new HallowBlaze.Core.Board.State.BoardEntityDefinition(HallowBlaze.Core.Board.State.BoardLayer.Item,
+                HallowBlaze.Core.Board.Primitives.EntityKind.Item, digging.CacheContentId, new HallowBlaze.Core.Board.State.BoardEntityTraits(false, false, true));
+            var entities = blueprint.Entities.Concat(new[] { new HallowBlaze.Core.Board.State.BoardEntityState(entityId, shovel, new HallowBlaze.Core.Board.Primitives.GridPosition(6, 3)),
+                new HallowBlaze.Core.Board.State.BoardEntityState(cacheId, cache, new HallowBlaze.Core.Board.Primitives.GridPosition(6, 4)) });
+            var metadata = blueprint.Items.Concat(new[] { new BoardItemSpawn("tool.spawn", entityId, "shovel.basic", "tools", null, true),
+                new BoardItemSpawn("cache.spawn", cacheId, digging.CacheContentId, "food", null, false) });
+            var withTool = new BoardBlueprint(address, blueprint.Config, entities, metadata);
+            var complete = BoardResourceAnalysis.Blueprint(withTool);
+            Assert.That(complete.Food, Is.EqualTo(15 + digging.RewardDefinition.AutomaticFoodReward));
+            Assert.That(complete.Notes.Any(note => note.StartsWith("Conditional cache reward", StringComparison.Ordinal)), Is.True);
+            var finite = complete.Resources.Single(resource => resource.Id == "shovel.basic");
+            Assert.That(finite.Count, Is.EqualTo(1));
+            Assert.That(finite.Charges, Is.EqualTo(ToolContentCatalog.Load()["shovel.basic"].MaximumCharges));
+            var medicine = BoardTemplateDocument.ReadTemplate(Minimal().ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+            grid.ChooseContent("legacy.aid"); grid.Activate(medicine, "base", new HallowBlaze.Core.Board.Primitives.GridPosition(1, 1));
+            var food = BoardTemplateDocument.ReadTemplate(Minimal().ToString(), OrdinaryBoardContent.CreateAuthoringCatalog());
+            grid.ChooseContent("ordinary.berries"); grid.Activate(food, "base", new HallowBlaze.Core.Board.Primitives.GridPosition(1, 1));
+            var ranges = BoardResourceAnalysis.Choices(new[] { BoardResourceAnalysis.Board(medicine.ToJson(), "base"), BoardResourceAnalysis.Board(food.ToJson(), "base") });
+            Assert.That(ranges.Values["Food"].Maximum, Is.EqualTo(10));
+            Assert.That(ranges.Values["Health (nominal)"].Maximum, Is.EqualTo(10));
+            Assert.That(ranges.Values["Food"].Mean, Is.EqualTo(5m));
+            Assert.That(ranges.Values["Health (nominal)"].Mean, Is.EqualTo(5m));
         }
 
         /// <summary>The painted exit owns its default completion and content enablement is one undo operation.</summary>

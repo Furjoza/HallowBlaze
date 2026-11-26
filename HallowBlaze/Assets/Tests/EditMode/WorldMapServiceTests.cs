@@ -386,7 +386,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(run.ActiveLeg.IntroState, Is.EqualTo(DayIntroState.Pending));
             Assert.That(run.Route, Is.Empty);
             Assert.That(run.CompletedDayCount, Is.Zero);
-            Assert.That(run.Food, Is.EqualTo(80));
+            Assert.That(run.Satiety, Is.EqualTo(80));
             Assert.That(run.ToolSlots[0].RemainingUses, Is.EqualTo(3));
             Assert.That(profile.GetEdgeDiscoveryState(edgeId),
                 Is.EqualTo(EdgeDiscoveryState.Sighted));

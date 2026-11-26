@@ -537,7 +537,7 @@ namespace HallowBlaze.Tests.PlayMode
             var borrowedViews = first.Views.Values.ToArray();
             var controller = first.Controller;
             int health = first.RunState.Health;
-            int food = first.RunState.Food;
+            int food = first.RunState.Satiety;
             EnemyIntent locked = enemy.LockedIntent;
             presenter.Publish(first.BoardState, new[] { enemy });
             EnemyIntentView removedMarker = presenter.Views[enemy.ActorId];
@@ -605,9 +605,9 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(first.IsDisposed || second.IsDisposed, Is.False);
             Assert.That(first.Controller, Is.SameAs(controller));
             Assert.That(first.RunState.Health, Is.EqualTo(health));
-            Assert.That(first.RunState.Food, Is.EqualTo(food));
+            Assert.That(first.RunState.Satiety, Is.EqualTo(food));
             Assert.That(second.RunState.Health, Is.EqualTo(100));
-            Assert.That(second.RunState.Food, Is.EqualTo(25));
+            Assert.That(second.RunState.Satiety, Is.EqualTo(25));
             CollectionAssert.AreEqual(firstSnapshot, first.BoardState.GetEntities());
             CollectionAssert.AreEqual(secondSnapshot, second.BoardState.GetEntities());
             Assert.That(enemy.LockedIntent, Is.SameAs(locked));
@@ -698,7 +698,7 @@ namespace HallowBlaze.Tests.PlayMode
                 legend.Control.onClick.Invoke();
                 Assert.That(legend.IsVisible, Is.True);
                 Assert.That(runtime.RunState.Health, Is.EqualTo(100));
-                Assert.That(runtime.RunState.Food, Is.EqualTo(25));
+                Assert.That(runtime.RunState.Satiety, Is.EqualTo(25));
                 Assert.That(enemy.LockedIntent, Is.SameAs(locked));
                 Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Active));
                 CollectionAssert.AreEqual(before, runtime.BoardState.GetEntities());
@@ -822,13 +822,13 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(enemy.LockedIntent, Is.SameAs(locked));
                     Assert.That(display.Views[enemy.ActorId], Is.SameAs(oldMarker));
                     int resolutions = presenter.Coordinator.ResolutionCount;
-                    int food = runtime.RunState.Food;
+                    int food = runtime.RunState.Satiety;
                     presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Modal, true);
                     Assert.That(presenter.Coordinator.SubmitAsync(new WaitCommand()).Result.Status,
                         Is.EqualTo(CommandSubmissionStatus.Blocked));
                     yield return null;
                     Assert.That(enemy.LockedIntent, Is.SameAs(locked));
-                    Assert.That(runtime.RunState.Food, Is.EqualTo(food));
+                    Assert.That(runtime.RunState.Satiety, Is.EqualTo(food));
                     presenter.Coordinator.Gate.SetBlocked(PresentationInputBlock.Modal, false);
                     Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(resolutions));
 
@@ -869,7 +869,7 @@ namespace HallowBlaze.Tests.PlayMode
                         Assert.That(presenter.Coordinator.Gate.State, Is.EqualTo(PresentationGateState.Idle));
                     }
 
-                    Assert.That(runtime.RunState.Food, Is.EqualTo(food - 1));
+                    Assert.That(runtime.RunState.Satiety, Is.EqualTo(food - 1));
                     Assert.That(runtime.RunState.Health, Is.EqualTo(100));
                     Assert.That(runtime.IsDisposed, Is.False);
                     if (scenario == "terminal" || scenario == "disposed")
@@ -935,7 +935,7 @@ namespace HallowBlaze.Tests.PlayMode
                     var markers = runtime.Enemies.Select(enemy => display.Views[enemy.ActorId]).ToArray();
                     var locked = runtime.Enemies.Select(enemy => enemy.LockedIntent).ToArray();
                     int health = runtime.RunState.Health;
-                    int food = runtime.RunState.Food;
+                    int food = runtime.RunState.Satiety;
                     int resolutions = presenter.Coordinator.ResolutionCount;
                     GridPosition? target = scenario == "adjacent-rest" ? (GridPosition?)null : new GridPosition(1, 1);
                     EnemyIntentSymbol symbol = scenario == "adjacent-rest" ? EnemyIntentSymbol.Wait :
@@ -959,7 +959,7 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(rejected.Status, Is.EqualTo(CommandSubmissionStatus.Rejected), context);
                     Assert.That(rejected.Result.Events, Is.Empty, context);
                     Assert.That(runtime.RunState.Health, Is.EqualTo(health), context);
-                    Assert.That(runtime.RunState.Food, Is.EqualTo(food), context);
+                    Assert.That(runtime.RunState.Satiety, Is.EqualTo(food), context);
                     for (int index = 0; index < announced.Length; index++)
                     {
                         Assert.That(runtime.Enemies[index].LockedIntent, Is.SameAs(locked[index]), context);
@@ -986,10 +986,10 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(submitted.Status, Is.EqualTo(CommandSubmissionStatus.Presented), context);
                     Assert.That(submitted.Result.Accepted, Is.True, context);
                     Assert.That(diagnostics, Is.Empty, context);
-                    Assert.That(runtime.RunState.Food, Is.EqualTo(food - 1), context);
+                    Assert.That(runtime.RunState.Satiety, Is.EqualTo(food - 1), context);
                     Assert.That(runtime.RunState.Health, Is.EqualTo(scenario == "same-cell" ? 90 : health), context);
                     Assert.That(sinks.Health, Is.EqualTo(runtime.RunState.Health), context);
-                    Assert.That(sinks.Food, Is.EqualTo(runtime.RunState.Food), context);
+                    Assert.That(sinks.Food, Is.EqualTo(runtime.RunState.Satiety), context);
                     Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(resolutions + 2), context);
                     GameEvent[] events = submitted.Result.Events.ToArray();
                     string action = scenario == "same-cell" || scenario == "fixed-miss" ? "EnemyAttackResolved" :
@@ -1058,7 +1058,7 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(presenter.Coordinator.CanSubmit, Is.True, context);
                     TestContext.WriteLine(context + "; announced=" + symbol + "@" + target +
                         "; outcome=" + string.Join(",", events.Select(gameEvent => gameEvent.EventType)) +
-                        "; HP=" + runtime.RunState.Health + "; food=" + runtime.RunState.Food +
+                        "; HP=" + runtime.RunState.Health + "; food=" + runtime.RunState.Satiety +
                         "; next=" + string.Join(",", display.Projections.Select(projection => projection.Symbol)));
                 }
                 yield return null;

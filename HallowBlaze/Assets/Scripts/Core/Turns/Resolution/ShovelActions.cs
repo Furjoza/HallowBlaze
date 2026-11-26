@@ -15,13 +15,12 @@ namespace HallowBlaze.Core.Turns.Resolution
         public static void Collect(BoardState board, RunState run, EntityId playerId, CacheRewardItem reward, ICollection<GameEvent> events)
         {
             if (reward == null) throw new ArgumentNullException(nameof(reward));
-            if (!board.TryGetCacheReward(reward.Entity.Id, out CacheRewardItem current) || !ReferenceEquals(current, reward) ||
-                run.Food > int.MaxValue - reward.Entity.Definition.AutomaticFoodReward)
+            if (!board.TryGetCacheReward(reward.Entity.Id, out CacheRewardItem current) || !ReferenceEquals(current, reward))
                 throw new InvalidOperationException("The validated concrete cache reward cannot be transferred.");
             if (!board.TryRemove(reward.Entity.Id)) throw new InvalidOperationException("The exact cache reward disappeared.");
-            run.RestoreFood(reward.Entity.Definition.AutomaticFoodReward);
+            ResourceGain gain = AutomaticFoodCompatibility.Apply(run, reward.Entity.Definition.AutomaticFoodReward);
             events.Add(new ItemCollectedEvent(playerId, reward.Entity.Id));
-            events.Add(new FoodRestoredEvent(playerId, reward.Entity.Id, reward.Entity.Definition.AutomaticFoodReward));
+            events.Add(new FoodRestoredEvent(playerId, reward.Entity.Id, gain.Applied, gain.Wasted));
         }
     }
 
@@ -53,7 +52,7 @@ namespace HallowBlaze.Core.Turns.Resolution
         /// <inheritdoc />
         public string DescribeEffect(BoardState board, BoardEntityState target) =>
             (useShovel ? "Unearth cache: 1 action" : "Uncover by hand: " + (rules.CacheWork - board.GetCacheWork(target.Id)) + " actions left") +
-            "; " + rules.RewardDefinition.ContentId + " Food +" + rules.RewardDefinition.AutomaticFoodReward;
+            "; " + rules.RewardDefinition.ContentId + " Satiety +" + rules.RewardDefinition.AutomaticFoodReward;
         /// <inheritdoc />
         public InteractionAvailability Evaluate(BoardState board, RunState run, BoardEntityState player, BoardEntityState target)
         {
@@ -63,9 +62,7 @@ namespace HallowBlaze.Core.Turns.Resolution
                 board.TryGetEntity(BoardLayer.Obstacle, target.Position, out _) || board.TryGetPit(target.Position, out _) ||
                 board.TryGetEntity(BoardLayer.Actor, target.Position, out BoardEntityState actor) && !actor.Id.Equals(player.Id))
                 return InteractionAvailability.Blocked;
-            bool completes = useShovel || board.GetCacheWork(target.Id) >= rules.CacheWork - 1;
-            return collectImmediately && completes && run.Food > int.MaxValue - rules.RewardDefinition.AutomaticFoodReward
-                ? InteractionAvailability.InvalidState : InteractionAvailability.Available;
+            return InteractionAvailability.Available;
         }
         /// <inheritdoc />
         public void Apply(BoardState board, RunState run, BoardEntityState player, BoardEntityState target, ICollection<GameEvent> events)

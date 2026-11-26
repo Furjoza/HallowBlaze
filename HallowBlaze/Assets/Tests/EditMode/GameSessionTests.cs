@@ -30,7 +30,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(run.RunId, Is.EqualTo("run-001"));
             Assert.That(run.RunSeed, Is.EqualTo(1729));
             Assert.That(run.Health, Is.EqualTo(100));
-            Assert.That(run.Food, Is.EqualTo(80));
+            Assert.That(run.Satiety, Is.EqualTo(80));
             Assert.That(run.CurrentDay, Is.Zero);
         }
 
@@ -51,11 +51,11 @@ namespace HallowBlaze.Tests.EditMode
             };
 
             RunState first = session.StartNewRun("run-first", 1, CreateConfiguration());
-            first.ConsumeFood(10);
+            first.ConsumeSatiety(10);
             RunState second = session.StartNewRun("run-second", 2, CreateConfiguration());
 
             Assert.That(second, Is.Not.SameAs(first));
-            Assert.That(second.Food, Is.EqualTo(80));
+            Assert.That(second.Satiety, Is.EqualTo(80));
             Assert.That(session.ActiveRun, Is.SameAs(second));
             Assert.That(lifecycle, Is.EqualTo(new[]
             {
@@ -123,16 +123,21 @@ namespace HallowBlaze.Tests.EditMode
             session.RestoreHealth(0);
             Assert.That(amounts, Is.Empty);
             session.RestoreHealth(7);
-            Assert.That(first.Health, Is.EqualTo(107));
+            Assert.That(first.Health, Is.EqualTo(100));
+            Assert.That(amounts, Is.Empty);
+            session.TakeDamage(10);
+            session.RestoreHealth(7);
+            Assert.That(first.Health, Is.EqualTo(97));
             Assert.Throws<ArgumentOutOfRangeException>(() => session.RestoreHealth(-1));
-            Assert.Throws<OverflowException>(() => session.RestoreHealth(int.MaxValue));
-            Assert.That(first.Health, Is.EqualTo(107));
+            session.RestoreHealth(int.MaxValue);
+            Assert.That(first.Health, Is.EqualTo(100));
             session.MarkDead();
             Assert.Throws<InvalidOperationException>(() => session.RestoreHealth(1));
             RunState second = session.StartNewRun("healing-second", 2, CreateConfiguration());
+            session.TakeDamage(5);
             session.RestoreHealth(5);
-            Assert.That(amounts, Is.EqualTo(new[] { 7, 5 }));
-            Assert.That(runs, Is.EqualTo(new[] { first, second }));
+            Assert.That(amounts, Is.EqualTo(new[] { 7, 3, 5 }));
+            Assert.That(runs, Is.EqualTo(new[] { first, first, second }));
         }
 
         [Test]
@@ -143,13 +148,13 @@ namespace HallowBlaze.Tests.EditMode
             List<RunState> notifications = new List<RunState>();
             session.OnRunChanged += changedRun => notifications.Add(changedRun);
 
-            session.ConsumeFood(5);
-            session.RestoreFood(2);
+            session.ConsumeSatiety(5);
+            session.RestoreSatiety(2);
             session.TakeDamage(10);
             session.RestoreHealth(3);
             session.AdvanceDay();
 
-            Assert.That(run.Food, Is.EqualTo(77));
+            Assert.That(run.Satiety, Is.EqualTo(77));
             Assert.That(run.Health, Is.EqualTo(93));
             Assert.That(run.CurrentDay, Is.EqualTo(1));
             Assert.That(notifications, Has.Count.EqualTo(5));
@@ -161,8 +166,8 @@ namespace HallowBlaze.Tests.EditMode
         {
             GameSession session = new GameSession(CreateProfile());
 
-            Assert.Throws<InvalidOperationException>(() => session.ConsumeFood());
-            Assert.Throws<InvalidOperationException>(() => session.RestoreFood(1));
+            Assert.Throws<InvalidOperationException>(() => session.ConsumeSatiety());
+            Assert.Throws<InvalidOperationException>(() => session.RestoreSatiety(1));
             Assert.Throws<InvalidOperationException>(() => session.TakeDamage(1));
             Assert.Throws<InvalidOperationException>(() => session.RestoreHealth(1));
             Assert.Throws<InvalidOperationException>(() => session.AdvanceDay());
@@ -179,7 +184,7 @@ namespace HallowBlaze.Tests.EditMode
             session.OnRunChanged += _ => changedCount++;
 
             session.MarkDead();
-            Assert.Throws<InvalidOperationException>(() => session.RestoreFood(1));
+            Assert.Throws<InvalidOperationException>(() => session.RestoreSatiety(1));
 
             Assert.That(run.Status, Is.EqualTo(RunStatus.Dead));
             Assert.That(changedCount, Is.EqualTo(1));

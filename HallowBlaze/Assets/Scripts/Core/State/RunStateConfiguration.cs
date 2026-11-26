@@ -2,18 +2,32 @@ using System;
 
 namespace HallowBlaze.Core.State
 {
+    /// <summary>Initial resources and checkpoint with one immutable resource-rule configuration.</summary>
     public sealed class RunStateConfiguration
     {
+        /// <summary>Creates a run boundary; initial resources must already lie inside the configured ranges.</summary>
+        /// <param name="initialHealth">Health in zero through the configured maximum.</param>
+        /// <param name="initialSatiety">Satiety in zero through the configured maximum; new production runs start at 100.</param>
+        /// <param name="initialDay">Nonnegative completed day count.</param>
+        /// <param name="initialWorldNodeId">Stable reached-checkpoint identity.</param>
+        /// <param name="resourceRules">Persisted limits and costs; null selects the accepted initial balance.</param>
+        /// <param name="inventoryContent">Trusted immutable item/effect publication; null keeps the initial empty content.</param>
+        /// <exception cref="ArgumentOutOfRangeException">Resources or the day are outside their ranges.</exception>
+        /// <exception cref="ArgumentException">The checkpoint ID is invalid.</exception>
         public RunStateConfiguration(
             int initialHealth,
-            int initialFood,
+            int initialSatiety,
             int initialDay,
-            string initialWorldNodeId)
+            string initialWorldNodeId,
+            ResourceRules resourceRules = null,
+            InventoryContent inventoryContent = null)
         {
-            if (initialHealth < 0)
+            ResourceRules = resourceRules ?? ResourceRules.Default;
+            InventoryContent = inventoryContent ?? InventoryContent.Empty;
+            if (initialHealth < 0 || initialHealth > ResourceRules.MaximumHealth)
                 throw new ArgumentOutOfRangeException(nameof(initialHealth));
-            if (initialFood < 0)
-                throw new ArgumentOutOfRangeException(nameof(initialFood));
+            if (initialSatiety < 0 || initialSatiety > ResourceRules.MaximumSatiety)
+                throw new ArgumentOutOfRangeException(nameof(initialSatiety));
             if (initialDay < 0)
                 throw new ArgumentOutOfRangeException(nameof(initialDay));
             if (string.IsNullOrWhiteSpace(initialWorldNodeId) ||
@@ -22,14 +36,22 @@ namespace HallowBlaze.Core.State
                 throw new ArgumentException("World node ID cannot be empty.", nameof(initialWorldNodeId));
 
             InitialHealth = initialHealth;
-            InitialFood = initialFood;
+            InitialSatiety = initialSatiety;
             InitialDay = initialDay;
             InitialWorldNodeId = initialWorldNodeId;
         }
 
+        /// <summary>Gets starting health without inferring a terminal outcome.</summary>
         public int InitialHealth { get; }
-        public int InitialFood { get; }
+        /// <summary>Gets starting satiety, not a second legacy Food resource.</summary>
+        public int InitialSatiety { get; }
+        /// <summary>Gets the completed day count.</summary>
         public int InitialDay { get; }
+        /// <summary>Gets the reached checkpoint.</summary>
         public string InitialWorldNodeId { get; }
+        /// <summary>Gets the immutable caps and action-cost thresholds retained by this run.</summary>
+        public ResourceRules ResourceRules { get; }
+        /// <summary>Gets trusted carried-item content; starting contents are empty and never inferred from UI.</summary>
+        public InventoryContent InventoryContent { get; }
     }
 }

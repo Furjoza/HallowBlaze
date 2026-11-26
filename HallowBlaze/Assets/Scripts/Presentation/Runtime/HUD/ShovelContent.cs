@@ -40,7 +40,8 @@ namespace HallowBlaze.Presentation.Runtime
         public static ToolUseQuery CreateTools(ObstacleClearingRules axe, ShovelRules shovel) => new ToolUseQuery(new[]
         {
             new ToolAction(ObstacleClearingRules.AxeDefinitionId, new ClearObstacleAction(axe, true), "Chop: clear obstacle",
-                axe.AxeNoiseStrength, axe.NoiseLifetimeTurns, ObstacleClearingRules.AxeNoiseFactId),
+                axe.AxeNoiseStrength, axe.NoiseLifetimeTurns, ObstacleClearingRules.AxeNoiseFactId,
+                chargeCost: ToolContentCatalog.Load()[ObstacleClearingRules.AxeDefinitionId].UseChargeCost),
             new ToolAction(ShovelRules.DefinitionId, new CacheDigAction(shovel, true), "Unearth cache", shovel.NoiseStrength, shovel.NoiseLifetimeTurns),
             new ToolAction(ShovelRules.DefinitionId, new PitDigAction(shovel), "Dig pit", shovel.NoiseStrength, shovel.NoiseLifetimeTurns)
         });

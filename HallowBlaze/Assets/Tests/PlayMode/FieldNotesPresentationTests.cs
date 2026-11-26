@@ -72,10 +72,10 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(notes.SelectedText, Does.Contain("announced step stays fixed"));
                 Assert.That(AllText(notes), Does.Not.Contain("Held by the ground").And.Not.Contain("PIT_TRAPS_SHAMBLER"));
                 int resolutions = fixture.Presenter.Coordinator.ResolutionCount;
-                int food = fixture.Session.ActiveRun.Food;
+                int food = fixture.Session.ActiveRun.Satiety;
                 Assert.That(fixture.Presenter.Coordinator.SubmitAsync(new WaitCommand()).Result.Status, Is.EqualTo(CommandSubmissionStatus.Blocked));
                 Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(resolutions));
-                Assert.That(fixture.Session.ActiveRun.Food, Is.EqualTo(food));
+                Assert.That(fixture.Session.ActiveRun.Satiety, Is.EqualTo(food));
                 Invoke(fixture.Manager, "SetGameplayInputBlocked", true);
                 notes.Close();
                 Assert.That(fixture.Presenter.Coordinator.SubmitAsync(new WaitCommand()).Result.Status, Is.EqualTo(CommandSubmissionStatus.Blocked));

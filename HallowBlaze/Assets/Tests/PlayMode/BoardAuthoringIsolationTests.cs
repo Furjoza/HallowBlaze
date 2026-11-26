@@ -125,7 +125,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(BoardAuthoringTestContext.Claim(owner), Is.SameAs(context));
             Assert.Throws<InvalidOperationException>(() => BoardAuthoringTestContext.Claim(new object()));
             string initial = PersistenceJsonSerializer.SerializeTravelRun(context.CreateInitialRun());
-            context.CreateInitialRun().ConsumeFood(5);
+            context.CreateInitialRun().ConsumeSatiety(5);
             Assert.That(PersistenceJsonSerializer.SerializeTravelRun(context.CreateInitialRun()), Is.EqualTo(initial));
             Assert.That(context.SaveRoot, Is.EqualTo(root));
             BoardAuthoringTestContext.Cancel();
@@ -161,15 +161,15 @@ namespace HallowBlaze.Tests.PlayMode
             }
             BoardEventPresenter presenter = Property<BoardEventPresenter>(manager, "ActiveBoardPresenter");
             presenter.AnimationsEnabled = false;
-            int food = runtime.RunState.Food;
+            int food = runtime.RunState.Satiety;
             var rejected = presenter.Coordinator.SubmitAsync(new MoveCommand(Direction.South));
             while (!rejected.IsCompleted) yield return null;
             Assert.That(rejected.Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
-            Assert.That(runtime.RunState.Food, Is.EqualTo(food));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(food));
             var accepted = presenter.Coordinator.SubmitAsync(new WaitCommand());
             while (!accepted.IsCompleted) yield return null;
             Assert.That(accepted.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
-            Assert.That(runtime.RunState.Food, Is.EqualTo(food - 1));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(food - 1));
             Component soundManager = (Component)soundType.GetField("instance").GetValue(null);
             Invoke(soundManager, "SetMusicEnabled", false);
             Invoke(soundManager, "SetSoundEnabled", false);
@@ -316,7 +316,7 @@ namespace HallowBlaze.Tests.PlayMode
             RunState run = runtime.RunState;
             Assert.That(run.ToolSlots[0].Instance.DefinitionId, Is.EqualTo("axe.basic"));
             Assert.That(run.RunSeed, Is.EqualTo(64));
-            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Satiety, Is.EqualTo(100));
             BoardEventPresenter presenter = Property<BoardEventPresenter>(manager, "ActiveBoardPresenter");
             presenter.AnimationsEnabled = false;
             var landmark = context.CreateBoard(runtime.Request, run);
@@ -395,13 +395,13 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(view.GetComponent<SpriteRenderer>().sprite, Is.SameAs(expected));
             int reward = item.Definition.AutomaticFoodReward;
             Assert.That(reward, Is.EqualTo(blueberries ? 10 : 5));
-            int previousFood = runtime.RunState.Food;
+            int previousFood = runtime.RunState.Satiety;
             BoardEventPresenter presenter = Property<BoardEventPresenter>(manager, "ActiveBoardPresenter");
             presenter.AnimationsEnabled = false;
             var pending = presenter.Coordinator.SubmitAsync(new MoveCommand(Direction.East));
             while (!pending.IsCompleted) yield return null;
             Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
-            Assert.That(runtime.RunState.Food, Is.EqualTo(previousFood + reward - 1));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(previousFood + reward - 1));
             Assert.That(runtime.BoardState.TryGetEntity(item.Id, out _), Is.False);
             Assert.That(view.activeSelf, Is.False);
         }
@@ -603,12 +603,12 @@ namespace HallowBlaze.Tests.PlayMode
                     presenter.AnimationsEnabled = false;
                     if (index > 0)
                     {
-                        int food = run.Food;
+                        int food = run.Satiety;
                         var rejected = presenter.Coordinator.SubmitAsync(new MoveCommand(Direction.West));
                         while (!rejected.IsCompleted) yield return null;
-                        Assert.That(run.Food, Is.EqualTo(food), "Rejected input must remain free on every captured board.");
+                        Assert.That(run.Satiety, Is.EqualTo(food), "Rejected input must remain free on every captured board.");
                     }
-                    int foodBeforeExit = run.Food;
+                    int foodBeforeExit = run.Satiety;
                     int healthBeforeExit = run.Health;
                     Direction[] path = ExitPath(runtime).ToArray();
                     bool failCheckpoint = pooled && index == 1;
@@ -636,14 +636,14 @@ namespace HallowBlaze.Tests.PlayMode
                         Assert.That(pendingOutcome, Is.Not.Null);
                         Directory.Delete(checkpointPath);
                         File.Move(retainedPath, checkpointPath);
-                        int chargedFood = run.Food;
+                        int chargedFood = run.Satiety;
                         Assert.That((bool)managerType.GetMethod("HandleBoardOutcome", Fields).Invoke(manager, new[] { pendingOutcome }), Is.True);
-                        Assert.That(run.Food, Is.EqualTo(chargedFood), "Retrying the boundary must not charge another move.");
+                        Assert.That(run.Satiety, Is.EqualTo(chargedFood), "Retrying the boundary must not charge another move.");
                         Assert.That(run.ActiveLeg.BoardPlan.Selections.Select(selection => selection.TemplateId), Is.EqualTo(pinned.Selections.Select(selection => selection.TemplateId)));
                     }
                     if (index > 0)
                     {
-                        Assert.That(run.Food, Is.EqualTo(foodBeforeExit - path.Length), "Each accepted move costs one Food, including exit.");
+                        Assert.That(run.Satiety, Is.EqualTo(foodBeforeExit - path.Length), "Each accepted move costs one Food, including exit.");
                         Assert.That(run.Health, Is.EqualTo(healthBeforeExit));
                     }
                     if (index + 1 < edge.SegmentCount)
@@ -707,14 +707,14 @@ namespace HallowBlaze.Tests.PlayMode
             presenter.AnimationsEnabled = false;
             var rejected = presenter.Coordinator.SubmitAsync(new MoveCommand(Direction.West));
             while (!rejected.IsCompleted) yield return null;
-            Assert.That(run.Food, Is.EqualTo(100), "Rejected command must not spend food.");
+            Assert.That(run.Satiety, Is.EqualTo(100), "Rejected command must not spend food.");
             foreach (Direction direction in Enumerable.Repeat(Direction.East, 7).Concat(Enumerable.Repeat(Direction.North, 7)))
             {
                 var pending = presenter.Coordinator.SubmitAsync(new MoveCommand(direction));
                 while (!pending.IsCompleted) yield return null;
                 Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented), pending.Result.Diagnostic?.Error?.ToString());
             }
-            Assert.That(run.Food, Is.EqualTo(86));
+            Assert.That(run.Satiety, Is.EqualTo(86));
             Assert.That(run.CompletedLandmarks, Is.Empty);
             if (targetKind == 0)
             {

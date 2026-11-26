@@ -60,7 +60,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(leaving.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
                 Assert.That(fixture.Runtime.BoardState.GetGates().Single().IsOpen, Is.False);
                 Assert.That(fixture.Gate.DisplayedActive || fixture.Plate.DisplayedActive, Is.False);
-                Assert.That(fixture.Run.Food, Is.EqualTo(18));
+                Assert.That(fixture.Run.Satiety, Is.EqualTo(18));
                 Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(2));
                 Assert.That(fixture.GateFeedback, Is.EqualTo(new[] { true, false }));
                 fixture.Dispose();
@@ -84,7 +84,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(fixture.Gate.DisplayedActive && fixture.Plate.DisplayedActive, Is.True);
                 Assert.That(fixture.GateFeedback, Is.Empty);
                 Assert.That(fixture.Runtime.BoardState.GetGates().Single().IsOpen, Is.True);
-                Assert.That(fixture.Run.Food, Is.EqualTo(19));
+                Assert.That(fixture.Run.Satiety, Is.EqualTo(19));
                 Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
                 Assert.That(fixture.Presenter.Coordinator.CanSubmit, Is.True);
                 Assert.That(fixture.Diagnostics.Count, Is.EqualTo(1));
@@ -105,7 +105,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.Presenter.Dispatcher.ReplayAsync(events).Result, Is.Null);
             Assert.That(fixture.GateFeedback, Is.EqualTo(new[] { true, false }));
             Assert.That(fixture.Gate.DisplayedActive || fixture.Plate.DisplayedActive, Is.False);
-            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(20));
         }
 
         /// <summary>Missing and orphan legacy links fail before runtime publication without consuming resources.</summary>
@@ -118,7 +118,7 @@ namespace HallowBlaze.Tests.PlayMode
                 new LegacyBoardView(descriptor.View, descriptor.Kind, descriptor.Position, linkId: link) : descriptor).ToArray();
             Assert.Throws<BoardRuntimeCompositionException>(() => LegacyBoardRuntimeComposer.Compose(fixture.Request, fixture.Run,
                 new GridBounds(0, 0, 4, 2), layout));
-            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(20));
         }
 
         /// <summary>Blueprint composition validates explicit links before planning and derives initial open state from an actor already on its plate.</summary>
@@ -165,7 +165,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.Runtime.BoardState.GetGates().Single().IsOpen, Is.True);
             Assert.That(fixture.Runtime.BoardState.TakePlateGateChanges(), Is.Empty);
             Assert.That(blueprint.Entities.Single(entity => entity.Id.Equals(gateId)).Definition.Traits.IsWalkable, Is.False);
-            Assert.That(fixture.Run.Food, Is.EqualTo(20));
+            Assert.That(fixture.Run.Satiety, Is.EqualTo(20));
         }
 
         /// <summary>Actual linked prefab art and labels remain nonblank and within their cells on desktop and portrait renders.</summary>

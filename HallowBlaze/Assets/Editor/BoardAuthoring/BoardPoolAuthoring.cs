@@ -45,6 +45,10 @@ namespace HallowBlaze.Editor.BoardAuthoring
         }
 
         internal bool KeyboardFocus => keyboardFocus;
+        internal string SelectedSegmentId => segmentId;
+        internal IEnumerable<string> UnavailableEntries => Document == null || availableTemplates == null || Document.Diagnostics.Count > 0 ? Array.Empty<string>() :
+            Document.Snapshot()["sources"].SelectMany(source => source["entries"]).Where(entry => !availableTemplates.Contains(TemplateKey(entry.ToString(Formatting.None))))
+                .Select(entry => "Unavailable saved map: " + DescribeEntry((string)entry["templateId"], (int)entry["templateVersion"], (string)entry["variantId"]).text).Distinct();
         internal void ObservePointer(Event input)
         {
             if (input.type == EventType.MouseDown) keyboardFocus = panelRect.Contains(input.mousePosition);
