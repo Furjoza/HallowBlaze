@@ -52,6 +52,8 @@ namespace HallowBlaze.Core.Generation.Landmarks
         public override string ToString()
         {
             if (command is MoveCommand move) return "Move " + move.Direction;
+            if (command is GroundPickupCommand ground && ground.Primary is MoveCommand entry)
+                return "Move " + entry.Direction + " pickup=" + ground.Choice + " instance=" + ground.InstanceId;
             if (command is InteractCommand interact) return interact.ActionId + " " + interact.TargetId;
             if (command is UseToolCommand tool) return tool.ActionId + " " + tool.TargetId + " slot=" + tool.SlotIndex;
             if (command is PickupToolCommand pickup) return "Pickup " + pickup.Tool.EntityId + " slot=" + pickup.SlotIndex;
@@ -117,7 +119,7 @@ namespace HallowBlaze.Core.Generation.Landmarks
         /// <summary>Copies a concrete board boundary and its retained Shambler plans without planning again or touching caller state.</summary>
         /// <param name="landmark">Template identity and exit declarations for the concrete fixture.</param>
         /// <param name="board">Nonterminal concrete board, including allocated ground tools and derived gates; the player must not already occupy an exit.</param>
-        /// <param name="run">Active resources/equipment; travel remains frozen throughout search.</param>
+        /// <param name="run">Active resources/equipment/trusted inventory content; travel and existing carried placements remain frozen throughout search.</param>
         /// <param name="playerId">The board-local player identity.</param>
         /// <param name="enemies">Exact Shambler definitions, phases and already retained intents.</param>
         /// <param name="catalog">Required for enemies; resolves their actual Shambler rule, never inferring it from kind or damage defaults.</param>
@@ -139,10 +141,10 @@ namespace HallowBlaze.Core.Generation.Landmarks
             {
                 new ToolAction(ObstacleClearingRules.AxeDefinitionId, new ClearObstacleAction(clearingRules, true),
                     "Chop: clear obstacle", clearingRules.AxeNoiseStrength, clearingRules.NoiseLifetimeTurns,
-                    ObstacleClearingRules.AxeNoiseFactId)
+                    ObstacleClearingRules.AxeNoiseFactId, chargeCost: 0)
             });
             root = new Node(board, run, enemies.ToArray(), null, null);
-            if (run.Status != RunStatus.Active || run.Health <= 0 || run.Food <= 0 ||
+            if (run.Status != RunStatus.Active || run.Health <= 0 || run.Satiety <= 0 ||
                 run.RunId != landmark.Blueprint.Address.RunId || !board.TryGetEntity(playerId, out BoardEntityState player) ||
                 player.Definition.Layer != BoardLayer.Actor || !player.Definition.Kind.Equals(EntityKind.Player) ||
                 board.TryGetEntity(BoardLayer.Terrain, player.Position, out BoardEntityState groundUnderPlayer) && groundUnderPlayer.Definition.Traits.IsExit ||
@@ -182,6 +184,10 @@ namespace HallowBlaze.Core.Generation.Landmarks
                 {
                     if (entity.Definition.AutomaticFoodReward <= 0 && entity.Definition.ContentId != FirstAidInteractionAction.ContentId)
                         throw new NotSupportedException("Every non-food item requires a concrete axe binding.");
+                    if (!board.TryGetGroundItem(entity.Id, out GroundItemState consumable) ||
+                        !run.InventoryContent.Items.TryGetDefinition(consumable.DefinitionId, out ItemDefinition definition) ||
+                        !run.InventoryContent.Effects.TryGetDefinition(definition.EffectId, out _))
+                        throw new ArgumentException("Consumables require concrete bindings and trusted effect content.");
                     continue;
                 }
                 if (ground.DefinitionId != ObstacleClearingRules.AxeDefinitionId)
@@ -259,7 +265,18 @@ namespace HallowBlaze.Core.Generation.Landmarks
 
         private IEnumerable<PlayerCommand> Commands(Node node)
         {
-            foreach (Direction direction in directions) yield return new MoveCommand(direction);
+            var groundPickups = new GroundPickupQuery(interactions, tools);
+            foreach (Direction direction in directions)
+            {
+                var move = new MoveCommand(direction);
+                GroundPickupOption option = groundPickups.GetOption(node.Board, node.Run, playerId, move);
+                if (option == null) yield return move;
+                else
+                {
+                    if (option.UseAvailable) yield return option.CreateCommand(GroundPickupChoice.UseNow);
+                    yield return option.CreateCommand(GroundPickupChoice.Leave);
+                }
+            }
             yield return new WaitCommand();
             foreach (InteractionOption option in interactions.GetOptions(node.Board, node.Run, playerId))
                 if (option.IsAvailable) yield return option.CreateCommand();
@@ -294,11 +311,12 @@ namespace HallowBlaze.Core.Generation.Landmarks
             internal Node Copy(LandmarkSolverStep step = null)
             {
                 var run = new RunState(Run.RunId, Run.RunSeed,
-                    new RunStateConfiguration(Run.Health, Run.Food, Run.CompletedDayCount, Run.WorldNodeId),
+                    new RunStateConfiguration(Run.Health, Run.Satiety, Run.CompletedDayCount, Run.WorldNodeId, Run.ResourceRules, Run.InventoryContent),
                     Run.RandomAlgorithmId, Run.RandomAlgorithmVersion);
                 run.RestoreTravelState(Run.CompletedDayCount, Run.WorldNodeId, Run.TraversalSequence, Run.TravelHistory, Run.ActiveLeg);
                 run.RestoreLandmarkState(Run.ActiveLandmark, Run.CompletedLandmarks);
                 run.RestoreToolState(Run.ToolInstanceSequence, Run.ToolSlots.Select(slot => slot.Instance));
+                run.RestoreInventoryState(Run.InventoryContent, Run.InventoryRevision, Run.Inventory.Placements);
                 ShamblerState[] enemies = Enemies.Select(source =>
                 {
                     var copy = new ShamblerState(source.ActorId, source.Definition);

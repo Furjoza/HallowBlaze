@@ -46,9 +46,9 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(fixture.Labels, Does.Contain("CACHE 0/3"));
                 Assert.That(picker.Open(), Is.True);
                 Assert.That(picker.Options.Single().ActionId, Is.EqualTo("uncover"));
-                Assert.That(picker.GetOptionLabel(0), Does.Contain("3 actions left").And.Contain("Food -1").And.Contain("Charge 0"));
+                Assert.That(picker.GetOptionLabel(0), Does.Contain("3 actions left").And.Contain("Satiety -1").And.Contain("Charge 0"));
                 picker.Cancel();
-                Assert.That(fixture.Run.Food, Is.EqualTo(20));
+                Assert.That(fixture.Run.Satiety, Is.EqualTo(20));
                 Assert.That(fixture.Runtime.BoardState.GetCacheWork(fixture.CacheId), Is.Zero);
                 yield return null;
                 int steps = shovel ? 1 : 3;
@@ -59,6 +59,16 @@ namespace HallowBlaze.Tests.PlayMode
                     if (shovel) Assert.That(picker.GetOptionLabel(selected), Does.Contain("1 action").And.Contain("Charge -1").And.Contain("Noise 2 / 2"));
                     Assert.That(picker.Select(selected), Is.True);
                     CommandSubmission submission = picker.ConfirmAsync().Result;
+                    if (step == steps - 1)
+                    {
+                        Assert.That(submission.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+                        Assert.That(fixture.Presenter.PickupDisplay.IsOpen, Is.True);
+                        Assert.That(fixture.Runtime.BoardState.HasRevealedCache(fixture.CacheId), Is.False);
+                        int before = fixture.Run.Satiety;
+                        yield return null;
+                        submission = fixture.Presenter.PickupDisplay.ConfirmAsync(GroundPickupChoice.UseNow).Result;
+                        Assert.That(fixture.Run.Satiety, Is.EqualTo(before + 9));
+                    }
                     Assert.That(submission.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
                     Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
                     if (!shovel && step < 2) Assert.That(fixture.Labels, Does.Contain("CACHE " + (step + 1) + "/3"));
@@ -71,7 +81,7 @@ namespace HallowBlaze.Tests.PlayMode
                     yield return null;
                 }
                 Assert.That(fixture.CacheView.activeSelf, Is.False);
-                Assert.That(fixture.Run.Food, Is.EqualTo(shovel ? 29 : 27));
+                Assert.That(fixture.Run.Satiety, Is.EqualTo(shovel ? 29 : 27));
                 fixture.Hud.Refresh();
                 Assert.That(fixture.Hud.GetSlotText(1), Is.EqualTo(shovel ? "Shovel  2" : "Empty"));
                 Assert.That(fixture.Profile.DiscoveredFactIds, Is.Empty);

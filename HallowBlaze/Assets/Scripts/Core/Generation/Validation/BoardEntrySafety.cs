@@ -87,13 +87,13 @@ namespace HallowBlaze.Core.Generation.Validation
                     var controller = new TurnController(child, run, player.Id, new TurnResolver(), phases.Handlers);
                     evaluated++;
                     TurnResult result = controller.Resolve(command);
-                    if (!result.Accepted || run.Health <= 0 || run.Food <= 0) continue;
+                    if (!result.Accepted || run.Health <= 0 || run.Satiety <= 0) continue;
                     var next = new List<PlayerCommand>(path) { command };
                     if (result.Events.OfType<ExitReachedEvent>().Any() ||
                         child.TryGetEntity(player.Id, out BoardEntityState moved) && moved.Position.ManhattanDistance(blueprint.Start) >= 3)
                         return next.AsReadOnly();
                     if (controller.IsTerminal || next.Count == Horizon) continue;
-                    IReadOnlyList<PlayerCommand> witness = Search(child, run.Health, run.Food, roster, next);
+                    IReadOnlyList<PlayerCommand> witness = Search(child, run.Health, run.Satiety, roster, next);
                     if (witness != null) return witness;
                 }
                 return null;

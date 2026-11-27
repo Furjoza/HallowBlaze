@@ -21,7 +21,11 @@ namespace HallowBlaze.Presentation.Runtime
         /// <summary>A target picker owns a free draft independently of pause and route modals.</summary>
         Interaction = 8,
         /// <summary>The read-only Field Notes screen owns input independently of pause and other modals.</summary>
-        FieldNotes = 16
+        FieldNotes = 16,
+        /// <summary>An unfinished bag session owns input independently of pause, inspection and target picking.</summary>
+        Inventory = 32,
+        /// <summary>A pre-command ground-item decision owns input independently of pause and bag sessions.</summary>
+        Pickup = 64
     }
 
     /// <summary>Transient ownership of the one admitted submission.</summary>
@@ -52,7 +56,7 @@ namespace HallowBlaze.Presentation.Runtime
         {
             const PresentationInputBlock all = PresentationInputBlock.Setup |
                 PresentationInputBlock.Modal | PresentationInputBlock.Disabled | PresentationInputBlock.Interaction |
-                PresentationInputBlock.FieldNotes;
+                PresentationInputBlock.FieldNotes | PresentationInputBlock.Inventory | PresentationInputBlock.Pickup;
             if (reason == PresentationInputBlock.None || (reason & ~all) != 0)
                 throw new ArgumentOutOfRangeException(nameof(reason));
             Blocks = blocked ? Blocks | reason : Blocks & ~reason;

@@ -51,9 +51,9 @@ namespace HallowBlaze.Tests.PlayMode
         {
             Fixture animated = CreateFixture(true);
             Fixture immediate = CreateFixture(false);
-            Task<CommandSubmission> pending = animated.Presenter.Coordinator.SubmitAsync(new MoveCommand(Direction.East));
+            Task<CommandSubmission> pending = animated.Presenter.Coordinator.SubmitAsync(UsePickup(animated, new MoveCommand(Direction.East)));
             Assert.That(pending.IsCompleted, Is.False);
-            Assert.That(animated.Runtime.RunState.Food, Is.EqualTo(109));
+            Assert.That(animated.Runtime.RunState.Satiety, Is.EqualTo(104));
             Assert.That(animated.FoodView.activeSelf, Is.True);
             for (int attempt = 0; attempt < 20; attempt++)
                 Assert.That(animated.Presenter.Coordinator.SubmitAsync(new WaitCommand()).Result.Status,
@@ -61,7 +61,7 @@ namespace HallowBlaze.Tests.PlayMode
             while (!pending.IsCompleted)
                 yield return null;
 
-            CommandSubmission snap = immediate.Presenter.Coordinator.SubmitAsync(new MoveCommand(Direction.East)).Result;
+            CommandSubmission snap = immediate.Presenter.Coordinator.SubmitAsync(UsePickup(immediate, new MoveCommand(Direction.East))).Result;
             Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             Assert.That(snap.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             Assert.That(animated.Runtime.Views[animated.Runtime.PlayerId].transform.position,
@@ -69,9 +69,9 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(animated.Runtime.Views[animated.Runtime.PlayerId].transform.position, Is.EqualTo(new Vector3(1, 0, 3)));
             Assert.That(animated.FoodView.activeSelf, Is.False);
             Assert.That(immediate.FoodView.activeSelf, Is.False);
-            Assert.That(animated.Runtime.RunState.Food, Is.EqualTo(immediate.Runtime.RunState.Food));
+            Assert.That(animated.Runtime.RunState.Satiety, Is.EqualTo(immediate.Runtime.RunState.Satiety));
             CollectionAssert.AreEqual(animated.Sink.Trace, immediate.Sink.Trace);
-            CollectionAssert.AreEqual(new[] { "EntityMoved", "Hud:100:109", "FoodRestored", "Hud:100:109", "Noise" }, animated.Sink.Trace);
+            CollectionAssert.AreEqual(new[] { "EntityMoved", "Hud:100:104", "GroundPickupResolved", "Hud:100:104", "Noise" }, animated.Sink.Trace);
             Assert.That(animated.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
             Assert.That(immediate.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
             Assert.That(animated.Presenter.Coordinator.CanSubmit, Is.True);
@@ -85,7 +85,7 @@ namespace HallowBlaze.Tests.PlayMode
             using (var cancellation = new CancellationTokenSource())
             {
                 Task<CommandSubmission> pending = fixture.Presenter.Coordinator.SubmitAsync(
-                    new MoveCommand(Direction.East), cancellation.Token);
+                    UsePickup(fixture, new MoveCommand(Direction.East)), cancellation.Token);
                 cancellation.Cancel();
                 while (!pending.IsCompleted)
                     yield return null;
@@ -100,7 +100,7 @@ namespace HallowBlaze.Tests.PlayMode
         public IEnumerator DisposalDuringMove_CancelsReplayAndReleasesSubmissionOwnership()
         {
             Fixture fixture = CreateFixture(true);
-            Task<CommandSubmission> pending = fixture.Presenter.Coordinator.SubmitAsync(new MoveCommand(Direction.East));
+            Task<CommandSubmission> pending = fixture.Presenter.Coordinator.SubmitAsync(UsePickup(fixture, new MoveCommand(Direction.East)));
             fixture.Presenter.Dispose();
             while (!pending.IsCompleted)
                 yield return null;
@@ -136,7 +136,7 @@ namespace HallowBlaze.Tests.PlayMode
                     Is.EqualTo(immediate.Runtime.Views[immediate.Runtime.PlayerId].transform.position));
                 Assert.That(animated.FoodView.activeSelf, Is.False);
                 Assert.That(immediate.FoodView.activeSelf, Is.False);
-                Assert.That(animated.Runtime.RunState.Food, Is.EqualTo(immediate.Runtime.RunState.Food));
+                Assert.That(animated.Runtime.RunState.Satiety, Is.EqualTo(immediate.Runtime.RunState.Satiety));
                 Assert.That(animated.Presenter.Coordinator.Gate.State, Is.EqualTo(immediate.Presenter.Coordinator.Gate.State));
             }
         }
@@ -147,7 +147,7 @@ namespace HallowBlaze.Tests.PlayMode
             Fixture fixture = CreateFixture(false);
             Assert.That(fixture.Runtime.BoardState.TryMove(fixture.Runtime.PlayerId, new GridPosition(1, 0)), Is.True);
             Assert.That(fixture.Runtime.BoardState.TryRemove(fixture.FoodId), Is.True);
-            fixture.Runtime.RunState.ConsumeFood(1);
+            fixture.Runtime.RunState.ConsumeSatiety(1);
             var events = new GameEvent[] { new UnknownEvent(), new PlayerDiedEvent(fixture.Runtime.PlayerId) };
             PresentationDiagnostic diagnostic = fixture.Presenter.Dispatcher.ReplayAsync(events).Result;
             Assert.That(diagnostic.Code, Is.EqualTo(PresentationDiagnosticCode.UnknownEvent));
@@ -179,7 +179,7 @@ namespace HallowBlaze.Tests.PlayMode
             CommandSubmission interaction = fixture.Presenter.Coordinator.SubmitAsync(new InteractCommand(fixture.AidId)).Result;
             Assert.That(wait.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             Assert.That(interaction.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
-            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(98));
+            Assert.That(fixture.Runtime.RunState.Satiety, Is.EqualTo(98));
             Assert.That(fixture.Runtime.Views[fixture.Runtime.PlayerId].transform.position, Is.EqualTo(origin));
             Assert.That(fixture.Runtime.Views[fixture.AidId].activeSelf, Is.True);
             CollectionAssert.AreEqual(new[] { "EntityWaited", "Hud:100:99", "InteractionPerformed", "Hud:100:98", "Noise" }, fixture.Sink.Trace);
@@ -202,7 +202,7 @@ namespace HallowBlaze.Tests.PlayMode
                 new ActionCostAppliedEvent(fixture.Runtime.PlayerId, 999), terminal };
             Assert.That(fixture.Presenter.Dispatcher.ReplayAsync(events).Result, Is.Null);
             CollectionAssert.AreEqual(new[] { "EntityWaited", "Hud:100:100", terminal.EventType }, fixture.Sink.Trace);
-            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(fixture.Runtime.RunState.Satiety, Is.EqualTo(100));
             Assert.That(fixture.Sink.AcceptedOutcomes, Is.EqualTo(1));
             Assert.That(fixture.Presenter.Dispatcher.ReplayAsync(new[] { terminal }).Result, Is.Null);
             Assert.That(fixture.Sink.AcceptedOutcomes, Is.EqualTo(1));
@@ -246,7 +246,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.Presenter.Coordinator.SubmitAsync(new MoveCommand(Direction.West)).Result.Status,
                 Is.EqualTo(CommandSubmissionStatus.Rejected));
             Assert.That(fixture.Sink.Rejection, Is.EqualTo(CommandRejectionCode.OutOfBounds));
-            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(fixture.Runtime.RunState.Satiety, Is.EqualTo(100));
             Assert.That(fixture.FoodView.activeSelf, Is.True);
             Assert.That(fixture.Sink.Trace, Is.Empty);
             Assert.That(fixture.Presenter.Coordinator.CanSubmit, Is.True);
@@ -413,7 +413,7 @@ namespace HallowBlaze.Tests.PlayMode
                     Animator animator = runtime.Views[runtime.Enemies.Single().ActorId].GetComponent<Animator>();
                     animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
                     int previousHealth = run.Health;
-                    int previousFood = run.Food;
+                    int previousFood = run.Satiety;
                     PlayerCommand command = scenario == "miss" ? (PlayerCommand)new MoveCommand(Direction.North) :
                         scenario == "conditional" ? new MoveCommand(Direction.East) : new WaitCommand();
                     Task<CommandSubmission> pending = presenter.Coordinator.SubmitAsync(command);
@@ -427,7 +427,7 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(sink.Diagnostic, Is.Null);
                     bool hit = scenario == "hit" || scenario == "conditional";
                     Assert.That(run.Health, Is.EqualTo(previousHealth - (hit ? 10 : 0)), scenario);
-                    Assert.That(run.Food, Is.EqualTo(previousFood - 1), scenario);
+                    Assert.That(run.Satiety, Is.EqualTo(previousFood - 1), scenario);
                     Assert.That(sawSwing, Is.EqualTo(animations && scenario != "rest"), scenario);
                     Assert.That(pending.Result.Result.Events.OfType<EnemyAttackResolvedEvent>().Count(),
                         Is.EqualTo(scenario == "rest" ? 0 : 1), scenario);
@@ -469,7 +469,7 @@ namespace HallowBlaze.Tests.PlayMode
                         hit ? (EntityId?)fixture.Runtime.PlayerId : null, hit ? -damage : 0);
                     var entitiesBefore = fixture.Runtime.BoardState.GetEntities();
                     int health = fixture.Runtime.RunState.Health;
-                    int food = fixture.Runtime.RunState.Food;
+                    int food = fixture.Runtime.RunState.Satiety;
                     var attack = new EnemyAttackPresenter(fixture.Runtime, fixture.Sink, fixture.Sink, 0.04f) { AnimationsEnabled = animations };
                     attackPresenters.Add(attack);
                     var dispatcher = new OrderedEventDispatcher(value => fixture.Sink.Diagnostic = value, fixture.Presenter.SynchronizeFromState);
@@ -524,7 +524,7 @@ namespace HallowBlaze.Tests.PlayMode
                     }
                     CollectionAssert.AreEqual(entitiesBefore, fixture.Runtime.BoardState.GetEntities());
                     Assert.That(fixture.Runtime.RunState.Health, Is.EqualTo(health));
-                    Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(food));
+                    Assert.That(fixture.Runtime.RunState.Satiety, Is.EqualTo(food));
                     Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
                     Assert.That(fixture.Runtime.IsDisposed, Is.False);
                     TestContext.WriteLine("Animations=" + animations + "; outcome=" + scenario + "; HP=" + health);
@@ -547,7 +547,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(fixture.Runtime.BoardState.TryAdd(new BoardEntityState(fixture.AidId, definition, new GridPosition(1, 1))), Is.True);
                 fixture.Runtime.Views[fixture.AidId].transform.position = new Vector3(1, 1, 3);
                 Assert.That(fixture.Runtime.BoardState.TryMove(fixture.Runtime.PlayerId, new GridPosition(1, 0)), Is.True);
-                fixture.Runtime.RunState.ConsumeFood(1);
+                fixture.Runtime.RunState.ConsumeSatiety(1);
                 fixture.Runtime.RunState.TakeDamage(80);
                 fixture.Runtime.RunState.TakeDamage(20);
                 var attack = new EnemyAttackResolvedEvent(fixture.AidId, new GridPosition(1, 0), true, fixture.Runtime.PlayerId, -20);
@@ -574,7 +574,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(fixture.Sink.LastAttack, Is.SameAs(attack));
                 Assert.That(fixture.Sink.AcceptedOutcomes, Is.EqualTo(1));
                 Assert.That(fixture.Runtime.RunState.Health, Is.Zero);
-                Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(99));
+                Assert.That(fixture.Runtime.RunState.Satiety, Is.EqualTo(99));
                 Assert.That(fixture.Runtime.Views[fixture.AidId].transform.position, Is.EqualTo(new Vector3(1, 1, 3)));
                 Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
                 CollectionAssert.AreEqual(entitiesBefore, fixture.Runtime.BoardState.GetEntities());
@@ -612,7 +612,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(picker.GetComponentsInChildren<LineRenderer>(), Is.Empty);
             fixture.Runtime.BoardState.TryGetEntity(fixture.AidId, out BoardEntityState retained);
             Assert.That(retained, Is.SameAs(original));
-            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(fixture.Runtime.RunState.Satiety, Is.EqualTo(100));
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
             yield return null;
             Assert.That(fixture.Presenter.Coordinator.Gate.Blocks, Is.EqualTo(PresentationInputBlock.Modal));
@@ -620,9 +620,8 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.Presenter.Coordinator.CanSubmit, Is.True);
         }
 
-        [TestCase(true)]
-        [TestCase(false)]
-        public void InteractionConfirm_CollectsSelectedInstanceOnceWithAnimationParity(bool animations)
+        [UnityTest]
+        public IEnumerator InteractionConfirm_CollectsSelectedInstanceOnceWithAnimationParity([Values(true, false)] bool animations)
         {
             Fixture fixture = CreateFixture(animations);
             MakeInteractiveFood(fixture);
@@ -630,19 +629,27 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(picker.Open(), Is.True);
             Assert.That(picker.Options.Count, Is.EqualTo(2));
             int collectIndex = picker.Options.ToList().FindIndex(option => option.ActionId == "collect");
-            Assert.That(picker.Select(collectIndex), Is.True);
+            Assert.That(picker.Options[collectIndex].IsAvailable, Is.False);
+            Assert.That(picker.GetUnavailableReason(collectIndex), Is.EqualTo("Entry required"));
+            Assert.That(picker.Select(collectIndex), Is.False);
             Assert.That(fixture.FoodView.activeSelf, Is.True);
-            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
-            Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            Assert.That(fixture.Runtime.RunState.Satiety, Is.EqualTo(100));
             Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
-            Assert.That(fixture.Presenter.Coordinator.SubmitAsync(new WaitCommand()).Result.Status,
-                Is.EqualTo(CommandSubmissionStatus.Blocked));
+            Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
+            picker.Cancel();
+            yield return null;
+            Assert.That(fixture.Presenter.SubmitAsync(new MoveCommand(Direction.East)).Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+            Assert.That(fixture.Presenter.PickupDisplay.IsOpen, Is.True);
+            Assert.That(fixture.Presenter.Coordinator.SubmitAsync(new WaitCommand()).Result.Status, Is.EqualTo(CommandSubmissionStatus.Blocked));
+            Task<CommandSubmission> use = fixture.Presenter.PickupDisplay.ConfirmAsync(GroundPickupChoice.UseNow);
+            while (!use.IsCompleted) yield return null;
+            Assert.That(use.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
-            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(109));
+            Assert.That(fixture.Runtime.RunState.Satiety, Is.EqualTo(109));
             Assert.That(fixture.FoodView.activeSelf, Is.False);
             Assert.That(fixture.Runtime.BoardState.TryGetEntity(fixture.AidId, out _), Is.True);
             Assert.That(picker.GetComponentsInChildren<LineRenderer>(), Is.Empty);
-            CollectionAssert.AreEqual(new[] { "InteractionPerformed", "Hud:100:109", "FoodRestored", "Hud:100:109", "Noise" }, fixture.Sink.Trace);
+            CollectionAssert.AreEqual(new[] { "EntityMoved", "Hud:100:109", "GroundPickupResolved", "Hud:100:109", "Noise" }, fixture.Sink.Trace);
         }
 
         [Test]
@@ -655,7 +662,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.Runtime.BoardState.TryMove(fixture.AidId, new GridPosition(1, 1)), Is.True);
             CommandSubmission result = picker.ConfirmAsync().Result;
             Assert.That(result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
-            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(fixture.Runtime.RunState.Satiety, Is.EqualTo(100));
             Assert.That(fixture.Runtime.BoardState.GetActiveNoises(), Is.Empty);
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
             Assert.That(fixture.Runtime.BoardState.TryGetEntity(fixture.AidId, out _), Is.True);
@@ -695,7 +702,7 @@ namespace HallowBlaze.Tests.PlayMode
             fixture.Presenter.Dispose();
             Assert.That(picker.Open(), Is.False);
             Assert.That(fixture.Runtime.IsDisposed, Is.False);
-            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(fixture.Runtime.RunState.Satiety, Is.EqualTo(100));
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
         }
 
@@ -762,7 +769,7 @@ namespace HallowBlaze.Tests.PlayMode
                 UnityEngine.Object.DestroyImmediate(target);
             }
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
-            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(fixture.Runtime.RunState.Satiety, Is.EqualTo(100));
         }
 
         [UnityTest]
@@ -777,12 +784,12 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(picker.Open(), Is.True);
             int toolIndex = picker.Options.Count;
             Assert.That(picker.ToolOptions.Count, Is.EqualTo(1));
-            Assert.That(picker.GetOptionLabel(toolIndex), Does.Contain("Tool 2: Move target").And.Contain("Food -2")
+            Assert.That(picker.GetOptionLabel(toolIndex), Does.Contain("Tool 2: Move target").And.Contain("Satiety -2")
                 .And.Contain("Charge -1 (3 left)").And.Contain("Noise 3 / 2 turns").And.Contain("1 turn"));
             Assert.That(picker.Select(toolIndex), Is.True);
             picker.Cancel();
             Assert.That(fixture.Runtime.RunState.ToolSlots[1].Instance.Charges, Is.EqualTo(3));
-            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(fixture.Runtime.RunState.Satiety, Is.EqualTo(100));
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.Zero);
             yield return null;
             Assert.That(picker.Open(), Is.True);
@@ -799,7 +806,7 @@ namespace HallowBlaze.Tests.PlayMode
             while (!pending.IsCompleted) yield return null;
             Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             Assert.That(fixture.Sink.Diagnostic, Is.Null);
-            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(98));
+            Assert.That(fixture.Runtime.RunState.Satiety, Is.EqualTo(98));
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
             Assert.That(picker.ToolOptions, Is.Empty);
             Assert.That(fixture.Runtime.Views[fixture.AidId].transform.position, Is.EqualTo(new Vector3(1, 1, 3)));
@@ -819,7 +826,7 @@ namespace HallowBlaze.Tests.PlayMode
             fixture.Runtime.RunState.ReplaceTool(0, fixture.Runtime.RunState.CreateToolInstance(new ToolDefinition("test.tool", "Test", 3)));
             Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
             Assert.That(fixture.Sink.Rejection, Is.EqualTo(CommandRejectionCode.StaleTool));
-            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(fixture.Runtime.RunState.Satiety, Is.EqualTo(100));
             Assert.That(fixture.Runtime.BoardState.GetActiveNoises(), Is.Empty);
             Assert.That(fixture.Runtime.Views[fixture.AidId].transform.position, Is.EqualTo(new Vector3(0, 1, 3)));
         }
@@ -840,7 +847,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             Assert.That(animated.Runtime.RunState.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
             Assert.That(immediate.Runtime.RunState.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
-            Assert.That(animated.Runtime.RunState.Food, Is.EqualTo(immediate.Runtime.RunState.Food));
+            Assert.That(animated.Runtime.RunState.Satiety, Is.EqualTo(immediate.Runtime.RunState.Satiety));
             Assert.That(animated.Runtime.Views[animated.AidId].transform.position,
                 Is.EqualTo(immediate.Runtime.Views[immediate.AidId].transform.position));
             Assert.That(animated.Sink.Trace, Is.EqualTo(immediate.Sink.Trace));
@@ -857,7 +864,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(replay.Result.Diagnostic.Code, Is.EqualTo(PresentationDiagnosticCode.Canceled));
                 Assert.That(replay.Result.Result.Accepted, Is.True);
                 Assert.That(canceled.Runtime.RunState.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
-                Assert.That(canceled.Runtime.RunState.Food, Is.EqualTo(99));
+                Assert.That(canceled.Runtime.RunState.Satiety, Is.EqualTo(99));
                 Assert.That(canceled.Runtime.Views[canceled.AidId].transform.position, Is.EqualTo(new Vector3(1, 1, 3)));
                 Assert.That(canceled.Presenter.Coordinator.SubmitAsync(canceledCommand).Result.Status,
                     Is.EqualTo(CommandSubmissionStatus.Rejected));
@@ -877,7 +884,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(disabledPicker.ToolOptions.Single().RejectionCode, Is.EqualTo(CommandRejectionCode.ToolDepleted));
             Assert.That(disabledPicker.Select(disabledPicker.Options.Count), Is.False);
             Assert.That(disabledPicker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
-            Assert.That(depleted.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(depleted.Runtime.RunState.Satiety, Is.EqualTo(100));
             Assert.That(depleted.Presenter.Coordinator.ResolutionCount, Is.Zero);
             disabledPicker.Cancel();
 
@@ -889,20 +896,20 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
             Assert.That(displaced.Sink.Rejection, Is.EqualTo(CommandRejectionCode.InvalidTarget));
             Assert.That(displaced.Runtime.RunState.ToolSlots[0].Instance.Charges, Is.EqualTo(3));
-            Assert.That(displaced.Runtime.RunState.Food, Is.EqualTo(100));
+            Assert.That(displaced.Runtime.RunState.Satiety, Is.EqualTo(100));
             Assert.That(displaced.Runtime.BoardState.GetActiveNoises(), Is.Empty);
         }
 
         [Test]
         public void ToolTerminalConfirmationDisposesPickerWithoutReacquiringItsBlock()
         {
-            Fixture fixture = CreateToolFixture(false, initialFood: 1);
+            Fixture fixture = CreateToolFixture(false, initialSatiety: 1);
             var picker = fixture.Presenter.InteractionDisplay;
             Assert.That(picker.Open(), Is.True);
             Assert.That(picker.Select(picker.Options.Count), Is.True);
             Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             Assert.That(fixture.Runtime.RunState.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
-            Assert.That(fixture.Runtime.RunState.Food, Is.Zero);
+            Assert.That(fixture.Runtime.RunState.Satiety, Is.Zero);
             Assert.That(fixture.Runtime.Controller.IsTerminal, Is.True);
             Assert.That(picker.IsDisposed, Is.True);
             Assert.That(picker.ToolOptions, Is.Empty);
@@ -912,10 +919,10 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
         }
 
-        private Fixture CreateToolFixture(bool animations, int initialFood = 100)
+        private Fixture CreateToolFixture(bool animations, int initialSatiety = 100)
         {
             var tools = new ToolUseQuery(new[] { new ToolAction("test.tool", new MoveToolTarget(), "Move target", 3, 2) });
-            Fixture fixture = CreateFixture(animations, initialFood, tools);
+            Fixture fixture = CreateFixture(animations, initialSatiety, tools);
             fixture.Runtime.RunState.EquipTool(0,
                 fixture.Runtime.RunState.CreateToolInstance(new ToolDefinition("test.tool", "Test", 3)));
             return fixture;
@@ -928,14 +935,23 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(fixture.Runtime.BoardState.TryAdd(new BoardEntityState(item.Id,
                 new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, "test.collectible",
                     new BoardEntityTraits(false, false, true), 10), item.Position)), Is.True);
+            var content = new InventoryContent(new ItemCatalog(new[]
+                { new ItemDefinition("test.collectible", 1, 1, "food", "consumable", true, "test.collectible.eat") }),
+                new ConsumableEffectCatalog(new[] { new ConsumableEffectDefinition("test.collectible.eat", ConsumableResource.Satiety, 10) }));
+            fixture.Runtime.RunState.RestoreInventoryState(content, 0, Array.Empty<InventoryPlacement>());
+            Assert.That(fixture.Runtime.BoardState.TryBindGroundItem(new GroundItemState(item.Id,
+                GroundItemIdentity.Create(fixture.Runtime.RunState, item.Id), "test.collectible")), Is.True);
         }
+
+        private static GroundPickupCommand UsePickup(Fixture fixture, PlayerCommand primary) => fixture.Runtime.GroundPickups.GetOption(
+            fixture.Runtime.BoardState, fixture.Runtime.RunState, fixture.Runtime.PlayerId, primary).CreateCommand(GroundPickupChoice.UseNow);
 
         private static void AssertRecovered(Fixture fixture)
         {
             Assert.That(fixture.Runtime.Views[fixture.Runtime.PlayerId].transform.position, Is.EqualTo(new Vector3(1, 0, 3)));
             Assert.That(fixture.FoodView.activeSelf, Is.False);
-            Assert.That(fixture.Runtime.RunState.Food, Is.EqualTo(109));
-            CollectionAssert.AreEqual(new[] { "Hud:100:109" }, fixture.Sink.Trace);
+            Assert.That(fixture.Runtime.RunState.Satiety, Is.EqualTo(104));
+            CollectionAssert.AreEqual(new[] { "Hud:100:104" }, fixture.Sink.Trace);
             Assert.That(fixture.Presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
             Assert.That(fixture.Presenter.Coordinator.CanSubmit, Is.True);
         }
@@ -944,8 +960,8 @@ namespace HallowBlaze.Tests.PlayMode
         {
             Assert.That(fixture.Runtime.BoardState.TryMove(fixture.Runtime.PlayerId, new GridPosition(1, 0)), Is.True);
             Assert.That(fixture.Runtime.BoardState.TryRemove(fixture.FoodId), Is.True);
-            fixture.Runtime.RunState.RestoreFood(10);
-            fixture.Runtime.RunState.ConsumeFood(1);
+            fixture.Runtime.RunState.RestoreSatiety(10);
+            fixture.Runtime.RunState.ConsumeSatiety(1);
             GameEvent terminal = kind == "exit" ? (GameEvent)new ExitReachedEvent(fixture.Runtime.PlayerId, fixture.ExitId) :
                 kind == "starvation" ? new PlayerStarvedEvent(fixture.Runtime.PlayerId) : new PlayerDiedEvent(fixture.Runtime.PlayerId);
             return new GameEvent[]
@@ -957,11 +973,11 @@ namespace HallowBlaze.Tests.PlayMode
             };
         }
 
-        private Fixture CreateFixture(bool animations, int initialFood = 100, ToolUseQuery tools = null,
+        private Fixture CreateFixture(bool animations, int initialSatiety = 100, ToolUseQuery tools = null,
             string attackPrefab = null)
         {
             var run = new RunState("presentation-" + runtimes.Count, 12345,
-                new RunStateConfiguration(100, initialFood, 0, "forest.start"));
+                new RunStateConfiguration(100, initialSatiety, 0, "forest.start"));
             var request = new BoardRequest(run.RunId, run.RunSeed, run.WorldNodeId, run.CurrentDay,
                 run.GetBoardSeed(), "forest", "temperate", 1);
             var layout = new List<LegacyBoardView>();

@@ -20,7 +20,7 @@ using UnityEngine.UI;
 public class GameManager : MonoBehaviour, IBoardOutcomeSink
 {
     private const int InitialHealth = 100;
-    private const int InitialFood = 100;
+    private const int InitialSatiety = 100;
     private const string OpeningWarmUpOriginNodeId = "shelter.warm-up";
     private const string OpeningWarmUpEdgeId = "road.shelter-warm-up";
     private const string MenuSceneName = "Menu";
@@ -210,7 +210,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
                 && activeBoardRuntime != null
                 && !activeBoardRuntime.IsDisposed
                 && activeBoardPresenter != null
-                && (activeBoardPresenter.Coordinator.Gate.Blocks & (PresentationInputBlock.Interaction | PresentationInputBlock.FieldNotes)) == PresentationInputBlock.None
+                && (activeBoardPresenter.Coordinator.Gate.Blocks & (PresentationInputBlock.Interaction | PresentationInputBlock.FieldNotes |
+                    PresentationInputBlock.Pickup)) == PresentationInputBlock.None
                 && !activeBoardRuntime.Controller.IsTerminal;
         }
     }
@@ -235,7 +236,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         submission = null;
         if (!IsGameplayInputEnabled)
             return false;
-        submission = activeBoardPresenter.Coordinator.SubmitAsync(command);
+        submission = activeBoardPresenter.SubmitAsync(command);
         return true;
     }
 
@@ -249,7 +250,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         submission = null;
         if (!IsGameplayInputEnabled)
             return false;
-        submission = activeBoardPresenter.Coordinator.SubmitFromAsync(source);
+        submission = activeBoardPresenter.SubmitFromAsync(source);
         return true;
     }
 
@@ -1290,7 +1291,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         if (activePlayerView == null || activeBoardRuntime == null || activeBoardRuntime.IsDisposed ||
             !ReferenceEquals(run, session.ActiveRun) || !ReferenceEquals(run, activeBoardRuntime.RunState))
             return;
-        activePlayerView.Refresh(run.Health, run.Food);
+        activePlayerView.Refresh(run.Health, run.Satiety);
         activePlayerView.AddResourceGains(amount, 0);
     }
 
@@ -1322,9 +1323,10 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         nextRunSequence = checked(nextRunSequence + 1);
         RunStateConfiguration configuration = new RunStateConfiguration(
             InitialHealth,
-            InitialFood,
+            InitialSatiety,
             0,
-            OpeningWarmUpOriginNodeId);
+            OpeningWarmUpOriginNodeId,
+            inventoryContent: GroundPickupContent.Load());
         string runId = session.Profile.ProfileId + "-run-" +
             System.Guid.NewGuid().ToString("N");
 
@@ -1539,7 +1541,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     #if UNITY_EDITOR
             authoringContext != null ? authoringContext.SaveRoot :
     #endif
-            GetPersistenceRoot());
+            GetPersistenceRoot(), inventoryContent: GroundPickupContent.Load());
         SaveStoreResult<ProfileState> profileResult = saveStore.LoadProfile();
         ProfileState profile = profileResult.IsSuccess
             ? profileResult.Data
@@ -1575,9 +1577,10 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         nextRunSequence = checked(nextRunSequence + 1);
         RunStateConfiguration configuration = new RunStateConfiguration(
             InitialHealth,
-            InitialFood,
+            InitialSatiety,
             0,
-            OpeningWarmUpOriginNodeId);
+            OpeningWarmUpOriginNodeId,
+            inventoryContent: GroundPickupContent.Load());
         RunState freshRun = new RunState(
             freshProfile.ProfileId + "-run-" + System.Guid.NewGuid().ToString("N"),
             12345 + nextRunSequence,

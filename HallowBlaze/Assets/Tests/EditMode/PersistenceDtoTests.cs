@@ -16,6 +16,293 @@ namespace HallowBlaze.Tests.EditMode
 {
     public sealed class PersistenceDtoTests
     {
+        [TestCase("checkpoint")]
+        [TestCase("pending")]
+        [TestCase("consumed")]
+        [TestCase("intermediate")]
+        [TestCase("complete")]
+        [TestCase("dead")]
+        [TestCase("won")]
+        public void InventoryV8RoundTripsEveryContainerRevisionAndRetainedBoundary(string boundary)
+        {
+            RunState run = TravelBoundary(boundary);
+            InventoryContent content = InventoryTestContent();
+            run.RestoreInventoryState(content, 103, new[]
+            {
+                new InventoryPlacement(new ItemInstanceState("grid-1", "test.meal"), InventoryContainer.MainGrid, 1, 1),
+                new InventoryPlacement(new ItemInstanceState("left-1", "test.drink"), InventoryContainer.LeftPocket),
+                new InventoryPlacement(new ItemInstanceState("right-1", "test.drink"), InventoryContainer.RightPocket)
+            });
+            string json = PersistenceJsonSerializer.SerializeRun(run);
+            Assert.That(JObject.Parse(json)["schemaVersion"].Value<int>(), Is.EqualTo(8));
+            RunState restored = PersistenceJsonSerializer.DeserializeRun(json, content);
+            AssertTravelEquals(run, restored);
+            Assert.That(restored.InventoryRevision, Is.EqualTo(103));
+            Assert.That(restored.Inventory.GetMainGridItem(1, 1).InstanceId, Is.EqualTo("grid-1"));
+            Assert.That(restored.Inventory.GetMainGridItem(2, 1).DefinitionId, Is.EqualTo("test.meal"));
+            Assert.That(restored.Inventory.GetPocketItem(InventoryContainer.LeftPocket).InstanceId, Is.EqualTo("left-1"));
+            Assert.That(restored.Inventory.GetPocketItem(InventoryContainer.RightPocket).InstanceId, Is.EqualTo("right-1"));
+            Assert.That(restored.Inventory.Placements, Has.Count.EqualTo(3));
+            Assert.That(restored.Inventory, Is.Not.SameAs(run.Inventory));
+            Assert.That(restored.Inventory.Placements[0].Item, Is.Not.SameAs(run.Inventory.Placements[0].Item));
+            Assert.That(PersistenceJsonSerializer.SerializeRun(restored), Is.EqualTo(json));
+            Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeRun(json));
+        }
+
+        internal static InventoryContent InventoryTestContent(bool includeEffects = true)
+        {
+            return new InventoryContent(new ItemCatalog(new[]
+            {
+                new ItemDefinition("test.meal", 2, 1, "satiety", "consumable", false, "test.restore"),
+                new ItemDefinition("test.drink", 1, 2, "satiety", "consumable", true, "test.restore"),
+                new ItemDefinition("test.berry", 1, 1, "satiety", "consumable", true, "test.restore")
+            }), new ConsumableEffectCatalog(includeEffects ? new[]
+            { new ConsumableEffectDefinition("test.restore", ConsumableResource.Satiety, 5) }
+                : Array.Empty<ConsumableEffectDefinition>()));
+        }
+
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        [TestCase(4)]
+        [TestCase(5)]
+        [TestCase(6)]
+        [TestCase(7)]
+        public void LegacyInventoryMigrationStartsEmptyAndDoesNotChangeProfileOrPreviousBoundary(int version)
+        {
+            RunState original = TravelBoundary("consumed");
+            object dto;
+            switch (version)
+            {
+                case 1: dto = RunStateMapper.ToDto(original); break;
+                case 2: dto = RunStateV2Mapper.ToDto(original); break;
+                case 3: dto = RunStateV3Mapper.ToDto(original); break;
+                case 4: dto = RunStateV4Mapper.ToDto(original); break;
+                case 5: dto = RunStateV5Mapper.ToDto(original); break;
+                case 6: dto = RunStateV6Mapper.ToDto(original); break;
+                default: dto = RunStateV7Mapper.ToDto(original); break;
+            }
+            var profile = new ProfileState("inventory-profile", "world.default", 1);
+            profile.DiscoverFact("fact.kept");
+            profile.AdvanceNodeDiscovery("a", NodeDiscoveryState.Visited);
+            string profileBefore = PersistenceJsonSerializer.SerializeProfile(profile);
+            InventoryContent content = InventoryTestContent();
+            string source = JsonConvert.SerializeObject(dto);
+            RunState before = PersistenceJsonSerializer.DeserializeRun(source);
+            RunState migrated = PersistenceJsonSerializer.DeserializeRun(source, content);
+            Assert.That(migrated.InventoryContent, Is.SameAs(content));
+            Assert.That(migrated.InventoryRevision, Is.Zero);
+            Assert.That(migrated.Inventory.Placements, Is.Empty);
+            Assert.That(migrated.Inventory.GetPocketItem(InventoryContainer.LeftPocket), Is.Null);
+            Assert.That(migrated.Inventory.GetPocketItem(InventoryContainer.RightPocket), Is.Null);
+            Assert.That(PersistenceJsonSerializer.SerializeRun(migrated), Is.EqualTo(PersistenceJsonSerializer.SerializeRun(before)));
+            Assert.That(PersistenceJsonSerializer.SerializeProfile(profile), Is.EqualTo(profileBefore));
+            Assert.That(new GameSession(profile).StartNewRun("fresh", 3,
+                new RunStateConfiguration(100, 100, 0, "a", inventoryContent: content)).InventoryRevision, Is.Zero);
+        }
+
+        [TestCase("missing-inventory")]
+        [TestCase("null-inventory")]
+        [TestCase("negative-revision")]
+        [TestCase("revision-type")]
+        [TestCase("revision-overflow")]
+        [TestCase("null-items")]
+        [TestCase("null-item")]
+        [TestCase("duplicate-instance")]
+        [TestCase("unknown-definition")]
+        [TestCase("unowned-item")]
+        [TestCase("missing-grid")]
+        [TestCase("null-grid-anchor")]
+        [TestCase("missing-anchor-field")]
+        [TestCase("bad-anchor-type")]
+        [TestCase("bounds")]
+        [TestCase("overlap")]
+        [TestCase("duplicate-placement")]
+        [TestCase("unknown-instance")]
+        [TestCase("incompatible-pocket")]
+        [TestCase("duplicate-pocket-owner")]
+        [TestCase("missing-pocket")]
+        [TestCase("pocket-type")]
+        [TestCase("whitespace-id")]
+        [TestCase("unknown-effect")]
+        [TestCase("unknown-inventory-field")]
+        [TestCase("future-schema")]
+        public void InventoryV8RejectsMalformedOrUnresolvedOwnershipWithoutMutatingTheSource(string corruption)
+        {
+            RunState run = InventoryFullRun();
+            string source = PersistenceJsonSerializer.SerializeRun(run);
+            JObject document = JObject.Parse(source);
+            JObject inventory = (JObject)document["inventory"];
+            var items = (JArray)inventory["items"];
+            var grid = (JArray)inventory["mainGrid"];
+            InventoryContent content = run.InventoryContent;
+            switch (corruption)
+            {
+                case "missing-inventory": document.Remove("inventory"); break;
+                case "null-inventory": document["inventory"] = null; break;
+                case "negative-revision": inventory["revision"] = -1; break;
+                case "revision-type": inventory["revision"] = "1"; break;
+                case "revision-overflow": inventory["revision"] = (long)int.MaxValue + 1; break;
+                case "null-items": inventory["items"] = null; break;
+                case "null-item": items[0] = null; break;
+                case "duplicate-instance": items.Add(items[0].DeepClone()); break;
+                case "unknown-definition": items[0]["definitionId"] = "test.missing"; break;
+                case "unowned-item": items.Add(JObject.FromObject(new ItemInstanceDto { InstanceId = "orphan", DefinitionId = "test.berry" })); break;
+                case "missing-grid": inventory.Remove("mainGrid"); break;
+                case "null-grid-anchor": grid[0] = null; break;
+                case "missing-anchor-field": ((JObject)grid[0]).Remove("column"); break;
+                case "bad-anchor-type": grid[0]["column"] = 0.5; break;
+                case "bounds": grid[0]["column"] = int.MaxValue; break;
+                case "overlap": grid[1]["column"] = grid[0]["column"].DeepClone(); grid[1]["row"] = grid[0]["row"].DeepClone(); break;
+                case "duplicate-placement": grid[1]["instanceId"] = grid[0]["instanceId"].DeepClone(); break;
+                case "unknown-instance": grid[0]["instanceId"] = "missing"; break;
+                case "incompatible-pocket": items.Single(value => value["instanceId"].Value<string>() == "left")["definitionId"] = "test.meal"; break;
+                case "duplicate-pocket-owner": inventory["rightPocket"] = inventory["leftPocket"].DeepClone(); break;
+                case "missing-pocket": inventory.Remove("leftPocket"); break;
+                case "pocket-type": inventory["leftPocket"] = 1; break;
+                case "whitespace-id": items[0]["instanceId"] = " bad "; break;
+                case "unknown-effect": content = InventoryTestContent(false); break;
+                case "unknown-inventory-field": inventory["draft"] = true; break;
+                case "future-schema": document["schemaVersion"] = 9; break;
+            }
+            PersistenceDataException error = Assert.Throws<PersistenceDataException>(() =>
+                PersistenceJsonSerializer.DeserializeRun(document.ToString(), content));
+            if (corruption == "unknown-definition" || corruption == "unknown-effect")
+                Assert.That(error.Error, Is.EqualTo(PersistenceDataError.MissingInventoryContent));
+            Assert.That(PersistenceJsonSerializer.SerializeRun(run), Is.EqualTo(source));
+        }
+
+        internal static RunState InventoryFullRun()
+        {
+            RunState run = TravelBoundary("consumed");
+            var placements = Enumerable.Range(0, 9).Select(index => new InventoryPlacement(
+                new ItemInstanceState("grid-" + index, "test.berry"), InventoryContainer.MainGrid, index % 3, index / 3)).ToList();
+            placements.Add(new InventoryPlacement(new ItemInstanceState("left", "test.drink"), InventoryContainer.LeftPocket));
+            placements.Add(new InventoryPlacement(new ItemInstanceState("right", "test.drink"), InventoryContainer.RightPocket));
+            run.RestoreInventoryState(InventoryTestContent(), 17, placements);
+            return run;
+        }
+
+        [Test]
+        public void InventoryDtoFieldMatrixAndRepeatedFullBagCopiesRetainEveryFieldWithoutMutableAliases()
+        {
+            Assert.That(typeof(RunStateV8Dto).GetProperties().Select(property => property.Name),
+                Is.EquivalentTo(new[] { "SchemaVersion", "RunId", "RunSeed", "CompletedDayCount", "ReachedCheckpointNodeId",
+                    "TraversalSequence", "Health", "Satiety", "Status", "ToolSlots", "TravelHistory", "ActiveLeg",
+                    "RandomAlgorithmId", "RandomAlgorithmVersion", "ToolInstanceSequence", "ActiveLandmark", "CompletedLandmarks",
+                    "BoardSelectionPlan", "ResourceRules", "Inventory" }));
+            Assert.That(typeof(InventoryDto).GetProperties().Select(property => property.Name),
+                Is.EquivalentTo(new[] { "Revision", "Items", "MainGrid", "LeftPocket", "RightPocket" }));
+            Assert.That(typeof(ItemInstanceDto).GetProperties().Select(property => property.Name),
+                Is.EquivalentTo(new[] { "InstanceId", "DefinitionId" }));
+            Assert.That(typeof(InventoryAnchorDto).GetProperties().Select(property => property.Name),
+                Is.EquivalentTo(new[] { "InstanceId", "Column", "Row" }));
+            RunState original = InventoryFullRun();
+            RunState copy = original;
+            string expected = PersistenceJsonSerializer.SerializeRun(original);
+            for (int iteration = 0; iteration < 25; iteration++)
+            {
+                copy = PersistenceJsonSerializer.DeserializeRun(PersistenceJsonSerializer.SerializeRun(copy), original.InventoryContent);
+                Assert.That(PersistenceJsonSerializer.SerializeRun(copy), Is.EqualTo(expected), "iteration " + iteration);
+                Assert.That(copy.Inventory.Placements, Has.Count.EqualTo(11));
+            }
+            RunStateV8Dto dto = RunStateV8Mapper.ToDto(copy);
+            dto.Inventory.Items[0].DefinitionId = "changed";
+            dto.Inventory.MainGrid[0].Column = 2;
+            dto.Inventory.Revision = 1;
+            Assert.That(PersistenceJsonSerializer.SerializeRun(original), Is.EqualTo(expected));
+            Assert.That(PersistenceJsonSerializer.SerializeRun(copy), Is.EqualTo(expected));
+            InventoryPlacement[] removed = copy.Inventory.Placements.Skip(1).ToArray();
+            Assert.That(copy.TryCommitInventory(17, removed, out _), Is.True);
+            Assert.That(copy.InventoryRevision, Is.EqualTo(18));
+            Assert.That(original.Inventory.Placements, Has.Count.EqualTo(11));
+            Assert.That(original.InventoryRevision, Is.EqualTo(17));
+        }
+
+        [Test]
+        public void SatietySchemaHasOneResourceAndPreservesCustomConfigurationOnContinue()
+        {
+            var rules = new ResourceRules(80, 150, 60, 2, 3);
+            var run = new RunState("resource-v7", 102, new RunStateConfiguration(70, 140, 0, "start", rules));
+            run.EquipTool(0, run.CreateToolInstance(new ToolDefinition("test.tool", "Tool", 3)));
+            string json = PersistenceJsonSerializer.SerializeRun(run);
+            JObject document = JObject.Parse(json);
+            Assert.That((int)document["schemaVersion"], Is.EqualTo(8));
+            Assert.That(document["food"], Is.Null);
+            Assert.That((int)document["satiety"], Is.EqualTo(140));
+            RunState restored = PersistenceJsonSerializer.DeserializeRun(json);
+            Assert.That(restored.Health, Is.EqualTo(70));
+            Assert.That(restored.Satiety, Is.EqualTo(140));
+            Assert.That(restored.ResourceRules.MaximumHealth, Is.EqualTo(80));
+            Assert.That(restored.ResourceRules.MaximumSatiety, Is.EqualTo(150));
+            Assert.That(restored.ResourceRules.SelectActionCost(60), Is.EqualTo(2));
+            Assert.That(restored.ResourceRules.SelectActionCost(61), Is.EqualTo(3));
+            Assert.That(restored.ToolSlots[0].Instance.InstanceId, Is.EqualTo(run.ToolSlots[0].Instance.InstanceId));
+            Assert.That(PersistenceJsonSerializer.SerializeRun(restored), Is.EqualTo(json));
+        }
+
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        [TestCase(4)]
+        [TestCase(5)]
+        [TestCase(6)]
+        public void EveryLegacySchemaClampsResourcesWithoutChangingIdentityOrRng(int version)
+        {
+            RunState run = TravelBoundary("checkpoint");
+            object dto;
+            switch (version)
+            {
+                case 1: dto = RunStateMapper.ToDto(run); break;
+                case 2: dto = RunStateV2Mapper.ToDto(run); break;
+                case 3: dto = RunStateV3Mapper.ToDto(run); break;
+                case 4: dto = RunStateV4Mapper.ToDto(run); break;
+                case 5: dto = RunStateV5Mapper.ToDto(run); break;
+                default: dto = RunStateV6Mapper.ToDto(run); break;
+            }
+            JObject document = JObject.FromObject(dto);
+            document["health"] = int.MaxValue;
+            document["food"] = int.MaxValue;
+            string source = document.ToString();
+            RunState migrated = PersistenceJsonSerializer.DeserializeRun(source);
+            Assert.That(migrated.RunId, Is.EqualTo(run.RunId));
+            Assert.That(migrated.RunSeed, Is.EqualTo(run.RunSeed));
+            Assert.That(migrated.Health, Is.EqualTo(100));
+            Assert.That(migrated.Satiety, Is.EqualTo(200));
+            Assert.That(migrated.RandomAlgorithmId, Is.EqualTo(version < 3 ? RunState.LegacyRandomAlgorithmId : run.RandomAlgorithmId));
+            Assert.That(PersistenceJsonSerializer.SerializeRun(migrated), Does.Contain("\"satiety\": 200").And.Not.Contain("\"food\""));
+            document["food"] = -1;
+            Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeRun(document.ToString()));
+            Assert.That(document.ToString(), Is.Not.EqualTo(source));
+        }
+
+        [TestCase("missing-satiety")]
+        [TestCase("duplicate-food")]
+        [TestCase("high-satiety")]
+        [TestCase("high-health")]
+        [TestCase("wrong-type")]
+        [TestCase("missing-rules")]
+        [TestCase("future-rules")]
+        [TestCase("bad-threshold")]
+        [TestCase("zero-cost")]
+        public void CurrentResourceSchemaRejectsMissingMalformedAndOutOfRangeData(string corruption)
+        {
+            JObject document = JObject.Parse(PersistenceJsonSerializer.SerializeRun(TravelBoundary("pending")));
+            switch (corruption)
+            {
+                case "missing-satiety": document.Remove("satiety"); break;
+                case "duplicate-food": document["food"] = 100; break;
+                case "high-satiety": document["satiety"] = 201; break;
+                case "high-health": document["health"] = 101; break;
+                case "wrong-type": document["satiety"] = "100"; break;
+                case "missing-rules": document.Remove("resourceRules"); break;
+                case "future-rules": document["resourceRules"]["version"] = 99; break;
+                case "bad-threshold": document["resourceRules"]["normalSatietyThreshold"] = 201; break;
+                case "zero-cost": document["resourceRules"]["satedActionCost"] = 0; break;
+            }
+            Assert.Throws<PersistenceDataException>(() => PersistenceJsonSerializer.DeserializeRun(document.ToString()));
+        }
+
         [Test]
         public void RunV2Dto_HasExplicitTravelSchemaWithoutV1Cutover()
         {
@@ -94,7 +381,7 @@ namespace HallowBlaze.Tests.EditMode
         public void TravelRunWriter_EmitsCompleteV4StableState()
         {
             string json = PersistenceJsonSerializer.SerializeTravelRun(TravelBoundary("pending"));
-            Assert.That(json, Does.Contain("\"schemaVersion\": 6").And.Contain("\"introState\": \"pending\""));
+            Assert.That(json, Does.Contain("\"schemaVersion\": 8").And.Contain("\"introState\": \"pending\""));
             Assert.That(json, Does.Not.Contain("\"route\":").And.Not.Contain("\"boardSeed\":").And.Not.Contain("\"currentDay\":"));
             AssertTravelEquals(TravelBoundary("pending"), PersistenceJsonSerializer.DeserializeTravelRun(json));
             Assert.That(RunStateDto.CurrentSchemaVersion, Is.EqualTo(1));
@@ -144,7 +431,7 @@ namespace HallowBlaze.Tests.EditMode
             string profileJson = PersistenceJsonSerializer.SerializeProfile(profile);
             RunState run = TravelBoundary("intermediate");
             string runJson = PersistenceJsonSerializer.SerializeRun(run);
-            Assert.That(runJson, Does.Contain("\"schemaVersion\": 6"));
+            Assert.That(runJson, Does.Contain("\"schemaVersion\": 8"));
             AssertTravelEquals(run, PersistenceJsonSerializer.DeserializeRun(runJson));
             Assert.That(PersistenceJsonSerializer.SerializeProfile(profile), Is.EqualTo(profileJson));
             Assert.That(ProfileStateDto.CurrentSchemaVersion, Is.EqualTo(2));
@@ -175,6 +462,42 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(run.ToolSlots[1].Instance.Charges, Is.Zero);
             Assert.That(restored.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 3)).InstanceId,
                 Is.Not.EqualTo(removed.InstanceId).And.Not.EqualTo(unknown.InstanceId));
+        }
+
+        /// <summary>All retained schemas preserve a depleted axe snapshot; reusable behavior never requires save rewriting or refill.</summary>
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        [TestCase(4)]
+        [TestCase(5)]
+        [TestCase(6)]
+        public void RetainedAxeChargesStayUnchangedAcrossAllRunSchemas(int version)
+        {
+            RunState original = TravelBoundary("checkpoint");
+            original.ClearTool(0);
+            original.ClearTool(1);
+            ToolInstanceState axe = original.CreateToolInstance(new ToolDefinition("axe.basic", "Axe", 3));
+            original.EquipTool(0, axe);
+            for (int index = 0; index < 3; index++) Assert.That(original.TrySpendToolCharge(0, axe.InstanceId), Is.True);
+            object dto;
+            switch (version)
+            {
+                case 1: dto = RunStateMapper.ToDto(original); break;
+                case 2: dto = RunStateV2Mapper.ToDto(original); break;
+                case 3: dto = RunStateV3Mapper.ToDto(original); break;
+                case 4: dto = RunStateV4Mapper.ToDto(original); break;
+                case 5: dto = RunStateV5Mapper.ToDto(original); break;
+                default: dto = RunStateV6Mapper.ToDto(original); break;
+            }
+            RunState restored = PersistenceJsonSerializer.DeserializeRun(JsonConvert.SerializeObject(dto));
+            Assert.That(restored.ToolSlots[0].ToolId, Is.EqualTo("axe.basic"));
+            Assert.That(restored.ToolSlots[0].Instance.Charges, Is.Zero);
+            Assert.That(restored.ToolSlots[1].IsEmpty, Is.True);
+            Assert.That(restored.Satiety, Is.EqualTo(original.Satiety));
+            Assert.That(restored.Health, Is.EqualTo(original.Health));
+            if (version >= 4) Assert.That(restored.ToolSlots[0].Instance.InstanceId, Is.EqualTo(axe.InstanceId));
+            string rewritten = PersistenceJsonSerializer.SerializeRun(restored);
+            Assert.That(PersistenceJsonSerializer.DeserializeRun(rewritten).ToolSlots[0].Instance.Charges, Is.Zero);
         }
 
         /// <summary>All historical schemas acquire deterministic instance IDs and preserve existing rewards, RNG and tool values.</summary>
@@ -417,8 +740,8 @@ namespace HallowBlaze.Tests.EditMode
                 "run-maximum",
                 int.MinValue,
                 new RunStateConfiguration(
-                    int.MaxValue,
-                    int.MaxValue,
+                    100,
+                    200,
                     int.MaxValue,
                     "node.current"));
             original.RecordRouteNode("node.start");
@@ -607,7 +930,7 @@ namespace HallowBlaze.Tests.EditMode
         {
             string futureDocument = profile
                 ? "{\"schemaVersion\":3}"
-                : "{\"schemaVersion\":7}";
+                : "{\"schemaVersion\":9}";
 
             PersistenceDataException exception = Assert.Throws<PersistenceDataException>(() =>
             {
@@ -750,7 +1073,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(actual.CurrentDay, Is.EqualTo(expected.CurrentDay));
             Assert.That(actual.WorldNodeId, Is.EqualTo(expected.WorldNodeId));
             Assert.That(actual.Health, Is.EqualTo(expected.Health));
-            Assert.That(actual.Food, Is.EqualTo(expected.Food));
+            Assert.That(actual.Satiety, Is.EqualTo(expected.Satiety));
             Assert.That(actual.Status, Is.EqualTo(expected.Status));
             Assert.That(actual.Route, Is.EqualTo(expected.Route));
             Assert.That(actual.ToolSlots, Has.Count.EqualTo(expected.ToolSlots.Count));

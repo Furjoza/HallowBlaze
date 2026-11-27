@@ -3,7 +3,7 @@ using HallowBlaze.Core.Board.Primitives;
 
 namespace HallowBlaze.Core.Turns.Contracts
 {
-    /// <summary>Reports Food restored by collecting a board item.</summary>
+    /// <summary>Reports capped satiety and wasted excess from the transitional automatic-food adapter.</summary>
     public sealed class FoodRestoredEvent : GameEvent
     {
         /// <summary>Gets the board-local player identifier.</summary>
@@ -12,22 +12,29 @@ namespace HallowBlaze.Core.Turns.Contracts
         /// <summary>Gets the board-local source item identifier.</summary>
         public EntityId SourceItemId { get; }
 
-        /// <summary>Gets the positive amount of Food restored.</summary>
+        /// <summary>Gets satiety actually restored, including zero when the entire reward is wasted.</summary>
         public int Amount { get; }
 
-        /// <summary>Creates a Food restoration event.</summary>
-        /// <param name="playerId">The player receiving Food.</param>
-        /// <param name="sourceItemId">The collected item providing Food.</param>
-        /// <param name="amount">The positive amount restored.</param>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="amount"/> is not positive.</exception>
-        public FoodRestoredEvent(EntityId playerId, EntityId sourceItemId, int amount)
+        /// <summary>Gets the discarded excess, never stored in another resource.</summary>
+        public int Wasted { get; }
+        /// <summary>Gets the requested reward before applying the configured cap.</summary>
+        public int Requested => Amount + Wasted;
+
+        /// <summary>Captures a completed satiety restoration; historical type name is retained for the adapter.</summary>
+        /// <param name="playerId">The player receiving satiety.</param>
+        /// <param name="sourceItemId">The collected item providing satiety.</param>
+        /// <param name="amount">The nonnegative applied amount.</param>
+        /// <param name="wasted">Nonnegative discarded excess; the total requested reward must be positive.</param>
+        /// <exception cref="ArgumentOutOfRangeException">An amount is invalid or the requested total would overflow.</exception>
+        public FoodRestoredEvent(EntityId playerId, EntityId sourceItemId, int amount, int wasted = 0)
         {
-            if (amount <= 0)
+            if (amount < 0 || wasted < 0 || amount > int.MaxValue - wasted || amount == 0 && wasted == 0)
                 throw new ArgumentOutOfRangeException(nameof(amount));
 
             PlayerId = playerId;
             SourceItemId = sourceItemId;
             Amount = amount;
+            Wasted = wasted;
         }
 
         /// <inheritdoc />

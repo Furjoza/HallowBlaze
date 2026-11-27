@@ -19,13 +19,25 @@ namespace HallowBlaze.Core.Generation.Landmarks
         private readonly int hash;
 
         /// <summary>Copies all mutable inputs affecting the supported model's next command or exit reachability.</summary>
-        /// <remarks>Compare keys only within the same fixed template, clearing/cost rules and frozen travel context.</remarks>
+        /// <remarks>
+        /// Compare keys only within the same fixed template, trusted inventory content, clearing/cost rules and frozen travel context.
+        /// Each search branch creates fresh pickup proposals, so ordinary pickup sequence values do not affect reachability;
+        /// exhaustion does. The board clone still preserves the exact sequence for accepted-command replay.
+        /// </remarks>
         public LandmarkSolverStateKey(BoardState board, RunState run, EntityId playerId, IEnumerable<ShamblerState> enemies)
         {
             if (board == null) throw new ArgumentNullException(nameof(board));
             if (run == null) throw new ArgumentNullException(nameof(run));
             if (enemies == null) throw new ArgumentNullException(nameof(enemies));
-            var data = new List<object> { board.Bounds, playerId, run.Health, run.Food, run.Status, run.ToolInstanceSequence };
+            var data = new List<object> { board.Bounds, playerId, run.Health, run.Satiety, run.Status, run.ToolInstanceSequence };
+            data.Add(board.PickupRevision == int.MaxValue);
+            data.Add(run.InventoryRevision);
+            data.Add(run.Inventory.Placements.Count);
+            foreach (InventoryPlacement placement in run.Inventory.Placements.OrderBy(value => value.Item.InstanceId, StringComparer.Ordinal))
+            {
+                data.Add(placement.Item.InstanceId); data.Add(placement.Item.DefinitionId);
+                data.Add(placement.Container); data.Add(placement.Column); data.Add(placement.Row);
+            }
             foreach (ToolSlotState slot in run.ToolSlots)
             {
                 data.Add(slot.Instance?.InstanceId);
@@ -40,6 +52,9 @@ namespace HallowBlaze.Core.Generation.Landmarks
                 data.Add(entity.Position);
                 data.Add(entity.Definition);
                 data.Add(board.GetObstacleWork(entity.Id));
+                bool consumable = board.TryGetGroundItem(entity.Id, out GroundItemState item);
+                data.Add(consumable);
+                if (consumable) { data.Add(item.InstanceId); data.Add(item.DefinitionId); }
                 bool ground = board.TryGetGroundTool(entity.Id, out GroundToolState tool);
                 data.Add(ground);
                 if (!ground) continue;

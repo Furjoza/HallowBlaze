@@ -24,36 +24,38 @@ namespace HallowBlaze.Tests.EditMode
             Add(1, BoardLayer.Actor, EntityKind.Player, "player", new GridPosition(1, 1));
         }
 
-        /// <summary>Medical healing is capped locally and commits removal, applied amount and one shared cost exactly once.</summary>
+        /// <summary>Medical healing reports capped and wasted amounts and commits one shared cost exactly once.</summary>
         [TestCase(1, 11)]
         [TestCase(89, 99)]
         [TestCase(95, 100)]
         [TestCase(99, 100)]
         [TestCase(100, 100)]
-        [TestCase(120, 120)]
-        public void FirstAidUsesFixedHealingAndRejectsFullHealthWithoutWaste(int initialHealth, int expectedHealth)
+        public void FirstAidChosenUseReportsFixedHealingAndCapWaste(int initialHealth, int expectedHealth)
         {
             run = new RunState("medical", 16, new RunStateConfiguration(initialHealth, 5, 0, "forest.start"));
             BoardEntityState item = Add(7, BoardLayer.Item, EntityKind.Item, FirstAidInteractionAction.ContentId, new GridPosition(1, 2));
             var query = new InteractionQuery();
             InteractionOption option = query.GetOptions(board, run, PlayerId).Single();
             Assert.That(run.Health, Is.EqualTo(initialHealth), "Preview must be free.");
-            Assert.That(option.IsAvailable, Is.EqualTo(initialHealth < 100));
+            Assert.That(option.Availability, Is.EqualTo(InteractionAvailability.DecisionRequired));
             var resolver = new TurnResolver(ActionNoiseProfile.Prototype, query);
-            TurnResult result = resolver.Resolve(board, run, PlayerId, option.CreateCommand());
-            Assert.That(result.Accepted, Is.EqualTo(initialHealth < 100));
+            TurnResult result = resolver.Resolve(board, run, PlayerId,
+                UseByEntry(item));
+            Assert.That(result.Accepted, Is.True);
             Assert.That(run.Health, Is.EqualTo(expectedHealth));
-            Assert.That(run.Food, Is.EqualTo(initialHealth < 100 ? 4 : 5));
-            Assert.That(board.TryGetEntity(item.Id, out _), Is.EqualTo(initialHealth >= 100));
+            Assert.That(run.Satiety, Is.EqualTo(4));
+            Assert.That(board.TryGetEntity(item.Id, out _), Is.False);
             if (result.Accepted)
             {
-                Assert.That(result.Events.OfType<HealthRestoredEvent>().Single().Amount, Is.EqualTo(expectedHealth - initialHealth));
+                Assert.That(result.Events.OfType<GroundPickupResolvedEvent>().Single().Applied, Is.EqualTo(expectedHealth - initialHealth));
+                Assert.That(result.Events.OfType<GroundPickupResolvedEvent>().Single().Wasted,
+                    Is.EqualTo(10 - (expectedHealth - initialHealth)));
                 Assert.That(result.Events.Select(gameEvent => gameEvent.EventType), Is.EqualTo(new[]
-                    { "InteractionPerformed", "ItemCollected", "HealthRestored", "ActionCostApplied", "Noise" }));
-                Assert.That(board.GetActiveNoises().Single().Strength, Is.EqualTo(4));
+                    { "EntityMoved", "ItemCollected", "GroundPickupResolved", "ActionCostApplied", "Noise" }));
+                Assert.That(board.GetActiveNoises().Single().Strength, Is.EqualTo(ActionNoiseProfile.Prototype.MovementStrength));
                 Assert.That(resolver.Resolve(board, run, PlayerId, option.CreateCommand()).Accepted, Is.False);
                 Assert.That(run.Health, Is.EqualTo(expectedHealth));
-                Assert.That(run.Food, Is.EqualTo(4));
+                Assert.That(run.Satiety, Is.EqualTo(4));
             }
             else
             {
@@ -67,7 +69,7 @@ namespace HallowBlaze.Tests.EditMode
         [TestCase("removed")]
         [TestCase("replaced")]
         [TestCase("distant")]
-        [TestCase("full-after-preview")]
+        [TestCase("revision-after-preview")]
         [TestCase("dead")]
         [TestCase("starved")]
         [TestCase("wrong-action")]
@@ -75,18 +77,18 @@ namespace HallowBlaze.Tests.EditMode
         {
             BoardEntityState item = Add(7, BoardLayer.Item, EntityKind.Item, FirstAidInteractionAction.ContentId, new GridPosition(1, 2));
             var query = new InteractionQuery();
-            InteractCommand command = query.GetOptions(board, run, PlayerId).Single().CreateCommand();
+            PlayerCommand command = UseByEntry(item);
             BoardNoise noise = board.EmitNoise(PlayerId, new GridPosition(1, 1), 1, 3);
             if (scenario == "moved") board.TryMove(item.Id, new GridPosition(2, 1));
             if (scenario == "distant") board.TryMove(PlayerId, new GridPosition(7, 7));
             if (scenario == "removed" || scenario == "replaced") board.TryRemove(item.Id);
             if (scenario == "replaced") Add(8, BoardLayer.Item, EntityKind.Item, FirstAidInteractionAction.ContentId, item.Position);
-            if (scenario == "full-after-preview") run.RestoreHealth(90);
+            if (scenario == "revision-after-preview") run.TryCommitInventory(run.InventoryRevision, run.Inventory.Placements, out _);
             if (scenario == "dead") run.TakeDamage(run.Health);
-            if (scenario == "starved") run.ConsumeFood(run.Food);
+            if (scenario == "starved") run.ConsumeSatiety(run.Satiety);
             if (scenario == "wrong-action") command = new InteractCommand(item.Id, item.Position, "interact");
             int health = run.Health;
-            int food = run.Food;
+            int food = run.Satiety;
             var before = board.GetEntities();
             int phases = 0;
             var controller = new TurnController(board, run, PlayerId, new TurnResolver(ActionNoiseProfile.Prototype, query),
@@ -97,7 +99,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(result.Events, Is.Empty);
             Assert.That(phases, Is.Zero);
             Assert.That(run.Health, Is.EqualTo(health));
-            Assert.That(run.Food, Is.EqualTo(food));
+            Assert.That(run.Satiety, Is.EqualTo(food));
             CollectionAssert.AreEqual(before, board.GetEntities());
             Assert.That(board.GetActiveNoises().Single().Id, Is.EqualTo(noise.Id));
             Assert.That(board.GetActiveNoises().Single().RemainingTurns, Is.EqualTo(3));
@@ -109,38 +111,41 @@ namespace HallowBlaze.Tests.EditMode
         public void FirstAidCostAndTerminalOrderingUseTheExistingController(int food, int expectedPhases)
         {
             run = new RunState("medical-order", 16, new RunStateConfiguration(50, food, 0, "forest.start"));
-            Add(7, BoardLayer.Item, EntityKind.Item, FirstAidInteractionAction.ContentId, new GridPosition(1, 2));
+            BoardEntityState item = Add(7, BoardLayer.Item, EntityKind.Item, FirstAidInteractionAction.ContentId, new GridPosition(1, 2));
             var query = new InteractionQuery();
             int phases = 0;
             var controller = new TurnController(board, run, PlayerId, new TurnResolver(ActionNoiseProfile.Prototype, query),
                 new TurnPhaseHandlers((state, active, actor, events) => phases++,
                     (state, active, actor, events) => phases++, (state, active, actor, events) => phases++));
-            InteractCommand command = query.GetOptions(board, run, PlayerId).Single().CreateCommand();
+            GroundPickupCommand command = UseByEntry(item);
             TurnResult result = controller.Resolve(command);
             Assert.That(result.Accepted, Is.True);
             Assert.That(run.Health, Is.EqualTo(60));
-            Assert.That(run.Food, Is.EqualTo(food - 1));
+            Assert.That(run.Satiety, Is.EqualTo(food - 1));
             Assert.That(phases, Is.EqualTo(expectedPhases));
             Assert.That(result.Events.OfType<ActionCostAppliedEvent>().Count(), Is.EqualTo(1));
-            Assert.That(result.Events.OfType<HealthRestoredEvent>().Single().Amount, Is.EqualTo(10));
+            Assert.That(result.Events.OfType<GroundPickupResolvedEvent>().Single().Applied, Is.EqualTo(10));
             Assert.That(controller.IsTerminal, Is.EqualTo(food == 1));
             if (food == 1) Assert.That(result.Events.Last(), Is.TypeOf<PlayerStarvedEvent>());
             Assert.That(controller.Resolve(command).Accepted, Is.False);
             Assert.That(run.Health, Is.EqualTo(60));
-            Assert.That(run.Food, Is.EqualTo(food - 1));
+            Assert.That(run.Satiety, Is.EqualTo(food - 1));
             Assert.That(phases, Is.EqualTo(expectedPhases));
         }
 
-        /// <summary>Walking over a medical item does not consume or apply it; only conscious use heals.</summary>
+        /// <summary>A medical entry requires a decision; conscious Leave moves without healing or consuming it.</summary>
         [Test]
         public void FirstAidIsNotAutomaticFoodOrTriggerHealing()
         {
             BoardEntityState kit = Add(7, BoardLayer.Item, EntityKind.Item, FirstAidInteractionAction.ContentId, new GridPosition(1, 2));
             Add(100, BoardLayer.Terrain, new EntityKind("terrain"), "floor", kit.Position);
-            TurnResult result = new TurnResolver(ActionNoiseProfile.Prototype).Resolve(board, run, PlayerId, new MoveCommand(Direction.North));
+            var resolver = new TurnResolver(ActionNoiseProfile.Prototype);
+            Assert.That(resolver.Resolve(board, run, PlayerId, new MoveCommand(Direction.North)).Accepted, Is.False);
+            var option = new GroundPickupQuery().GetOption(board, run, PlayerId, new MoveCommand(Direction.North));
+            TurnResult result = resolver.Resolve(board, run, PlayerId, option.CreateCommand(GroundPickupChoice.Leave));
             Assert.That(result.Accepted, Is.True);
             Assert.That(run.Health, Is.EqualTo(10));
-            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.Satiety, Is.EqualTo(4));
             Assert.That(board.TryGetEntity(kit.Id, out _), Is.True);
             Assert.That(result.Events.OfType<HealthRestoredEvent>(), Is.Empty);
             Assert.That(result.Events.OfType<FoodRestoredEvent>(), Is.Empty);
@@ -151,7 +156,7 @@ namespace HallowBlaze.Tests.EditMode
         {
             Assert.That(new InteractionQuery().GetOptions(board, run, PlayerId), Is.Empty);
             Assert.That(board.Count, Is.EqualTo(1));
-            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.Satiety, Is.EqualTo(5));
             Assert.That(board.GetActiveNoises(), Is.Empty);
         }
 
@@ -164,7 +169,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(result.Accepted, Is.False);
             Assert.That(((RejectedTurnResult)result).RejectionCode, Is.EqualTo(CommandRejectionCode.EmptyToolSlot));
             Assert.That(result.Events, Is.Empty);
-            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.Satiety, Is.EqualTo(5));
             Assert.That(board.Count, Is.EqualTo(1));
             Assert.That(board.GetActiveNoises(), Is.Empty);
         }
@@ -175,13 +180,13 @@ namespace HallowBlaze.Tests.EditMode
             BoardEntityState item = Add(7, BoardLayer.Item, EntityKind.Item, "carrot", new GridPosition(1, 2), 4);
             InteractionOption option = new InteractionQuery().GetOptions(board, run, PlayerId).Single();
             InteractCommand command = option.CreateCommand();
-            Assert.That(option.IsAvailable, Is.True);
+            Assert.That(option.Availability, Is.EqualTo(InteractionAvailability.DecisionRequired));
             Assert.That(command.ActionId, Is.EqualTo("collect"));
             Assert.That(command.TargetId, Is.EqualTo(item.Id));
             Assert.That(command.TargetPosition, Is.EqualTo(item.Position));
             Assert.That(board.TryGetEntity(item.Id, out BoardEntityState retained), Is.True);
             Assert.That(retained, Is.SameAs(item));
-            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.Satiety, Is.EqualTo(5));
         }
 
         [Test]
@@ -211,7 +216,7 @@ namespace HallowBlaze.Tests.EditMode
             TurnResult result = new TurnResolver(ActionNoiseProfile.Prototype, query).Resolve(board, run, PlayerId, selection);
             Assert.That(result.Accepted, Is.False);
             Assert.That(result.Events, Is.Empty);
-            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.Satiety, Is.EqualTo(5));
             Assert.That(board.GetActiveNoises(), Is.Empty);
             Assert.That(board.GetEntities().Single(entity => entity.Definition.Layer == BoardLayer.Item).Id,
                 Is.EqualTo(displaced ? item.Id : new EntityId(8)));
@@ -223,12 +228,12 @@ namespace HallowBlaze.Tests.EditMode
             BoardEntityState item = Add(7, BoardLayer.Item, EntityKind.Item, "carrot", new GridPosition(1, 2), 4);
             var query = new InteractionQuery();
             TurnResult result = new TurnResolver(interactions: query).Resolve(board, run, PlayerId,
-                query.GetOptions(board, run, PlayerId).Single().CreateCommand());
+                UseByEntry(item));
             Assert.That(result.Accepted, Is.True);
             Assert.That(board.TryGetEntity(item.Id, out _), Is.False);
-            Assert.That(run.Food, Is.EqualTo(8));
+            Assert.That(run.Satiety, Is.EqualTo(8));
             Assert.That(result.Events.Select(gameEvent => gameEvent.EventType), Is.EqualTo(new[]
-                { "InteractionPerformed", "ItemCollected", "FoodRestored", "ActionCostApplied" }));
+                { "EntityMoved", "ItemCollected", "GroundPickupResolved", "ActionCostApplied" }));
         }
 
         [Test]
@@ -240,14 +245,14 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(push.Availability, Is.EqualTo(InteractionAvailability.Blocked));
             var resolver = new TurnResolver(interactions: query);
             Assert.That(resolver.Resolve(board, run, PlayerId, push.CreateCommand()).Accepted, Is.False);
-            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.Satiety, Is.EqualTo(5));
             Add(100, BoardLayer.Terrain, new EntityKind("terrain"), "floor", new GridPosition(3, 1));
             Assert.That(resolver.Resolve(board, run, PlayerId, push.CreateCommand()).Accepted, Is.True);
             Assert.That(board.TryGetEntity(crate.Id, out BoardEntityState moved), Is.True);
             Assert.That(moved.Position, Is.EqualTo(new GridPosition(3, 1)));
             Assert.That(board.TryGetEntity(PlayerId, out BoardEntityState player), Is.True);
             Assert.That(player.Position, Is.EqualTo(new GridPosition(1, 1)));
-            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.Satiety, Is.EqualTo(4));
         }
 
         [Test]
@@ -260,7 +265,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(new TurnResolver(interactions: query).Resolve(board, run, PlayerId, option.CreateCommand()).Accepted, Is.False);
             Assert.That(board.TryGetEntity(item.Id, out BoardEntityState retained), Is.True);
             Assert.That(retained, Is.SameAs(item));
-            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.Satiety, Is.EqualTo(5));
         }
 
         [TestCase("unknown", 1, 2, InteractionAvailability.Unsupported)]
@@ -273,7 +278,7 @@ namespace HallowBlaze.Tests.EditMode
             var command = new InteractCommand(item.Id, item.Position, action);
             Assert.That(query.GetAvailability(board, run, PlayerId, command), Is.EqualTo(expected));
             Assert.That(new TurnResolver(interactions: query).Resolve(board, run, PlayerId, command).Accepted, Is.False);
-            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.Satiety, Is.EqualTo(5));
             Assert.That(board.TryGetEntity(item.Id, out BoardEntityState retained), Is.True);
             Assert.That(retained, Is.SameAs(item));
         }
@@ -290,7 +295,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(new TurnResolver(interactions: query).Resolve(board, run, PlayerId, command).Accepted, Is.False);
             Assert.That(board.TryGetEntity(crate.Id, out BoardEntityState retained), Is.True);
             Assert.That(retained, Is.SameAs(crate));
-            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.Satiety, Is.EqualTo(5));
         }
 
         [Test]
@@ -305,15 +310,15 @@ namespace HallowBlaze.Tests.EditMode
                     (state, activeRun, actor, events) => phases.Add("environment"),
                     (state, activeRun, actor, events) => phases.Add("plan")));
             var query = new InteractionQuery();
-            InteractCommand command = query.GetOptions(board, run, PlayerId).Single().CreateCommand();
+            GroundPickupCommand command = UseByEntry(item);
             Assert.That(controller.Resolve(command).Accepted, Is.True);
             Assert.That(phases, Is.EqualTo(new[] { "enemies", "environment", "plan" }));
             Assert.That(board.GetActiveNoises().Single(noise => noise.Id == existingNoise.Id).RemainingTurns, Is.EqualTo(2));
-            int foodAfterAccepted = run.Food;
+            int foodAfterAccepted = run.Satiety;
             phases.Clear();
             Assert.That(controller.Resolve(command).Accepted, Is.False);
             Assert.That(phases, Is.Empty);
-            Assert.That(run.Food, Is.EqualTo(foodAfterAccepted));
+            Assert.That(run.Satiety, Is.EqualTo(foodAfterAccepted));
             Assert.That(board.GetActiveNoises().Single(noise => noise.Id == existingNoise.Id).RemainingTurns, Is.EqualTo(2));
             Assert.That(board.TryGetEntity(item.Id, out _), Is.False);
         }
@@ -332,17 +337,17 @@ namespace HallowBlaze.Tests.EditMode
             var tools = new ToolUseQuery(new[] { new ToolAction("test.tool", new PushInteractionAction("crate"), "Push", 4, 2) },
                 new ActionCostPolicy(2));
             ToolUseOption option = tools.GetOptions(board, run, PlayerId).Single();
-            Assert.That(option.FoodCost, Is.EqualTo(2));
+            Assert.That(option.SatietyCost, Is.EqualTo(2));
             Assert.That(option.ChargeCost, Is.EqualTo(1));
             Assert.That(option.NoiseStrength, Is.EqualTo(4));
             Assert.That(option.ExpectedCharges, Is.EqualTo(3));
-            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.Satiety, Is.EqualTo(5));
             var resolver = new TurnResolver(ActionNoiseProfile.Prototype, tools: tools);
             TurnResult result = resolver.Resolve(board, run, PlayerId, option.CreateCommand());
             Assert.That(result.Accepted && result.ConsumesTurn, Is.True);
             Assert.That(result.Events.Select(gameEvent => gameEvent.EventType), Is.EqualTo(new[]
                 { "ToolUsed", "EntityMoved", "ToolChargeSpent", "ActionCostApplied", "Noise" }));
-            Assert.That(run.Food, Is.EqualTo(3));
+            Assert.That(run.Satiety, Is.EqualTo(3));
             Assert.That(run.ToolSlots[1].Instance.Charges, Is.EqualTo(2));
             Assert.That(instance.Charges, Is.EqualTo(3));
             Assert.That(board.GetEntities().Single(entity => entity.Id.Equals(crate.Id)).Position, Is.EqualTo(new GridPosition(3, 1)));
@@ -350,7 +355,7 @@ namespace HallowBlaze.Tests.EditMode
             TurnResult duplicate = resolver.Resolve(board, run, PlayerId, option.CreateCommand());
             Assert.That(((RejectedTurnResult)duplicate).RejectionCode, Is.EqualTo(CommandRejectionCode.StaleTool));
             Assert.That(duplicate.Events, Is.Empty);
-            Assert.That(run.Food, Is.EqualTo(3));
+            Assert.That(run.Satiety, Is.EqualTo(3));
             Assert.That(run.ToolSlots[1].Instance.Charges, Is.EqualTo(2));
         }
 
@@ -412,13 +417,13 @@ namespace HallowBlaze.Tests.EditMode
                 command = new UseToolCommand(0, tool.InstanceId, 3, other.Id, other.Position, "push");
             }
             if (scenario == "terminal") run.MarkWon();
-            if (scenario == "starved") run.ConsumeFood(run.Food);
+            if (scenario == "starved") run.ConsumeSatiety(run.Satiety);
             if (scenario == "dead") run.TakeDamage(run.Health);
             if (scenario == "missing-player") board.TryRemove(PlayerId);
             BoardNoise previous = board.EmitNoise(PlayerId, new GridPosition(1, 1), 2, 3);
             string[] entitiesBefore = board.GetEntities().Select(entity => entity.Id + ":" + entity.Position).ToArray();
             ToolSlotState[] slotsBefore = run.ToolSlots.ToArray();
-            int foodBefore = run.Food;
+            int foodBefore = run.Satiety;
             int healthBefore = run.Health;
             int sequenceBefore = run.ToolInstanceSequence;
             int laterPhases = 0;
@@ -432,7 +437,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(result.ConsumesTurn, Is.False);
             Assert.That(result.Events, Is.Empty);
             Assert.That(laterPhases, Is.Zero);
-            Assert.That(run.Food, Is.EqualTo(foodBefore));
+            Assert.That(run.Satiety, Is.EqualTo(foodBefore));
             Assert.That(run.Health, Is.EqualTo(healthBefore));
             Assert.That(run.ToolInstanceSequence, Is.EqualTo(sequenceBefore));
             Assert.That(run.ToolSlots, Is.EqualTo(slotsBefore));
@@ -460,7 +465,7 @@ namespace HallowBlaze.Tests.EditMode
             TurnResult accepted = controller.Resolve(command);
             Assert.That(accepted.Accepted, Is.True);
             Assert.That(phases, Is.EqualTo(new[] { "enemy", "environment", "plan" }));
-            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.Satiety, Is.EqualTo(4));
             Assert.That(run.ToolSlots[0].IsEmpty, Is.False);
             Assert.That(run.ToolSlots[0].Instance.Charges, Is.Zero);
             Assert.That(board.GetActiveNoises().Single(noise => noise.Id == old.Id).RemainingTurns, Is.EqualTo(2));
@@ -488,7 +493,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(preview[1].EffectLabel, Is.EqualTo("Push"));
             Assert.That(preview[1].NoiseStrength, Is.EqualTo(4));
             Assert.That(preview[1].NoiseLifetimeTurns, Is.EqualTo(2));
-            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.Satiety, Is.EqualTo(5));
             Assert.That(run.ToolSlots[1].Instance.Charges, Is.EqualTo(1));
             Assert.That(new ToolUseQuery().GetOptions(board, run, PlayerId), Is.Empty);
         }
@@ -511,7 +516,7 @@ namespace HallowBlaze.Tests.EditMode
                 tools.GetOptions(board, run, PlayerId).Single().CreateCommand();
             TurnResult result = new TurnResolver(tools: tools).Resolve(board, run, PlayerId, command);
             Assert.That(result.Accepted, Is.True);
-            Assert.That(run.Food, Is.EqualTo(3));
+            Assert.That(run.Satiety, Is.EqualTo(3));
             Assert.That(result.Events.OfType<ActionCostAppliedEvent>().Count(), Is.EqualTo(1));
         }
 
@@ -530,7 +535,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(result.Events.Select(gameEvent => gameEvent.EventType), Is.EqualTo(new[]
                 { "ToolUsed", "EntityMoved", "ToolChargeSpent", "ActionCostApplied", "Noise", "PlayerStarved" }));
             Assert.That(run.ToolSlots[0].Instance.Charges, Is.Zero);
-            Assert.That(run.Food, Is.Zero);
+            Assert.That(run.Satiety, Is.Zero);
             Assert.That(enemyPhases, Is.Zero);
             Assert.That(controller.IsTerminal, Is.True);
         }
@@ -552,26 +557,28 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(option.RejectionCode, Is.EqualTo(expected));
             Assert.That(((RejectedTurnResult)new TurnResolver(tools: tools).Resolve(board, run, PlayerId,
                 option.CreateCommand())).RejectionCode, Is.EqualTo(expected));
-            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.Satiety, Is.EqualTo(5));
             Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(3));
             Assert.That(board.GetActiveNoises(), Is.Empty);
         }
 
-        /// <summary>Direct rewards precede the current action cost and silent tool behavior never borrows ordinary interaction noise.</summary>
+        /// <summary>A legacy collect tool hook cannot bypass entry, consume an item or spend its charge.</summary>
         [Test]
         public void ToolDirectRewardPrecedesCostAndSilentConfigurationEmitsNoNoise()
         {
             Add(7, BoardLayer.Item, EntityKind.Item, "reward", new GridPosition(1, 2), 4);
-            run.ConsumeFood(4);
+            run.ConsumeSatiety(4);
             run.EquipTool(0, run.CreateToolInstance(new ToolDefinition("test.tool", "Test", 3)));
             var tools = new ToolUseQuery(new[] { new ToolAction("test.tool", new CollectInteractionAction(), "Collect", 0, 1) },
                 new ActionCostPolicy(2));
+            ToolUseOption option = tools.GetOptions(board, run, PlayerId).Single();
+            Assert.That(option.IsAvailable, Is.False);
             TurnResult result = new TurnController(board, run, PlayerId, new TurnResolver(ActionNoiseProfile.Prototype, tools: tools))
-                .Resolve(tools.GetOptions(board, run, PlayerId).Single().CreateCommand());
-            Assert.That(result.Events.Select(gameEvent => gameEvent.EventType), Is.EqualTo(new[]
-                { "ToolUsed", "ItemCollected", "FoodRestored", "ToolChargeSpent", "ActionCostApplied" }));
-            Assert.That(run.Food, Is.EqualTo(3));
-            Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
+                .Resolve(option.CreateCommand());
+            Assert.That(result.Accepted, Is.False);
+            Assert.That(result.Events, Is.Empty);
+            Assert.That(run.Satiety, Is.EqualTo(1));
+            Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(3));
             Assert.That(board.GetActiveNoises(), Is.Empty);
         }
 
@@ -585,6 +592,8 @@ namespace HallowBlaze.Tests.EditMode
             Assert.Throws<System.ArgumentException>(() => new ToolAction("tool", behavior, "", 1, 1));
             Assert.Throws<System.ArgumentOutOfRangeException>(() => new ToolAction("tool", behavior, "Effect", -1, 1));
             Assert.Throws<System.ArgumentOutOfRangeException>(() => new ToolAction("tool", behavior, "Effect", 1, 0));
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => new ToolAction("tool", behavior, "Effect", 1, 1, chargeCost: -1));
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => new ToolAction("tool", behavior, "Effect", 1, 1, chargeCost: 2));
             Assert.Throws<System.ArgumentOutOfRangeException>(() => new ActionCostPolicy(0));
             var binding = new ToolAction("tool", behavior, "Effect", 1, 1);
             Assert.Throws<System.ArgumentException>(() => new ToolUseQuery(new[] { binding, binding }));
@@ -594,7 +603,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.Throws<System.ArgumentOutOfRangeException>(() => new UseToolCommand(0, "tool.1", -1, PlayerId, default, "interact"));
             var depleted = new UseToolCommand(0, "tool.1", 0, PlayerId, default, "interact");
             Assert.Throws<System.ArgumentOutOfRangeException>(() => new ToolChargeSpentEvent(PlayerId, depleted));
-            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.Satiety, Is.EqualTo(5));
             Assert.That(run.ToolSlots.All(slot => slot.IsEmpty), Is.True);
         }
 
@@ -609,14 +618,22 @@ namespace HallowBlaze.Tests.EditMode
                 => Assert.Fail("A rejected tool behavior must never apply.");
         }
 
-        private static ToolUseQuery TestTools(int foodCost = 1) => new ToolUseQuery(
-            new[] { new ToolAction("test.tool", new PushInteractionAction("crate"), "Push", 4, 2) }, new ActionCostPolicy(foodCost));
+        private static ToolUseQuery TestTools(int satietyCost = 1) => new ToolUseQuery(
+            new[] { new ToolAction("test.tool", new PushInteractionAction("crate"), "Push", 4, 2) }, new ActionCostPolicy(satietyCost));
+
+        private GroundPickupCommand UseByEntry(BoardEntityState item)
+        {
+            if (!board.TryGetEntity(BoardLayer.Terrain, item.Position, out _))
+                Add(100, BoardLayer.Terrain, new EntityKind("terrain"), "floor", item.Position);
+            return GroundPickupTests.ChooseUse(board, run, PlayerId, new MoveCommand(Direction.North));
+        }
 
         private BoardEntityState Add(long id, BoardLayer layer, EntityKind kind, string content, GridPosition position, int food = 0)
         {
             var entity = new BoardEntityState(new EntityId(id), new BoardEntityDefinition(layer, kind, content,
                 new BoardEntityTraits(layer == BoardLayer.Terrain, false, layer != BoardLayer.Actor && layer != BoardLayer.Terrain), food), position);
             Assert.That(board.TryAdd(entity), Is.True);
+            if (food > 0 || content == FirstAidInteractionAction.ContentId) GroundPickupTests.BindConsumables(board, run);
             return entity;
         }
 

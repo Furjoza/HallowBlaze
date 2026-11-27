@@ -1,0 +1,686 @@
+{
+  "schemaVersion": 2,
+  "templateId": "draft.generated.79740a3d685a48d285df1139849c98a4",
+  "templateVersion": 1,
+  "configuration": {
+    "id": "draft.generated.79740a3d685a48d285df1139849c98a4.config",
+    "version": 1,
+    "pathLength": {
+      "minimum": 1,
+      "maximum": 63
+    },
+    "branchPoints": {
+      "minimum": 0,
+      "maximum": 64
+    },
+    "obstacleCount": {
+      "minimum": 0,
+      "maximum": 64
+    },
+    "enemyCount": {
+      "minimum": 0,
+      "maximum": 63
+    },
+    "maximumConcurrentThreats": 63,
+    "minimumSafeStartMoves": 0,
+    "allowedContentIds": [
+      "legacy.aid",
+      "legacy.floor",
+      "legacy.food",
+      "legacy.player",
+      "legacy.soda",
+      "legacy.wall",
+      "ordinary.berries",
+      "ordinary.carrot",
+      "ordinary.exit-terrain",
+      "ordinary.shambler.10",
+      "ordinary.shambler.20"
+    ],
+    "resourceBudgets": [
+      {
+        "resourceFamilyId": "food",
+        "itemCount": {
+          "minimum": 0,
+          "maximum": 64
+        }
+      },
+      {
+        "resourceFamilyId": "medical",
+        "itemCount": {
+          "minimum": 0,
+          "maximum": 64
+        }
+      }
+    ]
+  },
+  "variants": [
+    {
+      "id": "base",
+      "entities": [
+        {
+          "id": 1,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "id": 2,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 0,
+          "y": 1
+        },
+        {
+          "id": 3,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 0,
+          "y": 2
+        },
+        {
+          "id": 4,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 0,
+          "y": 3
+        },
+        {
+          "id": 5,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 0,
+          "y": 4
+        },
+        {
+          "id": 6,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 0,
+          "y": 5
+        },
+        {
+          "id": 7,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 0,
+          "y": 6
+        },
+        {
+          "id": 8,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 0,
+          "y": 7
+        },
+        {
+          "id": 9,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 1,
+          "y": 0
+        },
+        {
+          "id": 10,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 1,
+          "y": 1
+        },
+        {
+          "id": 11,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 1,
+          "y": 2
+        },
+        {
+          "id": 12,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 1,
+          "y": 3
+        },
+        {
+          "id": 13,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 1,
+          "y": 4
+        },
+        {
+          "id": 14,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 1,
+          "y": 5
+        },
+        {
+          "id": 15,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 1,
+          "y": 6
+        },
+        {
+          "id": 16,
+          "layer": "Terrain",
+          "contentId": "ordinary.exit-terrain",
+          "x": 1,
+          "y": 7
+        },
+        {
+          "id": 17,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 2,
+          "y": 0
+        },
+        {
+          "id": 18,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 2,
+          "y": 1
+        },
+        {
+          "id": 19,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 2,
+          "y": 2
+        },
+        {
+          "id": 20,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 2,
+          "y": 3
+        },
+        {
+          "id": 21,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 2,
+          "y": 4
+        },
+        {
+          "id": 22,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 2,
+          "y": 5
+        },
+        {
+          "id": 23,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 2,
+          "y": 6
+        },
+        {
+          "id": 24,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 2,
+          "y": 7
+        },
+        {
+          "id": 25,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 3,
+          "y": 0
+        },
+        {
+          "id": 26,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 3,
+          "y": 1
+        },
+        {
+          "id": 27,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 3,
+          "y": 2
+        },
+        {
+          "id": 28,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 3,
+          "y": 3
+        },
+        {
+          "id": 29,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 3,
+          "y": 4
+        },
+        {
+          "id": 30,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 3,
+          "y": 5
+        },
+        {
+          "id": 31,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 3,
+          "y": 6
+        },
+        {
+          "id": 32,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 3,
+          "y": 7
+        },
+        {
+          "id": 33,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 4,
+          "y": 0
+        },
+        {
+          "id": 34,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 4,
+          "y": 1
+        },
+        {
+          "id": 35,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 4,
+          "y": 2
+        },
+        {
+          "id": 36,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 4,
+          "y": 3
+        },
+        {
+          "id": 37,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 4,
+          "y": 4
+        },
+        {
+          "id": 38,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 4,
+          "y": 5
+        },
+        {
+          "id": 39,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 4,
+          "y": 6
+        },
+        {
+          "id": 40,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 4,
+          "y": 7
+        },
+        {
+          "id": 41,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 5,
+          "y": 0
+        },
+        {
+          "id": 42,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 5,
+          "y": 1
+        },
+        {
+          "id": 43,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 5,
+          "y": 2
+        },
+        {
+          "id": 44,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 5,
+          "y": 3
+        },
+        {
+          "id": 45,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 5,
+          "y": 4
+        },
+        {
+          "id": 46,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 5,
+          "y": 5
+        },
+        {
+          "id": 47,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 5,
+          "y": 6
+        },
+        {
+          "id": 48,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 5,
+          "y": 7
+        },
+        {
+          "id": 49,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 6,
+          "y": 0
+        },
+        {
+          "id": 50,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 6,
+          "y": 1
+        },
+        {
+          "id": 51,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 6,
+          "y": 2
+        },
+        {
+          "id": 52,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 6,
+          "y": 3
+        },
+        {
+          "id": 53,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 6,
+          "y": 4
+        },
+        {
+          "id": 54,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 6,
+          "y": 5
+        },
+        {
+          "id": 55,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 6,
+          "y": 6
+        },
+        {
+          "id": 56,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 6,
+          "y": 7
+        },
+        {
+          "id": 57,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 7,
+          "y": 0
+        },
+        {
+          "id": 58,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 7,
+          "y": 1
+        },
+        {
+          "id": 59,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 7,
+          "y": 2
+        },
+        {
+          "id": 60,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 7,
+          "y": 3
+        },
+        {
+          "id": 61,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 7,
+          "y": 4
+        },
+        {
+          "id": 62,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 7,
+          "y": 5
+        },
+        {
+          "id": 63,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 7,
+          "y": 6
+        },
+        {
+          "id": 64,
+          "layer": "Terrain",
+          "contentId": "legacy.floor",
+          "x": 7,
+          "y": 7
+        },
+        {
+          "id": 65,
+          "layer": "Actor",
+          "contentId": "legacy.player",
+          "x": 6,
+          "y": 0
+        },
+        {
+          "id": 66,
+          "layer": "Obstacle",
+          "contentId": "legacy.wall",
+          "x": 0,
+          "y": 2
+        },
+        {
+          "id": 67,
+          "layer": "Obstacle",
+          "contentId": "legacy.wall",
+          "x": 2,
+          "y": 2
+        },
+        {
+          "id": 68,
+          "layer": "Obstacle",
+          "contentId": "legacy.wall",
+          "x": 0,
+          "y": 5
+        },
+        {
+          "id": 69,
+          "layer": "Obstacle",
+          "contentId": "legacy.wall",
+          "x": 0,
+          "y": 3
+        },
+        {
+          "id": 70,
+          "layer": "Obstacle",
+          "contentId": "legacy.wall",
+          "x": 1,
+          "y": 4
+        },
+        {
+          "id": 71,
+          "layer": "Obstacle",
+          "contentId": "legacy.wall",
+          "x": 1,
+          "y": 0
+        },
+        {
+          "id": 72,
+          "layer": "Obstacle",
+          "contentId": "legacy.wall",
+          "x": 1,
+          "y": 6
+        },
+        {
+          "id": 73,
+          "layer": "Item",
+          "contentId": "ordinary.carrot",
+          "x": 4,
+          "y": 5
+        },
+        {
+          "id": 74,
+          "layer": "Item",
+          "contentId": "ordinary.carrot",
+          "x": 7,
+          "y": 6
+        },
+        {
+          "id": 75,
+          "layer": "Item",
+          "contentId": "ordinary.carrot",
+          "x": 5,
+          "y": 5
+        },
+        {
+          "id": 76,
+          "layer": "Item",
+          "contentId": "legacy.soda",
+          "x": 3,
+          "y": 1
+        },
+        {
+          "id": 77,
+          "layer": "Item",
+          "contentId": "ordinary.berries",
+          "x": 2,
+          "y": 2
+        },
+        {
+          "id": 78,
+          "layer": "Item",
+          "contentId": "ordinary.berries",
+          "x": 3,
+          "y": 2
+        },
+        {
+          "id": 79,
+          "layer": "Item",
+          "contentId": "legacy.aid",
+          "x": 2,
+          "y": 3
+        },
+        {
+          "id": 80,
+          "layer": "Obstacle",
+          "contentId": "legacy.wall",
+          "x": 2,
+          "y": 5
+        }
+      ],
+      "items": [
+        {
+          "resourceFamilyId": "food",
+          "instanceId": "item-3-1",
+          "entityId": 76,
+          "itemDefinitionId": "legacy.soda",
+          "sourceId": null,
+          "initiallyObservable": true
+        },
+        {
+          "resourceFamilyId": "food",
+          "instanceId": "item-4-5",
+          "entityId": 73,
+          "itemDefinitionId": "ordinary.carrot",
+          "sourceId": null,
+          "initiallyObservable": true
+        },
+        {
+          "resourceFamilyId": "food",
+          "instanceId": "item-5-5",
+          "entityId": 75,
+          "itemDefinitionId": "ordinary.carrot",
+          "sourceId": null,
+          "initiallyObservable": true
+        },
+        {
+          "resourceFamilyId": "food",
+          "instanceId": "item-7-6",
+          "entityId": 74,
+          "itemDefinitionId": "ordinary.carrot",
+          "sourceId": null,
+          "initiallyObservable": true
+        },
+        {
+          "resourceFamilyId": "food",
+          "instanceId": "item.77",
+          "entityId": 77,
+          "itemDefinitionId": "ordinary.berries",
+          "initiallyObservable": true
+        },
+        {
+          "resourceFamilyId": "food",
+          "instanceId": "item.78",
+          "entityId": 78,
+          "itemDefinitionId": "ordinary.berries",
+          "initiallyObservable": true
+        },
+        {
+          "resourceFamilyId": "medical",
+          "instanceId": "item.79",
+          "entityId": 79,
+          "itemDefinitionId": "legacy.aid",
+          "initiallyObservable": true
+        }
+      ]
+    }
+  ],
+  "outcomes": [
+    {
+      "id": "exit.16",
+      "name": "Exit",
+      "exitEntityId": 16,
+      "optional": false
+    }
+  ]
+}

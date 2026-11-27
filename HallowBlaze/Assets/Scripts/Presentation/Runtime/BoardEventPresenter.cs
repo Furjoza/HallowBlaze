@@ -20,8 +20,8 @@ namespace HallowBlaze.Presentation.Runtime
     {
         /// <summary>Replaces displayed resource values with the latest RunState values.</summary>
         /// <param name="health">Current run health.</param>
-        /// <param name="food">Current run food after complete domain resolution.</param>
-        void Refresh(int health, int food);
+        /// <param name="satiety">Current run satiety after complete domain resolution.</param>
+        void Refresh(int health, int satiety);
     }
 
     /// <summary>Retains positive applied resource gains separately from totals until the next accepted replay or disposal.</summary>
@@ -29,8 +29,8 @@ namespace HallowBlaze.Presentation.Runtime
     {
         /// <summary>Accumulates actual positive restoration, never a configured reward or net final-minus-initial difference.</summary>
         /// <param name="health">Applied health restored; zero leaves health feedback unchanged.</param>
-        /// <param name="food">Applied Food restored; zero leaves Food feedback unchanged.</param>
-        void AddResourceGains(int health, int food);
+        /// <param name="satiety">Applied satiety restored, excluding waste; zero leaves feedback unchanged.</param>
+        void AddResourceGains(int health, int satiety);
         /// <summary>Clears only transient gains without changing displayed totals, resources or another input owner.</summary>
         void ClearResourceGains();
     }
@@ -131,9 +131,13 @@ namespace HallowBlaze.Presentation.Runtime
                     DiggingDisplay.Refresh();
                     GroundToolsDisplay.Refresh();
                 });
+            InventoryDisplay = new InventorySessionPresenter(runtime, Coordinator, interactionInputAllowed);
+            var pickupOwner = new GameObject("Ground pickup") { hideFlags = HideFlags.DontSave };
+            PickupDisplay = pickupOwner.AddComponent<GroundPickupPresenter>();
+            PickupDisplay.Bind(runtime, Coordinator, interactionInputAllowed);
             var interactionOwner = new GameObject("Board interaction") { hideFlags = HideFlags.DontSave };
             InteractionDisplay = interactionOwner.AddComponent<InteractionPresenter>();
-            InteractionDisplay.Bind(runtime, Coordinator, interactionInputAllowed);
+            InteractionDisplay.Bind(runtime, Coordinator, interactionInputAllowed, command => SubmitAsync(command));
             if (intents != null)
                 intents.Bind(runtime.BoardState, () => disposed || runtime.IsDisposed || runtime.Controller.IsTerminal
                     ? null : runtime.BoardState);
@@ -190,6 +194,23 @@ namespace HallowBlaze.Presentation.Runtime
                 return Task.CompletedTask;
             });
             Dispatcher.Register<FoodRestoredEvent>((gameEvent, token) => RefreshFood(gameEvent));
+            Dispatcher.Register<GroundPickupResolvedEvent>((gameEvent, token) =>
+            {
+                RefreshHud();
+                if (gameEvent.Applied > 0)
+                    (hud as ITurnResourceGains)?.AddResourceGains(gameEvent.ResourceId == "health" ? gameEvent.Applied : 0,
+                        gameEvent.ResourceId == "satiety" ? gameEvent.Applied : 0);
+                return ShowFeedback(gameEvent);
+            });
+            Dispatcher.Register<InventoryItemActionEvent>((gameEvent, token) =>
+            {
+                RefreshHud();
+                (hud as ITurnResourceGains)?.AddResourceGains(
+                    gameEvent.ResourceId == InventoryItemActionEvent.Health ? gameEvent.Applied : 0,
+                    gameEvent.ResourceId == InventoryItemActionEvent.Satiety ? gameEvent.Applied : 0);
+                return ShowFeedback(gameEvent);
+            });
+            Dispatcher.Register<InventoryCommittedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
             Dispatcher.Register<HealthRestoredEvent>((gameEvent, token) =>
             {
                 RefreshHud();
@@ -218,6 +239,8 @@ namespace HallowBlaze.Presentation.Runtime
 
         /// <summary>Gets the one command path borrowing the runtime's existing controller.</summary>
         public CommandPresentationCoordinator Coordinator { get; }
+        /// <summary>Gets the minimal modal bag draft adapter; final B/grid/hotbar presentation belongs to M10.7.</summary>
+        public InventorySessionPresenter InventoryDisplay { get; }
         /// <summary>Gets the extensible registry; future concrete events can register handlers before replay.</summary>
         public OrderedEventDispatcher Dispatcher { get; }
         /// <summary>Gets this presenter's owned debug hearing display; snapshots are never recomputed by presentation.</summary>
@@ -448,14 +471,37 @@ namespace HallowBlaze.Presentation.Runtime
             return Task.CompletedTask;
         }
 
+        /// <summary>Gets the board-owned pre-command consumable modal.</summary>
+        public GroundPickupPresenter PickupDisplay { get; }
+
+        /// <summary>Opens a free pickup decision when required, otherwise submits through the sole coordinator.</summary>
+        public Task<CommandSubmission> SubmitAsync(PlayerCommand command, CancellationToken token = default)
+        {
+            if (disposed || !Coordinator.CanSubmit) return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.Blocked));
+            if (token.IsCancellationRequested) return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.Canceled));
+            if (PickupDisplay.TryOpen(command)) return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.NoCommand));
+            return Coordinator.SubmitAsync(command, token);
+        }
+
+        /// <summary>Samples at most one intent only while idle, then routes it through the same pre-command decision path.</summary>
+        public Task<CommandSubmission> SubmitFromAsync(ICommandSource source)
+        {
+            if (disposed || !Coordinator.CanSubmit) return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.Blocked));
+            if (source == null || !source.TryTakeCommand(out PlayerCommand command))
+                return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.NoCommand));
+            return SubmitAsync(command);
+        }
+
         private Task RefreshHud()
         {
-            hud.Refresh(runtime.RunState.Health, runtime.RunState.Food);
+            hud.Refresh(runtime.RunState.Health, runtime.RunState.Satiety);
             return Task.CompletedTask;
         }
 
         private Task NotifyOutcome(GameEvent gameEvent)
         {
+            InventoryDisplay.Dispose();
+            PickupDisplay.Dispose();
             (hud as ITurnResourceGains)?.ClearResourceGains();
             CloseIntents();
             NoiseDisplay.Dispose();
@@ -490,6 +536,13 @@ namespace HallowBlaze.Presentation.Runtime
             if (disposed)
                 return;
             disposed = true;
+            InventoryDisplay.Dispose();
+            if (PickupDisplay != null)
+            {
+                PickupDisplay.Dispose();
+                if (Application.isPlaying) UnityEngine.Object.Destroy(PickupDisplay.gameObject);
+                else UnityEngine.Object.DestroyImmediate(PickupDisplay.gameObject);
+            }
             Coordinator.Dispose();
             attacks.Dispose();
             CloseIntents();

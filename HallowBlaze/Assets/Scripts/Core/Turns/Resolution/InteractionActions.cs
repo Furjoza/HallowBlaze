@@ -35,8 +35,7 @@ namespace HallowBlaze.Core.Turns.Resolution
     }
 
     /// <summary>
-    /// Collects an explicitly interactive food item at commit only. Ordinary automatic food remains
-    /// movement-owned; tools and future decision-required inventory pickups need separate actions.
+    /// Retains the legacy action identity as disabled; existing consumables require entry, not a stationary retry.
     /// </summary>
     public sealed class CollectInteractionAction : IInteractionAction
     {
@@ -47,21 +46,16 @@ namespace HallowBlaze.Core.Turns.Resolution
             target.Definition.Traits.IsInteractable && target.Definition.AutomaticFoodReward > 0;
         /// <inheritdoc />
         public InteractionAvailability Evaluate(BoardState board, RunState run, BoardEntityState player, BoardEntityState target)
-            => run.Food <= int.MaxValue - target.Definition.AutomaticFoodReward
-                ? InteractionAvailability.Available : InteractionAvailability.InvalidState;
+            => board.TryGetGroundItem(target.Id, out _) ? InteractionAvailability.DecisionRequired : InteractionAvailability.InvalidTarget;
         /// <inheritdoc />
         public void Apply(BoardState board, RunState run, BoardEntityState player, BoardEntityState target,
             ICollection<GameEvent> events)
         {
-            if (!board.TryRemove(target.Id))
-                throw new InvalidOperationException("A validated collect target disappeared during commit.");
-            run.RestoreFood(target.Definition.AutomaticFoodReward);
-            events.Add(new ItemCollectedEvent(player.Id, target.Id));
-            events.Add(new FoodRestoredEvent(player.Id, target.Id, target.Definition.AutomaticFoodReward));
+            throw new InvalidOperationException("Consumables require a complete ground pickup command.");
         }
     }
 
-    /// <summary>Consumes one exact first-aid kit for at most ten Health up to 100; full or excess Health rejects without waste.</summary>
+    /// <summary>Retains the medical action identity as disabled; entry owns Use/Store/Leave, including deliberate cap waste.</summary>
     public sealed class FirstAidInteractionAction : IInteractionAction, IInteractionConsequences
     {
         /// <summary>Identifies the existing medical item independently of artwork or Unity tags.</summary>
@@ -70,7 +64,7 @@ namespace HallowBlaze.Core.Turns.Resolution
         public const string ActionId = "use-first-aid";
         /// <summary>Gets the kit's fixed maximum restoration before its own Health ceiling.</summary>
         public const int HealAmount = 10;
-        /// <summary>Gets the kit-specific ceiling; this does not change the legacy global Health API.</summary>
+        /// <summary>Gets the initial content balance ceiling; runtime availability uses the run's persisted health cap.</summary>
         public const int HealthCeiling = 100;
 
         /// <inheritdoc />
@@ -80,22 +74,17 @@ namespace HallowBlaze.Core.Turns.Resolution
         /// <inheritdoc />
         public int NoiseLifetimeTurns => ActionNoiseProfile.Prototype.LifetimeTurns;
         /// <inheritdoc />
-        public string DescribeEffect(BoardState board, BoardEntityState target) => "First aid: +10 Health (max 100)";
+        public string DescribeEffect(BoardState board, BoardEntityState target) => "First aid: up to +10 Health";
         /// <inheritdoc />
         public bool Supports(BoardEntityState target) => target.Definition.Layer == BoardLayer.Item &&
             target.Definition.ContentId == ContentId && target.Definition.Traits.IsInteractable;
         /// <inheritdoc />
         public InteractionAvailability Evaluate(BoardState board, RunState run, BoardEntityState player, BoardEntityState target)
-            => run.Health > 0 && run.Health < HealthCeiling ? InteractionAvailability.Available : InteractionAvailability.InvalidState;
+            => board.TryGetGroundItem(target.Id, out _) ? InteractionAvailability.DecisionRequired : InteractionAvailability.InvalidTarget;
         /// <inheritdoc />
         public void Apply(BoardState board, RunState run, BoardEntityState player, BoardEntityState target, ICollection<GameEvent> events)
         {
-            int amount = Math.Min(HealAmount, HealthCeiling - run.Health);
-            if (amount <= 0 || !board.TryRemove(target.Id))
-                throw new InvalidOperationException("A validated medical item changed during commit.");
-            run.RestoreHealth(amount);
-            events.Add(new ItemCollectedEvent(player.Id, target.Id));
-            events.Add(new HealthRestoredEvent(player.Id, target.Id, amount));
+            throw new InvalidOperationException("Medical items require a complete ground pickup command.");
         }
     }
 

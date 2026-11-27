@@ -50,6 +50,9 @@ namespace HallowBlaze.Editor.BoardAuthoring
         private BoardDocumentStore store;
         private BoardGridView grid;
         private BoardPropertyPanel properties;
+        private BoardResourcePanel resources = new BoardResourcePanel();
+        private Vector2 resourceScroll;
+        private Rect resourceViewportRect;
         private IReadOnlyList<BoardAuthoringDiagnostic> diagnostics = Array.Empty<BoardAuthoringDiagnostic>();
         private string error = "";
         private string rejectedPath = "";
@@ -480,7 +483,15 @@ namespace HallowBlaze.Editor.BoardAuthoring
                 if (wide) { EditorGUILayout.EndVertical(); EditorGUILayout.BeginVertical(GUILayout.Width(canvasSide + 24)); }
                 DrawCanvas(data, canvasSide);
                 if (wide) { EditorGUILayout.EndVertical(); EditorGUILayout.BeginVertical(GUILayout.Width(310)); }
-                if (properties.Draw(document, variantId, Grid, ConfirmReferences, RefreshDocument, canvasSide + 24)) RefreshDocument();
+                resourceScroll = EditorGUILayout.BeginScrollView(resourceScroll, GUILayout.Height(220));
+                resources.Draw(document, variantId, poolAuthoring, testSettings, guiOrigin);
+                EditorGUILayout.EndScrollView();
+                if (Event.current.type == EventType.Repaint)
+                {
+                    Rect resourceViewport = GUILayoutUtility.GetLastRect();
+                    resourceViewportRect = new Rect(GUIUtility.GUIToScreenPoint(resourceViewport.position) - guiOrigin, resourceViewport.size);
+                }
+                if (properties.Draw(document, variantId, Grid, ConfirmReferences, RefreshDocument, wide ? canvasSide - 220 : canvasSide + 24)) RefreshDocument();
                 if (wide) { EditorGUILayout.EndVertical(); EditorGUILayout.EndHorizontal(); }
                 DrawDiagnostics();
                 EditorGUILayout.EndVertical();
@@ -493,6 +504,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
                 EditorGUILayout.EndHorizontal();
                 }
             }
+            else resources.Draw(null, variantId, poolAuthoring, testSettings, guiOrigin);
             EditorGUILayout.EndScrollView();
             if (Event.current.type == EventType.Repaint)
                 workspaceViewportRect = GUILayoutUtility.GetLastRect();
@@ -552,7 +564,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
                     Defer(() => testSettings.Seed = BitConverter.ToInt32(Guid.NewGuid().ToByteArray(), 0));
             }
             testSettings.Health = EditorGUILayout.IntField("Starting Health", testSettings.Health);
-            testSettings.Food = EditorGUILayout.IntField("Starting Food", testSettings.Food);
+            testSettings.Food = EditorGUILayout.IntField("Starting Satiety", testSettings.Food);
             testSettings.EquipAxe = EditorGUILayout.Toggle("Equip Axe", testSettings.EquipAxe);
             if (document != null) DrawBoardCheck();
             if (document != null) assignmentPanel.Draw(Defer, SaveAssignment, OpenAssignment);

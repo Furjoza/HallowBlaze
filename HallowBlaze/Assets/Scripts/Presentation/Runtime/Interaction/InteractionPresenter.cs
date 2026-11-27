@@ -22,6 +22,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         private BoardRuntime runtime;
         private CommandPresentationCoordinator coordinator;
         private Func<bool> inputAllowed;
+        private Func<PlayerCommand, Task<CommandSubmission>> submit;
         private readonly List<GameObject> markers = new List<GameObject>();
         private Material material;
         private Vector2 scroll;
@@ -60,13 +61,15 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         /// <param name="runtime">Borrowed board whose query is also used by its resolver.</param>
         /// <param name="coordinator">The one production command/presentation path.</param>
         /// <param name="inputAllowed">Optional lifecycle permission excluding this picker's own block.</param>
-        public void Bind(BoardRuntime runtime, CommandPresentationCoordinator coordinator, Func<bool> inputAllowed = null)
+        public void Bind(BoardRuntime runtime, CommandPresentationCoordinator coordinator, Func<bool> inputAllowed = null,
+            Func<PlayerCommand, Task<CommandSubmission>> submit = null)
         {
             if (IsDisposed || this.runtime != null)
                 throw new InvalidOperationException("An interaction picker belongs to exactly one board.");
             this.runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
             this.inputAllowed = inputAllowed ?? (() => true);
+            this.submit = submit ?? (command => coordinator.SubmitAsync(command));
             toolCatalog = ToolContentCatalog.Load();
         }
 
@@ -134,7 +137,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             else command = SelectedIndex < Options.Count ? (PlayerCommand)Options[SelectedIndex].CreateCommand() :
                 ToolOptions[SelectedIndex - Options.Count].CreateCommand();
             Close(false);
-            Task<CommandSubmission> submission = coordinator.SubmitAsync(command);
+            Task<CommandSubmission> submission = submit(command);
             HoldRemainderOfFrame();
             return submission;
         }
@@ -308,7 +311,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 }
                 GUILayout.EndScrollView();
                 RevealSelectedRow();
-                GUILayout.Label("1 turn; Food -" + runtime.Tools.ActionCosts.FoodCost + "; Noise " +
+                GUILayout.Label("1 turn; Satiety -" + runtime.Tools.ActionCosts.GetCost(runtime.RunState) + "; Noise " +
                     ActionNoiseProfile.Prototype.InteractionStrength + " / " + ActionNoiseProfile.Prototype.LifetimeTurns + " turns");
                 GUI.enabled = replacementChoice != null;
                 if (GUILayout.Button("Replace", GUILayout.Height(32f))) ConfirmFromGui();
@@ -383,8 +386,9 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             if (index < Options.Count)
             {
                 InteractionOption option = Options[index];
-                if (option.ActionId == FirstAidInteractionAction.ActionId && runtime.RunState.Health >= FirstAidInteractionAction.HealthCeiling)
-                    return "Health is full - first aid is not needed.";
+                if (option.Availability == InteractionAvailability.DecisionRequired &&
+                    (option.ActionId == FirstAidInteractionAction.ActionId || option.ActionId == "collect"))
+                    return "Entry required";
                 return option.Availability.ToString();
             }
             return index < Options.Count + ToolOptions.Count ? ToolOptions[index - Options.Count].RejectionCode.ToString() :
@@ -401,7 +405,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             {
                 InteractionOption interaction = Options[index];
                 if (interaction.EffectLabel == null) return ActionLabel(interaction.ActionId) + target;
-                return interaction.EffectLabel + target + "\n1 turn; Food -" + runtime.Tools.ActionCosts.FoodCost +
+                return interaction.EffectLabel + target + "\n1 turn; Satiety -" + runtime.Tools.ActionCosts.GetCost(runtime.RunState) +
                     "; Charge 0; Noise " + interaction.NoiseStrength + " / " + interaction.NoiseLifetimeTurns + " turns";
             }
             if (index >= Options.Count + ToolOptions.Count)
@@ -409,18 +413,23 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
                 ToolPickupOption pickup = PickupOptions[index - Options.Count - ToolOptions.Count];
                 return "Pick up " + DescribeTool(pickup.Tool.DefinitionId, pickup.Tool.Charges) + target +
                     (pickup.RequiresReplacement ? "\nReplace / Leave" : "\nTool " + (pickup.Choices.Count == 0 ? "?" : (pickup.Choices[0].SlotIndex + 1).ToString())) +
-                    "\n1 turn; Food -" + runtime.Tools.ActionCosts.FoodCost + "; Charge 0; Noise " +
+                    "\n1 turn; Satiety -" + runtime.Tools.ActionCosts.GetCost(runtime.RunState) + "; Charge 0; Noise " +
                     ActionNoiseProfile.Prototype.InteractionStrength + " / " + ActionNoiseProfile.Prototype.LifetimeTurns + " turns";
             }
             ToolUseOption option = ToolOptions[index - Options.Count];
             return "Tool " + (option.SlotIndex + 1) + ": " + option.EffectLabel + target +
-                "\n1 turn; Food -" + option.FoodCost + "; Charge -" + option.ChargeCost +
-                " (" + option.ExpectedCharges + " left); Noise " + option.NoiseStrength +
+                "\n1 turn; Satiety -" + option.SatietyCost +
+                (option.ChargeCost == 0 ? "" : "; Charge -" + option.ChargeCost + " (" + option.ExpectedCharges + " left)") +
+                "; Noise " + option.NoiseStrength +
                 (option.NoiseStrength == 0 ? "" : " / " + option.NoiseLifetimeTurns + " turns");
         }
 
-        private string DescribeTool(string definitionId, int charges) =>
-            (toolCatalog.TryGetValue(definitionId, out ToolDefinition definition) ? definition.DisplayName : definitionId) + " (" + charges + " charges)";
+        private string DescribeTool(string definitionId, int charges)
+        {
+            bool known = toolCatalog.TryGetValue(definitionId, out ToolDefinition definition);
+            return (known ? definition.DisplayName : definitionId) +
+                (known && definition.IsReusable ? "" : " (" + charges + " charges)");
+        }
 
         private bool IsAvailable(int index) => index < Options.Count ? Options[index].IsAvailable :
             index < Options.Count + ToolOptions.Count ? ToolOptions[index - Options.Count].IsAvailable :

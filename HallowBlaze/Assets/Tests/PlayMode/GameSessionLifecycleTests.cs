@@ -79,14 +79,14 @@ namespace HallowBlaze.Tests.PlayMode
             GameSession session = GetProperty<GameSession>(manager, "Session");
             ProfileState profile = session.Profile;
             RunState firstRun = session.ActiveRun;
-            session.ConsumeFood(25);
+            session.ConsumeSatiety(25);
             session.TakeDamage(15);
 
             Invoke(manager, "StartNewRun");
 
             Assert.That(session.Profile, Is.SameAs(profile));
             Assert.That(session.ActiveRun, Is.Not.SameAs(firstRun));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(100));
             Assert.That(session.ActiveRun.Health, Is.EqualTo(100));
             Assert.That(session.ActiveRun.CurrentDay, Is.Zero);
             Assert.That(session.ActiveRun.Status, Is.EqualTo(RunStatus.Active));
@@ -194,12 +194,12 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(facing.QuarterTurns, Is.EqualTo(1));
             Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(1));
             yield return null;
-            int food = runtime.RunState.Food;
+            int food = runtime.RunState.Satiety;
             arguments = new object[] { new WaitCommand(), null };
             Assert.That((bool)Invoke(player, "TrySubmitCommand", arguments), Is.True);
             operation = (Task<CommandSubmission>)arguments[1];
             while (!operation.IsCompleted) yield return null;
-            Assert.That(runtime.RunState.Food, Is.EqualTo(food - 1));
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(food - 1));
             Assert.That(presenter.Coordinator.ResolutionCount, Is.EqualTo(2));
             Assert.That(facing.QuarterTurns, Is.EqualTo(1));
             Invoke(manager, "GameOver", false);
@@ -416,7 +416,7 @@ namespace HallowBlaze.Tests.PlayMode
             Invoke(manager, "StartNewRun");
             GameSession session = GetProperty<GameSession>(manager, "Session");
             RunState run = session.ActiveRun;
-            session.ConsumeFood(13);
+            session.ConsumeSatiety(13);
             session.TakeDamage(7);
             Scene originalScene = SceneManager.GetActiveScene();
             Scene nextScene = SceneManager.CreateScene("M1.4 Session Boundary " + Guid.NewGuid().ToString("N"));
@@ -427,7 +427,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetStaticField(gameManagerType, "instance"), Is.SameAs(manager));
             Assert.That(GetProperty<GameSession>(manager, "Session"), Is.SameAs(session));
             Assert.That(session.ActiveRun, Is.SameAs(run));
-            Assert.That(run.Food, Is.EqualTo(87));
+            Assert.That(run.Satiety, Is.EqualTo(87));
             Assert.That(run.Health, Is.EqualTo(93));
 
             Assert.That(SceneManager.SetActiveScene(originalScene), Is.True);
@@ -451,8 +451,8 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(run.CurrentDay, Is.EqualTo(2));
             Assert.That(run.CompletedDayCount, Is.EqualTo(1));
 
-            int expectedFood = run.Food - 14;
-            session.ConsumeFood(14);
+            int expectedFood = run.Satiety - 14;
+            session.ConsumeSatiety(14);
             session.TakeDamage(11);
             Component firstPlayer = FindSceneComponent(playerType, "Main");
             Assert.That(firstPlayer, Is.Not.Null);
@@ -460,7 +460,7 @@ namespace HallowBlaze.Tests.PlayMode
             BoardEventPresenter oldPresenter = GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter");
             oldPresenter.SynchronizeFromState();
             int firstPlayerInstanceId = firstPlayer.GetInstanceID();
-            Assert.That(GetField<Text>(firstPlayer, "foodText").text, Is.EqualTo("Food: " + expectedFood));
+            Assert.That(GetField<Text>(firstPlayer, "foodText").text, Is.EqualTo("Satiety: " + expectedFood));
             Assert.That(GetField<Text>(firstPlayer, "healthText").text, Is.EqualTo("Health: 89"));
 
             AsyncOperation reload = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
@@ -474,14 +474,14 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(GetProperty<GameSession>(reloadedManager, "Session"), Is.SameAs(session));
             Assert.That(session.ActiveRun, Is.SameAs(run));
             Assert.That(run.CurrentDay, Is.EqualTo(2));
-            Assert.That(run.Food, Is.EqualTo(expectedFood));
+            Assert.That(run.Satiety, Is.EqualTo(expectedFood));
             Assert.That(run.Health, Is.EqualTo(89));
             Assert.That(replacementPlayer, Is.Not.Null);
             Assert.That(replacementPlayer.GetInstanceID(), Is.Not.EqualTo(firstPlayerInstanceId));
             Assert.That(oldRuntime.IsDisposed, Is.True);
             Assert.That(oldPresenter.Coordinator.CanSubmit, Is.False);
             Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
-            Assert.That(GetField<Text>(replacementPlayer, "foodText").text, Is.EqualTo("Food: " + expectedFood));
+            Assert.That(GetField<Text>(replacementPlayer, "foodText").text, Is.EqualTo("Satiety: " + expectedFood));
             Assert.That(GetField<Text>(replacementPlayer, "healthText").text, Is.EqualTo("Health: 89"));
             Assert.That(GetField<GameObject>(manager, "levelImage").activeSelf, Is.False,
                 "Reload of Consumed must not repeat the intro.");
@@ -521,7 +521,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(restartedRun.Status, Is.EqualTo(RunStatus.Active));
             Assert.That(restartedRun.CurrentDay, Is.EqualTo(1));
             Assert.That(restartedRun.CompletedDayCount, Is.Zero);
-            Assert.That(restartedRun.Food, Is.EqualTo(100));
+            Assert.That(restartedRun.Satiety, Is.EqualTo(100));
             Assert.That(restartedRun.Health, Is.EqualTo(100));
             Assert.That(((Behaviour)manager).enabled, Is.True);
             Assert.That(restartedRun.WorldNodeId, Is.EqualTo("shelter.warm-up"));
@@ -1099,14 +1099,14 @@ namespace HallowBlaze.Tests.PlayMode
                     .First(direction => !opening.BoardState.GetEntities().Any(entity =>
                         entity.Definition.Layer == BoardLayer.Terrain && entity.Definition.Traits.IsWalkable &&
                         entity.Position.Equals(new GridPosition(origin.X + direction.DeltaX, origin.Y + direction.DeltaY))));
-                int food = session.ActiveRun.Food;
+                int food = session.ActiveRun.Satiety;
                 int sounds = GetProperty<int>(player, "PresentedSoundCount");
                 object[] rejectedArguments = { new MoveCommand(blocked), null };
                 Assert.That((bool)Invoke(manager, "TrySubmitCommand", rejectedArguments), Is.True);
                 var rejection = (Task<CommandSubmission>)rejectedArguments[1];
                 while (!rejection.IsCompleted) yield return null;
                 Assert.That(rejection.Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
-                Assert.That(session.ActiveRun.Food, Is.EqualTo(food));
+                Assert.That(session.ActiveRun.Satiety, Is.EqualTo(food));
                 Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(sounds));
                 Assert.That(GetField<Text>(player, "healthText").text, Does.EndWith(" +7"));
                 yield return PresentExit(manager, false, animations);
@@ -1175,7 +1175,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address, Is.EqualTo(address));
                 Assert.That(continued.CurrentDay, Is.EqualTo(2));
                 Assert.That(continued.Health, Is.EqualTo(checkpoint.Health));
-                Assert.That(continued.Food, Is.EqualTo(checkpoint.Food));
+                Assert.That(continued.Satiety, Is.EqualTo(checkpoint.Satiety));
                 Assert.That(GetProperty<GameSession>(manager, "Session").Profile.DiscoveredFactIds,
                     Does.Contain("PIT_TRAPS_SHAMBLER"));
                 Assert.That(GetField<GameObject>(manager, "levelImage").activeSelf, Is.False);
@@ -1280,7 +1280,7 @@ namespace HallowBlaze.Tests.PlayMode
             BoardAddress openingAddress = GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address;
             Assert.That(firstRun.CurrentDay, Is.EqualTo(1));
             Assert.That(firstRun.CompletedDayCount, Is.Zero);
-            firstSession.ConsumeFood(9);
+            firstSession.ConsumeSatiety(9);
             Assert.That((bool)Invoke(manager, "ExitToMenu"), Is.True);
             Assert.That(firstSession.ActiveRun, Is.Null);
 
@@ -1294,7 +1294,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(continuedSession.ActiveRun.RunId, Is.EqualTo(firstRun.RunId));
             Assert.That(continuedSession.ActiveRun.CurrentDay, Is.EqualTo(1));
             Assert.That(continuedSession.ActiveRun.CompletedDayCount, Is.Zero);
-            Assert.That(continuedSession.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(continuedSession.ActiveRun.Satiety, Is.EqualTo(100));
             Assert.That(continuedSession.ActiveRun.ActiveLeg.IntroState, Is.EqualTo(DayIntroState.Consumed));
             Assert.That(GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime").Request.Address,
                 Is.EqualTo(openingAddress));
@@ -1302,6 +1302,82 @@ namespace HallowBlaze.Tests.PlayMode
 
             Scene cleanupScene = SceneManager.CreateScene("M1.7 Continue Cleanup " + Guid.NewGuid().ToString("N"));
             Assert.That(SceneManager.SetActiveScene(cleanupScene), Is.True);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
+        /// <summary>The real menu button reads a committed production consumable and Continue retains its exact identity and anchor.</summary>
+        [UnityTest]
+        public IEnumerator MenuContinueLoadsCheckpointWithStoredConsumable()
+        {
+            InventoryContent content = GroundPickupContent.Load();
+            var run = new RunState("menu-pickup", 105, new RunStateConfiguration(100, 100, 0, "shelter.warm-up", inventoryContent: content));
+            var placement = new InventoryPlacement(new ItemInstanceState("checkpoint.raspberry", "legacy.food"), InventoryContainer.RightPocket);
+            Assert.That(run.TryCommitInventory(0, new[] { placement }, out _), Is.True);
+            var store = new FileSystemSaveStore(persistenceRoot, inventoryContent: content);
+            Assert.That(store.SaveProfile(new ProfileState("menu-pickup-profile", "world-1", 1)).IsSuccess, Is.True);
+            Assert.That(store.SaveRun(run).IsSuccess, Is.True);
+            yield return SceneManager.LoadSceneAsync("Menu", LoadSceneMode.Single);
+            yield return null;
+            Button button = GameObject.Find("ContinueBttn").GetComponent<Button>();
+            Assert.That(button.interactable, Is.True);
+            button.onClick.Invoke();
+            yield return null;
+            yield return null;
+            Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo("Main"));
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            RunState continued = GetProperty<GameSession>(manager, "Session").ActiveRun;
+            Assert.That(continued.RunId, Is.EqualTo(run.RunId));
+            InventoryPlacement retained = continued.Inventory.Placements.Single();
+            Assert.That(retained.Item.InstanceId, Is.EqualTo(placement.Item.InstanceId));
+            Assert.That(retained.Item.DefinitionId, Is.EqualTo(placement.Item.DefinitionId));
+            Assert.That(retained.Container, Is.EqualTo(InventoryContainer.RightPocket));
+            Assert.That(continued.InventoryRevision, Is.EqualTo(1));
+            Scene cleanup = SceneManager.CreateScene("M10.5 menu checkpoint cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
+        /// <summary>The production cancel handler and pause Escape handler share a frame without opening pause or submitting the pickup.</summary>
+        [UnityTest]
+        public IEnumerator PickupEscapeDoesNotAlsoOpenProductionPause()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            float deadline = Time.realtimeSinceStartup + 10;
+            while (!GetProperty<bool>(manager, "IsGameplayInputEnabled") && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.True);
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            BoardEventPresenter boardPresenter = (BoardEventPresenter)manager.GetType().GetField("activeBoardPresenter", InstanceFlags).GetValue(manager);
+            runtime.BoardState.TryGetEntity(runtime.PlayerId, out BoardEntityState player);
+            Direction direction = new[] { Direction.North, Direction.East, Direction.South, Direction.West }.First(candidate =>
+            {
+                GridPosition destination = player.Position.Move(candidate);
+                return runtime.BoardState.TryGetEntity(BoardLayer.Terrain, destination, out BoardEntityState terrain) && terrain.Definition.Traits.IsWalkable &&
+                    !runtime.BoardState.TryGetEntity(BoardLayer.Obstacle, destination, out _) && !runtime.BoardState.TryGetEntity(BoardLayer.Actor, destination, out _) &&
+                    !runtime.BoardState.TryGetEntity(BoardLayer.Item, destination, out _);
+            });
+            var itemId = new HallowBlaze.Core.Board.Primitives.EntityId(runtime.BoardState.GetEntities().Max(entity => entity.Id.Value) + 1);
+            Assert.That(runtime.BoardState.TryAdd(new BoardEntityState(itemId,
+                new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, "legacy.food"), player.Position.Move(direction))), Is.True);
+            Assert.That(runtime.BoardState.TryBindGroundItem(new GroundItemState(itemId, "pause-test.raspberry", "legacy.food")), Is.True);
+            int satiety = runtime.RunState.Satiety;
+            Assert.That(boardPresenter.PickupDisplay.TryOpen(new MoveCommand(direction)), Is.True);
+            Assert.That(boardPresenter.PickupDisplay.HandleKey(KeyCode.Escape), Is.True);
+            Component pause = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
+                .Single(component => component.GetType().Name == "PauseMenuController");
+            Invoke(pause, "HandleEscape");
+            Assert.That(GetProperty<object>(pause, "CurrentState").ToString(), Is.EqualTo("Closed"));
+            Assert.That(boardPresenter.PickupDisplay.IsOpen, Is.False);
+            Assert.That(boardPresenter.Coordinator.ResolutionCount, Is.Zero);
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(satiety));
+            Assert.That(runtime.BoardState.TryGetGroundItem(itemId, out _), Is.True);
+            Assert.That(runtime.BoardState.TryGetEntity(runtime.PlayerId, out BoardEntityState retained), Is.True);
+            Assert.That(retained.Position, Is.EqualTo(player.Position));
+            yield return null;
+            Scene cleanup = SceneManager.CreateScene("M10.5 pause cancel cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
             yield return SceneManager.UnloadSceneAsync("Main");
         }
 
@@ -1408,7 +1484,7 @@ namespace HallowBlaze.Tests.PlayMode
                     Assert.That(session.ActiveRun.ActiveLeg.IntroState, Is.EqualTo(DayIntroState.Consumed));
                     Assert.That(session.ActiveRun.CompletedDayCount, Is.Zero);
                     Assert.That(choicesPublished, Is.Zero);
-                    session.ConsumeFood(3);
+                    session.ConsumeSatiety(3);
                     session.TakeDamage(2);
                     Assert.That((bool)Invoke(manager, "ExitToMenu"), Is.True);
                     InvokeStatic(gameManagerType, "RequestContinue");
@@ -1417,22 +1493,22 @@ namespace HallowBlaze.Tests.PlayMode
                     session = GetProperty<GameSession>(manager, "Session");
                     Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address, Is.EqualTo(request.Address));
                     Assert.That(GetProperty<BoardBlueprint>(GetField<Component>(manager, "boardScript"), "ActiveBlueprint").ContentHash, Is.EqualTo(hash));
-                    Assert.That(session.ActiveRun.Food, Is.EqualTo(checkpoint.Food));
+                    Assert.That(session.ActiveRun.Satiety, Is.EqualTo(checkpoint.Satiety));
                     Assert.That(session.ActiveRun.Health, Is.EqualTo(checkpoint.Health));
                     Assert.That(session.ActiveRun.TraversalSequence, Is.EqualTo(1));
                     Assert.That(GetField<GameObject>(manager, "levelImage").activeSelf, Is.False, "Consumed Day must not replay.");
-                    session.ConsumeFood(index + 1);
+                    session.ConsumeSatiety(index + 1);
                     session.RestoreHealth(1);
-                    int food = session.ActiveRun.Food;
+                    int food = session.ActiveRun.Satiety;
                     int health = session.ActiveRun.Health;
                     BoardOutcome outcome = BoardOutcome.ExitReached(GetProperty<BoardRequest>(manager, "ActiveBoardRequest"));
                     Assert.That((bool)Invoke(manager, "HandleBoardOutcome", outcome), Is.True);
                     yield return null;
                     yield return null;
                     Assert.That((bool)Invoke(manager, "HandleBoardOutcome", outcome), Is.False);
-                    Assert.That(session.ActiveRun.Food, Is.EqualTo(food));
+                    Assert.That(session.ActiveRun.Satiety, Is.EqualTo(food));
                     Assert.That(session.ActiveRun.Health, Is.EqualTo(health));
-                    Assert.That(store.LoadRun().Data.Food, Is.EqualTo(food));
+                    Assert.That(store.LoadRun().Data.Satiety, Is.EqualTo(food));
                     Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(index == 2 ? 1 : 0));
                     Assert.That(GetProperty<bool>(manager, "IsRouteChoiceActive"), Is.EqualTo(index == 2));
                     Component atlas = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
@@ -1476,7 +1552,7 @@ namespace HallowBlaze.Tests.PlayMode
             session = GetProperty<GameSession>(manager, "Session");
             Assert.That(GetProperty<BoardRequest>(manager, "ActiveBoardRequest").Address, Is.EqualTo(address));
             Assert.That(session.ActiveRun.ActiveLeg.Segments, Has.Count.EqualTo(1));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(61));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(61));
             Assert.That(session.ActiveRun.Health, Is.EqualTo(73));
             yield return PresentExit(manager);
             Assert.That(session.ActiveRun.CompletedDayCount, Is.EqualTo(1));
@@ -1757,7 +1833,7 @@ namespace HallowBlaze.Tests.PlayMode
             }
             Assert.That(runtime.BoardState.TryGetEntity(runtime.PlayerId, out BoardEntityState player), Is.True);
             Assert.That(player.Position.ManhattanDistance(blueprint.Start), Is.GreaterThanOrEqualTo(3));
-            Assert.That(runtime.RunState.Food, Is.GreaterThan(0));
+            Assert.That(runtime.RunState.Satiety, Is.GreaterThan(0));
         }
 
         /// <summary>Dying in the opening records no completed day and a fresh restart retains profile knowledge.</summary>
@@ -1915,7 +1991,7 @@ namespace HallowBlaze.Tests.PlayMode
             }));
             Assert.That(continuedRun.CompletedDayCount, Is.EqualTo(2));
             Assert.That(continuedRun.Health, Is.EqualTo(100));
-            Assert.That(continuedRun.Food, Is.EqualTo(100 - 4 * (firstSegmentCount + secondSegmentCount)),
+            Assert.That(continuedRun.Satiety, Is.EqualTo(100 - 4 * (firstSegmentCount + secondSegmentCount)),
                 "Every fixture segment must execute four accepted moves through the production controller.");
             Assert.That(continuedSession.Profile.GetNodeDiscoveryState("forest.old-road"),
                 Is.EqualTo(NodeDiscoveryState.Visited));
@@ -1925,7 +2001,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(checkpoint.Data.CurrentDay, Is.EqualTo(2));
             Assert.That(checkpoint.Data.WorldNodeId, Is.EqualTo("forest.old-road"));
             Assert.That(checkpoint.Data.Route, Is.EqualTo(continuedRun.Route));
-            Assert.That(checkpoint.Data.Food, Is.EqualTo(continuedRun.Food));
+            Assert.That(checkpoint.Data.Satiety, Is.EqualTo(continuedRun.Satiety));
             Assert.That(checkpoint.Data.ToolSlots[0].Instance.InstanceId, Is.EqualTo(axe.InstanceId));
             Assert.That(checkpoint.Data.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
 
@@ -2123,7 +2199,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That((bool)Invoke(oldPlayer, "TrySubmitCommand", arguments), Is.True);
             var pending = (Task<CommandSubmission>)arguments[1];
             Assert.That(pending.IsCompleted, Is.False);
-            int resolvedFood = oldRuntime.RunState.Food;
+            int resolvedFood = oldRuntime.RunState.Satiety;
             Invoke(manager, "BlockBoardStartup");
             yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
             while (!pending.IsCompleted)
@@ -2133,7 +2209,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(oldPresenter.Coordinator.CanSubmit, Is.False);
             BoardRuntime replacement = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
             Assert.That(oldRequest.HasSameIdentity(replacement.Request), Is.True);
-            Assert.That(replacement.RunState.Food, Is.EqualTo(resolvedFood));
+            Assert.That(replacement.RunState.Satiety, Is.EqualTo(resolvedFood));
             Assert.That(GetProperty<BoardEventPresenter>(manager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
             Assert.That(((IBoardOutcomeSink)manager).TryNotify(oldRequest, new PlayerDiedEvent(replacement.PlayerId)), Is.False);
             Assert.That(replacement.RunState.Status, Is.EqualTo(RunStatus.Active));
@@ -2246,7 +2322,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(session.ActiveRun, Is.Not.SameAs(completedRun));
             Assert.That(session.ActiveRun.Status, Is.EqualTo(RunStatus.Active));
             Assert.That(session.ActiveRun.CurrentDay, Is.Zero);
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(100));
             Assert.That(session.ActiveRun.Health, Is.EqualTo(100));
 
             yield return null;
@@ -2258,23 +2334,23 @@ namespace HallowBlaze.Tests.PlayMode
             Component manager = CreateManager("M1.4 Player Manager");
             Invoke(manager, "StartNewRun");
             GameSession session = GetProperty<GameSession>(manager, "Session");
-            session.ConsumeFood(27);
+            session.ConsumeSatiety(27);
             session.TakeDamage(18);
 
             Component firstPlayer = CreatePlayer("M1.4 First Player", out Text firstFood, out Text firstHealth);
-            Assert.That(firstFood.text, Is.EqualTo("Food: 73"));
+            Assert.That(firstFood.text, Is.EqualTo("Satiety: 73"));
             Assert.That(firstHealth.text, Is.EqualTo("Health: 82"));
 
             ((Behaviour)firstPlayer).enabled = false;
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(73));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(73));
             Assert.That(session.ActiveRun.Health, Is.EqualTo(82));
 
-            session.ConsumeFood(3);
+            session.ConsumeSatiety(3);
             session.TakeDamage(2);
             ((Behaviour)firstPlayer).enabled = true;
-            Invoke(firstPlayer, "Refresh", session.ActiveRun.Health, session.ActiveRun.Food);
+            Invoke(firstPlayer, "Refresh", session.ActiveRun.Health, session.ActiveRun.Satiety);
 
-            Assert.That(firstFood.text, Is.EqualTo("Food: 70"));
+            Assert.That(firstFood.text, Is.EqualTo("Satiety: 70"));
             Assert.That(firstHealth.text, Is.EqualTo("Health: 80"));
             Assert.That(playerType.GetField("food", InstanceFlags), Is.Null);
             Assert.That(playerType.GetField("health", InstanceFlags), Is.Null);
@@ -2284,9 +2360,9 @@ namespace HallowBlaze.Tests.PlayMode
             yield return null;
 
             Assert.That(GetProperty<GameSession>(manager, "Session"), Is.SameAs(session));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(70));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(70));
             Assert.That(session.ActiveRun.Health, Is.EqualTo(80));
-            Assert.That(replacementFood.text, Is.EqualTo("Food: 70"));
+            Assert.That(replacementFood.text, Is.EqualTo("Satiety: 70"));
             Assert.That(replacementHealth.text, Is.EqualTo("Health: 80"));
 
             UnityEngine.Object.DestroyImmediate(replacement.gameObject);
@@ -2326,14 +2402,14 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(knowledge.FeedbackTitle, Is.EqualTo("Held by the ground"));
             if (deathReason == DeathReason.Starvation)
             {
-                session.ConsumeFood(completedRun.Food - 1);
+                session.ConsumeSatiety(completedRun.Satiety - 1);
                 object[] arguments = { new WaitCommand(), null };
                 Assert.That((bool)Invoke(FindSceneComponent(playerType, "Main"), "TrySubmitCommand", arguments), Is.True);
                 var submission = (Task<CommandSubmission>)arguments[1];
                 while (!submission.IsCompleted)
                     yield return null;
                 Assert.That(submission.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
-                Assert.That(completedRun.Food, Is.Zero);
+                Assert.That(completedRun.Satiety, Is.Zero);
             }
             else
                 yield return PresentHealthDeath(manager);
@@ -2376,7 +2452,7 @@ namespace HallowBlaze.Tests.PlayMode
             SetField(player, "foodText", foodText);
             SetField(player, "healthText", healthText);
             RunState run = GetProperty<GameSession>((Component)GetStaticField(gameManagerType, "instance"), "Session").ActiveRun;
-            Invoke(player, "Refresh", run.Health, run.Food);
+            Invoke(player, "Refresh", run.Health, run.Satiety);
             return player;
         }
 
@@ -2430,7 +2506,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(run.CurrentDay, Is.EqualTo(1));
             Assert.That(run.CompletedDayCount, Is.Zero);
             Assert.That(run.Health, Is.EqualTo(100));
-            Assert.That(run.Food, Is.EqualTo(100));
+            Assert.That(run.Satiety, Is.EqualTo(100));
             Assert.That(run.ActiveLeg.EdgeId, Is.EqualTo("road.shelter-warm-up"));
             Assert.That(run.ActiveLeg.DayNumber, Is.EqualTo(1));
             Assert.That(run.ActiveLeg.Segments, Has.Count.EqualTo(3));

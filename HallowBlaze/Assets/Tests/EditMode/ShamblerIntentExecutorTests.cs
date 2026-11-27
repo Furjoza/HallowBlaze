@@ -60,7 +60,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(movement.From, Is.EqualTo(Source));
             Assert.That(movement.To, Is.EqualTo(target));
             Assert.That(runState.Health, Is.EqualTo(100));
-            Assert.That(runState.Food, Is.EqualTo(25));
+            Assert.That(runState.Satiety, Is.EqualTo(25));
             Assert.That(enemy.LockedIntent, Is.Null);
             Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
         }
@@ -179,7 +179,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(events.Count, Is.EqualTo(1));
             Assert.That(events[0], Is.TypeOf<EntityWaitedEvent>());
             Assert.That(runState.Health, Is.EqualTo(100));
-            Assert.That(runState.Food, Is.EqualTo(25));
+            Assert.That(runState.Satiety, Is.EqualTo(25));
             Assert.That(enemy.LockedIntent, Is.Null);
             Assert.That(enemy.Phase, Is.EqualTo(resting ? ShamblerPhase.Active : ShamblerPhase.Rest));
         }
@@ -211,7 +211,7 @@ namespace HallowBlaze.Tests.EditMode
             CollectionAssert.AreEqual(before, board.GetEntities());
             Assert.That(events, Is.Empty);
             Assert.That(runState.Health, Is.EqualTo(100));
-            Assert.That(runState.Food, Is.EqualTo(25));
+            Assert.That(runState.Satiety, Is.EqualTo(25));
             Assert.That(enemy.LockedIntent, Is.Null);
             Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
         }
@@ -260,7 +260,7 @@ namespace HallowBlaze.Tests.EditMode
             CollectionAssert.AreEqual(before, board.GetEntities());
             AssertAttackEvent(events, target, true, -damage);
             Assert.That(runState.Health, Is.EqualTo(100 - damage));
-            Assert.That(runState.Food, Is.EqualTo(25));
+            Assert.That(runState.Satiety, Is.EqualTo(25));
             Assert.That(runState.Status, Is.EqualTo(RunStatus.Active));
             Assert.That(enemy.LockedIntent, Is.Null);
             Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
@@ -319,7 +319,7 @@ namespace HallowBlaze.Tests.EditMode
             CollectionAssert.AreEqual(before, board.GetEntities());
             AssertAttackEvent(events, Destination, false, 0);
             Assert.That(runState.Health, Is.EqualTo(100));
-            Assert.That(runState.Food, Is.EqualTo(25));
+            Assert.That(runState.Satiety, Is.EqualTo(25));
             Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
         }
 
@@ -441,7 +441,7 @@ namespace HallowBlaze.Tests.EditMode
             int actualDamage = Math.Min(health, damage);
             AssertAttackEvent(events, Destination, true, -actualDamage);
             Assert.That(runState.Health, Is.EqualTo(health - actualDamage));
-            Assert.That(runState.Food, Is.EqualTo(25));
+            Assert.That(runState.Satiety, Is.EqualTo(25));
             Assert.That(enemy.LockedIntent, Is.Null);
             Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
             Assert.That(intent.Kind, Is.EqualTo(EnemyIntentKind.Move));
@@ -482,7 +482,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(events[0], Is.TypeOf<EntityMovedEvent>());
             Assert.That(((EntityMovedEvent)events[0]).To, Is.EqualTo(Destination));
             Assert.That(runState.Health, Is.EqualTo(100));
-            Assert.That(runState.Food, Is.EqualTo(25));
+            Assert.That(runState.Satiety, Is.EqualTo(25));
             Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
         }
 
@@ -523,7 +523,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(events.Count, Is.EqualTo(1));
             Assert.That(events[0], Is.TypeOf<EntityWaitedEvent>());
             Assert.That(runState.Health, Is.EqualTo(100));
-            Assert.That(runState.Food, Is.EqualTo(25));
+            Assert.That(runState.Satiety, Is.EqualTo(25));
             Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
         }
 

@@ -19,6 +19,30 @@ namespace HallowBlaze.Tests.EditMode
     /// <summary>Checks bounded offline solving against independent real-controller execution.</summary>
     public sealed class LandmarkSolverTests
     {
+        /// <summary>Food on the first step is required for survival; search and independent replay use the same conscious pickup.</summary>
+        [Test]
+        public void FoodRequiredForSurvivalSolvesAndReplaysAtomicPickup()
+        {
+            LandmarkBoard landmark = Tiny();
+            BoardState board = landmark.CreateState();
+            RunState run = Run(1);
+            var definition = new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, "legacy.food", BoardEntityTraits.Default, 5);
+            Assert.That(board.TryAdd(new BoardEntityState(new EntityId(50), definition, new GridPosition(1, 0))), Is.True);
+            GroundPickupContent.Bind(board, run);
+            var source = new LandmarkSolverStateKey(board, run, new EntityId(1), Array.Empty<ShamblerState>());
+            LandmarkSolverResult result = new LandmarkSolver(landmark, board, run, new EntityId(1), Array.Empty<ShamblerState>()).Solve("arrival");
+            Assert.That(result.Status, Is.EqualTo(LandmarkSolverStatus.Solved), result.ToString());
+            Assert.That(result.SolutionPath.Count, Is.EqualTo(2));
+            Assert.That(result.SolutionPath[0].ToString(), Does.Contain("pickup=UseNow"));
+            Assert.That(new LandmarkSolverStateKey(board, run, new EntityId(1), Array.Empty<ShamblerState>()), Is.EqualTo(source));
+            var controller = new TurnController(board, run, new EntityId(1));
+            foreach (LandmarkSolverStep step in result.SolutionPath)
+                Assert.That(controller.Resolve(step.CreateCommand(board, run, new EntityId(1))).Accepted, Is.True);
+            Assert.That(controller.IsTerminal, Is.True);
+            Assert.That(run.Satiety, Is.EqualTo(4));
+            Assert.That(board.TryGetGroundItem(new EntityId(50), out _), Is.False);
+        }
+
         /// <summary>A tiny real template produces a shortest accepted path without changing its caller.</summary>
         [Test]
         public void TinyPuzzleFindsAndExecutesShortestPath()
@@ -30,7 +54,7 @@ namespace HallowBlaze.Tests.EditMode
             LandmarkSolverResult result = solver.Solve("arrival");
             Assert.That(result.Status, Is.EqualTo(LandmarkSolverStatus.Solved), result.ToString());
             Assert.That(result.SolutionPath.Count, Is.EqualTo(2));
-            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.Satiety, Is.EqualTo(4));
             var controller = new TurnController(board, run, new EntityId(1), new TurnResolver());
             TurnResult turn = null;
             foreach (LandmarkSolverStep step in result.SolutionPath)
@@ -39,7 +63,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(turn.Accepted, Is.True);
             }
             Assert.That(turn.Events.OfType<ExitReachedEvent>().Single().ExitId, Is.EqualTo(new EntityId(12)));
-            Assert.That(run.Food, Is.EqualTo(2));
+            Assert.That(run.Satiety, Is.EqualTo(2));
         }
 
         /// <summary>Independent equal snapshots share a hash, and forced collisions do not merge changed resources.</summary>
@@ -112,12 +136,12 @@ namespace HallowBlaze.Tests.EditMode
                 Is.EqualTo(source.Landmark.Outcomes.Single(outcome => outcome.Id == outcomeId).ExitEntityId));
             Assert.That(fresh.Controller.IsTerminal, Is.True);
             Assert.That(fresh.Run.Health, Is.GreaterThan(0));
-            Assert.That(fresh.Run.Food, Is.EqualTo(outcomeId == "tower.arrival" ? 93 : 109));
+            Assert.That(fresh.Run.Satiety, Is.EqualTo(outcomeId == "tower.arrival" ? 93 : 94));
             if (outcomeId == "tower.supplies")
             {
                 Assert.That(events.OfType<BoulderPushedEvent>().Count(), Is.EqualTo(1));
-                Assert.That(events.OfType<ToolChargeSpentEvent>().Count(), Is.EqualTo(1));
-                Assert.That(fresh.Run.ToolSlots[0].RemainingUses, Is.EqualTo(2));
+                Assert.That(events.OfType<ToolChargeSpentEvent>(), Is.Empty);
+                Assert.That(fresh.Run.ToolSlots[0].RemainingUses, Is.EqualTo(3));
                 Assert.That(fresh.Board.TryGetEntity(new EntityId(21), out _), Is.False);
             }
             TestContext.WriteLine(result + " path=" + string.Join("; ", result.SolutionPath));
@@ -137,7 +161,7 @@ namespace HallowBlaze.Tests.EditMode
             List<GameEvent> events = fresh.Execute(result);
             Assert.That(events.OfType<ExitReachedEvent>().Single().ExitId, Is.EqualTo(new EntityId(146)));
             Assert.That(events.OfType<ToolUsedEvent>(), Is.Empty);
-            Assert.That(fresh.Run.Food, Is.EqualTo(108));
+            Assert.That(fresh.Run.Satiety, Is.EqualTo(93));
             TestContext.WriteLine(result + " path=" + string.Join("; ", result.SolutionPath));
         }
 
@@ -167,8 +191,8 @@ namespace HallowBlaze.Tests.EditMode
                     Is.EqualTo(source.Landmark.Outcomes.Single(outcome => outcome.Id == outcomeId).ExitEntityId));
                 Assert.That(fresh.Run.Health, Is.GreaterThan(0), result.ToString());
                 Assert.That(fresh.Controller.IsTerminal, Is.True);
-                int reward = outcomeId == "tower.supplies" ? 20 : 0;
-                Assert.That(fresh.Run.Food, Is.EqualTo(100 + reward - result.SolutionPath.Count));
+                int reward = outcomeId == "tower.supplies" ? 5 : 0;
+                Assert.That(fresh.Run.Satiety, Is.EqualTo(100 + reward - result.SolutionPath.Count));
                 if (outcomeId == "tower.arrival")
                 {
                     Assert.That(events.OfType<BoulderPushedEvent>(), Is.Empty);
@@ -183,10 +207,10 @@ namespace HallowBlaze.Tests.EditMode
                     Assert.That(fresh.Board.TryGetEntity(new EntityId(21), out _), Is.False);
                     Assert.That(fresh.Board.TryGetEntity(new EntityId(11), out _), Is.False);
                     if (withoutAxe) Assert.That(events.OfType<ToolUsedEvent>(), Is.Empty);
-                    else Assert.That(events.OfType<ToolChargeSpentEvent>().Count(), Is.EqualTo(1));
+                    else Assert.That(events.OfType<ToolChargeSpentEvent>(), Is.Empty);
                 }
                 TestContext.WriteLine(result + " noAxe=" + withoutAxe + " health=" + fresh.Run.Health +
-                    " food=" + fresh.Run.Food + " path=" + string.Join("; ", result.SolutionPath));
+                    " food=" + fresh.Run.Satiety + " path=" + string.Join("; ", result.SolutionPath));
             }
         }
 
@@ -317,7 +341,7 @@ namespace HallowBlaze.Tests.EditMode
             var equal = new LandmarkSolverStateKey(equivalent.Board, equivalent.Run, new EntityId(1), equivalent.Enemies);
             Assert.That(before, Is.EqualTo(equal));
             if (field == "health") source.Run.TakeDamage(10);
-            else if (field == "food") source.Run.ConsumeFood(1);
+            else if (field == "food") source.Run.ConsumeSatiety(1);
             else if (field == "allocator") source.Run.CreateToolInstance(ToolContentCatalog.Load()["axe.basic"]);
             else if (field == "equipment")
             {
@@ -348,14 +372,14 @@ namespace HallowBlaze.Tests.EditMode
         {
             var source = new Tower();
             var solver = source.Solver();
-            source.Run.ConsumeFood(99);
+            source.Run.ConsumeSatiety(99);
             source.Run.TakeDamage(99);
             source.Enemies[0].ConsumeIntent();
             Assert.That(source.Board.TryRemove(new EntityId(20)), Is.True);
             LandmarkSolverResult result = solver.Solve("tower.supplies");
             Assert.That(result.Status, Is.EqualTo(LandmarkSolverStatus.Solved), result.ToString());
             Assert.That(result.SolutionPath.Count, Is.EqualTo(11));
-            Assert.That(source.Run.Food, Is.EqualTo(1));
+            Assert.That(source.Run.Satiety, Is.EqualTo(1));
             Assert.That(source.Run.Health, Is.EqualTo(1));
         }
 
@@ -412,6 +436,7 @@ namespace HallowBlaze.Tests.EditMode
                 Landmark = template.CreateBoard(new BoardAddress(Run.RunId, "leg.1", "road.ridge-radio-tower",
                     "segment.ridge-radio-tower.arrival", 5, template.Config.Id, 1, 64), variantId);
                 Board = Landmark.CreateState();
+                GroundPickupContent.Bind(Board, Run);
                 ToolInstanceState axe = Run.CreateToolInstance(ToolContentCatalog.Load()["axe.basic"]);
                 Assert.That(Board.TryBindGroundTool(new GroundToolState(new EntityId(20), axe.InstanceId, axe.DefinitionId,
                     axe.Charges, RadioTowerLandmark.AxeSourceId)), Is.True);

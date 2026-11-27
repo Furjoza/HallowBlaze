@@ -393,7 +393,7 @@ namespace HallowBlaze.Tests.EditMode
             firstRun.RecordRouteNode("forest.start");
             firstRun.EquipTool(0, new ToolSlotState("axe.basic", 2));
             firstRun.MarkDead();
-            secondRun.ConsumeFood(30);
+            secondRun.ConsumeSatiety(30);
             secondRun.SetCurrentWorldNode("forest.clearing");
             secondRun.RecordRouteNode("forest.clearing");
             secondRun.MarkWon();

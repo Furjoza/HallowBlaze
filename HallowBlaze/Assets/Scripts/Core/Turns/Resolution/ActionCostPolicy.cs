@@ -1,19 +1,31 @@
 using System;
+using HallowBlaze.Core.State;
 
 namespace HallowBlaze.Core.Turns.Resolution
 {
-    /// <summary>Immutable current board-action cost shared by command resolution and consequence previews.</summary>
+    /// <summary>Samples the run's persisted pre-command cost tiers, shared by previews and command resolution.</summary>
     public sealed class ActionCostPolicy
     {
-        /// <summary>Creates the active flat-cost policy; future cost tiers belong to their own contract.</summary>
-        /// <param name="foodCost">Positive food cost for one accepted board command; the transitional default is one.</param>
-        public ActionCostPolicy(int foodCost = 1)
+        private readonly int? fixedCost;
+
+        /// <summary>Uses the active run's resource configuration for every accepted command.</summary>
+        public ActionCostPolicy() { }
+
+        /// <summary>Creates an explicit flat policy for isolated scenarios; production uses the run's tiers.</summary>
+        /// <param name="satietyCost">Positive cost; rejection still spends nothing.</param>
+        /// <exception cref="ArgumentOutOfRangeException">The explicit cost is not positive.</exception>
+        public ActionCostPolicy(int satietyCost)
         {
-            if (foodCost <= 0) throw new ArgumentOutOfRangeException(nameof(foodCost));
-            FoodCost = foodCost;
+            if (satietyCost <= 0) throw new ArgumentOutOfRangeException(nameof(satietyCost));
+            fixedCost = satietyCost;
         }
 
-        /// <summary>Gets the cost applied once after an accepted action's direct effects.</summary>
-        public int FoodCost { get; }
+        /// <summary>Reads the cost before any direct effects; resolution retains this value until commit.</summary>
+        /// <exception cref="ArgumentNullException">The run is null.</exception>
+        public int GetCost(RunState run)
+        {
+            if (run == null) throw new ArgumentNullException(nameof(run));
+            return fixedCost ?? run.ResourceRules.SelectActionCost(run.Satiety);
+        }
     }
 }

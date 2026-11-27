@@ -5,6 +5,7 @@ using HallowBlaze.Core.Persistence;
 using HallowBlaze.Core.Persistence.Storage;
 using HallowBlaze.Core.Session;
 using HallowBlaze.Core.State;
+using HallowBlaze.Presentation.Runtime;
 
 public class StartBttnScript : MonoBehaviour
 {
@@ -24,6 +25,7 @@ public class StartBttnScript : MonoBehaviour
         SceneManager.LoadScene(sceneName);
     }
 
+    /// <summary>Loads only a compatible active run, resolving carried items with the same trusted content as gameplay.</summary>
     public void ContinueByName(string sceneName)
     {
         SaveStoreResult<RunState> result =
@@ -57,6 +59,6 @@ public class StartBttnScript : MonoBehaviour
 
     private static ISaveStore CreateSaveStore()
     {
-        return new FileSystemSaveStore(GameManager.GetPersistenceRoot());
+        return new FileSystemSaveStore(GameManager.GetPersistenceRoot(), inventoryContent: GroundPickupContent.Load());
     }
 }

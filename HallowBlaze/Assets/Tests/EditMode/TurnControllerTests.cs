@@ -73,7 +73,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(firstActor.Position, Is.EqualTo(Destination), context);
                 Assert.That(board.TryGetEntity(second.ActorId, out BoardEntityState secondActor), Is.True, context);
                 Assert.That(secondActor.Position, Is.EqualTo(secondDestination), context);
-                Assert.That(run.Food, Is.EqualTo(3), context);
+                Assert.That(run.Satiety, Is.EqualTo(3), context);
                 Assert.That(run.Health, Is.EqualTo(100), context);
                 Assert.That(environmentCalls, Is.EqualTo(1), context);
                 Assert.That(enemies.All(enemy => enemy.Phase == ShamblerPhase.Rest &&
@@ -100,7 +100,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(rest.Events.OfType<EntityWaitedEvent>().Select(wait => wait.EntityId),
                     Is.EqualTo(new[] { PlayerId, first.ActorId, second.ActorId }), context);
                 CollectionAssert.AreEqual(beforeRest, board.GetEntities(), context);
-                Assert.That(run.Food, Is.EqualTo(2), context);
+                Assert.That(run.Satiety, Is.EqualTo(2), context);
                 Assert.That(run.Health, Is.EqualTo(100), context);
                 Assert.That(environmentCalls, Is.EqualTo(2), context);
                 Assert.That(enemies.All(enemy => enemy.Phase == ShamblerPhase.Active), Is.True, context);
@@ -140,7 +140,7 @@ namespace HallowBlaze.Tests.EditMode
                 Assert.That(secondActor.Position, Is.EqualTo(secondDestination), context);
                 Assert.That(fixedAttack.TargetPosition, Is.EqualTo(Start), context);
                 Assert.That(conditionalMove.TargetPosition, Is.EqualTo(escape), context);
-                Assert.That(run.Food, Is.EqualTo(1), context);
+                Assert.That(run.Satiety, Is.EqualTo(1), context);
                 Assert.That(run.Health, Is.EqualTo(90), context);
                 Assert.That(environmentCalls, Is.EqualTo(3), context);
                 Assert.That(enemies.All(enemy => enemy.Phase == ShamblerPhase.Rest &&
@@ -153,7 +153,7 @@ namespace HallowBlaze.Tests.EditMode
 
                 Assert.That(starved.Accepted && starved.ConsumesTurn, Is.True, context);
                 AssertEvents(starved, "EntityWaited", "ActionCostApplied", "PlayerStarved");
-                Assert.That(run.Food, Is.Zero, context);
+                Assert.That(run.Satiety, Is.Zero, context);
                 Assert.That(run.Health, Is.EqualTo(90), context);
                 Assert.That(run.Status, Is.EqualTo(RunStatus.Active), context);
                 Assert.That(controller.IsTerminal, Is.True, context);
@@ -247,7 +247,7 @@ namespace HallowBlaze.Tests.EditMode
                 {
                     trace.Add("ExecuteLockedIntents");
                     executionCalls++;
-                    Assert.That(runState.Food, Is.EqualTo(5 - executionCalls));
+                    Assert.That(runState.Satiety, Is.EqualTo(5 - executionCalls));
                     for (int index = 0; index < enemies.Length; index++)
                         Assert.That(enemies[index].LockedIntent, Is.SameAs(expectedLocked[index]));
                     adapter.Handlers.ExecuteLockedIntents(boardState, runState, playerId, events);
@@ -285,7 +285,7 @@ namespace HallowBlaze.Tests.EditMode
             }
             Assert.That(result.Accepted && result.ConsumesTurn, Is.True);
             Assert.That(result.Events.OfType<ActionCostAppliedEvent>().Single().CostAmount, Is.EqualTo(1));
-            Assert.That(run.Food, Is.EqualTo(scenario == "starvation" ? 0 : 4));
+            Assert.That(run.Satiety, Is.EqualTo(scenario == "starvation" ? 0 : 4));
             if (earlyTerminal)
             {
                 AssertEvents(result, scenario == "exit" ? "EntityMoved" : "EntityWaited", "ActionCostApplied",
@@ -362,7 +362,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(rest.Events.OfType<ActionCostAppliedEvent>().Single().CostAmount, Is.EqualTo(1));
             Assert.That(rest.Accepted && rest.ConsumesTurn, Is.True);
             CollectionAssert.AreEqual(beforeRest, board.GetEntities());
-            Assert.That(run.Food, Is.EqualTo(3));
+            Assert.That(run.Satiety, Is.EqualTo(3));
             Assert.That(run.Health, Is.EqualTo(100));
             Assert.That(executionCalls, Is.EqualTo(2));
             Assert.That(environmentCalls, Is.EqualTo(2));
@@ -399,7 +399,7 @@ namespace HallowBlaze.Tests.EditMode
                 (boardState, runState, playerId, events) =>
                 {
                     trace.Add("ExecuteLockedIntents");
-                    Assert.That(runState.Food, Is.EqualTo(4));
+                    Assert.That(runState.Satiety, Is.EqualTo(4));
                     Assert.That(boardState.TryGetEntity(playerId, out BoardEntityState player), Is.True);
                     Assert.That(player.Position, Is.EqualTo(new GridPosition(1, 2)));
                     Assert.That(enemy.LockedIntent, Is.SameAs(initial));
@@ -429,7 +429,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(result.Accepted && result.ConsumesTurn, Is.True);
             AssertEvents(result, "EntityMoved", "ActionCostApplied", "EnemyAttackResolved");
             Assert.That(result.Events.OfType<ActionCostAppliedEvent>().Single().CostAmount, Is.EqualTo(1));
-            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.Satiety, Is.EqualTo(4));
             Assert.That(run.Health, Is.EqualTo(10));
             Assert.That(board.TryGetEntity(enemy.ActorId, out BoardEntityState actor), Is.True);
             Assert.That(actor.Position, Is.EqualTo(Destination));
@@ -510,7 +510,7 @@ namespace HallowBlaze.Tests.EditMode
             AssertEvents(first, command is WaitCommand ? "EntityWaited" : "EntityMoved", "ActionCostApplied", enemyEvent, "Environment");
             Assert.That(first.Accepted && first.ConsumesTurn, Is.True);
             Assert.That(first.Events.OfType<ActionCostAppliedEvent>().Count(), Is.EqualTo(1));
-            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.Satiety, Is.EqualTo(4));
             Assert.That(run.Health, Is.EqualTo(outcome == "conditional-hit" ? 90 : 100));
             Assert.That(environmentCalls, Is.EqualTo(1));
             Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Rest));
@@ -530,7 +530,7 @@ namespace HallowBlaze.Tests.EditMode
             TurnResult rest = controller.Resolve(new WaitCommand());
 
             AssertEvents(rest, "EntityWaited", "ActionCostApplied", "EntityWaited", "Environment");
-            Assert.That(run.Food, Is.EqualTo(3));
+            Assert.That(run.Satiety, Is.EqualTo(3));
             Assert.That(run.Health, Is.EqualTo(outcome == "conditional-hit" ? 90 : 100));
             Assert.That(environmentCalls, Is.EqualTo(2));
             Assert.That(enemy.Phase, Is.EqualTo(ShamblerPhase.Active));
@@ -610,7 +610,7 @@ namespace HallowBlaze.Tests.EditMode
             TurnResult result = controller.Resolve(new WaitCommand());
 
             AssertEvents(result, "EntityWaited", "ActionCostApplied", environmentDeath ? "EntityMoved" : "EnemyAttackResolved", "Environment", "PlayerDied");
-            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.Satiety, Is.EqualTo(4));
             Assert.That(run.Health, Is.Zero);
             Assert.That(run.Status, Is.EqualTo(RunStatus.Active), "Run lifecycle is not owned by the adapter.");
             Assert.That(enemy.LockedIntent, Is.Null);
@@ -630,7 +630,7 @@ namespace HallowBlaze.Tests.EditMode
                 (b, r, p, events) =>
                 {
                     Assert.That(controller.IsResolving, Is.True);
-                    Assert.That(r.Food, Is.EqualTo(4));
+                    Assert.That(r.Satiety, Is.EqualTo(4));
                     Assert.That(b.TryGetEntity(p, out BoardEntityState player), Is.True);
                     Assert.That(player.Position, Is.EqualTo(Destination));
                     events.Add(new MarkerEvent("LockedIntents"));
@@ -651,7 +651,7 @@ namespace HallowBlaze.Tests.EditMode
 
             Assert.That(result.Accepted && result.ConsumesTurn, Is.True);
             AssertEvents(result, "EntityMoved", "ActionCostApplied", "LockedIntents", "Environment", "NextIntents");
-            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.Satiety, Is.EqualTo(4));
             Assert.That(controller.IsResolving || controller.IsTerminal, Is.False);
         }
 
@@ -673,7 +673,7 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(controller.IsResolving || controller.IsTerminal, Is.False);
             Assert.That(controller.Resolve(new WaitCommand()).Accepted, Is.True);
             Assert.That(calls, Is.EqualTo(new[] { "LockedIntents", "Environment", "NextIntents" }));
-            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.Satiety, Is.EqualTo(4));
         }
 
         /// <summary>Null input is rejected by the player boundary with no later phases.</summary>
@@ -683,7 +683,7 @@ namespace HallowBlaze.Tests.EditMode
             RunState run = CreateRun();
             var controller = new TurnController(CreateBoard(), run, PlayerId, phases: ForbiddenPhases());
             AssertRejected(controller.Resolve(null), CommandRejectionCode.InvalidCommand);
-            Assert.That(run.Food, Is.EqualTo(5));
+            Assert.That(run.Satiety, Is.EqualTo(5));
             Assert.That(controller.IsResolving, Is.False);
         }
 
@@ -710,7 +710,7 @@ namespace HallowBlaze.Tests.EditMode
             AssertEvents(controller.Resolve(new MoveCommand(Direction.East)), "EntityMoved", "ActionCostApplied", "ExitReached");
             Assert.That(controller.IsTerminal, Is.True);
             AssertRejected(controller.Resolve(new WaitCommand()), CommandRejectionCode.InvalidState);
-            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.Satiety, Is.EqualTo(4));
             Assert.That(run.Status, Is.EqualTo(RunStatus.Active));
         }
 
@@ -730,9 +730,9 @@ namespace HallowBlaze.Tests.EditMode
             BoardState board = CreateBoard(exit: true, reward: 2);
             RunState run = CreateRun(1);
             var controller = new TurnController(board, run, PlayerId, phases: ForbiddenPhases());
-            AssertEvents(controller.Resolve(new MoveCommand(Direction.East)),
-                "EntityMoved", "ItemCollected", "FoodRestored", "ActionCostApplied", "ExitReached");
-            Assert.That(run.Food, Is.EqualTo(2));
+            AssertEvents(controller.Resolve(GroundPickupTests.ChooseUse(board, run, PlayerId, new MoveCommand(Direction.East))),
+                "EntityMoved", "ItemCollected", "GroundPickupResolved", "ActionCostApplied", "ExitReached");
+            Assert.That(run.Satiety, Is.EqualTo(2));
             Assert.That(board.TryGetEntity(new EntityId(200), out _), Is.False);
         }
 
@@ -770,7 +770,7 @@ namespace HallowBlaze.Tests.EditMode
             var phases = new TurnPhaseHandlers(applyEnvironment: (b, r, p, events) =>
             {
                 if (explicitDeadStatus) r.MarkDead();
-                else r.ConsumeFood(r.Food);
+                else r.ConsumeSatiety(r.Satiety);
             }, planNextIntents: FailPhase);
             var controller = new TurnController(CreateBoard(), CreateRun(), PlayerId, phases: phases);
             AssertEvents(controller.Resolve(new WaitCommand()), "EntityWaited", "ActionCostApplied",
@@ -787,7 +787,7 @@ namespace HallowBlaze.Tests.EditMode
             var phases = new TurnPhaseHandlers(applyEnvironment: (b, r, p, events) =>
             {
                 events.Add(new ExitReachedEvent(p, new EntityId(101)));
-                if (dies) r.ConsumeFood(r.Food);
+                if (dies) r.ConsumeSatiety(r.Satiety);
             }, planNextIntents: FailPhase);
             var controller = new TurnController(CreateBoard(), CreateRun(), PlayerId, phases: phases);
             AssertEvents(controller.Resolve(new WaitCommand()), "EntityWaited", "ActionCostApplied",
@@ -806,7 +806,7 @@ namespace HallowBlaze.Tests.EditMode
             {
                 if (!(command is CustomCommand custom) || !custom.Valid)
                     return new RejectedTurnResult(CommandRejectionCode.InvalidCommand);
-                r.ConsumeFood(2);
+                r.ConsumeSatiety(2);
                 return new AcceptedTurnResult(new GameEvent[] { new MarkerEvent("CustomEffect"), new ActionCostAppliedEvent(p, 2) });
             });
             var controller = new TurnController(board, run, PlayerId, resolver, RecordingPhases(calls));
@@ -818,7 +818,7 @@ namespace HallowBlaze.Tests.EditMode
             TurnResult result = controller.Resolve(new CustomCommand(true));
 
             AssertEvents(result, "CustomEffect", "ActionCostApplied", "LockedIntents", "Environment", "NextIntents");
-            Assert.That(run.Food, Is.EqualTo(3));
+            Assert.That(run.Satiety, Is.EqualTo(3));
             Assert.That(((ActionCostAppliedEvent)result.Events[1]).CostAmount, Is.EqualTo(2));
         }
 
@@ -833,9 +833,9 @@ namespace HallowBlaze.Tests.EditMode
             TurnController controller = null;
             Action tryNested = () =>
             {
-                int foodBefore = run.Food;
+                int foodBefore = run.Satiety;
                 AssertRejected(controller.Resolve(new WaitCommand()), CommandRejectionCode.InvalidState);
-                Assert.That(run.Food, Is.EqualTo(foodBefore));
+                Assert.That(run.Satiety, Is.EqualTo(foodBefore));
                 Assert.That(controller.IsResolving, Is.True);
             };
             var resolver = new CallbackResolver((b, r, p, c) =>
@@ -849,7 +849,7 @@ namespace HallowBlaze.Tests.EditMode
                 (b, r, p, e) => { if (stage == 3) tryNested(); });
             controller = new TurnController(CreateBoard(), run, PlayerId, resolver, phases);
             Assert.That(controller.Resolve(new WaitCommand()).Accepted, Is.True);
-            Assert.That(run.Food, Is.EqualTo(4));
+            Assert.That(run.Satiety, Is.EqualTo(4));
             Assert.That(controller.IsResolving, Is.False);
         }
 
@@ -883,7 +883,7 @@ namespace HallowBlaze.Tests.EditMode
                     Assert.That(first.Wait(TimeSpan.FromSeconds(10)), Is.True);
                 }
                 Assert.That(first.Result.Accepted, Is.True);
-                Assert.That(run.Food, Is.EqualTo(4));
+                Assert.That(run.Satiety, Is.EqualTo(4));
                 Assert.That(controller.IsResolving, Is.False);
             }
         }
@@ -1004,7 +1004,7 @@ namespace HallowBlaze.Tests.EditMode
 
         private static string Snapshot(BoardState board, RunState run) =>
             string.Join("|", board.GetEntities().Select(e => $"{e.Id.Value}:{e.Position.X}:{e.Position.Y}")) +
-            $";{run.Food};{run.Health};{run.Status}";
+            $";{run.Satiety};{run.Health};{run.Status}";
 
         private sealed class CallbackResolver : IPlayerPhaseResolver
         {

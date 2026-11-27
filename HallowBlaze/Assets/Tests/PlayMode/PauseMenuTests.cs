@@ -265,7 +265,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That(TrySubmit(new WaitCommand(), out _), Is.False);
 
             Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.False);
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(73));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(73));
             Assert.That(session.ActiveRun.Health, Is.EqualTo(61));
             Assert.That(GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
             Assert.That(player.transform.position, Is.EqualTo(originalPosition));
@@ -283,14 +283,14 @@ namespace HallowBlaze.Tests.PlayMode
             SetRunResources(73, 100);
             yield return null;
             Assert.That(TrySubmit(new MoveCommand(Direction.East), out Task<CommandSubmission> pending), Is.True);
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(82));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(82));
             Assert.That(pickupObject.activeSelf, Is.True);
             Assert.That(TrySubmit(new WaitCommand(), out _), Is.False);
             while (!pending.IsCompleted)
                 yield return null;
             Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             Assert.That(pickupObject.activeSelf, Is.False);
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(82));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(82));
             Assert.That(playerType.GetMethod("OnTriggerEnter2D", InstanceFlags), Is.Null);
         }
 
@@ -355,7 +355,7 @@ namespace HallowBlaze.Tests.PlayMode
                 KeyboardControlsView view = KeyboardControlsView.Current;
                 Assert.That(view, Is.Not.Null);
                 Assert.That(view.IsOpen, Is.True);
-                int food = session.ActiveRun.Food;
+                int food = session.ActiveRun.Satiety;
                 KeyboardMenuFocus helpFocus = view.GetComponent<KeyboardMenuFocus>();
                 helpFocus.HandleKey(KeyCode.Tab);
                 helpFocus.HandleKey(KeyCode.Tab);
@@ -412,7 +412,7 @@ namespace HallowBlaze.Tests.PlayMode
                         (RectTransform)rows.Last().transform);
                     Assert.That(wheelBounds.min.y, Is.GreaterThanOrEqualTo(bindings.viewport.rect.yMin - 1));
                     Assert.That(wheelBounds.max.y, Is.LessThanOrEqualTo(bindings.viewport.rect.yMax + 1));
-                    Assert.That(session.ActiveRun.Food, Is.EqualTo(food));
+                    Assert.That(session.ActiveRun.Satiety, Is.EqualTo(food));
                 }
                 EventSystem.current.SetSelectedGameObject(bindings.gameObject);
                 for (int index = 0; index < 10 && EventSystem.current.currentSelectedGameObject.GetComponent<ScrollRect>() == null; index++)
@@ -426,7 +426,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(Time.timeScale, Is.Zero);
                 Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.False);
                 Assert.That(EventSystem.current.currentSelectedGameObject.name, Is.EqualTo("Controls"));
-                Assert.That(session.ActiveRun.Food, Is.EqualTo(food));
+                Assert.That(session.ActiveRun.Satiety, Is.EqualTo(food));
                 Assert.That(GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.Zero);
                 yield return null;
                 Invoke(pauseMenu, "HandleEscape");
@@ -522,7 +522,7 @@ namespace HallowBlaze.Tests.PlayMode
             Invoke(gameManager, "StartNewRun");
 
             Assert.That(session.Profile, Is.SameAs(profile));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(100));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(100));
             Assert.That(session.ActiveRun.Health, Is.EqualTo(100));
             Assert.That(session.ActiveRun.CurrentDay, Is.Zero);
             Assert.That(PlayerPrefs.GetString("Music"), Is.EqualTo("Off"));
@@ -625,7 +625,7 @@ namespace HallowBlaze.Tests.PlayMode
 
         private void SetRunResources(int food, int health)
         {
-            session.ConsumeFood(session.ActiveRun.Food - food);
+            session.ConsumeSatiety(session.ActiveRun.Satiety - food);
             session.TakeDamage(session.ActiveRun.Health - health);
         }
 

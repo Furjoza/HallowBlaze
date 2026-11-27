@@ -212,7 +212,7 @@ namespace HallowBlaze.Tests.PlayMode
             while (!pending.IsCompleted)
                 yield return null;
             Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(9));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(9));
             Assert.That(playerObject.transform.position, Is.EqualTo(Vector3.right));
             Assert.That(GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.EqualTo(1));
             Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(1));
@@ -360,7 +360,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.Throws<ArgumentException>(() => new MoveCommand(default(Direction)));
             Assert.That(GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter").Coordinator.ResolutionCount,
                 Is.EqualTo(resolutions));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(10));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(10));
             Assert.That(session.ActiveRun.Health, Is.EqualTo(100));
             Assert.That(playerObject.transform.position, Is.EqualTo(Vector3.zero));
             Assert.That(GetField<int>(wall, "hp"), Is.EqualTo(3));
@@ -381,7 +381,7 @@ namespace HallowBlaze.Tests.PlayMode
             Assert.That((bool)Invoke(player, "TrySubmitInput", arguments), Is.True);
             var submission = (Task<CommandSubmission>)arguments[1];
             Assert.That(submission.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(9));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(9));
             Assert.That(playerObject.transform.position, Is.EqualTo(Vector3.zero));
             Assert.That(GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter").Coordinator.ResolutionCount, Is.EqualTo(1));
             Assert.That(GetProperty<bool>(gameManager, "IsGameplayInputEnabled"), Is.True);
@@ -390,7 +390,7 @@ namespace HallowBlaze.Tests.PlayMode
         [UnityTest]
         public IEnumerator SupportedFoodRewardsBeforeCostAndSynchronizesHud()
         {
-            session.ConsumeFood(9);
+            session.ConsumeSatiety(9);
             GameObject playerObject = CreatePlayer("Food Player", 0.01f);
             Component player = playerObject.GetComponent(playerType);
             Text foodText = Track(new GameObject("Food HUD")).AddComponent<Text>();
@@ -403,22 +403,22 @@ namespace HallowBlaze.Tests.PlayMode
                 new LegacyBoardView(food, LegacyBoardContentKind.Food, new GridPosition(1, 0)));
             yield return null;
             Assert.That(TrySubmit(player, new MoveCommand(Direction.East), out Task<CommandSubmission> pending), Is.True);
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(10));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(OrdinaryBoardContent.RaspberryFoodReward));
             Assert.That(food.activeSelf, Is.True);
-            Assert.That(foodText.text, Is.EqualTo("Food: 1"));
+            Assert.That(foodText.text, Is.EqualTo("Satiety: 1"));
             while (!pending.IsCompleted)
                 yield return null;
             Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(10));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(OrdinaryBoardContent.RaspberryFoodReward));
             Assert.That(session.ActiveRun.Status, Is.EqualTo(RunStatus.Active));
             Assert.That(food.activeSelf, Is.False);
-            Assert.That(foodText.text, Is.EqualTo("Food: 10 +10"));
+            Assert.That(foodText.text, Is.EqualTo("Satiety: 5 +5"));
             Assert.That(runtime.BoardState.Count, Is.EqualTo(runtime.Views.Count - 1));
             Assert.That(TrySubmit(player, new MoveCommand(Direction.South), out Task<CommandSubmission> rejected), Is.True);
             Assert.That(rejected.Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
-            Assert.That(foodText.text, Is.EqualTo("Food: 10 +10"));
-            session.RestoreFood(13);
-            session.ConsumeFood(1);
+            Assert.That(foodText.text, Is.EqualTo("Satiety: 5 +5"));
+            session.RestoreSatiety(13);
+            session.ConsumeSatiety(1);
             BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter");
             var replay = presenter.Dispatcher.ReplayAsync(new GameEvent[]
             {
@@ -428,13 +428,49 @@ namespace HallowBlaze.Tests.PlayMode
             });
             while (!replay.IsCompleted) yield return null;
             Assert.That(replay.Result, Is.Null);
-            Assert.That(foodText.text, Is.EqualTo("Food: 22 +13"));
+            Assert.That(foodText.text, Is.EqualTo("Satiety: 17 +13"));
             Assert.That(TrySubmit(player, new WaitCommand(), out Task<CommandSubmission> accepted), Is.True);
             while (!accepted.IsCompleted) yield return null;
-            Assert.That(foodText.text, Is.EqualTo("Food: 21"));
+            Assert.That(foodText.text, Is.EqualTo("Satiety: 16"));
             ((ITurnResourceGains)player).AddResourceGains(0, 5);
             presenter.SynchronizeFromState();
-            Assert.That(foodText.text, Is.EqualTo("Food: 21"));
+            Assert.That(foodText.text, Is.EqualTo("Satiety: 16"));
+        }
+
+        [UnityTest]
+        public IEnumerator FullSatietyWasteAndTieredCostReachHud([Values(false, true)] bool animations)
+        {
+            session.RestoreSatiety(190);
+            GameObject playerObject = CreatePlayer("Sated Player", 0.01f);
+            Component player = playerObject.GetComponent(playerType);
+            Text satietyText = Track(new GameObject("Satiety HUD")).AddComponent<Text>();
+            SetField(player, "foodText", satietyText);
+            GameObject food = Track(new GameObject("Wasted food"));
+            food.tag = "Food";
+            food.transform.position = Vector3.right;
+            BoardRuntime runtime = ComposeRuntime(playerObject,
+                new LegacyBoardView(food, LegacyBoardContentKind.Food, new GridPosition(1, 0)));
+            BoardEventPresenter presenter = GetProperty<BoardEventPresenter>(gameManager, "ActiveBoardPresenter");
+            presenter.AnimationsEnabled = animations;
+            yield return null;
+            Assert.That(TrySubmit(player, new MoveCommand(Direction.East), out Task<CommandSubmission> eating), Is.True);
+            while (!eating.IsCompleted) yield return null;
+            Assert.That(eating.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
+            FoodRestoredEvent gain = eating.Result.Result.Events.OfType<FoodRestoredEvent>().Single();
+            Assert.That(gain.Amount, Is.Zero);
+            Assert.That(gain.Wasted, Is.EqualTo(OrdinaryBoardContent.RaspberryFoodReward));
+            Assert.That(eating.Result.Result.Events.OfType<ActionCostAppliedEvent>().Single().CostAmount, Is.EqualTo(2));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(198));
+            Assert.That(satietyText.text, Is.EqualTo("Satiety: 198"));
+            Assert.That(food.activeSelf, Is.False);
+            Assert.That(TrySubmit(player, new MoveCommand(Direction.South), out Task<CommandSubmission> rejected), Is.True);
+            Assert.That(rejected.Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(198));
+            Assert.That(TrySubmit(player, new WaitCommand(), out Task<CommandSubmission> waiting), Is.True);
+            while (!waiting.IsCompleted) yield return null;
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(196));
+            Assert.That(satietyText.text, Is.EqualTo("Satiety: 196"));
+            Assert.That(runtime.RunState.GetType().GetProperty("Food"), Is.Null);
         }
 
         /// <summary>Applied healing is shown separately from later damage and survives rejection until the next accepted turn.</summary>
@@ -448,11 +484,11 @@ namespace HallowBlaze.Tests.PlayMode
             ComposeRuntime(playerObject);
             yield return null;
             session.TakeDamage(20);
-            ((IRunHud)player).Refresh(session.ActiveRun.Health, session.ActiveRun.Food);
+            ((IRunHud)player).Refresh(session.ActiveRun.Health, session.ActiveRun.Satiety);
             session.RestoreHealth(10);
             Assert.That(healthText.text, Is.EqualTo("Health: 90 +10"));
             session.TakeDamage(7);
-            ((IRunHud)player).Refresh(session.ActiveRun.Health, session.ActiveRun.Food);
+            ((IRunHud)player).Refresh(session.ActiveRun.Health, session.ActiveRun.Satiety);
             Assert.That(healthText.text, Is.EqualTo("Health: 83 +10"));
             session.RestoreHealth(5);
             Assert.That(healthText.text, Is.EqualTo("Health: 88 +15"));
@@ -521,7 +557,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(pixels.GetPixels32().Count(pixel => pixel.r > 180 && pixel.g > 180 && pixel.b > 180), Is.GreaterThan(100));
                 File.WriteAllBytes(Path.Combine(Path.GetTempPath(), "HB-M75-gains-" + width + "x" + height + ".png"), pixels.EncodeToPNG());
                 ((ITurnResourceGains)player).ClearResourceGains();
-                Assert.That(labels[0].text, Is.EqualTo("Food: 173"));
+                Assert.That(labels[0].text, Is.EqualTo("Satiety: 173"));
                 Assert.That(labels[1].text, Is.EqualTo("Health: 88"));
             }
             finally
@@ -554,7 +590,7 @@ namespace HallowBlaze.Tests.PlayMode
                 yield return null;
 
             Assert.That(pending.IsCompleted, Is.True);
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(9));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(9));
             Assert.That(playerObject.transform.position.x, Is.EqualTo(1f).Within(0.01f));
             Assert.That(playerObject.GetComponent<AudioSource>().clip, Is.SameAs(moveSound));
             Assert.That(audioSource.isPlaying, Is.False);
@@ -572,7 +608,7 @@ namespace HallowBlaze.Tests.PlayMode
             float movementStartedAt = Time.realtimeSinceStartup;
             Assert.That(TrySubmit(player, new MoveCommand(Direction.East), out Task<CommandSubmission> pending), Is.True);
 
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(9));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(9));
 
             float movementDeadline = movementStartedAt + configuredMoveTime + 0.4f;
             while ((playerObject.transform.position - Vector3.right).sqrMagnitude > float.Epsilon
@@ -610,7 +646,7 @@ namespace HallowBlaze.Tests.PlayMode
                 Assert.That(playerObject.transform.position, Is.EqualTo(expectedPosition));
             }
 
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(6));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(6));
         }
 
         [Test]
@@ -656,7 +692,7 @@ namespace HallowBlaze.Tests.PlayMode
 
             Assert.That(TrySubmit(player, new MoveCommand(Direction.East), out Task<CommandSubmission> blocked), Is.True);
             Assert.That(blocked.Result.Status, Is.EqualTo(CommandSubmissionStatus.Rejected));
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(9));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(9));
             Assert.That(TrySubmit(player, new MoveCommand(Direction.North), out Task<CommandSubmission> second), Is.True);
             while (!second.IsCompleted)
                 yield return null;
@@ -681,7 +717,7 @@ namespace HallowBlaze.Tests.PlayMode
                         return;
                     outcomeCalls++;
                     Assert.That(playerObject.transform.position, Is.EqualTo(new Vector3(2, 1, 0)));
-                    Assert.That(session.ActiveRun.Food, Is.EqualTo(7));
+                    Assert.That(session.ActiveRun.Satiety, Is.EqualTo(7));
                 }));
             yield return null;
             foreach (Direction direction in new[] { Direction.East, Direction.East, Direction.North })
@@ -691,7 +727,7 @@ namespace HallowBlaze.Tests.PlayMode
                     yield return null;
                 Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
             }
-            Assert.That(session.ActiveRun.Food, Is.EqualTo(7));
+            Assert.That(session.ActiveRun.Satiety, Is.EqualTo(7));
             Assert.That(GetProperty<bool>(gameManager, "IsRouteChoiceActive"), Is.True);
             Assert.That(outcomeCalls, Is.EqualTo(1));
             Assert.That(TrySubmit(player, new WaitCommand(), out _), Is.False);
@@ -722,13 +758,13 @@ namespace HallowBlaze.Tests.PlayMode
                 Invoke(gameManager, "DisposeActiveBoardRuntime");
                 ComposeRuntime(playerObject, new LegacyBoardView(soda, LegacyBoardContentKind.Soda, new GridPosition(1, 0)));
                 yield return null;
-                int initialFood = session.ActiveRun.Food;
+                int initialSatiety = session.ActiveRun.Satiety;
                 Assert.That(TrySubmit(player, new MoveCommand(Direction.East), out Task<CommandSubmission> pending), Is.True);
                 while (!pending.IsCompleted)
                     yield return null;
                 Assert.That(pending.Result.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
-                Assert.That(session.ActiveRun.Food, Is.EqualTo(initialFood + 19));
-                Assert.That(foodText.text, Is.EqualTo("Food: " + (initialFood + 19) + " +20"));
+                Assert.That(session.ActiveRun.Satiety, Is.EqualTo(initialSatiety + 19));
+                Assert.That(foodText.text, Is.EqualTo("Satiety: " + (initialSatiety + 19) + " +20"));
                 Assert.That(playerObject.transform.position, Is.EqualTo(Vector3.right));
                 Assert.That(soda.activeSelf, Is.False);
                 Assert.That(GetProperty<int>(player, "PresentedSoundCount"), Is.EqualTo(animated ? 2 : 1));

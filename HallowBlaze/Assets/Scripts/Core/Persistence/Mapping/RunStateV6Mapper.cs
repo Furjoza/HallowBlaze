@@ -35,14 +35,16 @@ namespace HallowBlaze.Core.Persistence.Mapping
 
         /// <summary>Validates all plan/run/leg/configuration invariants before returning detached state; malformed plans are never silently dropped.</summary>
         /// <exception cref="PersistenceDataException">Any required field, policy or association is invalid.</exception>
-        public static RunState FromDto(RunStateV6Dto dto)
+        public static RunState FromDto(RunStateV6Dto dto) => FromDto(dto, null);
+
+        internal static RunState FromDto(RunStateV6Dto dto, ResourceRules resourceRules)
         {
             if (dto == null) throw new ArgumentNullException(nameof(dto));
             DtoValidation.RequireCurrentSchemaVersion(dto.SchemaVersion, RunStateV6Dto.CurrentSchemaVersion);
             var previous = new RunStateV5Dto();
             Copy(dto, previous);
             previous.SchemaVersion = RunStateV5Dto.CurrentSchemaVersion;
-            RunState run = RunStateV5Mapper.FromDto(previous);
+            RunState run = RunStateV5Mapper.FromDto(previous, resourceRules);
             if (dto.BoardSelectionPlan == null) return run;
             try
             {

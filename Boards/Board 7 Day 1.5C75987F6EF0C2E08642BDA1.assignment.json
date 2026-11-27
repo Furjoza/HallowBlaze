@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "worldDefinitionId": "world-1",
+  "worldVersion": 1,
+  "edgeId": "road.shelter-warm-up",
+  "segmentId": "segment.shelter-warm-up.v2.arrival",
+  "generationConfigurationId": "ordinary.board.v1",
+  "generationVersion": 6,
+  "templateId": "draft.generated.90e812ec12754cbba1d0a19e059232c0",
+  "templateVersion": 1,
+  "variantId": "base"
+}

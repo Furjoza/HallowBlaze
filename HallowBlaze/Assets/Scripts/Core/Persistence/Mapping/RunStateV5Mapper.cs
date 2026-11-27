@@ -22,14 +22,16 @@ namespace HallowBlaze.Core.Persistence.Mapping
         }
 
         /// <summary>Validates every identity/association before returning an independent run; malformed data is never repaired silently.</summary>
-        public static RunState FromDto(RunStateV5Dto dto)
+        public static RunState FromDto(RunStateV5Dto dto) => FromDto(dto, null);
+
+        internal static RunState FromDto(RunStateV5Dto dto, ResourceRules resourceRules)
         {
             if (dto == null) throw new ArgumentNullException(nameof(dto));
             DtoValidation.RequireCurrentSchemaVersion(dto.SchemaVersion, RunStateV5Dto.CurrentSchemaVersion);
             var previous = new RunStateV4Dto();
             CopyEquipment(dto, previous);
             previous.SchemaVersion = RunStateV4Dto.CurrentSchemaVersion;
-            RunState run = RunStateV4Mapper.FromDto(previous);
+            RunState run = RunStateV4Mapper.FromDto(previous, resourceRules);
             try
             {
                 run.RestoreLandmarkState(FromRecord(dto.ActiveLandmark),

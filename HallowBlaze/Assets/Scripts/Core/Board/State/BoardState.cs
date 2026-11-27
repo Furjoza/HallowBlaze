@@ -103,6 +103,7 @@ namespace HallowBlaze.Core.Board.State
             obstacleWork.Remove(id);
             cacheWork.Remove(id);
             groundTools.Remove(id);
+            groundItems.Remove(id);
             pits.Remove(id);
             ReleasePitActor(id);
             listenerNoises.Remove(id);
@@ -133,7 +134,8 @@ namespace HallowBlaze.Core.Board.State
             if (tool == null || !TryGetEntity(tool.EntityId, out BoardEntityState entity) ||
                 entity.Definition.Layer != BoardLayer.Item || !entity.Definition.Kind.Equals(EntityKind.Item) ||
                 entity.Definition.AutomaticFoodReward != 0 || entity.Definition.Traits.IsExit ||
-                entity.Definition.ContentId != tool.DefinitionId || groundTools.ContainsKey(tool.EntityId)) return false;
+                entity.Definition.ContentId != tool.DefinitionId || groundTools.ContainsKey(tool.EntityId) ||
+                groundItems.ContainsKey(tool.EntityId)) return false;
             foreach (GroundToolState existing in groundTools.Values)
                 if (existing.InstanceId == tool.InstanceId) return false;
             groundTools.Add(tool.EntityId, tool);
@@ -203,9 +205,10 @@ namespace HallowBlaze.Core.Board.State
         /// <param name="requiredWork">Positive authored total shared by manual and shovel alternatives.</param>
         /// <param name="rewardDefinition">Non-exit item content, separate from the cache marker definition.</param>
         /// <param name="reward">The exact newly revealed item on completion, otherwise null.</param>
+        /// <param name="instanceId">Stable run/boundary identity predicted by the owning pickup query; null retains board-only compatibility identity.</param>
         /// <returns>False without mutation for a missing/invalid/already revealed source.</returns>
         public bool TryWorkCache(EntityId cacheId, int work, int requiredWork, BoardEntityDefinition rewardDefinition,
-            out CacheRewardItem reward)
+            out CacheRewardItem reward, string instanceId = null)
         {
             if (work <= 0) throw new ArgumentOutOfRangeException(nameof(work));
             if (requiredWork <= 0) throw new ArgumentOutOfRangeException(nameof(requiredWork));
@@ -217,7 +220,7 @@ namespace HallowBlaze.Core.Board.State
                 return false;
             int remaining = requiredWork - Math.Min(requiredWork, GetCacheWork(cacheId));
             if (work < remaining) { cacheWork[cacheId] = requiredWork - remaining + work; return true; }
-            reward = new CacheRewardItem(cache, rewardDefinition);
+            reward = new CacheRewardItem(cache, rewardDefinition, instanceId);
             cacheWork.Remove(cacheId);
             cacheRewards.Add(cacheId, reward);
             entitiesById[cacheId] = reward.Entity;
@@ -469,6 +472,9 @@ namespace HallowBlaze.Core.Board.State
                 clone.cacheWork.Add(progress.Key, progress.Value);
             foreach (var reward in cacheRewards)
                 clone.cacheRewards.Add(reward.Key, reward.Value);
+            foreach (var item in groundItems)
+                clone.groundItems.Add(item.Key, item.Value);
+            clone.PickupRevision = PickupRevision;
             foreach (var tool in groundTools)
                 clone.groundTools.Add(tool.Key, tool.Value);
             clone.nextPitId = nextPitId;

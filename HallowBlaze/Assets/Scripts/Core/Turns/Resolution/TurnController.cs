@@ -133,7 +133,7 @@ namespace HallowBlaze.Core.Turns.Resolution
                     exited = true;
             }
 
-            if (runState.Food <= 0 && !starved && !died)
+            if (runState.Satiety <= 0 && !starved && !died)
             {
                 events.Add(new PlayerStarvedEvent(playerId));
                 starved = true;

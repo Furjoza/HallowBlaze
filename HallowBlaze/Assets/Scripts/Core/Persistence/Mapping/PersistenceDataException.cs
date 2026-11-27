@@ -11,7 +11,9 @@ namespace HallowBlaze.Core.Persistence.Mapping
         UnsupportedSchemaVersion,
         InvalidStableId,
         DuplicateId,
-        InvalidValue
+        InvalidValue,
+        /// <summary>Required carried content is unavailable; loading must not silently replace this save with an older backup.</summary>
+        MissingInventoryContent
     }
 
     public sealed class PersistenceDataException : Exception

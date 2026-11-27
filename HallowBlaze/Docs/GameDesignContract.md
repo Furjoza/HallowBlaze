@@ -840,6 +840,18 @@ Hałas łączy ruch, narzędzia, przeciwników i puzzle w jeden system. Daje gra
 
 Gracz ma dwa sloty narzędzi. Narzędzia są częścią `RunState`, mają ograniczone użycia i zapewniają szybsze lub taktycznie odmienne rozwiązania. Nie są losowymi kluczami do obowiązkowych drzwi.
 
+**Owner amendment (2026-11-24):** Tool lifetime is definition-specific. The acquired axe has no
+use or durability limit for the current run, as specified in section 13.2; this supersedes the
+limited-use assumption above and its rationale for the axe only. Unlimited shovel use has not
+been approved by this amendment.
+
+All tools and carried items belong to the run, never to permanent profile equipment. Death or
+any other terminal end of the run, including victory, discards all equipped tools and all
+contents of the future backpack and side pockets. A new run inherits none of that equipment or
+inventory; any starting equipment must come from its explicit starting configuration. Ordinary
+board/segment/route transitions and Continue of the same run do not trigger this reset. Profile
+knowledge, atlas records and discovered facts retain their separate persistence rules.
+
 #### Rationale — dlaczego
 
 Dwa sloty wymuszają wybór bez tworzenia rozbudowanego inventory managementu. Ograniczone użycia tworzą koszt okazji. Alternatywa bez narzędzia chroni run przed softlockiem wynikającym z losowego dropu.
@@ -860,6 +872,30 @@ The two slots remain a separate equipment bar after M9. They are not cells in th
 #### Decyzja
 
 Siekiera pozwala pokonać krzew lub miękką drewnianą przeszkodę znacznie szybciej niż rękami, ale generuje duży hałas. Drugie zastosowanie, po walidacji pierwszego, może polegać na stworzeniu blokady z oznaczonego drzewa.
+
+**Accepted lifetime (2026-11-24):** An acquired axe remains usable without charge spending,
+depletion or wear during the current run. Its accepted actions still cost a turn and the
+current action's Food/satiety cost and emit the existing noise; rejected actions remain free.
+Acquisition does not create a permanent profile unlock or guarantee an equipped slot: conscious
+tool replacement retains the existing exchange behavior. Death or another terminal run end
+discards the axe with the rest of the run inventory.
+
+**Compatibility decision (2026-11-24):** The owner explicitly approved applying unlimited axe
+use to existing saves, including axes whose stored charges are zero. Preserve their instance
+IDs, stored charge snapshots and all other run data; do not refill or reset the save. Run schema
+6 and its historical readers remain unchanged. The definition's reusable policy, not a rewrite
+of its stored instance, determines whether an action requires or spends a charge. The existing
+positive `maximumCharges` value remains a compatibility snapshot, not an axe-use limit.
+
+**Implementation status (2026-11-24):** Source changes now mark `axe.basic` reusable, bypass
+depletion and charge spending for its actions, and omit its counter from equipment, ground-tool
+and picker presentation. Finite-use tools retain their charge policy. Domain, runtime, solver
+and test assemblies first compiled through .NET while Unity was prohibited. The owner later
+lifted that restriction on 2026-11-24. Fresh Unity verification passed 321 EditMode and 69
+graphics-enabled PlayMode cases without failures or skips, including retained saves, finite-use
+tools, rendered labels, travel/Continue and terminal-run restart. Independent Reviewer PASS
+found no material issues; the axe lifetime correction is Done. The resource panel remains
+Planned. No player-save reset or shovel policy change is authorized.
 
 #### Rationale — dlaczego
 
@@ -1446,7 +1482,7 @@ Poniższe pytania mają status **Open**. Agent nie może rozstrzygnąć ich sam,
 | ID | Decyzja właściciela | Warunek ponownego otwarcia |
 | --- | --- | --- |
 | O-002 | 2026-09-27 — po nagrodzie i koszcie najpierw rozstrzygana jest śmierć z głodu; martwy gracz nie kończy planszy, nawet jeśli akcja weszła na wyjście. | Osobna decyzja produktowa zmieniająca priorytet terminalnych wyników tej samej akcji. |
-| O-003 | 2026-09-27 — until M9, food is collected automatically on entry and resolved before the action cost; tools require conscious interaction. M9 replaces only the food/consumable pickup rule with section 27.6. | A separate product decision changing conscious tool pickup or the accepted M9 transfer semantics. |
+| O-003 | 2026-09-27: automatic food on entry was the pre-inventory transition. M10.5 replaces that runtime path with section 27.6's pre-command Use now / Store / Leave decision; effects still precede the preselected cost. Conscious tool pickup remains separate equipment behavior. | A separate product decision changing conscious tool pickup or section 27.6 transfer semantics. |
 | O-004 | 2026-09-08 — PC jest platformą referencyjną dla vertical slice. Mobile ma zachować tę samą semantykę po ustabilizowaniu interakcji. | Osobna decyzja produktowa zmieniająca platformę referencyjną lub wymagająca równorzędnej walidacji filesystemu na mobile. |
 | O-005 | 2026-08-27 — leaderboard online nie jest częścią bieżącego projektu; najpierw powstaje prywatne podsumowanie wyprawy. Usuniętej integracji Dreamlo nie przywracamy, a rotację starej wartości właściciel świadomie odkłada. | Osobna decyzja produktowa o ponownym wprowadzeniu funkcji online; wtedy wymagane są nowy model bezpieczeństwa, nowa integracja i poświadczenia, bez ponownego użycia historycznej wartości. |
 | O-006 | 2026-09-09 — `Exit to Menu` zachowuje poprawny run save dla `Continue`; trwałe porzucenie jest osobną, jednoznaczną akcją. | Osobna decyzja produktowa zmieniająca oczekiwania gracza wobec wznowienia lub zamknięcia runu. |
@@ -1713,7 +1749,9 @@ authoring editor; it does not implement pools, change rewards or declare a board
 	and publication are explicit. Intermediate/final segment and day semantics stay unchanged.
 - The editor offers a compact side panel for the current board/variant, the selected segment's
 	pool and the selected route. It reports counts by resource/content and actual authored Food,
-	nominal Health restoration, and tool instances/initial charges by tool definition. Reuse the
+	nominal Health restoration, and tool instances by tool definition. Show initial charges only
+	for tools with an accepted finite-use policy; the axe has a unit count and no charge total
+	under section 13.2. Reuse the
 	authoritative reward definitions and bindings; do not infer values from sprites or count an
 	entity and its item/source metadata twice. Starting resources/equipment are shown separately.
 - Show each candidate and the pool's minimum, arithmetic mean and maximum per resource for one
@@ -1953,6 +1991,7 @@ Pockets reward preparation by avoiding an extra bag-opening turn, but the one-it
 
 - Route-leg, atlas-observation, and inventory changes use separate versioned DTO migrations with stable textual IDs.
 - The run save includes active route address/accumulator, durable Day-transition status, item instances, bag placements, pockets, tool instances, health, and satiety once their owning cards ship.
+- Tool instances, backpack contents and side-pocket contents never transfer to a new run after death or another terminal run end. Continue and ordinary travel retain the current run's inventory; profile knowledge remains independent, as specified in section 13.1.
 - The profile save includes typed observation aggregates and discovered fixed-source IDs.
 - Mid-board snapshot, when implemented, captures only a completed turn; modal pickup and bag drafts are never persisted.
 - Portable diagnostic replay is deferred to M8.7 until real testers/players need transferable bug recordings. Until that capability is accepted, each mechanic owns explicit deterministic command-scenario tests; save migrations, generation, and inventory do not require a replay format or canonical diagnostic hash.
