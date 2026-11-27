@@ -20,7 +20,7 @@ namespace HallowBlaze.Presentation.Runtime
         }
 
         /// <summary>Validates authored placeholder content; malformed or duplicate definitions never publish a partial catalog.</summary>
-        /// <param name="json">A document with a nonempty tools array of stable IDs, names and positive capacities.</param>
+        /// <param name="json">A document with stable IDs, names, positive compatibility charge snapshots and optional reusable flags; omitted flags retain finite use.</param>
         /// <returns>Read-only definitions whose values are immutable across all runs.</returns>
         public static IReadOnlyDictionary<string, ToolDefinition> Read(string json)
         {
@@ -32,7 +32,7 @@ namespace HallowBlaze.Presentation.Runtime
             foreach (ContentEntry entry in document.tools)
             {
                 if (entry == null) throw new ArgumentException("A tool entry is missing.", nameof(json));
-                var definition = new ToolDefinition(entry.id, entry.displayName, entry.maximumCharges);
+                var definition = new ToolDefinition(entry.id, entry.displayName, entry.maximumCharges, entry.isReusable);
                 definitions.Add(definition.Id, definition);
             }
             return new ReadOnlyDictionary<string, ToolDefinition>(definitions);
@@ -41,6 +41,6 @@ namespace HallowBlaze.Presentation.Runtime
         [Serializable]
         private sealed class ContentDocument { public ContentEntry[] tools; }
         [Serializable]
-        private sealed class ContentEntry { public string id; public string displayName; public int maximumCharges; }
+        private sealed class ContentEntry { public string id; public string displayName; public int maximumCharges; public bool isReusable; }
     }
 }

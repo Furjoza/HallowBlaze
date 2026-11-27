@@ -6266,7 +6266,7 @@ exercise. Technical completion belongs to the Lead; usability acceptance belongs
 
 ## `M6.10` - Board-template assignments to existing route segments
 
-**Status:** `Active` - the limited route-sandbox increment below is technically Done with independent review PASS on 2026-11-20 and owner-reported travel acceptance on 2026-11-22. M6.10a's domain foundation is Done; M6.10b pool authoring/travel is Done with independent review PASS on 2026-11-23 and owner usability acceptance on 2026-11-24. Resource panel M6.10c remains Planned.
+**Status:** `Done` - the limited route-sandbox increment and M6.10a/b/c are complete within their delivered editor/sandbox scope. M6.10b received owner usability acceptance on 2026-11-24; M6.10c received technical verification, independent re-review PASS and owner acceptance on 2026-11-25. Production campaign activation, measured balance and the separate Check board TimeLimit are not claimed.
 **Priority:** P2 with the initial editor, before bulk handcrafted route content.
 **Related contract:** Section 27.2 segment-authoring amendment, section 15 biome hierarchy and existing route, template and pinned-selection contracts.
 **Rationale:** A local board and its place in a journey are different data. Explicit placements let an author reuse a template and control which board appears along a route without copying grids or editing campaign JSON by hand.
@@ -6571,13 +6571,100 @@ the separate Check board TimeLimit is unresolved. This closeout changes document
 
 ### M6.10c - Resource balance panel for boards, segment pools and routes
 
-**Status:** `Planned` - requested by the owner on 2026-11-22; no panel or analysis code is delivered
-by this documentation task.
+**Status:** `Done` - implementation authorized on 2026-11-25 following the completed axe
+prerequisite. Technical verification and independent re-review PASS completed on the same date;
+the owner then accepted the corrected display as working and authorized continuation.
 **Priority:** P2, alongside practical pool authoring and before bulk route-content balancing.
 **Dependencies:** M6.10a resource/catalog and immutable publication contracts; M6.10b pool/route
 selection and edit notifications. Freeze exact analyzer/panel/window/test paths before Ready.
 The board-level analyzer may be implemented first within that scope, without pretending that
 unfinished pool or route integration already exists.
+
+**Panel write scope (project-relative, frozen before implementation):**
+`Assets/Editor/BoardAuthoring/BoardResourceAnalysis.cs` and its Unity-generated `.meta`,
+`Assets/Editor/BoardAuthoring/BoardResourcePanel.cs` and its Unity-generated `.meta`,
+`Assets/Editor/BoardAuthoring/BoardAuthoringWindow.cs`,
+`Assets/Editor/BoardAuthoring/BoardPoolAuthoring.cs`,
+`Assets/Tests/EditMode/UnifiedBoardAuthoringTests.cs`,
+`Assets/Tests/EditMode/BoardAuthoringWindowTests.cs`,
+`Assets/Tests/EditMode/BoardAuthoringTestPlayTests.cs`, `Docs/BoardGeneration.md` and this roadmap.
+The accepted uncommitted axe correction and owner-staged configuration remain baseline, not
+new panel changes. No runtime, save DTO, catalog asset, scene, package or settings changes are
+authorized for this panel. Parent `Boards/` remains uninspected and unchanged. This scope does
+not authorize commits, pushes, new branches, solver changes or benchmarks.
+
+**Owner rule clarification (2026-11-24):** An acquired axe has no durability or use limit during
+the current run. Its existing turn, Food/satiety and noise costs remain. Death or any other
+terminal run end discards all tools and all future backpack/side-pocket contents; ordinary
+travel and Continue do not. Profile knowledge remains separate. This does not approve unlimited
+shovel use. The owning contract is sections 13.1, 13.2 and 27.9 of
+[GameDesignContract.md](GameDesignContract.md#13-narz%C4%99dzia).
+
+**Required predecessor - axe lifetime correction:** `Done` on 2026-11-24. The owner authorized
+programming work while initially prohibiting Unity, then lifted that restriction on the same
+date. Implementation, focused Unity validation and independent Reviewer PASS support final
+acceptance. That prerequisite did not deliver the resource panel; the panel starts separately
+on 2026-11-25.
+
+**Approved save policy (2026-11-24):** Unlimited axe use also applies to retained saves,
+including zero-charge axes, as explicitly confirmed by the owner. Preserve exact instance IDs,
+stored charge snapshots and all other run data. No refill, player reset, DTO change or schema
+bump is needed: the current definition supplies the reusable policy. Positive initial snapshots
+remain compatibility data, not a limit. Finite-use tools and unknown definitions retain their
+existing semantics.
+
+**Closed implementation writes (project-relative):**
+`Assets/Scripts/Core/State/ToolDefinition.cs`,
+`Assets/Scripts/Core/Turns/Resolution/ToolUseQuery.cs`,
+`Assets/Scripts/Core/Turns/Resolution/TurnResolver.cs`,
+`Assets/Scripts/Core/Generation/Landmarks/LandmarkSolver.cs`,
+`Assets/Scripts/Presentation/Runtime/HUD/ToolContentCatalog.cs`,
+`Assets/Scripts/Presentation/Runtime/HUD/AxeContent.cs`,
+`Assets/Scripts/Presentation/Runtime/HUD/ShovelContent.cs`,
+`Assets/Scripts/Presentation/Runtime/HUD/ToolHudPresenter.cs`,
+`Assets/Scripts/Presentation/Runtime/Interaction/InteractionPresenter.cs`,
+`Assets/Scripts/Presentation/Runtime/Interaction/GroundToolPresenter.cs`,
+`Assets/GameData/Tools/Resources/ToolDefinitions.json`,
+`Assets/Tests/EditMode/AxeObstacleTests.cs`,
+`Assets/Tests/EditMode/InteractionQueryTests.cs`,
+`Assets/Tests/EditMode/RunStateTests.cs`,
+`Assets/Tests/EditMode/PersistenceDtoTests.cs`,
+`Assets/Tests/EditMode/ToolPickupTests.cs`,
+`Assets/Tests/EditMode/RadioTowerLandmarkTests.cs`,
+`Assets/Tests/EditMode/LandmarkSolverTests.cs`,
+`Assets/Tests/PlayMode/ToolHudPresentationTests.cs`,
+`Assets/Tests/PlayMode/ToolPickupPresentationTests.cs`,
+`Assets/Tests/PlayMode/AxePresentationTests.cs`,
+`Docs/GameDesignContract.md` and this roadmap. Existing owner-staged `AGENTS.md` and settings
+changes are preserved, not included; parent `Boards/` is not inspected or modified. No Unity
+asset moves, metadata, scenes, prefabs, packages or generated-project edits. Validation uses
+isolated temporary saves, not player data. The only settings exception is Unity's permitted
+`SENTIS_ANALYTICS_ENABLED` token; the owner's staged settings blob remains unchanged.
+
+**Prepared behavior and validation boundary (2026-11-24):** Tool actions declare a charge cost
+of zero or one; reusable chopping keeps normal accepted turn/Food/noise costs without spending
+a charge or emitting a charge-spent event. Instance/target snapshot checks and free rejection
+remain. Runtime and solver use the same axe lifetime; equipment, pickup/replacement and ground
+labels no longer imply depletion. Regressions cover more than three uses with retained
+0/1/3 snapshots, unchanged save data and schema 1-6 readers, zero-charge pickup, stale/rejected
+commands, finite-use tools and fresh-run reset after death or victory. Existing travel/Continue
+checks passed. Source compilation first passed through .NET for both EditMode and PlayMode
+assemblies and their domain/runtime dependencies. After the owner permitted Unity, the final
+focused set passed 321/321 EditMode cases and 69/69 graphics-enabled PlayMode cases, with no
+skips: tool presentation 32/32 plus route/isolation and production lifecycle 37/37. Rendered
+HUD and exchange labels passed desktop/narrow pixel and fit checks. The solver fixture's stale
+20-Food ration expectation was aligned with the existing accepted five-Food raspberry reward;
+no reward or route cost changed. The remaining exchange screenshot expectation now requires
+the reusable axe name without a charge counter. The
+separate pre-existing Check board TimeLimit issue is not claimed fixed. M6.10c must not be
+accepted with unvalidated or contradictory axe behavior.
+
+**Acceptance (2026-11-24):** Independent Reviewer PASS found no material bugs or regressions.
+The approved lifetime, retained-save policy, finite-use compatibility, presentation and
+run-boundary checks have evidence; the axe correction is complete, not a resource-panel
+delivery. The untouched `UseToolCommand.ExpectedCharges` XML comment still overstates the
+counter's replay protection for zero-cost actions; this is a non-blocking documentation note,
+not a gameplay defect. Baseline/scope checks preserve the owner's staged changes and map files.
 
 **Expected outcome:** A fast, compact side panel makes authored resource supply visible while
 painting/editing: current board/variant, selected segment pool and selected route. In narrow
@@ -6586,8 +6673,9 @@ No Play Mode or solver search is required to inspect the numbers.
 
 **Acceptance:** Count actual spawns and authoritative catalog/binding rewards once, never both
 the entity and its item/source metadata. Show counts by resource/content, total Food, nominal
-Health restoration and tool instances/initial charges by definition; keep starting inputs
-separate. Unknown definitions and conditional rewards are explicit, not guessed or zero-filled.
+Health restoration and tool instances by definition; show initial charge totals only for tools
+whose accepted policy is finite-use. Count axes as units without a charge total. Keep starting
+inputs separate. Unknown definitions and conditional rewards are explicit, not guessed or zero-filled.
 Gross authored supply is not reachable/collected supply, effective healing, net Food after turns
 or proof that a board is solvable. Do not change rewards or automate balance decisions.
 
@@ -6606,13 +6694,55 @@ changes; stale/invalid data is visibly marked. Work from detached source data wi
 RNG, history, selection, runtime state, files, publication or player saves.
 
 **Required checks:** Hand-calculated empty/one/many candidate and multi-segment fixtures; exact
-Food/medicine/tool definitions including retained aliases; no entity/binding double counting;
+Food/medicine/tool definitions including retained aliases; axe units without fictitious charge
+totals and finite-use tools with actual initial charges; no entity/binding double counting;
 independent variants; duplicate-copy handling; one template on two segments; fractional means;
 independent resource extrema; missing/unsupported definitions; generated unknown versus exact
 seed snapshots; frozen seed-selected totals. Native wide/narrow checks cover panel visibility,
 edit/undo refresh and unchanged draft/RNG/context. Use small deterministic fixtures, not a seed
 benchmark or an implicit promise of tactical balance. Owner acceptance asks whether the numbers
 are useful for comparing rich/poor routes, not for measured proof of difficulty or reachability.
+
+**Implementation checkpoint (2026-11-25):** Read-only Board/Pool/Route panel and detached
+analysis are implemented. Six focused EditMode checks pass, including hand-calculated route
+15/25/35, fractional expectations, aliases, conditional/hidden rewards, finite shovel charges,
+reusable axe units, per-resource extrema, repeated placements, exact seed snapshots and native
+1280/640 refresh/isolation. Final graphics-enabled authoring validation passed 202 EditMode
+cases with zero failures: document 58, unified authoring 30, window 41, launcher 35 and pool
+publication 38. Two existing launcher cases explicitly skipped because this batch session lacks
+their clean unnamed camera-scene prerequisite; these are not passes. Native layout validation
+preserves canvas pixel thresholds and tests actual Add Outcome after both outer and inspector
+scrolling. Resources and the inspector share the canvas-height column with separate bounded
+viewports. Initial independent review found two invalid-input/error-lifetime defects; both
+were corrected and covered by a native regression for missing/null/wrong-type membership
+fields and a capture failure retained across unchanged repaints. Independent re-review PASS on
+2026-11-25 closed both findings and found no new material regressions. Technical verification
+is complete. No runtime changes
+or new PlayMode/Player-compilation claims are made. Owner usefulness/usability is not inferred
+from automated results.
+
+**Owner feedback correction (2026-11-25):** Route totals update correctly when the owner changes
+the first fixed map, but Board displayed `No board` without an open draft. Board now inspects
+the selected segment's captured fixed map directly when no draft is open, with exact saved
+identity and resource details. When a draft is also open, explicit Draft/Segment map controls
+keep its supply separate from captured route data. Pooled segment inspection uses the shown
+test seed's exact choice; uncaptured generation remains unknown. The focused native regression
+passes at 1280/640 GUI-point widths, including fixed-map replacement/undo and independent draft
+selection. The full window fixture passed 42/42 live EditMode cases with no failures or skips;
+independent read-only review PASS found no material defects in this correction. The pooled
+seed-selection and generated/invalid Board-source branches were reviewed statically rather
+than added to the new native case; Draft/Segment map pointer switching is covered at 1280.
+This correction does not change route aggregation or imply owner acceptance, and the earlier
+202-case authoring result is not claimed as a fresh rerun.
+
+**Owner acceptance (2026-11-25):** The owner reported that the corrected resource panel appears
+to work and requested continuation, after previously confirming route recalculation while
+changing fixed maps. This closes the practical usability gate for M6.10c and the delivered
+M6.10 editor/sandbox scope on the existing technical evidence and independent reviews. It is
+not a fresh automated run, measured difficulty/balance acceptance, proof of reachability,
+production campaign activation, every manual scenario or resolution of the separate Check
+board TimeLimit. The two skipped camera-scene prerequisites and documented test gaps remain
+as recorded; no additional coverage is inferred. This closeout changes documentation only.
 
 ---
 
@@ -8616,7 +8746,7 @@ The next safe sequence is:
 1. retain the accepted `M4.9` and `M6.6` Proceed decisions of 2026-11-12. The owner accepts two external testers plus separate owner participation and waives further recruitment and missing protocol-specific measurements; no completed 5-8-person cohort or inferred score is claimed. The owner separately authorized M5.1/M5.2 solo work and then direct M5.3/M5.4/M5.5/M5.6/M5.7 implementation with Reviewer; all seven cards are Done. The owner subsequently authorized M6.1's authoring foundation, M6.2's single-boulder push, M6.3's plate/gate state, M6.4's production landmark and M6.5's offline solver before the planned human sessions. All five cards are Done. M6.1 received independent Reviewer PASS; M6.2/M6.3/M6.4/M6.5 used explicitly authorized combined-role self-review. M6.4 passed full EditMode 1199 tests plus the existing Explicit skip and graphics PlayMode 185/185; M6.5 passed focused 26/26 and full EditMode 1225 tests plus the existing Explicit skip. The owner then separately authorized solo M6.6: its technical preparation passed full EditMode 1237 tests plus the existing Explicit skip and graphics PlayMode 188/188, with self-review only. The later owner acceptance closes its human gate without changing those review attributions. No additional M4.9/M6.6 cohort is a remaining prerequisite. Future cards use the current Lead implementation and Reviewer/self-review policy in `AGENTS.md`;
 2. retain the separate 2026-11-12 owner-directed M7 closeout, including `M7.8` and `M7.17`. Existing technical evidence and the accepted manual-check limitations remain as recorded; no additional human-test result is implied by closing M4.9/M6.6;
 3. preserve the completed M7 repairs and the explicit `M7.21`/`M7.26` deferrals. Their risks and follow-up evidence requirements remain unchanged; leave the current Radio Tower board unchanged;
-4. after the expanded M7 gate and a Proceed verdict from `M4.9`, complete the bounded stone-lure extension `M5.8`-`M5.11`: accept detailed rules, validate atomic throw/supply behavior, add shared aiming, then obtain the human prototype verdict. No earlier human gate or production rollout is waived. `M6.7` and `M6.8a/b` are Done. For the owner's editor priority, preserve delivered `M6.9e` shared authoring and the technically completed one-route sandbox, with owner-reported three-map travel acceptance on 2026-11-22. Historical `M6.9c/d` are consolidated scope, not duplicate implementation prerequisites. `M6.10a` is Done with explicit segment pools, equal-probability deterministic choice and old-save pinning; `M6.10b` pool editing/preview/travel is Done with owner usability acceptance on 2026-11-24. `M6.10c` live board/pool/route resource summaries remain Planned; its contract and exact scope must be ready before implementation, and no code starts from this documentation change. The hierarchy stays biome -> named routes -> stable segments -> generated, fixed or pooled authored content, never a route-wide pool. Preserve strict legacy landmark guards, isolation and the unresolved Check board TimeLimit as separate work. Complete practical editor tooling before bulk handcrafted M8 content; unrelated slice work is not blocked;
+4. after the expanded M7 gate and a Proceed verdict from `M4.9`, complete the bounded stone-lure extension `M5.8`-`M5.11`: accept detailed rules, validate atomic throw/supply behavior, add shared aiming, then obtain the human prototype verdict. No earlier human gate or production rollout is waived. `M6.7` and `M6.8a/b` are Done. For the owner's editor priority, preserve delivered `M6.9e` shared authoring and the completed one-route sandbox, with owner-reported three-map travel acceptance on 2026-11-22. Historical `M6.9c/d` are consolidated scope, not duplicate implementation prerequisites. `M6.10a` is Done with explicit segment pools, equal-probability deterministic choice and old-save pinning; `M6.10b` pool editing/preview/travel is Done with owner usability acceptance on 2026-11-24. `M6.10c` live board/pool/route resource summaries and the delivered `M6.10` editor/sandbox scope are Done with technical verification, independent re-review PASS and owner acceptance on 2026-11-25. The hierarchy stays biome -> named routes -> stable segments -> generated, fixed or pooled authored content, never a route-wide pool. Preserve strict legacy landmark guards, isolation and the unresolved Check board TimeLimit as separate work. Complete practical editor tooling before bulk handcrafted M8 content; unrelated slice work is not blocked;
 5. complete the no-backpack vertical slice through `M8.8`, preserving its playtest requirements and earlier M4.9/M6.6/M7 gates, then make the explicit M10 verdict. The stone prototype does not automatically become a production or vertical-slice acceptance requirement;
 6. keep M10 deferred and last among planned milestones unless the owner explicitly changes that order; activate M9.7 only for an actual owner-approved bug-report workflow, independently of M10. Keep scent/wind `M9.8` last among optional ideas, not ahead of accepted work or an activated M10 because of its milestone number.
 

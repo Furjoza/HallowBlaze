@@ -585,6 +585,8 @@ namespace HallowBlaze.Tests.EditMode
             Assert.Throws<System.ArgumentException>(() => new ToolAction("tool", behavior, "", 1, 1));
             Assert.Throws<System.ArgumentOutOfRangeException>(() => new ToolAction("tool", behavior, "Effect", -1, 1));
             Assert.Throws<System.ArgumentOutOfRangeException>(() => new ToolAction("tool", behavior, "Effect", 1, 0));
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => new ToolAction("tool", behavior, "Effect", 1, 1, chargeCost: -1));
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => new ToolAction("tool", behavior, "Effect", 1, 1, chargeCost: 2));
             Assert.Throws<System.ArgumentOutOfRangeException>(() => new ActionCostPolicy(0));
             var binding = new ToolAction("tool", behavior, "Effect", 1, 1);
             Assert.Throws<System.ArgumentException>(() => new ToolUseQuery(new[] { binding, binding }));

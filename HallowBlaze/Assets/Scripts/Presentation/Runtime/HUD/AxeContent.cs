@@ -33,7 +33,8 @@ namespace HallowBlaze.Presentation.Runtime
         public static ToolUseQuery CreateTools(ObstacleClearingRules rules) => new ToolUseQuery(new[]
         {
             new ToolAction(ObstacleClearingRules.AxeDefinitionId, new ClearObstacleAction(rules, true), "Chop: clear obstacle",
-                rules.AxeNoiseStrength, rules.NoiseLifetimeTurns, ObstacleClearingRules.AxeNoiseFactId)
+                rules.AxeNoiseStrength, rules.NoiseLifetimeTurns, ObstacleClearingRules.AxeNoiseFactId,
+                chargeCost: ToolContentCatalog.Load()[ObstacleClearingRules.AxeDefinitionId].UseChargeCost)
         });
 
         [Serializable]
