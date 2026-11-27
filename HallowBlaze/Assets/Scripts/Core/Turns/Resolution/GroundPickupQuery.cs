@@ -10,14 +10,14 @@ namespace HallowBlaze.Core.Turns.Resolution
     public sealed class GroundPickupOption
     {
         internal GroundPickupOption(PlayerCommand primary, GridPosition playerPosition, int revision,
-            GroundItemState item, GridPosition position, RunState run, int pickupRevision)
+            GroundItemState item, GridPosition position, RunState run, int pickupRevision, InventoryState availableInventory = null)
         {
             Primary = primary; PlayerPosition = playerPosition; Revision = revision; Item = item; Position = position;
             PickupRevision = pickupRevision;
             UseAvailable = !run.Inventory.TryGetPlacement(item.InstanceId, out _) &&
                 run.InventoryContent.Items.TryGetDefinition(item.DefinitionId, out ItemDefinition definition) &&
                 run.InventoryContent.Effects.TryGetDefinition(definition.EffectId, out _);
-            CanStore = UseAvailable && run.InventoryRevision < int.MaxValue && HasPlacement(run, item);
+            CanStore = UseAvailable && run.InventoryRevision < int.MaxValue && HasPlacement(availableInventory ?? run.Inventory, item);
             UseUnavailableReason = UseAvailable ? null : "Missing content or duplicate ownership";
             StoreUnavailableReason = CanStore ? null : !UseAvailable ? UseUnavailableReason :
                 run.InventoryRevision == int.MaxValue ? "Inventory revision exhausted" : "No legal placement";
@@ -46,14 +46,14 @@ namespace HallowBlaze.Core.Turns.Resolution
         public GroundPickupCommand CreateCommand(GroundPickupChoice choice, InventoryLayoutEntry placement = null) =>
             new GroundPickupCommand(Primary, PlayerPosition, Revision, Item.EntityId, Item.InstanceId, Item.DefinitionId, Position, choice, placement, PickupRevision);
 
-        private static bool HasPlacement(RunState run, GroundItemState item)
+        private static bool HasPlacement(InventoryState inventory, GroundItemState item)
         {
             var instance = new ItemInstanceState(item.InstanceId, item.DefinitionId);
             for (int column = 0; column < InventoryState.MainGridWidth; column++)
                 for (int row = 0; row < InventoryState.MainGridHeight; row++)
-                    if (run.Inventory.TryPlace(new InventoryPlacement(instance, InventoryContainer.MainGrid, column, row), out _, out _)) return true;
-            return run.Inventory.TryPlace(new InventoryPlacement(instance, InventoryContainer.LeftPocket), out _, out _) ||
-                run.Inventory.TryPlace(new InventoryPlacement(instance, InventoryContainer.RightPocket), out _, out _);
+                    if (inventory.TryPlace(new InventoryPlacement(instance, InventoryContainer.MainGrid, column, row), out _, out _)) return true;
+            return inventory.TryPlace(new InventoryPlacement(instance, InventoryContainer.LeftPocket), out _, out _) ||
+                inventory.TryPlace(new InventoryPlacement(instance, InventoryContainer.RightPocket), out _, out _);
         }
     }
 
@@ -68,8 +68,13 @@ namespace HallowBlaze.Core.Turns.Resolution
         { this.interactions = interactions ?? new InteractionQuery(); this.tools = tools ?? new ToolUseQuery(); }
 
         /// <summary>Reads entry or final cache-production decisions without mutation; standing, Wait and legacy consumable interactions never prompt.</summary>
+        /// <param name="board">The authoritative current board.</param>
+        /// <param name="run">The authoritative current run and trusted content.</param>
+        /// <param name="playerId">The acting player.</param>
+        /// <param name="primary">The uncommitted movement, interaction or tool intent.</param>
+        /// <param name="availableInventory">Optional detached post-quick-use layout for capacity preview only; resolution validates its own complete proposal.</param>
         /// <returns>Null unless the validated movement enters a bound consumable or an interaction produces a new concrete cache reward.</returns>
-        public GroundPickupOption GetOption(BoardState board, RunState run, EntityId playerId, PlayerCommand primary)
+        public GroundPickupOption GetOption(BoardState board, RunState run, EntityId playerId, PlayerCommand primary, InventoryState availableInventory = null)
         {
             if (board == null) throw new ArgumentNullException(nameof(board));
             if (run == null) throw new ArgumentNullException(nameof(run));
@@ -88,7 +93,7 @@ namespace HallowBlaze.Core.Turns.Resolution
                     return null;
                 if (!board.TryGetEntity(BoardLayer.Item, destination, out target) ||
                     !board.TryGetGroundItem(target.Id, out GroundItemState item)) return null;
-                return new GroundPickupOption(primary, player.Position, run.InventoryRevision, item, destination, run, board.PickupRevision);
+                return new GroundPickupOption(primary, player.Position, run.InventoryRevision, item, destination, run, board.PickupRevision, availableInventory);
             }
             if (primary is InteractCommand interact)
             {
@@ -101,7 +106,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             }
             else return null;
             if (!(action is CacheDigAction cache) || !cache.TryPreviewReward(board, run, target, out GroundItemState ground)) return null;
-            return new GroundPickupOption(primary, player.Position, run.InventoryRevision, ground, target.Position, run, board.PickupRevision);
+            return new GroundPickupOption(primary, player.Position, run.InventoryRevision, ground, target.Position, run, board.PickupRevision, availableInventory);
         }
     }
 

@@ -11,7 +11,7 @@ namespace HallowBlaze.Core.Turns.Resolution
         private readonly GroundPickupQuery groundPickups;
 
         private TurnResult ResolveGroundPickup(BoardState board, RunState run, BoardEntityState player,
-            GroundPickupCommand command, int cost, int satietyAtStart)
+            GroundPickupCommand command, int cost, int satietyAtStart, QuickUsePlan quick = null)
         {
             GroundPickupOption option = groundPickups.GetOption(board, run, player.Id, command.Primary);
             if (option == null || command.ExpectedRevision != run.InventoryRevision || command.ExpectedPickupRevision != board.PickupRevision ||
@@ -41,21 +41,25 @@ namespace HallowBlaze.Core.Turns.Resolution
                     default: return new RejectedTurnResult(CommandRejectionCode.InvalidInventory);
                 }
                 placement = new InventoryPlacement(new ItemInstanceState(command.InstanceId, command.DefinitionId), container, entry.Column, entry.Row);
-                if (!run.Inventory.TryPlace(placement, out _, out _)) return new RejectedTurnResult(CommandRejectionCode.InvalidInventory);
+                var proposed = new List<InventoryPlacement>(quick?.Placements ?? run.Inventory.Placements) { placement };
+                if (!run.InventoryContent.TryCreateInventory(proposed, out _, out _))
+                    return new RejectedTurnResult(CommandRejectionCode.InvalidInventory);
+                if (quick != null) quick.Placements = proposed;
             }
             else if (command.Choice != GroundPickupChoice.UseNow && command.Choice != GroundPickupChoice.Leave || command.Placement != null)
                 return new RejectedTurnResult(CommandRejectionCode.InvalidCommand);
             if (command.Primary is MoveCommand move)
-                return ResolveMove(board, run, player, move, cost, satietyAtStart, command, placement, effect);
+                return ResolveMove(board, run, player, move, cost, satietyAtStart, command, placement, effect, quick);
             var events = new List<GameEvent>();
             if (command.Primary is InteractCommand interact)
             {
                 if (interactions.Validate(board, run, player.Id, interact, out BoardEntityState target, out IInteractionAction action) != InteractionAvailability.Available)
                     return new RejectedTurnResult(CommandRejectionCode.StalePickup);
+                ApplyQuick(run, player.Id, quick, events);
                 events.Add(new InteractionPerformedEvent(player.Id, target.Id));
                 if (action is CacheDigAction) action.Apply(board, run, player, target, events);
                 var consequences = action as IInteractionConsequences;
-                ApplyPickup(board, run, player.Id, command, placement, effect, events);
+                ApplyPickup(board, run, player.Id, command, placement, effect, events, quick != null);
                 ApplyCost(run, player.Id, events, cost, satietyAtStart);
                 int strength = consequences?.NoiseStrength ?? noiseProfile?.InteractionStrength ?? 0;
                 if (strength > 0) events.Add(new NoiseEvent(board.EmitNoise(player.Id, player.Position, strength,
@@ -66,9 +70,10 @@ namespace HallowBlaze.Core.Turns.Resolution
                 var use = (UseToolCommand)command.Primary;
                 if (tools.Validate(board, run, player.Id, use, out BoardEntityState target, out ToolAction tool) != CommandRejectionCode.None)
                     return new RejectedTurnResult(CommandRejectionCode.StalePickup);
+                ApplyQuick(run, player.Id, quick, events);
                 events.Add(new ToolUsedEvent(player.Id, use, tool.DefinitionId));
                 if (tool.Behavior is CacheDigAction) tool.Behavior.Apply(board, run, player, target, events);
-                ApplyPickup(board, run, player.Id, command, placement, effect, events);
+                ApplyPickup(board, run, player.Id, command, placement, effect, events, quick != null);
                 if (tool.ChargeCost > 0)
                 {
                     if (!run.TrySpendToolCharge(use.SlotIndex, use.InstanceId))
@@ -85,12 +90,12 @@ namespace HallowBlaze.Core.Turns.Resolution
         }
 
         private static void ApplyPickup(BoardState board, RunState run, EntityId playerId, GroundPickupCommand command,
-            InventoryPlacement placement, ConsumableEffectDefinition effect, ICollection<GameEvent> events)
+            InventoryPlacement placement, ConsumableEffectDefinition effect, ICollection<GameEvent> events, bool inventoryCommitted = false)
         {
             ResourceGain gain = default;
             if (!board.TryCommitPickupRevision(command.ExpectedPickupRevision))
                 throw new System.InvalidOperationException("Prevalidated pickup sequence changed during synchronous commit.");
-            if (command.Choice == GroundPickupChoice.Store)
+            if (command.Choice == GroundPickupChoice.Store && !inventoryCommitted)
             {
                 var all = new List<InventoryPlacement>(run.Inventory.Placements) { placement };
                 if (!run.TryCommitInventory(command.ExpectedRevision, all, out _))

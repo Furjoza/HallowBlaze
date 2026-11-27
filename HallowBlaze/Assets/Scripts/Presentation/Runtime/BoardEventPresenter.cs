@@ -132,9 +132,12 @@ namespace HallowBlaze.Presentation.Runtime
                     GroundToolsDisplay.Refresh();
                 });
             InventoryDisplay = new InventorySessionPresenter(runtime, Coordinator, interactionInputAllowed);
+            var quickOwner = new GameObject("Quick pockets") { hideFlags = HideFlags.DontSave };
+            QuickDisplay = quickOwner.AddComponent<QuickPocketPresenter>();
+            QuickDisplay.Bind(runtime, Coordinator, interactionInputAllowed);
             var pickupOwner = new GameObject("Ground pickup") { hideFlags = HideFlags.DontSave };
             PickupDisplay = pickupOwner.AddComponent<GroundPickupPresenter>();
-            PickupDisplay.Bind(runtime, Coordinator, interactionInputAllowed);
+            PickupDisplay.Bind(runtime, Coordinator, interactionInputAllowed, QuickDisplay.Complete);
             var interactionOwner = new GameObject("Board interaction") { hideFlags = HideFlags.DontSave };
             InteractionDisplay = interactionOwner.AddComponent<InteractionPresenter>();
             InteractionDisplay.Bind(runtime, Coordinator, interactionInputAllowed, command => SubmitAsync(command));
@@ -211,6 +214,14 @@ namespace HallowBlaze.Presentation.Runtime
                 return ShowFeedback(gameEvent);
             });
             Dispatcher.Register<InventoryCommittedEvent>((gameEvent, token) => ShowFeedback(gameEvent));
+            Dispatcher.Register<QuickItemUsedEvent>((gameEvent, token) =>
+            {
+                RefreshHud();
+                (hud as ITurnResourceGains)?.AddResourceGains(
+                    gameEvent.ResourceId == InventoryItemActionEvent.Health ? gameEvent.Applied : 0,
+                    gameEvent.ResourceId == InventoryItemActionEvent.Satiety ? gameEvent.Applied : 0);
+                return ShowFeedback(gameEvent);
+            });
             Dispatcher.Register<HealthRestoredEvent>((gameEvent, token) =>
             {
                 RefreshHud();
@@ -473,14 +484,16 @@ namespace HallowBlaze.Presentation.Runtime
 
         /// <summary>Gets the board-owned pre-command consumable modal.</summary>
         public GroundPickupPresenter PickupDisplay { get; }
+        /// <summary>Gets the board-owned transient one-pocket selector; it never modifies a bag draft or resolves a free use.</summary>
+        public QuickPocketPresenter QuickDisplay { get; }
 
-        /// <summary>Opens a free pickup decision when required, otherwise submits through the sole coordinator.</summary>
+        /// <summary>Freezes the selected pocket through any required pickup decision, otherwise submits one composite through the sole coordinator.</summary>
         public Task<CommandSubmission> SubmitAsync(PlayerCommand command, CancellationToken token = default)
         {
             if (disposed || !Coordinator.CanSubmit) return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.Blocked));
             if (token.IsCancellationRequested) return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.Canceled));
-            if (PickupDisplay.TryOpen(command)) return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.NoCommand));
-            return Coordinator.SubmitAsync(command, token);
+            if (PickupDisplay.TryOpen(command, QuickDisplay.Selection)) return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.NoCommand));
+            return QuickDisplay.SubmitAsync(command, token);
         }
 
         /// <summary>Samples at most one intent only while idle, then routes it through the same pre-command decision path.</summary>
@@ -501,6 +514,7 @@ namespace HallowBlaze.Presentation.Runtime
         private Task NotifyOutcome(GameEvent gameEvent)
         {
             InventoryDisplay.Dispose();
+            QuickDisplay.Dispose();
             PickupDisplay.Dispose();
             (hud as ITurnResourceGains)?.ClearResourceGains();
             CloseIntents();
@@ -537,6 +551,12 @@ namespace HallowBlaze.Presentation.Runtime
                 return;
             disposed = true;
             InventoryDisplay.Dispose();
+            if (QuickDisplay != null)
+            {
+                QuickDisplay.Dispose();
+                if (Application.isPlaying) UnityEngine.Object.Destroy(QuickDisplay.gameObject);
+                else UnityEngine.Object.DestroyImmediate(QuickDisplay.gameObject);
+            }
             if (PickupDisplay != null)
             {
                 PickupDisplay.Dispose();

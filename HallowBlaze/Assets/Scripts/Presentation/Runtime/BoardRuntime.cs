@@ -62,6 +62,7 @@ namespace HallowBlaze.Presentation.Runtime
             Pickups = new ToolPickupQuery();
             GroundPickupContent.Bind(boardState, runState);
             GroundPickups = new GroundPickupQuery(Interactions, Tools);
+            QuickPockets = new QuickPocketQuery();
             controller = new TurnController(boardState, runState, playerId,
                 new TurnResolver(ActionNoiseProfile.Prototype, Interactions, Tools, Pickups), enemyPhases.Handlers);
         }
@@ -121,6 +122,8 @@ namespace HallowBlaze.Presentation.Runtime
         public ToolPickupQuery Pickups { get; }
         /// <summary>Gets shared read-only consumable decisions for entry and item-producing interactions.</summary>
         public GroundPickupQuery GroundPickups { get; }
+        /// <summary>Gets read-only pocket snapshots for the central resolver's supported composite contracts.</summary>
+        public QuickPocketQuery QuickPockets { get; }
 
         /// <summary>Gets the single command resolver owned for this board lifetime.</summary>
         /// <exception cref="ObjectDisposedException">The board runtime has been disposed.</exception>

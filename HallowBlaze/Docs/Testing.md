@@ -1,5 +1,104 @@
 # HallowBlaze Testing
 
+## M10.6 Quick-Pocket Composite Turns
+
+`QuickPocketCommand` wraps one immutable primary snapshot, its player source cell,
+the expected inventory revision and exactly one `QuickItemUse` (pocket, instance and
+definition IDs). A malformed list remains representable so the central resolver rejects
+two items, duplicate references, null/empty payloads or nested quick/bag commands before
+mutation. Zero modifiers use the ordinary unwrapped command. No effect or trusted item
+definition comes from the caller.
+
+### Supported Primary Matrix
+
+| Primary | Admission | Complete accepted result |
+| --- | --- | --- |
+| Move without a ground decision | Existing bounds/terrain/obstacle/actor validation | One pocket use, move, selected cost and normal movement noise |
+| Wait | Live player/run | One pocket use and Wait; never an independently resolved free use |
+| Interact | Current shared action query must accept the exact target/action | One effect/work step and cost; legacy collect/first-aid entry restrictions remain enforced |
+| UseTool | Current exact slot/instance/charges/target/action validation | One tool effect and its existing zero-or-one charge cost; no extra quick-use phase |
+| PickupTool | Existing conscious equipment-transfer snapshot | Original generic tool exchange/ownership, still separate from consumable pockets |
+| GroundPickup (Move / final cache interaction or tool) | Complete exact ground snapshot, Use/Store/Leave and any placement must validate | Pocket removal plus any Store addition commit inventory once; Store may explicitly fill the freed pocket |
+| ManageInventory / nested quick / unknown primary | Not supported | Cost-free rejection; a normal bag session does not inherit a pending quick selection |
+
+The 56-case domain matrix covers both pockets, all 14 concrete primary/ground-choice
+variants above, and accepted versus invalidated-primary snapshots. The other 31 cases
+cover detached payloads, movement rejection, 20 malformed/incompatible proposals,
+consecutive pockets, caps and starvation/exit ordering.
+
+### Event And Commit Chronology
+
+1. Sample the action-cost tier and initial satiety before any restoration. Validate live
+    player/run, one supported primary, exact pocket/instance/definition, revision and source
+    cell, eligibility and trusted effect. An exhausted inventory revision cannot advance.
+2. Reuse the existing primary validation before consumption. A ground decision additionally
+    checks its player/item positions, identity, inventory and pickup revisions, choice and
+    complete proposed Store layout after the selected item is removed. Invalid placement
+    cannot move, excavate, spend a tool charge, or consume the pocket item.
+3. Within the synchronous accepted primary path, commit the final inventory once and apply
+    the trusted quick effect. Emit `QuickItemUsedEvent` with actual applied/wasted restoration,
+    followed by `InventoryCommittedEvent`. For quick+Store, that layout already includes the
+    exact incoming ground identity; no intermediate inventory is published.
+4. Emit primary effects (movement/Wait/interaction/tool/equipment and optional exact ground
+    transfer), followed by its existing tool charge and one preselected `ActionCostApplied`.
+    Existing noise, cache/pit and plate/gate event contracts are preserved. The transient
+    pickup sequence advances only for an accepted ground decision, not for quick use alone.
+5. The unchanged controller checks immediate starvation/exit, executes the single retained
+    hostile batch and environment, checks terminal state, and plans once. Exit/starvation
+    still suppress later phases. Presentation replays only the accepted result.
+
+`InventoryRevision` advances exactly once, including quick+Store, so duplicate submit is
+stale. Two quick items cannot pass the count check, even if both identities are legal or
+the same item is listed twice. Nesting cannot evade the limit in either envelope direction.
+
+### Explicit State Evidence
+
+| Scenario | Before | After |
+| --- | --- | --- |
+| Left `food` / `berry`, eat 10 + Wait | Health 95, Satiety 100, revision 0, both pockets occupied | Health 95, Satiety 109, revision 1, only left consumed; one cost 1 |
+| Fresh right `medicine`, heal 10 + Move | Health 95, Satiety 100, revision 0 | Health 100, Satiety 99, applied 5/wasted 5, one move/cost |
+| Consecutive left then right + Wait | Both same exact identities, revision 0 | Two ordinary turns, revision 2, Satiety 107; second cost samples the now-sated tier |
+| Quick+Store with full grid and both pockets | Existing left `food`, exact bound ground item | Same ground identity replaces consumed left item, 11 total carried items, one inventory commit/cost/controller call |
+| Production berry + Wait + real locked attack | Health 95, Satiety 100, `legacy.food` left | Health 85, Satiety 104, actual gain 5, one attack; both animation modes |
+| Production medicine + Wait + real locked attack | Health 95, Satiety 100, `legacy.aid` right | Health 90, Satiety 99, actual gain 5/waste 5, one attack; both animation modes |
+
+For every invalidated primary and malformed payload the tests compare the complete run
+serialization, board entities, inventory ownership, pickup revision, cache work and/or
+active noise snapshots as relevant, with no events, turn or later phase. The tool snapshot
+includes charges; final-cache rejection does not reveal a reward. The full-bag presentation
+test verifies the same authoritative inventory object remains untouched during preview.
+
+Selection/replacement/clearing are free and limited to an idle live board. The minimal
+mouse selector permits only one pocket; final hotbar/key/focus design belongs to M10.7.
+Pause, setup, other modals and replay block selection/submission. Pickup freezes the selected
+snapshot and uses an immutable projected layout for capacity preview. Cancel abandons the
+primary without consumption; a domain result forgets the selected snapshot, including stale
+rejection or accepted replay failure. It is never automatically replaced with a new item.
+Disposal releases only owned presentation state. Existing schema-v8 save/load tests prove
+that a selected modifier is not persisted and only completed ownership is saved at the
+existing boundaries. No mid-board snapshot or portable replay extension is claimed.
+
+### Validation
+
+Actual Unity 6000.3.21f1 checks on 2026-11-27, noninteractive batchmode with `-nographics`:
+
+- `quick-runtime-final.xml`: **381/381 passed**, zero failed/skipped/inconclusive. Includes
+  QuickPocket 87, GroundPickup 35, InventoryTurn 37, Movement 16, Interaction 63, Shovel 28,
+  ToolPickup 26, Controller 44, PresentationPipeline 33 and ResourceRules 12.
+- `quick-play-final.xml`: **46/46 passed**, zero failed/skipped/inconclusive. Includes
+  QuickPocket 11, GroundPickup 9, InventorySession 7, OrderedPresentation 9, Shovel 3,
+  ToolPickup 4 and three production Continue/menu/pause lifecycle cases.
+
+XML/log evidence is outside the repository in `%TEMP%/HB-M106-d4df6e33483b4a69901e70a6238397c1`.
+Earlier probes caught incorrect test API names, an unallocated fixture tool ID, a missing
+test import and a cost assertion addressed to feedback rather than the authoritative result;
+each was corrected locally and the same focused checks rerun. No production rule or
+assertion was weakened to hide them. No full-suite, authoring-window, visual/human M10.7
+acceptance, generation distribution, benchmark or portable replay claim is made.
+Independent read-only review returned `PASS` on 2026-11-27 without material findings.
+Source and metadata hashes remained unchanged during review; only these acceptance
+records were updated afterward. This does not accept future M10.7/human/replay gates.
+
 ## M10.5 Atomic Ground Pickup
 
 The production command entry points now open a board-owned `GroundPickupPresenter` before

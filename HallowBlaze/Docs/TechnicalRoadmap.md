@@ -8688,13 +8688,13 @@ was changed. Full milestone and final player-facing bag UI acceptance remain lat
 
 ## `M10.6` — Quick-pocket composite turn
 
-**Status:** `Deferred`
+**Status:** `Done` (2026-11-27); required scoped validation passed and independent read-only review returned `PASS` without material findings.
 **Priority:** P1
 **Related contract:** sections 10, 18, 21.2, and 27.8.
 
 **Rationale:** Side pockets are valuable because preparation avoids a separate bag turn. Allowing both pockets—or a pocket plus bag actions—before one enemy response would erase the tactical cost, so quick use must be one modifier on one ordinary command.
 
-**Current behavior:** Pockets can be persisted after M10.3 but have no runtime use path. Every effect is otherwise a standalone part of its owning command.
+**Current behavior:** One transient pocket selection wraps Move, Wait, legal interaction/tool/equipment pickup, or an explicit ground-pickup decision. The sole resolver validates the complete proposal before consumption, applies the trusted pocket effect before primary events and one preselected cost, and commits inventory once even when Store fills the freed pocket. Final hotbar/key bindings remain M10.7.
 
 **Expected outcome:** An optional `QuickItemUse` from either pocket may wrap one accepted non-inventory primary command. At most one item resolves, then the primary action/resource/hostile phases complete as one atomic turn. `Wait` supports intentional quick use without movement.
 
@@ -8720,6 +8720,29 @@ was changed. Full milestone and final player-facing bag UI acceptance remain lat
 **Save and compatibility impact:** No new persistent shape beyond M10.3. After M9.7 acceptance, new command tags require an explicit diagnostic-version update. Save boundaries contain only the completed result, never a pending modifier.
 
 **Required handoff:** Supported-command matrix, exact event chronology, explicit unchanged-state rejection evidence, and proof that two quick items cannot resolve in one turn.
+
+### Implementation Scope - 2026-11-27
+
+Owner continuation authorized this single next card. Git root `D:/Repos/HallowBlaze`,
+branch `M10/6/QuickPocketTurn`, clean baseline `6abda781ed906586f30a59d1b33627dc391e1dff`.
+Closed write scope: new `QuickPocketCommand`, `QuickPocketQuery`, `TurnResolver.Quick`,
+`QuickPocketPresenter`, their two runtime test fixtures and Unity-generated metadata;
+existing `TurnResolver`/pickup partial, `GroundPickupQuery`, `BoardRuntime`,
+`BoardEventPresenter`, `GroundPickupPresenter`, optional rejection-code declarations,
+this roadmap and Testing. No scenes, prefabs, packages, settings, new planner or save shape.
+The Lead implements and validates directly. Final scoped Unity 6000.3.21f1 checks passed
+381/381 runtime EditMode and 46/46 runtime PlayMode, with no failed/skipped/inconclusive
+cases. The tests include both pockets, 14 primary/ground-choice variants with invalidated
+snapshots, malformed/two-item/nested payloads, exact rollback evidence, cost/caps/terminal
+priority, actual hostile response in both animation modes, full-bag Store into the freed
+pocket, cancellation/stale/lifecycle and existing v8 save boundaries. The supported matrix,
+event chronology, explicit before/after scenarios and limitations are recorded in
+[Testing.md](Testing.md#m106-quick-pocket-composite-turns). No authoring-window tests,
+new inventory planner, portable replay format or final M10.7 UI acceptance were added.
+Independent read-only review returned `PASS` without material findings. The Reviewer
+confirmed primary/pocket atomicity, exact one-commit Store identity, pre-effect cost
+sampling, retained equipment/entry rules and modal-selection lifecycle. Reviewed source
+and metadata hashes remained unchanged; only acceptance records were updated afterward.
 
 ---
 

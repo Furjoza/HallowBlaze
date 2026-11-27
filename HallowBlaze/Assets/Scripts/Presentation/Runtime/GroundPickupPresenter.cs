@@ -15,6 +15,9 @@ namespace HallowBlaze.Presentation.Runtime
         private BoardRuntime runtime;
         private CommandPresentationCoordinator coordinator;
         private Func<bool> inputAllowed;
+        private Action<CommandSubmission> completed;
+        private QuickPocketOption quick;
+        private InventoryState availableInventory;
         private bool disposed, submitting, releasePending;
         private InventoryLayoutEntry placement;
         private Vector2 scroll;
@@ -26,21 +29,26 @@ namespace HallowBlaze.Presentation.Runtime
         /// <summary>Gets the explicitly selected valid Store anchor, or null before selection.</summary>
         public InventoryLayoutEntry Placement => placement;
 
-        /// <summary>Borrows one runtime and its sole command coordinator for this view lifetime.</summary>
-        public void Bind(BoardRuntime runtime, CommandPresentationCoordinator coordinator, Func<bool> inputAllowed = null)
+        /// <summary>Borrows one runtime and its sole coordinator; the optional callback forgets a quick snapshot only after a domain result.</summary>
+        public void Bind(BoardRuntime runtime, CommandPresentationCoordinator coordinator, Func<bool> inputAllowed = null,
+            Action<CommandSubmission> completed = null)
         {
             if (this.runtime != null || disposed) throw new InvalidOperationException("A pickup modal belongs to one board.");
             this.runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
             this.inputAllowed = inputAllowed;
+            this.completed = completed;
         }
 
-        /// <summary>Opens only for a decision-producing intent on an idle live board; no command or turn is submitted.</summary>
-        public bool TryOpen(PlayerCommand primary)
+        /// <summary>Opens only for a decision-producing intent; an optional frozen quick selection projects capacity without changing inventory.</summary>
+        public bool TryOpen(PlayerCommand primary, QuickPocketOption quick = null)
         {
             if (!CanUse() || IsOpen || releasePending || submitting || !coordinator.CanSubmit) return false;
-            Option = runtime.GroundPickups.GetOption(runtime.BoardState, runtime.RunState, runtime.PlayerId, primary);
+            availableInventory = null;
+            if (quick != null && !quick.TryProjectInventory(runtime.RunState, out availableInventory)) return false;
+            Option = runtime.GroundPickups.GetOption(runtime.BoardState, runtime.RunState, runtime.PlayerId, primary, availableInventory);
             if (Option == null) return false;
+            this.quick = quick;
             placement = null;
             scroll = Vector2.zero;
             coordinator.Gate.SetBlocked(PresentationInputBlock.Pickup, true);
@@ -63,12 +71,14 @@ namespace HallowBlaze.Presentation.Runtime
             if (!CanChoose() || choice == GroundPickupChoice.Store && placement == null ||
                 choice == GroundPickupChoice.UseNow && !Option.UseAvailable || choice == GroundPickupChoice.Store && !Option.CanStore)
                 return new CommandSubmission(CommandSubmissionStatus.Blocked);
-            var command = Option.CreateCommand(choice, choice == GroundPickupChoice.Store ? placement : null);
+            PlayerCommand command = Option.CreateCommand(choice, choice == GroundPickupChoice.Store ? placement : null);
+            if (quick != null) command = quick.CreateCommand(command);
             submitting = true;
             coordinator.Gate.SetBlocked(PresentationInputBlock.Pickup, false);
             try
             {
                 CommandSubmission submission = await coordinator.SubmitAsync(command, token);
+                completed?.Invoke(submission);
                 if (submission.Result != null) Close(false);
                 return submission;
             }
@@ -102,7 +112,7 @@ namespace HallowBlaze.Presentation.Runtime
                 case InventoryLayoutEntry.RightPocket: container = InventoryContainer.RightPocket; break;
                 default: return false;
             }
-            return runtime.RunState.Inventory.TryPlace(new InventoryPlacement(new ItemInstanceState(Option.Item.InstanceId,
+            return (availableInventory ?? runtime.RunState.Inventory).TryPlace(new InventoryPlacement(new ItemInstanceState(Option.Item.InstanceId,
                 Option.Item.DefinitionId), container, entry.Column, entry.Row), out _, out _);
         }
 
@@ -167,8 +177,9 @@ namespace HallowBlaze.Presentation.Runtime
             Color previous = GUI.backgroundColor;
             bool selected = placement != null && placement.ContainerId == containerId && placement.Column == column && placement.Row == row;
             if (selected) GUI.backgroundColor = Interaction.InteractionPresenter.SelectionColor;
-            ItemInstanceState occupied = containerId == InventoryLayoutEntry.MainGrid ? runtime.RunState.Inventory.GetMainGridItem(column, row) :
-                runtime.RunState.Inventory.GetPocketItem(containerId == InventoryLayoutEntry.LeftPocket ? InventoryContainer.LeftPocket : InventoryContainer.RightPocket);
+            InventoryState inventory = availableInventory ?? runtime.RunState.Inventory;
+            ItemInstanceState occupied = containerId == InventoryLayoutEntry.MainGrid ? inventory.GetMainGridItem(column, row) :
+                inventory.GetPocketItem(containerId == InventoryLayoutEntry.LeftPocket ? InventoryContainer.LeftPocket : InventoryContainer.RightPocket);
             if (GUILayout.Button(new GUIContent(occupied == null ? label : "Occupied", occupied?.DefinitionId ?? label), GUILayout.Height(40f)))
                 SelectPlacement(containerId, column, row);
             GUI.backgroundColor = previous;
@@ -182,6 +193,8 @@ namespace HallowBlaze.Presentation.Runtime
         private void Close(bool holdFrame)
         {
             Option = null;
+            quick = null;
+            availableInventory = null;
             placement = null;
             releasePending = holdFrame;
             coordinator?.Gate.SetBlocked(PresentationInputBlock.Pickup, holdFrame);

@@ -63,35 +63,42 @@ namespace HallowBlaze.Core.Turns.Resolution
 
             int selectedCost = tools.ActionCosts.GetCost(runState);
             int satietyAtStart = runState.Satiety;
+            QuickUsePlan quick = null;
+            if (command is QuickPocketCommand quickCommand)
+            {
+                CommandRejectionCode rejection = ValidateQuick(boardState, runState, player, quickCommand, out quick);
+                if (rejection != CommandRejectionCode.None) return new RejectedTurnResult(rejection);
+                command = quickCommand.Primary;
+            }
             TurnResult result;
             switch (command)
             {
                 case MoveCommand moveCommand:
                     if (groundPickups.GetOption(boardState, runState, playerId, command) != null)
                         return new RejectedTurnResult(CommandRejectionCode.PickupRequired);
-                    result = ResolveMove(boardState, runState, player, moveCommand, selectedCost, satietyAtStart);
+                    result = ResolveMove(boardState, runState, player, moveCommand, selectedCost, satietyAtStart, quick: quick);
                     break;
                 case WaitCommand _:
-                    result = ResolveWait(runState, playerId, selectedCost, satietyAtStart);
+                    result = ResolveWait(runState, playerId, selectedCost, satietyAtStart, quick);
                     break;
                 case InteractCommand interactCommand:
                     if (groundPickups.GetOption(boardState, runState, playerId, command) != null)
                         return new RejectedTurnResult(CommandRejectionCode.PickupRequired);
-                    result = ResolveInteract(boardState, runState, player, interactCommand, selectedCost, satietyAtStart);
+                    result = ResolveInteract(boardState, runState, player, interactCommand, selectedCost, satietyAtStart, quick);
                     break;
                 case UseToolCommand toolCommand:
                     if (groundPickups.GetOption(boardState, runState, playerId, command) != null)
                         return new RejectedTurnResult(CommandRejectionCode.PickupRequired);
-                    result = ResolveUseTool(boardState, runState, player, toolCommand, selectedCost, satietyAtStart);
+                    result = ResolveUseTool(boardState, runState, player, toolCommand, selectedCost, satietyAtStart, quick);
                     break;
                 case PickupToolCommand pickupCommand:
-                    result = ResolvePickupTool(boardState, runState, player, pickupCommand, selectedCost, satietyAtStart);
+                    result = ResolvePickupTool(boardState, runState, player, pickupCommand, selectedCost, satietyAtStart, quick);
                     break;
                 case ManageInventoryCommand inventoryCommand:
                     result = ResolveManageInventory(runState, playerId, inventoryCommand, selectedCost, satietyAtStart);
                     break;
                 case GroundPickupCommand groundCommand:
-                    result = ResolveGroundPickup(boardState, runState, player, groundCommand, selectedCost, satietyAtStart);
+                    result = ResolveGroundPickup(boardState, runState, player, groundCommand, selectedCost, satietyAtStart, quick);
                     break;
                 default:
                     return new RejectedTurnResult(CommandRejectionCode.InvalidCommand);
@@ -114,7 +121,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             RunState runState,
             BoardEntityState player,
             MoveCommand command, int selectedCost, int satietyAtStart, GroundPickupCommand pickup = null,
-            InventoryPlacement placement = null, ConsumableEffectDefinition effect = null)
+            InventoryPlacement placement = null, ConsumableEffectDefinition effect = null, QuickUsePlan quick = null)
         {
             GridPosition destination;
             try
@@ -144,12 +151,11 @@ namespace HallowBlaze.Core.Turns.Resolution
             if (!boardState.TryMove(player.Id, destination))
                 return new RejectedTurnResult(CommandRejectionCode.Blocked);
 
-            var events = new List<GameEvent>
-            {
-                new EntityMovedEvent(player.Id, player.Position, destination)
-            };
+            var events = new List<GameEvent>();
+            ApplyQuick(runState, player.Id, quick, events);
+            events.Add(new EntityMovedEvent(player.Id, player.Position, destination));
             PlateGateEventRecorder.Append(boardState, events);
-            if (pickup != null) ApplyPickup(boardState, runState, player.Id, pickup, placement, effect, events);
+            if (pickup != null) ApplyPickup(boardState, runState, player.Id, pickup, placement, effect, events, quick != null);
             ApplyCost(runState, player.Id, events, selectedCost, satietyAtStart);
             if (runState.Satiety == 0)
             {
@@ -161,12 +167,11 @@ namespace HallowBlaze.Core.Turns.Resolution
             return new AcceptedTurnResult(events);
         }
 
-        private TurnResult ResolveWait(RunState runState, EntityId playerId, int selectedCost, int satietyAtStart)
+        private TurnResult ResolveWait(RunState runState, EntityId playerId, int selectedCost, int satietyAtStart, QuickUsePlan quick = null)
         {
-            var events = new List<GameEvent>
-            {
-                new EntityWaitedEvent(playerId)
-            };
+            var events = new List<GameEvent>();
+            ApplyQuick(runState, playerId, quick, events);
+            events.Add(new EntityWaitedEvent(playerId));
             ApplyCost(runState, playerId, events, selectedCost, satietyAtStart);
             if (runState.Satiety == 0)
                 events.Add(new PlayerStarvedEvent(playerId));
@@ -177,7 +182,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             BoardState boardState,
             RunState runState,
             BoardEntityState player,
-            InteractCommand command, int selectedCost, int satietyAtStart)
+            InteractCommand command, int selectedCost, int satietyAtStart, QuickUsePlan quick = null)
         {
             InteractionAvailability availability = interactions.Validate(boardState, runState, player.Id, command,
                 out BoardEntityState target, out IInteractionAction action);
@@ -191,10 +196,9 @@ namespace HallowBlaze.Core.Turns.Resolution
                 return new RejectedTurnResult(reason);
             }
 
-            var events = new List<GameEvent>
-            {
-                new InteractionPerformedEvent(player.Id, target.Id)
-            };
+            var events = new List<GameEvent>();
+            ApplyQuick(runState, player.Id, quick, events);
+            events.Add(new InteractionPerformedEvent(player.Id, target.Id));
             action.Apply(boardState, runState, player, target, events);
             PlateGateEventRecorder.Append(boardState, events);
             ApplyCost(runState, player.Id, events, selectedCost, satietyAtStart);
@@ -212,12 +216,14 @@ namespace HallowBlaze.Core.Turns.Resolution
         }
 
         private TurnResult ResolveUseTool(BoardState boardState, RunState runState, BoardEntityState player, UseToolCommand command,
-            int selectedCost, int satietyAtStart)
+            int selectedCost, int satietyAtStart, QuickUsePlan quick = null)
         {
             CommandRejectionCode rejection = tools.Validate(boardState, runState, player.Id, command,
                 out BoardEntityState target, out ToolAction action);
             if (rejection != CommandRejectionCode.None) return new RejectedTurnResult(rejection);
-            var events = new List<GameEvent> { new ToolUsedEvent(player.Id, command, action.DefinitionId) };
+            var events = new List<GameEvent>();
+            ApplyQuick(runState, player.Id, quick, events);
+            events.Add(new ToolUsedEvent(player.Id, command, action.DefinitionId));
             action.Behavior.Apply(boardState, runState, player, target, events);
             PlateGateEventRecorder.Append(boardState, events);
             if (action.ChargeCost > 0)
@@ -235,10 +241,12 @@ namespace HallowBlaze.Core.Turns.Resolution
         }
 
         private TurnResult ResolvePickupTool(BoardState board, RunState run, BoardEntityState player, PickupToolCommand command,
-            int selectedCost, int satietyAtStart)
+            int selectedCost, int satietyAtStart, QuickUsePlan quick = null)
         {
             CommandRejectionCode rejection = pickups.Validate(board, run, player.Id, command, out GroundToolState ground);
             if (rejection != CommandRejectionCode.None) return new RejectedTurnResult(rejection);
+            var events = new List<GameEvent>();
+            ApplyQuick(run, player.Id, quick, events);
             ToolInstanceState old = run.ToolSlots[command.SlotIndex].Instance;
             GroundToolState displaced = old == null ? null : new GroundToolState(ground.EntityId, old.InstanceId, old.DefinitionId, old.Charges);
             bool transferred = old == null ? board.TryRemove(ground.EntityId) : board.TryExchangeGroundTool(ground, displaced);
@@ -246,7 +254,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             var incoming = new ToolInstanceState(ground.InstanceId, ground.DefinitionId, ground.Charges);
             if (old == null) run.EquipTool(command.SlotIndex, incoming);
             else run.ReplaceTool(command.SlotIndex, incoming);
-            var events = new List<GameEvent> { new ToolPickedUpEvent(player.Id, command, displaced) };
+            events.Add(new ToolPickedUpEvent(player.Id, command, displaced));
             if (old == null) events.Add(new ItemCollectedEvent(player.Id, ground.EntityId));
             ApplyCost(run, player.Id, events, selectedCost, satietyAtStart);
             if (noiseProfile != null && noiseProfile.InteractionStrength > 0)
