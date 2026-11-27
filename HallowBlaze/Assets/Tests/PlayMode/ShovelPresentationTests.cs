@@ -59,6 +59,16 @@ namespace HallowBlaze.Tests.PlayMode
                     if (shovel) Assert.That(picker.GetOptionLabel(selected), Does.Contain("1 action").And.Contain("Charge -1").And.Contain("Noise 2 / 2"));
                     Assert.That(picker.Select(selected), Is.True);
                     CommandSubmission submission = picker.ConfirmAsync().Result;
+                    if (step == steps - 1)
+                    {
+                        Assert.That(submission.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
+                        Assert.That(fixture.Presenter.PickupDisplay.IsOpen, Is.True);
+                        Assert.That(fixture.Runtime.BoardState.HasRevealedCache(fixture.CacheId), Is.False);
+                        int before = fixture.Run.Satiety;
+                        yield return null;
+                        submission = fixture.Presenter.PickupDisplay.ConfirmAsync(GroundPickupChoice.UseNow).Result;
+                        Assert.That(fixture.Run.Satiety, Is.EqualTo(before + 9));
+                    }
                     Assert.That(submission.Status, Is.EqualTo(CommandSubmissionStatus.Presented));
                     Assert.That(picker.ConfirmAsync().Result.Status, Is.EqualTo(CommandSubmissionStatus.NoCommand));
                     if (!shovel && step < 2) Assert.That(fixture.Labels, Does.Contain("CACHE " + (step + 1) + "/3"));

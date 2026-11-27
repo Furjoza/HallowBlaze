@@ -1305,6 +1305,82 @@ namespace HallowBlaze.Tests.PlayMode
             yield return SceneManager.UnloadSceneAsync("Main");
         }
 
+        /// <summary>The real menu button reads a committed production consumable and Continue retains its exact identity and anchor.</summary>
+        [UnityTest]
+        public IEnumerator MenuContinueLoadsCheckpointWithStoredConsumable()
+        {
+            InventoryContent content = GroundPickupContent.Load();
+            var run = new RunState("menu-pickup", 105, new RunStateConfiguration(100, 100, 0, "shelter.warm-up", inventoryContent: content));
+            var placement = new InventoryPlacement(new ItemInstanceState("checkpoint.raspberry", "legacy.food"), InventoryContainer.RightPocket);
+            Assert.That(run.TryCommitInventory(0, new[] { placement }, out _), Is.True);
+            var store = new FileSystemSaveStore(persistenceRoot, inventoryContent: content);
+            Assert.That(store.SaveProfile(new ProfileState("menu-pickup-profile", "world-1", 1)).IsSuccess, Is.True);
+            Assert.That(store.SaveRun(run).IsSuccess, Is.True);
+            yield return SceneManager.LoadSceneAsync("Menu", LoadSceneMode.Single);
+            yield return null;
+            Button button = GameObject.Find("ContinueBttn").GetComponent<Button>();
+            Assert.That(button.interactable, Is.True);
+            button.onClick.Invoke();
+            yield return null;
+            yield return null;
+            Assert.That(SceneManager.GetActiveScene().name, Is.EqualTo("Main"));
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            RunState continued = GetProperty<GameSession>(manager, "Session").ActiveRun;
+            Assert.That(continued.RunId, Is.EqualTo(run.RunId));
+            InventoryPlacement retained = continued.Inventory.Placements.Single();
+            Assert.That(retained.Item.InstanceId, Is.EqualTo(placement.Item.InstanceId));
+            Assert.That(retained.Item.DefinitionId, Is.EqualTo(placement.Item.DefinitionId));
+            Assert.That(retained.Container, Is.EqualTo(InventoryContainer.RightPocket));
+            Assert.That(continued.InventoryRevision, Is.EqualTo(1));
+            Scene cleanup = SceneManager.CreateScene("M10.5 menu checkpoint cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
+        /// <summary>The production cancel handler and pause Escape handler share a frame without opening pause or submitting the pickup.</summary>
+        [UnityTest]
+        public IEnumerator PickupEscapeDoesNotAlsoOpenProductionPause()
+        {
+            yield return SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
+            yield return null;
+            yield return null;
+            Component manager = (Component)GetStaticField(gameManagerType, "instance");
+            float deadline = Time.realtimeSinceStartup + 10;
+            while (!GetProperty<bool>(manager, "IsGameplayInputEnabled") && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.That(GetProperty<bool>(manager, "IsGameplayInputEnabled"), Is.True);
+            BoardRuntime runtime = GetProperty<BoardRuntime>(manager, "ActiveBoardRuntime");
+            BoardEventPresenter boardPresenter = (BoardEventPresenter)manager.GetType().GetField("activeBoardPresenter", InstanceFlags).GetValue(manager);
+            runtime.BoardState.TryGetEntity(runtime.PlayerId, out BoardEntityState player);
+            Direction direction = new[] { Direction.North, Direction.East, Direction.South, Direction.West }.First(candidate =>
+            {
+                GridPosition destination = player.Position.Move(candidate);
+                return runtime.BoardState.TryGetEntity(BoardLayer.Terrain, destination, out BoardEntityState terrain) && terrain.Definition.Traits.IsWalkable &&
+                    !runtime.BoardState.TryGetEntity(BoardLayer.Obstacle, destination, out _) && !runtime.BoardState.TryGetEntity(BoardLayer.Actor, destination, out _) &&
+                    !runtime.BoardState.TryGetEntity(BoardLayer.Item, destination, out _);
+            });
+            var itemId = new HallowBlaze.Core.Board.Primitives.EntityId(runtime.BoardState.GetEntities().Max(entity => entity.Id.Value) + 1);
+            Assert.That(runtime.BoardState.TryAdd(new BoardEntityState(itemId,
+                new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, "legacy.food"), player.Position.Move(direction))), Is.True);
+            Assert.That(runtime.BoardState.TryBindGroundItem(new GroundItemState(itemId, "pause-test.raspberry", "legacy.food")), Is.True);
+            int satiety = runtime.RunState.Satiety;
+            Assert.That(boardPresenter.PickupDisplay.TryOpen(new MoveCommand(direction)), Is.True);
+            Assert.That(boardPresenter.PickupDisplay.HandleKey(KeyCode.Escape), Is.True);
+            Component pause = UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None)
+                .Single(component => component.GetType().Name == "PauseMenuController");
+            Invoke(pause, "HandleEscape");
+            Assert.That(GetProperty<object>(pause, "CurrentState").ToString(), Is.EqualTo("Closed"));
+            Assert.That(boardPresenter.PickupDisplay.IsOpen, Is.False);
+            Assert.That(boardPresenter.Coordinator.ResolutionCount, Is.Zero);
+            Assert.That(runtime.RunState.Satiety, Is.EqualTo(satiety));
+            Assert.That(runtime.BoardState.TryGetGroundItem(itemId, out _), Is.True);
+            Assert.That(runtime.BoardState.TryGetEntity(runtime.PlayerId, out BoardEntityState retained), Is.True);
+            Assert.That(retained.Position, Is.EqualTo(player.Position));
+            yield return null;
+            Scene cleanup = SceneManager.CreateScene("M10.5 pause cancel cleanup " + Guid.NewGuid().ToString("N"));
+            SceneManager.SetActiveScene(cleanup);
+            yield return SceneManager.UnloadSceneAsync("Main");
+        }
+
         /// <summary>Production menu startup, presented exits, and checkpoint continuation render the actual atlas without implicitly selecting a route.</summary>
         [UnityTest]
         public IEnumerator MenuOpeningExitsShowTheActualAtlas([Values(false, true)] bool animations)

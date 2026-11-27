@@ -136,9 +136,9 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(found.Charges, Is.EqualTo(2));
         }
 
-        /// <summary>Entering a tool cell is ordinary movement, while food still restores before its existing movement cost under O-003.</summary>
+        /// <summary>Entering a tool cell remains ordinary movement; consumable use requires its separate conscious composite.</summary>
         [Test]
-        public void MovementLeavesToolAndAutomaticFoodRemainsRewardBeforeCost()
+        public void MovementLeavesToolAndConsciousFoodUsePrecedesCost()
         {
             RunState run = CreateRun();
             BoardState board = CreateBoard(run);
@@ -152,12 +152,13 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(board.TryAdd(new BoardEntityState(new EntityId(4), new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item,
                 "food", BoardEntityTraits.Default, 10), new GridPosition(2, 0))), Is.True);
             run.ConsumeSatiety(18);
-            TurnResult move = resolver.Resolve(board, run, PlayerId, new MoveCommand(Direction.East));
+            TurnResult move = resolver.Resolve(board, run, PlayerId,
+                GroundPickupTests.ChooseUse(board, run, PlayerId, new MoveCommand(Direction.East)));
             Assert.That(move.Accepted, Is.True);
             Assert.That(run.Satiety, Is.EqualTo(10));
             Assert.That(move.Events.OfType<PlayerStarvedEvent>(), Is.Empty);
             var eventTypes = move.Events.Select(gameEvent => gameEvent.EventType).ToList();
-            Assert.That(eventTypes.IndexOf("FoodRestored"), Is.LessThan(eventTypes.IndexOf("ActionCostApplied")));
+            Assert.That(eventTypes.IndexOf("GroundPickupResolved"), Is.LessThan(eventTypes.IndexOf("ActionCostApplied")));
         }
 
         /// <summary>The same preview cannot be replayed even after another accepted exchange returns the original tool to the original cell.</summary>

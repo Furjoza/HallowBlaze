@@ -22,6 +22,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         private BoardRuntime runtime;
         private CommandPresentationCoordinator coordinator;
         private Func<bool> inputAllowed;
+        private Func<PlayerCommand, Task<CommandSubmission>> submit;
         private readonly List<GameObject> markers = new List<GameObject>();
         private Material material;
         private Vector2 scroll;
@@ -60,13 +61,15 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
         /// <param name="runtime">Borrowed board whose query is also used by its resolver.</param>
         /// <param name="coordinator">The one production command/presentation path.</param>
         /// <param name="inputAllowed">Optional lifecycle permission excluding this picker's own block.</param>
-        public void Bind(BoardRuntime runtime, CommandPresentationCoordinator coordinator, Func<bool> inputAllowed = null)
+        public void Bind(BoardRuntime runtime, CommandPresentationCoordinator coordinator, Func<bool> inputAllowed = null,
+            Func<PlayerCommand, Task<CommandSubmission>> submit = null)
         {
             if (IsDisposed || this.runtime != null)
                 throw new InvalidOperationException("An interaction picker belongs to exactly one board.");
             this.runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
             this.inputAllowed = inputAllowed ?? (() => true);
+            this.submit = submit ?? (command => coordinator.SubmitAsync(command));
             toolCatalog = ToolContentCatalog.Load();
         }
 
@@ -134,7 +137,7 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             else command = SelectedIndex < Options.Count ? (PlayerCommand)Options[SelectedIndex].CreateCommand() :
                 ToolOptions[SelectedIndex - Options.Count].CreateCommand();
             Close(false);
-            Task<CommandSubmission> submission = coordinator.SubmitAsync(command);
+            Task<CommandSubmission> submission = submit(command);
             HoldRemainderOfFrame();
             return submission;
         }
@@ -383,8 +386,9 @@ namespace HallowBlaze.Presentation.Runtime.Interaction
             if (index < Options.Count)
             {
                 InteractionOption option = Options[index];
-                if (option.ActionId == FirstAidInteractionAction.ActionId && runtime.RunState.Health >= runtime.RunState.ResourceRules.MaximumHealth)
-                    return "Health is full - first aid is not needed.";
+                if (option.Availability == InteractionAvailability.DecisionRequired &&
+                    (option.ActionId == FirstAidInteractionAction.ActionId || option.ActionId == "collect"))
+                    return "Entry required";
                 return option.Availability.ToString();
             }
             return index < Options.Count + ToolOptions.Count ? ToolOptions[index - Options.Count].RejectionCode.ToString() :

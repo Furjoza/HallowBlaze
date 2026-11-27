@@ -19,6 +19,30 @@ namespace HallowBlaze.Tests.EditMode
     /// <summary>Checks bounded offline solving against independent real-controller execution.</summary>
     public sealed class LandmarkSolverTests
     {
+        /// <summary>Food on the first step is required for survival; search and independent replay use the same conscious pickup.</summary>
+        [Test]
+        public void FoodRequiredForSurvivalSolvesAndReplaysAtomicPickup()
+        {
+            LandmarkBoard landmark = Tiny();
+            BoardState board = landmark.CreateState();
+            RunState run = Run(1);
+            var definition = new BoardEntityDefinition(BoardLayer.Item, EntityKind.Item, "legacy.food", BoardEntityTraits.Default, 5);
+            Assert.That(board.TryAdd(new BoardEntityState(new EntityId(50), definition, new GridPosition(1, 0))), Is.True);
+            GroundPickupContent.Bind(board, run);
+            var source = new LandmarkSolverStateKey(board, run, new EntityId(1), Array.Empty<ShamblerState>());
+            LandmarkSolverResult result = new LandmarkSolver(landmark, board, run, new EntityId(1), Array.Empty<ShamblerState>()).Solve("arrival");
+            Assert.That(result.Status, Is.EqualTo(LandmarkSolverStatus.Solved), result.ToString());
+            Assert.That(result.SolutionPath.Count, Is.EqualTo(2));
+            Assert.That(result.SolutionPath[0].ToString(), Does.Contain("pickup=UseNow"));
+            Assert.That(new LandmarkSolverStateKey(board, run, new EntityId(1), Array.Empty<ShamblerState>()), Is.EqualTo(source));
+            var controller = new TurnController(board, run, new EntityId(1));
+            foreach (LandmarkSolverStep step in result.SolutionPath)
+                Assert.That(controller.Resolve(step.CreateCommand(board, run, new EntityId(1))).Accepted, Is.True);
+            Assert.That(controller.IsTerminal, Is.True);
+            Assert.That(run.Satiety, Is.EqualTo(4));
+            Assert.That(board.TryGetGroundItem(new EntityId(50), out _), Is.False);
+        }
+
         /// <summary>A tiny real template produces a shortest accepted path without changing its caller.</summary>
         [Test]
         public void TinyPuzzleFindsAndExecutesShortestPath()
@@ -412,6 +436,7 @@ namespace HallowBlaze.Tests.EditMode
                 Landmark = template.CreateBoard(new BoardAddress(Run.RunId, "leg.1", "road.ridge-radio-tower",
                     "segment.ridge-radio-tower.arrival", 5, template.Config.Id, 1, 64), variantId);
                 Board = Landmark.CreateState();
+                GroundPickupContent.Bind(Board, Run);
                 ToolInstanceState axe = Run.CreateToolInstance(ToolContentCatalog.Load()["axe.basic"]);
                 Assert.That(Board.TryBindGroundTool(new GroundToolState(new EntityId(20), axe.InstanceId, axe.DefinitionId,
                     axe.Charges, RadioTowerLandmark.AxeSourceId)), Is.True);

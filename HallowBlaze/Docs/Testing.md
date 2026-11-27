@@ -1,5 +1,137 @@
 # HallowBlaze Testing
 
+## M10.5 Atomic Ground Pickup
+
+The production command entry points now open a board-owned `GroundPickupPresenter` before
+submitting a movement or final cache-work intent. The modal observes state only. Cancel
+abandons the entire pending primary intent for free; it does not move the player or reveal
+the cache. Confirm submits one `GroundPickupCommand` through the existing coordinator and
+central resolver. There is no suspended half-resolved movement or excavation.
+
+### Availability And Placement
+
+| Option | Available when | Accepted ownership change |
+| --- | --- | --- |
+| Use now | Exact trusted definition/effect exists, the instance is not already carried, and the run can act; capacity is irrelevant | Remove exactly that ground binding/entity, apply its capped effect, report actual gain/waste |
+| Store | Same content/identity checks, inventory revision can advance, and the explicitly selected fixed-orientation grid/pocket anchor fits | Remove the ground entity, retain the same instance/definition in the chosen container, advance inventory revision once |
+| Leave | Exact primary/player/item/revision snapshots are still current | Finish the primary action; retain the same immutable ground instance and entity |
+| Cancel | The modal has not submitted its command | No movement, work, charge, item, cost or hostile phase |
+
+The query reports missing-content/duplicate-ownership, exhausted revision and no-legal-placement
+reasons. Full and fragmented bags do not disable legal Use. At a resource cap, deliberate Use
+still consumes the item and exposes the wasted amount. Store never selects a best anchor,
+rotates an item, repacks existing items, or replaces equipment. The modal previews occupied
+cells and allows only a chosen legal anchor; two side pockets remain separate whole-item slots.
+
+### Atomic Transfer Chronology
+
+1. Validate the live run/player and select the satiety cost tier before any consumable effect.
+2. Recompute the primary query, including movement or interaction/tool preconditions. Match
+    the player source position, item entity/position/instance/definition, inventory revision,
+    and transient board pickup revision. Validate choice, trusted effect and complete proposed
+    Store addition. No authoritative mutation has occurred.
+3. Commit the movement, or the final cache work. A cache produces one predicted concrete
+    reward and binds that exact identity before transfer. Earlier manual work steps do not
+    produce a pickup decision. Invalid Store cannot reveal a cache or spend a shovel charge.
+4. Advance the transient pickup sequence once, including Leave. Store commits inventory
+    once; Use/Store remove one exact ground entity/binding. Leave retains both. Apply a
+    prevalidated Use effect, then emit `GroundPickupResolvedEvent` with exact identity and
+    capped resource accounting. Item removal also emits `ItemCollectedEvent`.
+5. For a tool primary, spend its one validated charge. Apply the one preselected action cost
+    and existing movement/interaction/tool noise. The existing controller owns terminal
+    priority and the single locked-hostile/environment/planning opportunity.
+6. Replay accepted events once. Rapid input and other modal owners remain blocked. A stale
+    rejection closes the obsolete pickup snapshot without retargeting it. Scene disposal
+    releases only pickup ownership and tolerates Unity destroying its view before the manager.
+
+Standing or Wait does not trigger a new prompt. Moving off and reentering observes the same
+ground instance but produces a fresh decision. The board pickup sequence prevents replaying
+the original Leave after returning to its original source cell. Carried Discard remains the
+M10.4 destruction operation and never adds an item to the board. Tool pickup/replacement
+retains the separate M5.6 equipment flow.
+
+Legacy `collect` and `use-first-aid` options are disabled with `Entry required`, including
+at distance zero after Leave. Raw and forged interaction composites cannot bypass that
+domain restriction. Only an interaction that produces a new cache reward may complete
+its decision without movement. Escape keeps pickup input ownership through its closing
+frame so the same edge cannot also open production pause.
+
+### Identity And Compatibility Evidence
+
+The runtime content adapter publishes existing food, medicine and shovel-ration IDs with
+explicit effect IDs and existing restoration values. Initial carried footprints are fixed
+1x1 eligible items, including the contract's 1x1 berry bundle. It adds no supply, generation
+rolls, equipment or balance amounts. New-run construction and `FileSystemSaveStore` share
+this same trusted content, so stored production items can be read by Continue.
+
+Identity uses the persisted run ID, completed day count, traversal sequence, active segment
+index and deterministic board entity ID, not Unity object identity or a random allocator.
+The visual fixture demonstrates:
+
+| State | Ground instance | Player / resources | Ownership |
+| --- | --- | --- | --- |
+| Before confirmation | `pickup-presentation.ground.0.0.0.9` | 0.0 / Satiety 100 | Ground only; preview is free |
+| Accepted Leave | Same exact identity | 1.0 / Satiety 99 | Ground only; one move and cost |
+| Off tile, reentry preview | Same exact identity | 0.0 / Satiety 98 | Ground only; the second entry is still unsubmitted |
+| Accepted Store in runtime test | Same exact identity | 1.0 / one additional selected cost | Carried only, one inventory revision increment |
+
+The PlayMode reload fixture actually reconstructs a runtime from the saved entry and
+observes the same ground identity, then stores it and round-trips its exact identity and
+container through schema v8. This is existing entry/checkpoint rollback, not a mid-board
+snapshot promise: unsaved moves/choices are rolled back together with unsaved inventory.
+M9.1 and portable replay M9.7 remain deferred; no new save schema or replay format is added.
+
+O-003's pre-inventory automatic-food transition is now replaced by section 27.6. Both
+`AutomaticFoodCompatibility` and `CacheRewardCompatibility` are removed. The retained
+`AutomaticFoodReward` content field still describes historical generation/content values;
+the resolver no longer uses it to collect or restore automatically. Neighboring tests now
+submit explicit decisions. Existing `legacy.food` is still worth 5, not 10.
+
+### Validation
+
+Actual Unity 6000.3.21f1 scoped checks on 2026-11-26 and 2026-11-27:
+
+- `pickup-runtime-reviewed.xml`: **488/488 passed**, zero failed/skipped/inconclusive across
+  pickup, movement, interactions, shovel, equipment, turns, presentation gates, resources,
+    inventory and schema-v8 DTO/storage fixtures. This includes 35 focused pickup cases.
+- `pickup-play-reviewed.xml`: **35/35 passed**, zero failed/skipped/inconclusive, including
+  modal/reentry/reload, real hostile response in both animation modes, bag regression,
+    shovel/tool regression, ordered replay/cancellation, actual Main Continue, actual menu
+    Continue with a carried item, production Escape/pause handlers and a left revealed ration.
+- `pickup-solver-final.xml`: **39/39 passed**, zero failed/skipped/inconclusive, for the
+    existing bounded solver and three explicitly selected backend Check Board methods.
+    A corridor with Satiety 2 requires food on its first of three moves; both direct checking
+    and bounded search reproduce conscious Use through fresh real-controller replay.
+- `pickup-visual-evidence.xml`: **1/1 passed** in noninteractive D3D11 batchmode. Existing
+  sprites rendered nonblank Leave and reentry board states to `%TEMP%/HB-M105-leave.png`
+  and `%TEMP%/HB-M105-reentry-preview.png`; the log records the matching instance ID.
+  These are camera-rendered board states, not a screenshot of the IMGUI modal itself.
+
+XML/log evidence is outside the repository in `%TEMP%/HB-M105-12a8a45f20da4e23b9dba0f668defa8a`.
+An earlier synchronous animated save fixture deadlocked and was stopped, then corrected
+and rerun; it produced no XML and is not a passing result. The owner explicitly authorized
+removing its sole generated `InitTestScene2b09109d-ea0c-41b6-a63e-ffdcca60dfaf.unity`/`.meta`
+pair. The final PlayMode run also caught and verified the scene-disposal null guard.
+No full-suite, authoring-window, generation-distribution, benchmark or final M10.7 UI acceptance
+claim is made. Success evidence does not waive the remaining M10 human/release gates.
+
+The first independent review required three corrections: menu storage lacked the trusted
+item catalogue, legacy consumable interactions bypassed entry-only retry, and pause did
+not honor pickup's cancel-frame block. All three were repaired with focused regressions
+and the final 488/35 gates above. The owner explicitly authorized the two additional menu
+adapter/lifecycle-test paths. The second review verified those fixes and found the existing
+Check Board solver still used raw movement without consumable bindings. The owner authorized
+five solver/adapter/test paths to repair that compatibility regression without window changes.
+The adapter now supplies trusted content/bindings; search generates conscious Use/Leave,
+copies the run inventory context/state, and preserves exact pickup proposals during replay.
+The structural key includes carried ownership/binding state and pickup-sequence exhaustion;
+ordinary sequence values are irrelevant to reachability because proposals are always fresh.
+This is not a new backpack planner: Store, bag management and quick-use search remain outside
+the existing solver's declared model. Final independent review returned `PASS` on 2026-11-27
+and explicitly confirmed all four findings resolved. Source/metadata hashes remained unchanged
+during review; only these acceptance records were subsequently updated. Earlier 486/32 results
+do not validate later corrections.
+
 ## M10.4 Atomic Backpack Session
 
 `ManageInventoryCommand` uses the existing `TurnResolver`, `TurnController` and presentation

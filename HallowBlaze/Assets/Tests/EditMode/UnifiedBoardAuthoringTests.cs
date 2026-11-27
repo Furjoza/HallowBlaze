@@ -748,6 +748,34 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(cleared.Replayed, Is.True);
         }
 
+        /// <summary>Check Board and bounded Solve both replay conscious food use when the corridor is otherwise fatal.</summary>
+        [Test]
+        public void PlayabilityUsesAtomicFoodPickupToSurviveCorridor()
+        {
+            JObject data = Minimal();
+            var entities = (JArray)data["variants"][0]["entities"];
+            foreach (JObject entity in entities.OfType<JObject>().ToArray())
+                if ((string)entity["layer"] == "Terrain" && ((int)entity["y"] != 0 || (int)entity["x"] > 3)) entity.Remove();
+            JObject exit = entities.OfType<JObject>().Single(entity => (string)entity["layer"] == "Terrain" &&
+                (int)entity["x"] == 3 && (int)entity["y"] == 0);
+            exit["contentId"] = "ordinary.exit-terrain";
+            data["outcomes"][0]["exitEntityId"] = (int)exit["id"];
+            ((JArray)data["configuration"]["allowedContentIds"]).Add("legacy.food");
+            entities.Add(new JObject { ["id"] = 100, ["layer"] = "Item", ["contentId"] = "legacy.food", ["x"] = 1, ["y"] = 0 });
+            ((JArray)data["variants"][0]["items"]).Add(new JObject
+            { ["instanceId"] = "corridor.food.100", ["entityId"] = 100, ["itemDefinitionId"] = "legacy.food",
+                ["resourceFamilyId"] = "food", ["sourceId"] = JValue.CreateNull(), ["initiallyObservable"] = true });
+            var inputs = new BoardTestPlaySettings { Health = 100, Food = 2, Seed = 105 };
+            var direct = BoardSolverAdapter.CheckPlayable(data.ToString(), "base", inputs);
+            Assert.That(direct.Status, Is.EqualTo("Solved"), direct.Message);
+            Assert.That(direct.Replayed, Is.True);
+            string outcome = (string)data["outcomes"][0]["id"];
+            var searched = BoardSolverAdapter.Solve(data.ToString(), "base", outcome, inputs);
+            Assert.That(searched.Status, Is.EqualTo("Solved"), searched.Message);
+            Assert.That(searched.Replayed, Is.True);
+            Assert.That(searched.Result.SolutionPath.Select(step => step.ToString()), Has.Some.Contains("pickup=UseNow"));
+        }
+
         /// <summary>Shared acceptance requires one realizable exit, not whichever exit happened to be painted first.</summary>
         [Test]
         public void ReachableAlternativeExitIsSufficientForSharedBoardAcceptance()

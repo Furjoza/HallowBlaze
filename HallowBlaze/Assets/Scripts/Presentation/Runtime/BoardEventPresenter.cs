@@ -132,9 +132,12 @@ namespace HallowBlaze.Presentation.Runtime
                     GroundToolsDisplay.Refresh();
                 });
             InventoryDisplay = new InventorySessionPresenter(runtime, Coordinator, interactionInputAllowed);
+            var pickupOwner = new GameObject("Ground pickup") { hideFlags = HideFlags.DontSave };
+            PickupDisplay = pickupOwner.AddComponent<GroundPickupPresenter>();
+            PickupDisplay.Bind(runtime, Coordinator, interactionInputAllowed);
             var interactionOwner = new GameObject("Board interaction") { hideFlags = HideFlags.DontSave };
             InteractionDisplay = interactionOwner.AddComponent<InteractionPresenter>();
-            InteractionDisplay.Bind(runtime, Coordinator, interactionInputAllowed);
+            InteractionDisplay.Bind(runtime, Coordinator, interactionInputAllowed, command => SubmitAsync(command));
             if (intents != null)
                 intents.Bind(runtime.BoardState, () => disposed || runtime.IsDisposed || runtime.Controller.IsTerminal
                     ? null : runtime.BoardState);
@@ -191,6 +194,14 @@ namespace HallowBlaze.Presentation.Runtime
                 return Task.CompletedTask;
             });
             Dispatcher.Register<FoodRestoredEvent>((gameEvent, token) => RefreshFood(gameEvent));
+            Dispatcher.Register<GroundPickupResolvedEvent>((gameEvent, token) =>
+            {
+                RefreshHud();
+                if (gameEvent.Applied > 0)
+                    (hud as ITurnResourceGains)?.AddResourceGains(gameEvent.ResourceId == "health" ? gameEvent.Applied : 0,
+                        gameEvent.ResourceId == "satiety" ? gameEvent.Applied : 0);
+                return ShowFeedback(gameEvent);
+            });
             Dispatcher.Register<InventoryItemActionEvent>((gameEvent, token) =>
             {
                 RefreshHud();
@@ -460,6 +471,27 @@ namespace HallowBlaze.Presentation.Runtime
             return Task.CompletedTask;
         }
 
+        /// <summary>Gets the board-owned pre-command consumable modal.</summary>
+        public GroundPickupPresenter PickupDisplay { get; }
+
+        /// <summary>Opens a free pickup decision when required, otherwise submits through the sole coordinator.</summary>
+        public Task<CommandSubmission> SubmitAsync(PlayerCommand command, CancellationToken token = default)
+        {
+            if (disposed || !Coordinator.CanSubmit) return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.Blocked));
+            if (token.IsCancellationRequested) return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.Canceled));
+            if (PickupDisplay.TryOpen(command)) return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.NoCommand));
+            return Coordinator.SubmitAsync(command, token);
+        }
+
+        /// <summary>Samples at most one intent only while idle, then routes it through the same pre-command decision path.</summary>
+        public Task<CommandSubmission> SubmitFromAsync(ICommandSource source)
+        {
+            if (disposed || !Coordinator.CanSubmit) return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.Blocked));
+            if (source == null || !source.TryTakeCommand(out PlayerCommand command))
+                return Task.FromResult(new CommandSubmission(CommandSubmissionStatus.NoCommand));
+            return SubmitAsync(command);
+        }
+
         private Task RefreshHud()
         {
             hud.Refresh(runtime.RunState.Health, runtime.RunState.Satiety);
@@ -469,6 +501,7 @@ namespace HallowBlaze.Presentation.Runtime
         private Task NotifyOutcome(GameEvent gameEvent)
         {
             InventoryDisplay.Dispose();
+            PickupDisplay.Dispose();
             (hud as ITurnResourceGains)?.ClearResourceGains();
             CloseIntents();
             NoiseDisplay.Dispose();
@@ -504,6 +537,12 @@ namespace HallowBlaze.Presentation.Runtime
                 return;
             disposed = true;
             InventoryDisplay.Dispose();
+            if (PickupDisplay != null)
+            {
+                PickupDisplay.Dispose();
+                if (Application.isPlaying) UnityEngine.Object.Destroy(PickupDisplay.gameObject);
+                else UnityEngine.Object.DestroyImmediate(PickupDisplay.gameObject);
+            }
             Coordinator.Dispose();
             attacks.Dispose();
             CloseIntents();

@@ -28,7 +28,8 @@ namespace HallowBlaze.Tests.EditMode
                 BoardEntityTraits.Default, automaticFoodReward: 50);
             RunState run = CreateRun(food: 100);
             TurnResolver resolver = new TurnResolver();
-            TurnResult eating = resolver.Resolve(board, run, PlayerId, new MoveCommand(Direction.East));
+            TurnResult eating = resolver.Resolve(board, run, PlayerId,
+                GroundPickupTests.ChooseUse(board, run, PlayerId, new MoveCommand(Direction.East)));
             Assert.That(run.Satiety, Is.EqualTo(149));
             Assert.That(eating.Events.OfType<ActionCostAppliedEvent>().Single().CostAmount, Is.EqualTo(1));
             Assert.That(eating.Events.OfType<ActionCostAppliedEvent>().Single().SatietyAtCommandStart, Is.EqualTo(100));
@@ -39,7 +40,7 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
-        public void AutomaticRewardCapsBeforeSelectedCostAndReportsWaste()
+        public void ChosenUseCapsBeforeSelectedCostAndReportsWaste()
         {
             BoardState board = CreateBoardWithPlayer();
             GridPosition destination = Start.Move(Direction.East);
@@ -47,11 +48,12 @@ namespace HallowBlaze.Tests.EditMode
             AddEntity(board, new EntityId(2), BoardLayer.Item, EntityKind.Item, "food", destination,
                 BoardEntityTraits.Default, automaticFoodReward: int.MaxValue);
             RunState run = CreateRun(food: 199);
-            TurnResult result = new TurnResolver().Resolve(board, run, PlayerId, new MoveCommand(Direction.East));
-            FoodRestoredEvent gain = result.Events.OfType<FoodRestoredEvent>().Single();
-            Assert.That(gain.Amount, Is.EqualTo(1));
+            TurnResult result = new TurnResolver().Resolve(board, run, PlayerId,
+                GroundPickupTests.ChooseUse(board, run, PlayerId, new MoveCommand(Direction.East)));
+            GroundPickupResolvedEvent gain = result.Events.OfType<GroundPickupResolvedEvent>().Single();
+            Assert.That(gain.Applied, Is.EqualTo(1));
             Assert.That(gain.Wasted, Is.EqualTo(int.MaxValue - 1));
-            Assert.That(gain.Requested, Is.EqualTo(int.MaxValue));
+            Assert.That((long)gain.Applied + gain.Wasted, Is.EqualTo(int.MaxValue));
             Assert.That(run.Satiety, Is.EqualTo(198));
             Assert.That(result.Events.OfType<ActionCostAppliedEvent>().Single().CostAmount, Is.EqualTo(2));
         }
@@ -229,7 +231,7 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
-        public void AutomaticFoodIsCollectedAndAppliedBeforeActionCost()
+        public void ConsciousUseCollectsExactItemAndAppliesEffectBeforeCost()
         {
             BoardState board = CreateBoardWithPlayer();
             GridPosition destination = Start.Move(Direction.East);
@@ -251,7 +253,7 @@ namespace HallowBlaze.Tests.EditMode
                 board,
                 run,
                 PlayerId,
-                new MoveCommand(Direction.East));
+                GroundPickupTests.ChooseUse(board, run, PlayerId, new MoveCommand(Direction.East)));
 
             Assert.That(result, Is.TypeOf<AcceptedTurnResult>());
             Assert.That(run.Satiety, Is.EqualTo(3));
@@ -260,14 +262,14 @@ namespace HallowBlaze.Tests.EditMode
             {
                 "EntityMoved",
                 "ItemCollected",
-                "FoodRestored",
+                "GroundPickupResolved",
                 "ActionCostApplied"
             }));
-            Assert.That(((FoodRestoredEvent)result.Events[2]).Amount, Is.EqualTo(3));
+            Assert.That(((GroundPickupResolvedEvent)result.Events[2]).Applied, Is.EqualTo(3));
         }
 
         [Test]
-        public void AutomaticFoodCanSavePlayerBeforeExitIsEmitted()
+        public void ChosenUseCanSavePlayerBeforeExitIsEmitted()
         {
             BoardState board = CreateBoardWithPlayer();
             GridPosition destination = Start.Move(Direction.East);
@@ -289,14 +291,14 @@ namespace HallowBlaze.Tests.EditMode
                 board,
                 run,
                 PlayerId,
-                new MoveCommand(Direction.East));
+                GroundPickupTests.ChooseUse(board, run, PlayerId, new MoveCommand(Direction.East)));
 
             Assert.That(run.Satiety, Is.EqualTo(2));
             Assert.That(result.Events.Select(gameEvent => gameEvent.EventType), Is.EqualTo(new[]
             {
                 "EntityMoved",
                 "ItemCollected",
-                "FoodRestored",
+                "GroundPickupResolved",
                 "ActionCostApplied",
                 "ExitReached"
             }));
@@ -331,7 +333,7 @@ namespace HallowBlaze.Tests.EditMode
         }
 
         [Test]
-        public void FullSatietyWastesAutomaticRewardBeforePayingTheSelectedCost()
+        public void FullSatietyWastesChosenUseBeforePayingTheSelectedCost()
         {
             BoardState board = CreateBoardWithPlayer();
             GridPosition destination = Start.Move(Direction.East);
@@ -351,12 +353,12 @@ namespace HallowBlaze.Tests.EditMode
                 board,
                 run,
                 PlayerId,
-                new MoveCommand(Direction.East));
+                GroundPickupTests.ChooseUse(board, run, PlayerId, new MoveCommand(Direction.East)));
 
             Assert.That(result.Accepted, Is.True);
             Assert.That(run.Satiety, Is.EqualTo(198));
-            FoodRestoredEvent restored = result.Events.OfType<FoodRestoredEvent>().Single();
-            Assert.That(restored.Amount, Is.Zero);
+            GroundPickupResolvedEvent restored = result.Events.OfType<GroundPickupResolvedEvent>().Single();
+            Assert.That(restored.Applied, Is.Zero);
             Assert.That(restored.Wasted, Is.EqualTo(1));
             Assert.That(board.TryGetEntity(new EntityId(2), out _), Is.False);
         }

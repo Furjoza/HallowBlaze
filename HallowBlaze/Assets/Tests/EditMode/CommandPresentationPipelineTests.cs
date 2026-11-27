@@ -446,7 +446,10 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(separate.CanSubmit, Is.False);
             separate.SetBlocked(PresentationInputBlock.Modal, false);
             Assert.That(separate.CanSubmit, Is.True);
-            Assert.Throws<ArgumentOutOfRangeException>(() => separate.SetBlocked((PresentationInputBlock)64, true));
+            separate.SetBlocked(PresentationInputBlock.Pickup, true);
+            separate.SetBlocked(PresentationInputBlock.Inventory, false);
+            Assert.That(separate.Blocks.HasFlag(PresentationInputBlock.Pickup), Is.True);
+            Assert.Throws<ArgumentOutOfRangeException>(() => separate.SetBlocked((PresentationInputBlock)128, true));
         }
 
         [Test]

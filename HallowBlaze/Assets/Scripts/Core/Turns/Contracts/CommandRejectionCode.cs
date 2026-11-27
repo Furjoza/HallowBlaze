@@ -57,6 +57,10 @@ namespace HallowBlaze.Core.Turns.Contracts
         /// <summary>The bag proposal was made against an older inventory snapshot.</summary>
         StaleInventory = 13,
         /// <summary>The actions, ownership or final layout cannot be committed atomically.</summary>
-        InvalidInventory = 14
+        InvalidInventory = 14,
+        /// <summary>Entry or item production needs a conscious pickup choice before any mutation.</summary>
+        PickupRequired = 15,
+        /// <summary>The observed player, inventory or ground instance no longer matches the pickup proposal.</summary>
+        StalePickup = 16
     }
 }

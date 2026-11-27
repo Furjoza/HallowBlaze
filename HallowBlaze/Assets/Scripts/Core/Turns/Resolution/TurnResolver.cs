@@ -30,6 +30,7 @@ namespace HallowBlaze.Core.Turns.Resolution
             this.interactions = interactions ?? new InteractionQuery();
             this.tools = tools ?? new ToolUseQuery();
             this.pickups = pickups ?? new ToolPickupQuery();
+            groundPickups = new GroundPickupQuery(this.interactions, this.tools);
         }
 
         /// <summary>Validates and resolves one player command.</summary>
@@ -66,15 +67,21 @@ namespace HallowBlaze.Core.Turns.Resolution
             switch (command)
             {
                 case MoveCommand moveCommand:
+                    if (groundPickups.GetOption(boardState, runState, playerId, command) != null)
+                        return new RejectedTurnResult(CommandRejectionCode.PickupRequired);
                     result = ResolveMove(boardState, runState, player, moveCommand, selectedCost, satietyAtStart);
                     break;
                 case WaitCommand _:
                     result = ResolveWait(runState, playerId, selectedCost, satietyAtStart);
                     break;
                 case InteractCommand interactCommand:
+                    if (groundPickups.GetOption(boardState, runState, playerId, command) != null)
+                        return new RejectedTurnResult(CommandRejectionCode.PickupRequired);
                     result = ResolveInteract(boardState, runState, player, interactCommand, selectedCost, satietyAtStart);
                     break;
                 case UseToolCommand toolCommand:
+                    if (groundPickups.GetOption(boardState, runState, playerId, command) != null)
+                        return new RejectedTurnResult(CommandRejectionCode.PickupRequired);
                     result = ResolveUseTool(boardState, runState, player, toolCommand, selectedCost, satietyAtStart);
                     break;
                 case PickupToolCommand pickupCommand:
@@ -83,10 +90,14 @@ namespace HallowBlaze.Core.Turns.Resolution
                 case ManageInventoryCommand inventoryCommand:
                     result = ResolveManageInventory(runState, playerId, inventoryCommand, selectedCost, satietyAtStart);
                     break;
+                case GroundPickupCommand groundCommand:
+                    result = ResolveGroundPickup(boardState, runState, player, groundCommand, selectedCost, satietyAtStart);
+                    break;
                 default:
                     return new RejectedTurnResult(CommandRejectionCode.InvalidCommand);
             }
-            int strength = command is MoveCommand ? noiseProfile?.MovementStrength ?? 0 : 0;
+            int strength = command is MoveCommand || command is GroundPickupCommand composite && composite.Primary is MoveCommand
+                ? noiseProfile?.MovementStrength ?? 0 : 0;
             if (!result.Accepted || strength == 0)
                 return result;
             boardState.TryGetEntity(playerId, out BoardEntityState currentPlayer);
@@ -102,7 +113,8 @@ namespace HallowBlaze.Core.Turns.Resolution
             BoardState boardState,
             RunState runState,
             BoardEntityState player,
-            MoveCommand command, int selectedCost, int satietyAtStart)
+            MoveCommand command, int selectedCost, int satietyAtStart, GroundPickupCommand pickup = null,
+            InventoryPlacement placement = null, ConsumableEffectDefinition effect = null)
         {
             GridPosition destination;
             try
@@ -129,13 +141,6 @@ namespace HallowBlaze.Core.Turns.Resolution
             if (boardState.TryGetEntity(BoardLayer.Actor, destination, out _))
                 return new RejectedTurnResult(CommandRejectionCode.Blocked);
 
-            BoardEntityState automaticFood = null;
-            if (boardState.TryGetEntity(BoardLayer.Item, destination, out BoardEntityState item) &&
-                item.Definition.AutomaticFoodReward > 0)
-            {
-                automaticFood = item;
-            }
-
             if (!boardState.TryMove(player.Id, destination))
                 return new RejectedTurnResult(CommandRejectionCode.Blocked);
 
@@ -144,10 +149,7 @@ namespace HallowBlaze.Core.Turns.Resolution
                 new EntityMovedEvent(player.Id, player.Position, destination)
             };
             PlateGateEventRecorder.Append(boardState, events);
-            if (automaticFood != null)
-            {
-                CollectAutomaticFood(boardState, runState, player.Id, automaticFood, events);
-            }
+            if (pickup != null) ApplyPickup(boardState, runState, player.Id, pickup, placement, effect, events);
             ApplyCost(runState, player.Id, events, selectedCost, satietyAtStart);
             if (runState.Satiety == 0)
             {
@@ -251,22 +253,6 @@ namespace HallowBlaze.Core.Turns.Resolution
                 events.Add(new NoiseEvent(board.EmitNoise(player.Id, player.Position, noiseProfile.InteractionStrength, noiseProfile.LifetimeTurns)));
             if (run.Satiety == 0) events.Add(new PlayerStarvedEvent(player.Id));
             return new AcceptedTurnResult(events);
-        }
-
-        private static void CollectAutomaticFood(
-            BoardState boardState,
-            RunState runState,
-            EntityId playerId,
-            BoardEntityState item,
-            ICollection<GameEvent> events)
-        {
-            if (!boardState.TryRemove(item.Id))
-                throw new InvalidOperationException("Validated automatic food item could not be removed.");
-
-            int reward = item.Definition.AutomaticFoodReward;
-            ResourceGain gain = AutomaticFoodCompatibility.Apply(runState, reward);
-            events.Add(new ItemCollectedEvent(playerId, item.Id));
-            events.Add(new FoodRestoredEvent(playerId, item.Id, gain.Applied, gain.Wasted));
         }
 
         private static void ApplyCost(

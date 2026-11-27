@@ -64,16 +64,18 @@ namespace HallowBlaze.Tests.EditMode
             {
                 PlayerCommand command = shovel ? (PlayerCommand)tools.GetOptions(board, run, PlayerId).Single(option => option.ActionId == "unearth").CreateCommand() :
                     manual.GetOptions(board, run, PlayerId).Single().CreateCommand();
+                if (shovel || step == 2)
+                    command = GroundPickupTests.ChooseUse(board, run, PlayerId, command, new GroundPickupQuery(manual, tools), rules.RewardDefinition);
                 last = controller.Resolve(command);
                 Assert.That(last.Accepted, Is.True);
                 Assert.That(last.Events.OfType<CacheWorkedEvent>().Single().Reward != null, Is.EqualTo(shovel || step == 2));
             }
             CacheRewardItem reward = last.Events.OfType<CacheWorkedEvent>().Single().Reward;
-            Assert.That(reward.InstanceId, Is.EqualTo("cache.reward.3"));
+            Assert.That(reward.InstanceId, Is.EqualTo(GroundItemIdentity.Create(run, reward.SourceEntityId)));
             Assert.That(reward.DefinitionId, Is.EqualTo("cache.ration"));
             Assert.That(reward.SourceEntityId, Is.EqualTo(new EntityId(3)));
             Assert.That(last.Events.OfType<ItemCollectedEvent>().Count(), Is.EqualTo(1));
-            Assert.That(last.Events.Select(gameEvent => gameEvent.EventType).ToList().IndexOf("FoodRestored"),
+            Assert.That(last.Events.Select(gameEvent => gameEvent.EventType).ToList().IndexOf("GroundPickupResolved"),
                 Is.LessThan(last.Events.Select(gameEvent => gameEvent.EventType).ToList().IndexOf("ActionCostApplied")));
             Assert.That(run.Satiety, Is.EqualTo(10));
             Assert.That(board.HasRevealedCache(new EntityId(3)), Is.True);
@@ -82,7 +84,7 @@ namespace HallowBlaze.Tests.EditMode
             if (shovel) Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
         }
 
-        /// <summary>Without the transitional transfer the exact revealed instance remains cloneable ground state, not a raw resource change.</summary>
+        /// <summary>Conscious Leave retains the exact revealed instance as cloneable ground state without a resource effect.</summary>
         [Test]
         public void RevealedRewardCanRemainOnGroundWithoutDuplicationOrResourceMutation()
         {
@@ -90,11 +92,12 @@ namespace HallowBlaze.Tests.EditMode
             Add(board, 3, BoardLayer.Item, EntityKind.Item, "marked.cache", 1);
             RunState run = CreateRun();
             ShovelRules rules = Rules();
-            var tools = new ToolUseQuery(new[] { new ToolAction("shovel.basic", new CacheDigAction(rules, true, false), "Unearth", 2, 2) });
+            var tools = new ToolUseQuery(new[] { new ToolAction("shovel.basic", new CacheDigAction(rules, true), "Unearth", 2, 2) });
             run.EquipTool(0, run.CreateToolInstance(new ToolDefinition("shovel.basic", "Shovel", 3)));
             var resolver = new TurnResolver(tools: tools);
             UseToolCommand command = tools.GetOptions(board, run, PlayerId).Single().CreateCommand();
-            TurnResult result = resolver.Resolve(board, run, PlayerId, command);
+            GroundPickupOption decision = new GroundPickupQuery(tools: tools).GetOption(board, run, PlayerId, command);
+            TurnResult result = resolver.Resolve(board, run, PlayerId, decision.CreateCommand(GroundPickupChoice.Leave));
             CacheRewardItem reward = result.Events.OfType<CacheWorkedEvent>().Single().Reward;
             Assert.That(board.TryGetCacheReward(new EntityId(3), out CacheRewardItem ground), Is.True);
             Assert.That(ground, Is.SameAs(reward));
@@ -200,12 +203,13 @@ namespace HallowBlaze.Tests.EditMode
             Assert.That(clone.GetCacheWork(new EntityId(3)), Is.EqualTo(2));
             run.RestoreSatiety(int.MaxValue - run.Satiety);
             UseToolCommand command = tools.GetOptions(board, run, PlayerId).Single(option => option.ActionId == "unearth").CreateCommand();
-            TurnResult completed = resolver.Resolve(board, run, PlayerId, command);
+            TurnResult completed = resolver.Resolve(board, run, PlayerId,
+                GroundPickupTests.ChooseUse(board, run, PlayerId, command, new GroundPickupQuery(manual, tools), rules.RewardDefinition));
             Assert.That(completed.Accepted, Is.True);
             Assert.That(board.HasRevealedCache(new EntityId(3)), Is.True);
             Assert.That(run.Satiety, Is.EqualTo(198));
-            Assert.That(completed.Events.OfType<FoodRestoredEvent>().Single().Amount, Is.Zero);
-            Assert.That(completed.Events.OfType<FoodRestoredEvent>().Single().Wasted,
+            Assert.That(completed.Events.OfType<GroundPickupResolvedEvent>().Single().Applied, Is.Zero);
+            Assert.That(completed.Events.OfType<GroundPickupResolvedEvent>().Single().Wasted,
                 Is.EqualTo(rules.RewardDefinition.AutomaticFoodReward));
             Assert.That(run.ToolSlots[0].Instance.Charges, Is.EqualTo(2));
             Assert.That(resolver.Resolve(board, run, PlayerId, command).Accepted, Is.False);

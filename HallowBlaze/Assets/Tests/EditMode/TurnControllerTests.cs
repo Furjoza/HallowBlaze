@@ -730,8 +730,8 @@ namespace HallowBlaze.Tests.EditMode
             BoardState board = CreateBoard(exit: true, reward: 2);
             RunState run = CreateRun(1);
             var controller = new TurnController(board, run, PlayerId, phases: ForbiddenPhases());
-            AssertEvents(controller.Resolve(new MoveCommand(Direction.East)),
-                "EntityMoved", "ItemCollected", "FoodRestored", "ActionCostApplied", "ExitReached");
+            AssertEvents(controller.Resolve(GroundPickupTests.ChooseUse(board, run, PlayerId, new MoveCommand(Direction.East))),
+                "EntityMoved", "ItemCollected", "GroundPickupResolved", "ActionCostApplied", "ExitReached");
             Assert.That(run.Satiety, Is.EqualTo(2));
             Assert.That(board.TryGetEntity(new EntityId(200), out _), Is.False);
         }

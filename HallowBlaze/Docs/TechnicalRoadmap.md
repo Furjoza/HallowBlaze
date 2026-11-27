@@ -8622,13 +8622,13 @@ flowchart LR
 
 ## `M10.5` — Ground pickup decision and atomic board-to-run transfer
 
-**Status:** `Deferred`
+**Status:** `Done` (2026-11-27); scoped validation passed and final independent review returned `PASS` with all four findings resolved.
 **Priority:** P1
 **Related contract:** sections 6.4, 9, 10, 21.2, and 27.6.
 
 **Rationale:** A reward should create `use now versus carry versus leave`, not automatic consumption or silent loss when the bag is full. The move and decision must still be one atomic turn so no modal can pause the resolver after partial mutation.
 
-**Current behavior:** Entering food removes it and applies `AutomaticFoodReward`; non-food/tool interaction is separate. A left item can remain in `BoardState`, but no generic choice or carried transfer exists.
+**Current behavior:** Production entry opens a free pre-command `Use now` / `Store` / `Leave` modal. One composite validates the exact movement/interaction/tool, ground identity, inventory revision and transient board pickup sequence before effects. Successful Store retains the same instance in an explicitly selected anchor; Leave preserves the same ground item. Final cache work uses the same decision without a raw resource bypass. Tools remain separate equipment.
 
 **Expected outcome:** Entering a consumable tile presents `Use now`, `Store`, or `Leave` before final command submission. Item-producing interactions such as a shovel cache use the same decision within their interaction command. The accepted composite command either uses/removes, stores/removes, or leaves the exact same ground instance. Tool pickup continues to use M5.6's separate equipment flow.
 
@@ -8638,7 +8638,7 @@ flowchart LR
 
 **Dependencies:** `M10.4`, `M5.1`, `M5.6`, and the M10.2 temporary adapter, which this card removes.
 
-**Allowed file area:** Core Board/Interaction/Items/Inventory/Turns, Presentation Pickup/Inventory, legacy food adapter removal, tests, and explicit UI assets.
+**Allowed file area:** Core Board/Interaction/Items/Inventory/Turns, Presentation Pickup/Inventory, legacy food adapter removal, tests, and explicit UI assets. The owner separately approved the production Continue-menu adapter/lifecycle tests and existing bounded-solver/Check Board compatibility, without window changes or a new inventory planner.
 
 **Acceptance criteria:**
 
@@ -8656,6 +8656,33 @@ flowchart LR
 **Save and compatibility impact:** Uses M10.3 inventory and existing board-boundary persistence. If M9.1 exists, the same exact ground/carried instance transition must survive mid-board snapshot without duplication.
 
 **Required handoff:** Option availability table, atomic transfer sequence, before/after entity identity evidence, O-003 migration note, and video/screenshots of leave then re-entry.
+
+### Implementation And Validation - 2026-11-27
+
+Owner continuation explicitly authorized this single next card. `GroundItemState`,
+`GroundPickupCommand`, shared query/resolver and board-owned modal implement exact transfer,
+free stale/invalid/cancel rejection, one preselected cost and one hostile opportunity.
+Production new runs and save loading share trusted definitions for existing consumables.
+No automatic placement/repack, drop, tool storage, quick-use or save-schema change was added.
+O-003's automatic-food and cache compatibility adapters are removed; retained historical
+content reward fields do not execute pickup. M9.1/M9.7 remain deferred.
+
+Actual final scoped Unity checks: 488/488 runtime EditMode, 35/35 runtime PlayMode, 39/39
+offline solver/backend compatibility checks and 1/1
+noninteractive visual-evidence test, all without skipped/inconclusive cases. Camera-rendered
+Leave/reentry screenshots retain the same concrete identity; details, option table, chronology,
+identity matrix, failures/corrections and limitations are recorded in [Testing.md](Testing.md#m105-atomic-ground-pickup).
+The owner separately authorized deleting only the interrupted test's generated scene/meta pair.
+Initial review found menu-content loading, stationary retry and Escape/pause defects; the
+Lead corrected them and added actual menu/handler/domain regressions. The owner authorized
+the menu adapter and lifecycle-test scope extension. A second review confirmed those fixes
+and found existing Check Board still relied on automatic food. The owner authorized five
+solver/adapter/test paths; the Lead repaired trusted bindings, conscious Use/Leave search,
+state copying and replay, then passed the scoped 39-case compatibility gate. No window tests
+or new inventory planner were introduced. Final independent review returned `PASS` and
+explicitly confirmed all four findings resolved; reviewed source/metadata hashes remained unchanged.
+No existing scene/prefab, package, generator distribution or protected agent configuration
+was changed. Full milestone and final player-facing bag UI acceptance remain later gates.
 
 ---
 

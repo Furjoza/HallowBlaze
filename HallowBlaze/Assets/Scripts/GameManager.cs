@@ -210,7 +210,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
                 && activeBoardRuntime != null
                 && !activeBoardRuntime.IsDisposed
                 && activeBoardPresenter != null
-                && (activeBoardPresenter.Coordinator.Gate.Blocks & (PresentationInputBlock.Interaction | PresentationInputBlock.FieldNotes)) == PresentationInputBlock.None
+                && (activeBoardPresenter.Coordinator.Gate.Blocks & (PresentationInputBlock.Interaction | PresentationInputBlock.FieldNotes |
+                    PresentationInputBlock.Pickup)) == PresentationInputBlock.None
                 && !activeBoardRuntime.Controller.IsTerminal;
         }
     }
@@ -235,7 +236,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         submission = null;
         if (!IsGameplayInputEnabled)
             return false;
-        submission = activeBoardPresenter.Coordinator.SubmitAsync(command);
+        submission = activeBoardPresenter.SubmitAsync(command);
         return true;
     }
 
@@ -249,7 +250,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
         submission = null;
         if (!IsGameplayInputEnabled)
             return false;
-        submission = activeBoardPresenter.Coordinator.SubmitFromAsync(source);
+        submission = activeBoardPresenter.SubmitFromAsync(source);
         return true;
     }
 
@@ -1324,7 +1325,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             InitialHealth,
             InitialSatiety,
             0,
-            OpeningWarmUpOriginNodeId);
+            OpeningWarmUpOriginNodeId,
+            inventoryContent: GroundPickupContent.Load());
         string runId = session.Profile.ProfileId + "-run-" +
             System.Guid.NewGuid().ToString("N");
 
@@ -1539,7 +1541,7 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
     #if UNITY_EDITOR
             authoringContext != null ? authoringContext.SaveRoot :
     #endif
-            GetPersistenceRoot());
+            GetPersistenceRoot(), inventoryContent: GroundPickupContent.Load());
         SaveStoreResult<ProfileState> profileResult = saveStore.LoadProfile();
         ProfileState profile = profileResult.IsSuccess
             ? profileResult.Data
@@ -1577,7 +1579,8 @@ public class GameManager : MonoBehaviour, IBoardOutcomeSink
             InitialHealth,
             InitialSatiety,
             0,
-            OpeningWarmUpOriginNodeId);
+            OpeningWarmUpOriginNodeId,
+            inventoryContent: GroundPickupContent.Load());
         RunState freshRun = new RunState(
             freshProfile.ProfileId + "-run-" + System.Guid.NewGuid().ToString("N"),
             12345 + nextRunSequence,

@@ -131,7 +131,11 @@ namespace HallowBlaze.Editor.BoardAuthoring
                 GridPosition next = path.Pop();
                 Direction direction = next.X > position.X ? Direction.East : next.X < position.X ? Direction.West :
                     next.Y > position.Y ? Direction.North : Direction.South;
-                TurnResult turn = owners.Controller.Resolve(new MoveCommand(direction));
+                var move = new MoveCommand(direction);
+                GroundPickupOption pickup = new GroundPickupQuery().GetOption(owners.Board, owners.Run, owners.Player, move);
+                PlayerCommand command = pickup == null ? (PlayerCommand)move : pickup.CreateCommand(
+                    pickup.UseAvailable ? GroundPickupChoice.UseNow : GroundPickupChoice.Leave);
+                TurnResult turn = owners.Controller.Resolve(command);
                 if (!turn.Accepted || owners.Run.Health <= 0) return false;
                 if (turn.Events.OfType<ExitReachedEvent>().Any(reached => reached.ExitId.Equals(exitId))) return true;
                 if (owners.Controller.IsTerminal) return false;
@@ -151,7 +155,8 @@ namespace HallowBlaze.Editor.BoardAuthoring
 
             internal Owners(LandmarkTemplate template, string variantId, BoardTestPlaySettings settings)
             {
-                Run = new RunState("authoring-solver", settings.Seed, new RunStateConfiguration(settings.Health, settings.Food, 0, "authoring.start"));
+                Run = new RunState("authoring-solver", settings.Seed, new RunStateConfiguration(settings.Health, settings.Food, 0, "authoring.start",
+                    inventoryContent: GroundPickupContent.Load()));
                 Run.StartLeg("authoring.route", "authoring.start", "authoring.goal",
                     new[] { new RouteSegmentState("authoring.segment", template.Config.Id, template.Config.Version) });
                 if (settings.EquipAxe) Run.EquipTool(0, Run.CreateToolInstance(ToolContentCatalog.Load()["axe.basic"]));
@@ -159,6 +164,7 @@ namespace HallowBlaze.Editor.BoardAuthoring
                 if (!Landmark.Validate(OrdinaryBoardContent.CreateAuthoringCatalog()).IsValid)
                     throw new ArgumentException("The selected variant is invalid.");
                 Board = Landmark.CreateState();
+                GroundPickupContent.Bind(Board, Run);
                 Player = Board.GetEntities().Single(entity => entity.Definition.Kind.Equals(EntityKind.Player)).Id;
                 foreach (var spawn in Landmark.Blueprint.Items.Where(item => item.ResourceFamilyId == "tools"))
                 {
